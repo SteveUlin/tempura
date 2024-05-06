@@ -19,8 +19,6 @@ set(CMAKE_CXX_FLAGS "-Wall -Wextra")
 set(CMAKE_CXX_FLAGS_DEBUG "-g")
 set(CMAKE_CXX_FLAGS_RELEASE "-Ofast -ftree-vectorize -march=native -ffast-math")
 
-add_executable(hello_world)
-target_sources(hello_world PRIVATE hello_world.cpp)
+add_subdirectory(src)
+add_subdirectory(examples)
 
-add_executable(clocks)
-target_sources(clocks PRIVATE clocks.cpp)
