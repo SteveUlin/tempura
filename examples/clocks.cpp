@@ -8,10 +8,6 @@
 // for cpu clocks.
 
 // Modern C++ Approach:
-//
-// Note that the chrono classes take more time to allocate than the other
-// methods. So preallocating the timepoint objects is especially important
-// for accurate measurements.
 uint64_t getCppDelta() {
   std::chrono::time_point<std::chrono::high_resolution_clock> a;
   std::chrono::time_point<std::chrono::high_resolution_clock> b;

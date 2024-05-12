@@ -1,6 +1,12 @@
-add_executable(hello_world)
-target_sources(hello_world PRIVATE hello_world.cpp)
+add_executable(hello_world_main hello_world.cpp)
 
-add_executable(clocks)
-target_sources(clocks PRIVATE clocks.cpp)
+add_executable(clocks_main clocks.cpp)
+
+add_executable(profile_main profile.cpp)
+target_link_libraries(profile_main PRIVATE profiler)
+
+add_executable(fork fork.cpp)
+
+add_executable(unit_main unit_main.cpp)
+target_link_libraries(unit_main PRIVATE unit)
 

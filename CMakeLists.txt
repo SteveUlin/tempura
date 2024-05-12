@@ -19,6 +19,7 @@ set(CMAKE_CXX_FLAGS "-Wall -Wextra")
 set(CMAKE_CXX_FLAGS_DEBUG "-g")
 set(CMAKE_CXX_FLAGS_RELEASE "-Ofast -ftree-vectorize -march=native -ffast-math")
 
+include_directories(src)
 add_subdirectory(src)
 add_subdirectory(examples)
 
