@@ -5,7 +5,7 @@
 
 namespace tempura {
 
-Profiler& Profiler::instance_ = *(new Profiler());
+Profiler& Profiler::instance_ = *(new Profiler{});
 
 Profiler::Tracer::Tracer(Anchor &anchor)
     : anchor_(anchor), parent_anchor_(*instance_.global_current_),
@@ -52,17 +52,17 @@ auto Profiler::endAndPrintStats() -> void {
   for (const Anchor& anchor : instance_.anchors_) {
     {
       auto percent =
-          (static_cast<double>(anchor.inclusive.count()) / elapsed.count()) * 100;
-      auto avg = static_cast<double>(anchor.inclusive.count()) / anchor.hits;
+          (static_cast<double>(anchor.inclusive.count()) / static_cast<double>(elapsed.count())) * 100;
+      auto avg = static_cast<double>(anchor.inclusive.count()) / static_cast<double>(anchor.hits);
 
       std::print("{}[{}]: {} ns, {:.2f}%, avg: {:.2f} ns",
                  anchor.label, anchor.hits,  anchor.inclusive.count(), percent, avg);
     }
     {
       auto percent =
-          (static_cast<double>(anchor.exclusive.count()) / elapsed.count()) *
+          (static_cast<double>(anchor.exclusive.count()) / static_cast<double>(elapsed.count())) *
           100;
-      auto avg = static_cast<double>(anchor.exclusive.count()) / anchor.hits;
+      auto avg = static_cast<double>(anchor.exclusive.count()) / static_cast<double>(anchor.hits);
       std::println(", w/o children: {} ns, {:.2f}%, avg: {:.2f} ns",
                    anchor.exclusive.count(), percent, avg);
     }

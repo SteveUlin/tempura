@@ -12,28 +12,38 @@ struct Test;
 // TestRegistry stores global data about the currently running test and
 // metadata about the entire test suite.
 //
-// Unit test binaries should indicate success or failure by returning 
+// Unit test binaries should indicate success or failure by returning
 // TestRegistry::result().
 class TestRegistry final {
 public:
+  TestRegistry(const TestRegistry&) = delete;
+  TestRegistry(TestRegistry&&) = delete;
+  auto operator=(const TestRegistry&) -> TestRegistry& = delete;
+  auto operator=(TestRegistry&&) -> TestRegistry& = delete;
+
   static void setCurrent(Test& test) {
-    instance.current_ = &test;
-    instance.current_success_ = true;
+    getInstance().current_ = &test;
+    getInstance().current_success_ = true;
   }
 
   static void setFailure() {
-    if (instance.current_success_) {
-      ++instance.total_failures_;
+    if (getInstance().current_success_) {
+      ++getInstance().total_failures_;
     }
-    instance.current_success_ = false;
+    getInstance().current_success_ = false;
   }
 
-  [[nodiscard]] static bool result() {
-    return instance.total_failures_ > 0;
+  [[nodiscard]] static auto result() -> int {
+    return static_cast<int>(getInstance().total_failures_);
   }
 
 private:
-  static TestRegistry& instance;
+  TestRegistry() = default;
+
+  static auto getInstance() -> TestRegistry& {
+    static TestRegistry instance;
+    return instance;
+  }
 
   Test* current_;
   bool current_success_;
@@ -42,17 +52,23 @@ private:
 };
 
 struct Test {
-  std::string_view name = {};
+public:
+  std::string_view name;
 
-  auto operator=(std::function<void()>& func) -> void {
+  auto operator=(const std::function<void()>& func) -> void {
+    TestRegistry::setCurrent(*this);
     std::clog << "Running... " << name << '\n';
     func();
   }
+private:
+  constexpr Test(std::string_view name) : name(name) {}
+
+  friend constexpr auto operator""_test(const char*, std::size_t) -> Test;
 };
 
-[[nodiscard]] constexpr Test operator""_test(
-  const char* name, std::size_t size) {
-  return Test{ .name = {name, size} };
+[[nodiscard]] constexpr auto operator""_test(
+  const char* name, std::size_t size) -> Test {
+  return Test{{name, size}};
 }
 
 
@@ -66,16 +82,44 @@ public:
 
   ~expectEq() {
     if (not *this) {
-      TestRegistry::setFailure();
       std::cerr << location_.file_name() << ":"
             << location_.line() << ":"
             << "error: "
             << "Expected " << lhs_ << " == " << rhs_ << '\n';
+      TestRegistry::setFailure();
     }
   }
 
   [[nodiscard]] constexpr operator bool() const {
     return lhs_ == rhs_;
+  }
+
+private:
+  const TLhs& lhs_;
+  const TRhs& rhs_;
+  std::source_location location_;
+};
+
+template <class TLhs, class TRhs>
+class expectApproxEq final {
+public:
+  constexpr expectApproxEq(
+      const TLhs& lhs, const TRhs& rhs,
+      std::source_location location = std::source_location::current())
+      : lhs_(lhs), rhs_(rhs), location_(location) {}
+
+  ~expectApproxEq() {
+    if (not *this) {
+      std::cerr << location_.file_name() << ":"
+            << location_.line() << ":"
+            << "error: "
+            << "Expected " << lhs_ << " ≈ " << rhs_ << '\n';
+      TestRegistry::setFailure();
+    }
+  }
+
+  [[nodiscard]] constexpr operator bool() const {
+    return lhs_ - rhs_ < 0.0001;
   }
 
 private:

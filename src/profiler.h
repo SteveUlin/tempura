@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include <chrono>
 
 namespace tempura {
@@ -14,8 +14,7 @@ using namespace std::chrono_literals;
 // Not super high fidelity as the Profiler allocates new anchor points as
 // needed, but this is more than accurate enough for most tasks. Allocating
 // a new anchor may add a few nanoseconds to a trace.
-//
-// 
+
 class Profiler {
 public:
   // Information about an anchor point. i.e. TEMPURA_TRACE("Some Label");
@@ -57,7 +56,7 @@ public:
 
 private:
   static Profiler& instance_;
-  std::deque<Anchor> anchors_ = {};
+  std::deque<Anchor> anchors_;
 
   // The anchor that we are currently tracing.
   Anchor* global_current_;
