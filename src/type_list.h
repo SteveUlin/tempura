@@ -33,7 +33,6 @@ constexpr auto concat(TypeListed auto first, TypeListed auto... rest);
 template <typename... Args>
 struct TypeList {
   constexpr TypeList() = default;
-
   constexpr TypeList(Args...) requires (sizeof...(Args) > 0) {};
 
   // Get the list of types out of the TypeList by using a lmanbda
@@ -116,17 +115,17 @@ struct Not {
 
 } // namespace internal
 
-template <typename... Args>
+template <template <typename> typename Fn, typename... Args>
 constexpr auto sort(TypeList<Args...> list) {
 
   if constexpr (sizeof...(Args) <= 1) {
     return TypeList<Args...>{};
   } else {
     auto pivot = list.head();
-    auto lhs = list.tail().template filter<internal::Not<internal::TypeNameCmp<decltype(pivot)>>>();
-    auto rhs = list.tail().template filter<internal::TypeNameCmp<decltype(pivot)>>();
+    auto lhs = list.tail().template filter<internal::Not<Fn<decltype(pivot)>>>();
+    auto rhs = list.tail().template filter<Fn<decltype(pivot)>>();
 
-    return concat(sort(lhs), TypeList<decltype(pivot)>{}, sort(rhs));
+    return concat(sort<Fn>(lhs), TypeList<decltype(pivot)>{}, sort<Fn>(rhs));
   }
 }
 

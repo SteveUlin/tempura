@@ -69,8 +69,7 @@ struct Real : std::is_floating_point<T> {};
 
 // Automatically include a lambda in each instantiation of a Symbol.
 // This forces each instantiation to be a unique type.
-template <template <typename> typename Constraint = Unconstrined,
-          auto UNIQUE = [] {}>
+template <auto, template <typename> typename Constraint = Unconstrined>
 class Symbol {
 public:
   // Bind the symbol with a provided value
@@ -111,9 +110,10 @@ public:
     return substitution[*this];
   }
 };
+#define SYMBOL() Symbol<[]{}>{}
 
-template <template <typename> typename Constraint, auto ID>
-struct internal::SymbolicTrait<Symbol<Constraint, ID>> {
+template <auto ID, template <typename> typename Constraint>
+struct internal::SymbolicTrait<Symbol<ID, Constraint>> {
   static constexpr bool value = true;
 };
 
@@ -140,6 +140,7 @@ template <typename Action, Symbolic... Terms>
 struct SymbolicExpression {
   constexpr SymbolicExpression() = default;
   constexpr SymbolicExpression(Action, Terms...) {};
+  constexpr SymbolicExpression(Action, TypeList<Terms...>) {};
 
   constexpr auto terms() -> TypeList<Terms...> {
     return {};
@@ -168,8 +169,8 @@ enum class DisplayMode {
 
 template <typename>
 struct DisplayPolicy {
-  DisplayMode mode = DisplayMode::kPrefix;
-  std::string_view symbol = "UNKNOWN"sv;
+  static constexpr DisplayMode mode = DisplayMode::kPrefix;
+  static constexpr std::string_view symbol = "UNKNOWN"sv;
 };
 
 struct Plus {
@@ -182,8 +183,8 @@ struct Plus {
 
 template <>
 struct DisplayPolicy<Plus> {
-  DisplayMode mode = DisplayMode::kInfix;
-  std::string_view symbol = "+"sv;
+  static constexpr DisplayMode mode = DisplayMode::kInfix;
+  static constexpr std::string_view symbol = "+"sv;
 };
 
 template <Symbolic Lhs, Symbolic Rhs>
@@ -201,8 +202,8 @@ struct Minus {
 
 template <>
 struct DisplayPolicy<Minus> {
-  DisplayMode mode = DisplayMode::kInfix;
-  std::string_view symbol = "-"sv;
+  static constexpr DisplayMode mode = DisplayMode::kInfix;
+  static constexpr std::string_view symbol = "-"sv;
 };
 
 template <Symbolic Lhs, Symbolic Rhs>
@@ -220,8 +221,8 @@ struct Multiply {
 
 template <>
 struct DisplayPolicy<Multiply> {
-  DisplayMode mode = DisplayMode::kInfix;
-  std::string_view symbol = "*"sv;
+  static constexpr DisplayMode mode = DisplayMode::kInfix;
+  static constexpr std::string_view symbol = "*"sv;
 };
 
 template <Symbolic Lhs, Symbolic Rhs>
@@ -231,8 +232,8 @@ constexpr auto operator*(Lhs, Rhs) -> SymbolicExpression<Multiply, Lhs, Rhs> {
 
 template <>
 struct DisplayPolicy<std::divides<void>> {
-  DisplayMode mode = DisplayMode::kInfix;
-  std::string_view symbol = "/"sv;
+  static constexpr DisplayMode mode = DisplayMode::kInfix;
+  static constexpr std::string_view symbol = "/"sv;
 };
 
 template <Symbolic Lhs, Symbolic Rhs>
@@ -249,8 +250,8 @@ struct SinSymbol {
 
 template <>
 struct DisplayPolicy<SinSymbol> {
-  DisplayMode mode = DisplayMode::kPrefix;
-  std::string_view symbol = "sin"sv;
+  static constexpr DisplayMode mode = DisplayMode::kPrefix;
+  static constexpr std::string_view symbol = "sin"sv;
 };
 
 template <Symbolic Arg>
@@ -267,8 +268,8 @@ struct CosSymbol {
 
 template <>
 struct DisplayPolicy<CosSymbol> {
-  DisplayMode mode = DisplayMode::kPrefix;
-  std::string_view symbol = "cos"sv;
+  static constexpr DisplayMode mode = DisplayMode::kPrefix;
+  static constexpr std::string_view symbol = "cos"sv;
 };
 
 template <Symbolic Arg>
@@ -332,13 +333,13 @@ consteval auto match(Constant<LhsValue>, AnyConstant) -> bool {
   return true;
 }
 
-template <template <typename> typename Constraint, auto ID>
-consteval auto match(Symbol<Constraint, ID>, AnySymbol) -> bool {
+template <auto ID, template <typename> typename Constraint>
+consteval auto match(Symbol<ID, Constraint>, AnySymbol) -> bool {
   return true;
 }
 
 template <template <typename> typename Constraint, auto ID>
-consteval auto match(AnySymbol, Symbol<Constraint, ID>) -> bool {
+consteval auto match(AnySymbol, Symbol<ID, Constraint>) -> bool {
   return true;
 }
 
@@ -352,6 +353,26 @@ consteval auto match(AnySymbolicExpression, SymbolicExpression<OperatorRhs, Term
   return true;
 }
 
+
+namespace internal {
+consteval auto cmpTypeLists(TypeListed auto lhs,TypeListed auto rhs) {
+  if constexpr (lhs.empty() && rhs.empty()) {
+    return true;
+  } else if constexpr (lhs.empty()) {
+    return (rhs.size() == 1) && std::is_same_v<decltype(rhs.head()), AnyNTerms>;
+  } else if constexpr (rhs.empty()) {
+    return (lhs.size() == 1) && std::is_same_v<decltype(lhs.head()), AnyNTerms>;
+  } else if constexpr (std::is_same_v<decltype(lhs.head()), AnyNTerms> ||
+                       std::is_same_v<decltype(rhs.head()), AnyNTerms>) {
+    return true;
+  } else if constexpr (!match(lhs.head(), rhs.head())) {
+    return false;
+  } else {
+    return cmpTypeLists(lhs.tail(), rhs.tail());
+  }
+}
+}  // namespace internal
+
 template <typename OperatorLhs, Symbolic... TermsLhs,
           typename OperatorRhs, Symbolic... TermsRhs>
 consteval auto match(SymbolicExpression<OperatorLhs, TermsLhs...>,
@@ -359,13 +380,8 @@ consteval auto match(SymbolicExpression<OperatorLhs, TermsLhs...>,
   if constexpr (!std::is_same_v<OperatorLhs, OperatorRhs>) {
     // Operators must match
     return false;
-  } else if constexpr (std::is_same_v<TypeList<AnyNTerms>, TypeList<TermsRhs...>> or
-                       std::is_same_v<TypeList<AnyNTerms>, TypeList<TermsLhs...>>) {
-    return true;
-  } else if constexpr (sizeof...(TermsLhs) != sizeof...(TermsRhs)) {
-    return false;
   } else {
-    return (match(TermsLhs{}, TermsRhs{}) && ...);
+    return internal::cmpTypeLists(TypeList<TermsLhs...>{}, TypeList<TermsRhs...>{});
   }
 }
 
@@ -375,45 +391,25 @@ consteval auto match(Constant<LhsValue> lhs,
   return lhs.value == rhs.value;
 }
 
-template <template <typename> typename Constraint, auto ID>
-consteval auto match(Symbol<Constraint, ID>,
-                     Symbol<Constraint, ID>) -> bool {
+template <auto ID, template <typename> typename Constraint>
+consteval auto match(Symbol<ID, Constraint>,
+                     Symbol<ID, Constraint>) -> bool {
   return true;
 }
 
-template <typename Action, Symbolic... Terms>
-consteval auto flattenImpl(Action action, TypeList<Terms...> terms) {
-  if constexpr (sizeof...(Terms) == 0) {
-    return TypeList<>{};
-
-  } else if constexpr (match(terms.head(),
-                             SymbolicExpression<Action, AnyNTerms>{})) {
-    return flattenImpl(action, concat(terms.head().terms(), terms.tail()));
-  } else {
-    return flattenImpl(action, terms.tail()) >>= [&](Symbolic auto... rest) {
-        return TypeList<decltype(terms.head()), decltype(rest)...>{};
-    };
-  }
-}
-template <typename Action, Symbolic... Terms>
-consteval auto flatten(SymbolicExpression<Action, Terms...> expr) {
-  return flattenImpl(Action{}, expr.terms()) >>= [&](auto... args) {
-    return SymbolicExpression<Action, decltype(args)...>{};
-  };
-}
-
 constexpr auto shouldWrap(Symbolic auto expr) -> bool {
-  if constexpr (!match(expr, AnySymbolicExpression{})) {
-    return false;
-  } else {
-    return getDisplayPolicy(expr.action()).mode == DisplayMode::kInfix;
-  }
+  return match(expr, AnySymbolicExpression{});
+  // if constexpr (!match(expr, AnySymbolicExpression{})) {
+  //   return false;
+  // } else {
+  //   return DisplayPolicy<decltype(expr.action())>::mode == DisplayMode::kInfix;
+  // }
 }
 
 template<typename... Binders>
 void show(Symbolic auto expr, const Substitution<Binders...>& substitution) {
   if constexpr (match(expr, AnySymbol{})) {
-    std::print("{}", substitution[expr.id()]);
+    std::print("{}", substitution[expr]);
 
   } else if constexpr (match(expr, AnyConstant{})) {
     if constexpr (std::is_floating_point_v<decltype(expr.value)>) {
@@ -423,25 +419,26 @@ void show(Symbolic auto expr, const Substitution<Binders...>& substitution) {
     }
 
   } else if constexpr (match(expr, AnySymbolicExpression{}) &&
-                       getDisplayPolicy(expr.action()).mode ==
+                       DisplayPolicy<decltype(expr.action())>::mode ==
                            DisplayMode::kInfix) {
     if (expr.terms().size() == 0) {
-      std::print("{}", getDisplayPolicy(expr.action()).symbol);
+      std::print("{}", DisplayPolicy<decltype(expr.action())>::symbol);
       return;
     }
+    std::print(shouldWrap(expr.terms().head()) ? "(" : "");
     show(expr.terms().head(), substitution);
+    std::print(shouldWrap(expr.terms().head()) ? ")" : "");
     expr.terms().tail() >>= [&](auto... args) {
-      ((std::print(" {} ", getDisplayPolicy(expr.action()).symbol),
+      ((std::print(" {} ", DisplayPolicy<decltype(expr.action())>::symbol),
         (std::print(shouldWrap(args) ? "(" : "")),
         show(args, substitution),
         (std::print(shouldWrap(args) ? ")" : ""))),
        ...);
     };
-
   } else if constexpr (match(expr, AnySymbolicExpression{}) &&
-                       getDisplayPolicy(expr.action()).mode ==
+                       DisplayPolicy<decltype(expr.action())>::mode ==
                            DisplayMode::kPrefix) {
-    std::print("{}(", getDisplayPolicy(expr.action()).symbol);
+    std::print("{}(", DisplayPolicy<decltype(expr.action())>::symbol);
     show(expr.terms().head(), substitution);
     expr.terms().tail() >>= [&](auto... args) {
       ((std::print(" "), show(args, substitution)), ...);

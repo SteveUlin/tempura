@@ -3,6 +3,11 @@ add_library(profiler
 
 add_library(unit INTERFACE unit.h)
 
+add_library(simplify INTERFACE simplify.h)
+
+add_executable(simplify_test simplify_test.cpp)
+target_link_libraries(simplify_test type_list simplify symbolic unit)
+
 add_library(symbolic INTERFACE symbolic.h)
 
 add_executable(symbolic_test symbolic_test.cpp)

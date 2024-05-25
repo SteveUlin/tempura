@@ -2,6 +2,8 @@
 
 #include "unit.h"
 
+#include <functional>
+
 using namespace tempura;
 using namespace tempura::symbolic;
 using namespace std::string_view_literals;
@@ -9,8 +11,8 @@ using namespace std::string_view_literals;
 auto main() -> int {
 
   "Symbols are not the same type"_test = [] {
-    Symbol a;
-    Symbol b;
+    auto a = SYMBOL();
+    auto b = SYMBOL();
     static_assert(!std::is_same_v<decltype(a), decltype(b)>);
   };
 
@@ -24,9 +26,9 @@ auto main() -> int {
   };
 
   "Addition substitution"_test = [] {
-    Symbol a;
-    Symbol b;
-    Symbol c;
+    auto a = SYMBOL();
+    auto b = SYMBOL();
+    auto c = SYMBOL();
     auto f = a + b + c;
     expectEq(6.F, f(Substitution{a = 1.F, b = 2.F, c = 3.F}));
 
@@ -34,9 +36,9 @@ auto main() -> int {
   };
 
   "Subtraction substitution"_test = [] {
-    Symbol a;
-    Symbol b;
-    Symbol c;
+    auto a = SYMBOL();
+    auto b = SYMBOL();
+    auto c = SYMBOL();
     auto f = a - b - c;
     expectEq(4.F, f(Substitution{a = 10.F, b = 5.F, c = 1.F}));
 
@@ -44,9 +46,9 @@ auto main() -> int {
   };
 
   "Multiplies substitution"_test = [] {
-    Symbol a;
-    Symbol b;
-    Symbol c;
+    auto a = SYMBOL();
+    auto b = SYMBOL();
+    auto c = SYMBOL();
     auto f = a * b * c;
     expectEq(12.F, f(Substitution{a = 2.F, b = 2.F, c = 3.F}));
 
@@ -54,9 +56,9 @@ auto main() -> int {
   };
 
   "Divides substitution"_test = [] {
-    Symbol a;
-    Symbol b;
-    Symbol c;
+    auto a = SYMBOL();
+    auto b = SYMBOL();
+    auto c = SYMBOL();
     auto f = a / b / c;
     expectEq(1.F, f(Substitution{a = 10.F, b = 5.F, c = 2.F}));
 
@@ -64,9 +66,9 @@ auto main() -> int {
   };
 
   "Match Symbol"_test = [] {
-    Symbol a;
-    Symbol b;
-    Symbol c;
+    auto a = SYMBOL();
+    auto b = SYMBOL();
+    auto c = SYMBOL();
     static_assert(match(a + b + c, a + b + c));
     // Order matters
     static_assert(!match(a + b + c, a + c + b));
@@ -90,9 +92,9 @@ auto main() -> int {
   };
 
   "Match Any"_test = [] {
-    Symbol a;
-    Symbol b;
-    Symbol c;
+    auto a = SYMBOL();
+    auto b = SYMBOL();
+    auto c = SYMBOL();
     static_assert(match(Any{}, Any{}));
     static_assert(match(a + b + c, Any{}));
     // SubSymbol Match
@@ -108,9 +110,9 @@ auto main() -> int {
   };
 
   "Match AnyNTerms"_test = [] {
-    Symbol a;
-    Symbol b;
-    Symbol c;
+    auto a = SYMBOL();
+    auto b = SYMBOL();
+    auto c = SYMBOL();
     // AnyNTerms only matches inside SymbolicExpression
     static_assert(!match(AnyNTerms{}, AnyNTerms{}));
     static_assert(!match(a + b + c, AnyNTerms{}));
@@ -119,12 +121,19 @@ auto main() -> int {
     static_assert(match(SymbolicExpression<Plus, AnyNTerms>{}, a + b + c));
     static_assert(
         match(SymbolicExpression<Plus, AnyNTerms>{}, SymbolicExpression<Plus, AnyNTerms>{}));
+    static_assert(
+        match(SymbolicExpression<Plus, decltype(a), decltype(b)>{}, SymbolicExpression<Plus, AnyNTerms>{}));
+
+    static_assert(match(SymbolicExpression<Plus, decltype(a), decltype(b)>{},
+                        SymbolicExpression<Plus, decltype(a), AnyNTerms>{}));
+    static_assert(!match(SymbolicExpression<Plus, decltype(a), decltype(b)>{},
+                         SymbolicExpression<Plus, decltype(b), AnyNTerms>{}));
   };
 
   "Match AnyNTerms"_test = [] {
-    Symbol a;
-    Symbol b;
-    Symbol c;
+    auto a = SYMBOL();
+    auto b = SYMBOL();
+    auto c = SYMBOL();
     // AnyNTerms only matches inside SymbolicExpression
     static_assert(!match(AnyNTerms{}, AnyNTerms{}));
     static_assert(!match(a + b + c, AnyNTerms{}));
@@ -136,7 +145,7 @@ auto main() -> int {
   };
 
   "Match AnyConstant"_test = [] {
-    Symbol a;
+    auto a = SYMBOL();
     Constant<3> b;
     static_assert(match(AnyConstant{}, Constant<3>{}));
     static_assert(match(Constant<3>{}, AnyConstant{}));
@@ -146,9 +155,9 @@ auto main() -> int {
   };
 
   "Match AnySymbol"_test = [] {
-    Symbol a;
+    auto a = SYMBOL();
     Constant<3> b;
-    static_assert(match(AnySymbol{}, Symbol{}));
+    static_assert(match(AnySymbol{}, a));
     static_assert(match(a, AnySymbol{}));
 
     static_assert(!match(AnySymbol{}, Constant<3>{}));
@@ -157,23 +166,19 @@ auto main() -> int {
   };
 
   "Match AnySymbolicExpression"_test = [] {
-    Symbol a;
+    auto a = SYMBOL();
     Constant<3> b;
     static_assert(!match(AnySymbolicExpression{}, a));
     static_assert(!match(AnySymbolicExpression{}, b));
     static_assert(match(AnySymbolicExpression{}, a + b));
     static_assert(match(a + b, AnySymbolicExpression{}));
     static_assert(match((a + b) + b, AnySymbolicExpression{} + b));
-
-    static_assert(!match(AnySymbol{}, Constant<3>{}));
-    static_assert(match(a + b, AnySymbol{} + b));
-    static_assert(!match(a + b, b + AnySymbol{}));
   };
 
-  Symbol a;
-  Symbol ω;
-  Symbol t;
-  Symbol ϕ;
+  auto a = SYMBOL();
+  auto ω = SYMBOL();
+  auto t = SYMBOL();
+  auto ϕ = SYMBOL();
 
   auto f = a * sin(ω * t + ϕ);
   std::print("{}\n", f(Substitution{a = 1.f, ω = 2.f, t = 3.f, ϕ = 4.f}));

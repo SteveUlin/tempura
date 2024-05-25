@@ -67,7 +67,7 @@ int main() {
   "TypeList Sort"_test = [] {
     constexpr auto list = TypeList<int, double, float, char>{};
 
-    static_assert(std::is_same_v<decltype(sort(list)), TypeList<char, double, float, int>>);
+    static_assert(std::is_same_v<decltype(sort<internal::TypeNameCmp>(list)), TypeList<char, double, float, int>>);
   };
   return 0;
 }
