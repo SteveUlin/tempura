@@ -1,6 +1,6 @@
 #include "profiler.h"
 
-int main() {
+auto main() -> int {
   tempura::Profiler::beginTracing();
   {
     TEMPURA_TRACE("Scope 0");
@@ -17,3 +17,4 @@ int main() {
   tempura::Profiler::endAndPrintStats();
   return 0;
 }
+

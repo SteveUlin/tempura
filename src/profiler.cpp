@@ -1,9 +1,37 @@
 #include "profiler.h"
 
 #include <cassert>
+#include <format>
 #include <print>
+#include <ratio>
 
 namespace tempura {
+
+namespace {
+
+auto toHumanReadable(std::chrono::nanoseconds duration) -> std::string {
+  using namespace std::chrono_literals;
+  if (duration < 1ms) {
+    return std::format("{} ns", duration.count());
+  }
+  if (duration < 10s) {
+    return std::format(
+        "{:.2f} ms",
+        std::chrono::duration<double, std::chrono::milliseconds::period>(duration).count());
+  }
+  if (duration < 5min) {
+    return std::format("{:.2f} s",
+                     std::chrono::duration<double, std::chrono::seconds::period>(duration).count());
+  }
+  if (duration < 120min) {
+    return std::format("{:.2f} s",
+                     std::chrono::duration<double, std::chrono::hours::period>(duration).count());
+  }
+  return std::format("{:.2f} h",
+                   std::chrono::duration<double, std::chrono::hours::period>(duration).count());
+}
+
+};
 
 Profiler& Profiler::instance_ = *(new Profiler{});
 
@@ -53,18 +81,17 @@ auto Profiler::endAndPrintStats() -> void {
     {
       auto percent =
           (static_cast<double>(anchor.inclusive.count()) / static_cast<double>(elapsed.count())) * 100;
-      auto avg = static_cast<double>(anchor.inclusive.count()) / static_cast<double>(anchor.hits);
+      auto avg = anchor.inclusive / anchor.hits;
 
-      std::print("{}[{}]: {} ns, {:.2f}%, avg: {:.2f} ns",
-                 anchor.label, anchor.hits,  anchor.inclusive.count(), percent, avg);
+      std::print("{}[{}]: {} {:.2f}% avg: {}",
+                 anchor.label, anchor.hits,  toHumanReadable(anchor.inclusive), percent, toHumanReadable(avg));
     }
     {
       auto percent =
           (static_cast<double>(anchor.exclusive.count()) / static_cast<double>(elapsed.count())) *
           100;
-      auto avg = static_cast<double>(anchor.exclusive.count()) / static_cast<double>(anchor.hits);
-      std::println(", w/o children: {} ns, {:.2f}%, avg: {:.2f} ns",
-                   anchor.exclusive.count(), percent, avg);
+      auto avg = anchor.exclusive / anchor.hits;
+      std::println(", w/o children: {} ns, {:.2f}% avg: {}", toHumanReadable(anchor.exclusive), percent, toHumanReadable(avg));
     }
   }
 }

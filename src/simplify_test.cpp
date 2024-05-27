@@ -2,27 +2,9 @@
 
 #include "symbolic.h"
 #include "unit.h"
-#include "type_name.h"
-
-#include <algorithm>
 
 using namespace tempura;
 using namespace tempura::symbolic;
-
-template <size_t N>
-struct compile_time_string {
-    constexpr compile_time_string(const char (&str)[N])
-    {
-      std::copy_n(str, N, value);
-    }
-    char value[N]{};
-};
-
-template <compile_time_string cts>
-constexpr auto operator""_cts()
-{
-    return cts;
-}
 
 auto main() -> int {
   "Flatten"_test = [] {
