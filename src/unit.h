@@ -7,7 +7,7 @@
 
 namespace tempura {
 
-struct Test;
+class Test;
 
 // TestRegistry stores global data about the currently running test and
 // metadata about the entire test suite.
@@ -51,19 +51,19 @@ private:
   std::size_t total_failures_ = 0;
 };
 
-struct Test {
+class Test {
 public:
-  std::string_view name;
-
   auto operator=(const std::function<void()>& func) -> void {
     TestRegistry::setCurrent(*this);
-    std::clog << "Running... " << name << '\n';
+    std::clog << "Running... " << name_ << '\n';
     func();
   }
 private:
-  constexpr Test(std::string_view name) : name(name) {}
+  constexpr Test(std::string_view name) : name_(name) {}
 
   friend constexpr auto operator""_test(const char*, std::size_t) -> Test;
+
+  std::string_view name_;
 };
 
 [[nodiscard]] constexpr auto operator""_test(
@@ -97,6 +97,52 @@ public:
 private:
   const TLhs& lhs_;
   const TRhs& rhs_;
+  std::source_location location_;
+};
+
+class expectTrue final {
+public:
+  constexpr expectTrue(bool value) : value_(value) {}
+
+  ~expectTrue() {
+    if (not *this) {
+      std::cerr << location_.file_name() << ":"
+            << location_.line() << ":"
+            << "error: "
+            << "Expected true got false";
+      TestRegistry::setFailure();
+    }
+  }
+
+  [[nodiscard]] constexpr operator bool() const {
+    return value_;
+  }
+
+private:
+  bool value_;
+  std::source_location location_;
+};
+
+class expectFalse final {
+public:
+  constexpr expectFalse(bool value) : value_(value) {}
+
+  ~expectFalse() {
+    if (not *this) {
+      std::cerr << location_.file_name() << ":"
+            << location_.line() << ":"
+            << "error: "
+            << "Expected false got true";
+      TestRegistry::setFailure();
+    }
+  }
+
+  [[nodiscard]] constexpr operator bool() const {
+    return value_;
+  }
+
+private:
+  bool value_;
   std::source_location location_;
 };
 

@@ -22,6 +22,7 @@
           name = "Tempura";
 
           packages = with pkgs; [
+            bazel
             cmake
             ninja
           ];

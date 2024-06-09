@@ -1,10 +1,8 @@
-#include "unit.h"
-
-#include <print>
+#include "src/unit.h"
 
 using namespace tempura;
 
-int main() {
+auto main() -> int {
   "sum"_test = [] {
     expectEq((1 + 2), 6);
   };

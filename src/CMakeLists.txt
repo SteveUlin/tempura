@@ -1,7 +1,12 @@
+add_library(fifo_queue INTERFACE fifo_queue.h)
+
+add_executable(fifo_queue_test fifo_queue_test.cpp)
+target_link_libraries(fifo_queue_test fifo_queue profiler unit benchmark)
+
 add_library(profiler
   STATIC profiler.h profiler.cpp)
 
-add_library(unit INTERFACE unit.h)
+add_library(benchmark INTERFACE benchmark.h)
 
 add_library(simplify INTERFACE simplify.h)
 
@@ -24,3 +29,4 @@ add_library(type_name INTERFACE type_name.h)
 add_executable(type_name_test type_name_test.cpp)
 target_link_libraries(type_name_test type_name unit)
 
+add_library(unit INTERFACE unit.h)

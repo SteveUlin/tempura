@@ -1,7 +1,7 @@
-#include <print>
+#include <iostream>
 
-int main() {
-  std::print("Hello, World!");
+auto main() -> int {
+  std::cout <<"Hello, World!";
 
   return 0;
 }

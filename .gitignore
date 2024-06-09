@@ -1,6 +1,5 @@
-build/
-debug/
-.cache/
+bazel-*/
+bazel-*
 
 # Prerequisites
 *.d
