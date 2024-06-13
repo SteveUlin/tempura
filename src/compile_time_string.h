@@ -15,8 +15,8 @@ constexpr auto operator""_cts() {
 }
 
 template <size_t N, size_t M>
-constexpr auto operator<=>(CompileTimeString<N> lhs, CompileTimeString<M> rhs) -> bool {
-  return std::ranges::lexicographical_compare(lhs.value, rhs.value);
+constexpr auto operator==(CompileTimeString<N> lhs, CompileTimeString<M> rhs) -> bool {
+  return std::ranges::equal(lhs.value, rhs.value);
 }
 
 template <size_t N, size_t M>

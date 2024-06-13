@@ -6,6 +6,20 @@ cc_library(
 )
 
 cc_library(
+  name = "compile_time_string",
+  hdrs = ["compile_time_string.h"],
+)
+
+cc_test(
+  name = "compile_time_string_test",
+  srcs = ["compile_time_string_test.cpp"],
+  deps = [
+    ":compile_time_string",
+    ":unit",
+  ],
+)
+
+cc_library(
   name = "fifo_queue",
   hdrs = ["fifo_queue.h"],
 )
