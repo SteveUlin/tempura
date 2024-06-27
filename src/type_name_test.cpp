@@ -10,8 +10,8 @@ auto main() -> int {
     expectEq(typeName<int>(), "int"sv);
     expectEq(typeName<char>(), "char"sv);
 
-    expectEq(typeName<int>(int{}), "int"sv);
-    expectEq(typeName<char>(char{}), "char"sv);
+    expectEq(typeName(int{}), "int"sv);
+    expectEq(typeName(char{}), "char"sv);
   };
 
   "Constexpr typenames"_test = [] {
@@ -23,8 +23,8 @@ auto main() -> int {
   };
 
   "Lambdas are different"_test = [] {
-    static_assert(typeName<decltype([]{})>() != typeName<decltype([]{})>());
-    static_assert(typeName([]{}) != typeName([]{}));
+    expectNeq(typeName<decltype([]{})>(), typeName<decltype([]{})>());
+    expectNeq(typeName([]{}), typeName([]{}));
   };
 
   return TestRegistry::result();

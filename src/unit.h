@@ -100,6 +100,34 @@ private:
   std::source_location location_;
 };
 
+template <class TLhs, class TRhs>
+class expectNeq final {
+public:
+  constexpr expectNeq(
+      const TLhs& lhs, const TRhs& rhs,
+      std::source_location location = std::source_location::current())
+      : lhs_(lhs), rhs_(rhs), location_(location) {}
+
+  ~expectNeq() {
+    if (not *this) {
+      std::cerr << location_.file_name() << ":"
+            << location_.line() << ":"
+            << "error: "
+            << "Expected " << lhs_ << " != " << rhs_ << '\n';
+      TestRegistry::setFailure();
+    }
+  }
+
+  [[nodiscard]] constexpr operator bool() const {
+    return lhs_ != rhs_;
+  }
+
+private:
+  const TLhs& lhs_;
+  const TRhs& rhs_;
+  std::source_location location_;
+};
+
 class expectTrue final {
 public:
   constexpr expectTrue(bool value) : value_(value) {}

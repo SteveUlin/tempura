@@ -35,7 +35,7 @@ struct TypeList {
   constexpr TypeList() = default;
   constexpr TypeList(Args...) requires (sizeof...(Args) > 0) {};
 
-  // Get the list of types out of the TypeList by using a lmanbda
+  // Get the list of types out of the TypeList by using a lambda
   // typelist.apply([](auto... args) { ... });
   static constexpr auto apply(auto func) {
     return func(Args{}...);

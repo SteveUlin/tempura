@@ -13,7 +13,7 @@ struct FilterFn {
   }
 };
 
-int main() {
+auto main() -> int {
   "TypeList Constructor"_test = [] {
     constexpr auto list = TypeList<int, double, float, char>{};
     static_assert(std::is_same_v<decltype(list), const TypeList<int, double, float, char>>);
@@ -69,5 +69,6 @@ int main() {
 
     static_assert(std::is_same_v<decltype(sort<internal::TypeNameCmp>(list)), TypeList<char, double, float, int>>);
   };
+
   return 0;
 }

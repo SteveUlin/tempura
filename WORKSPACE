@@ -1,5 +1,23 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
+# Hedron's Compile Commands Extractor for Bazel
+# https://github.com/hedronvision/bazel-compile-commands-extractor
+http_archive(
+    name = "hedron_compile_commands",
+
+    # Replace the commit hash (0e990032f3c5a866e72615cf67e5ce22186dcb97) in both places (below) with the latest (https://github.com/hedronvision/bazel-compile-commands-extractor/commits/main), rather than using the stale one here.
+    url = "https://github.com/hedronvision/bazel-compile-commands-extractor/archive/a14ad3a64e7bf398ab48105aaa0348e032ac87f8.tar.gz",
+    strip_prefix = "bazel-compile-commands-extractor-a14ad3a64e7bf398ab48105aaa0348e032ac87f8",
+)
+load("@hedron_compile_commands//:workspace_setup.bzl", "hedron_compile_commands_setup")
+hedron_compile_commands_setup()
+load("@hedron_compile_commands//:workspace_setup_transitive.bzl", "hedron_compile_commands_setup_transitive")
+hedron_compile_commands_setup_transitive()
+load("@hedron_compile_commands//:workspace_setup_transitive_transitive.bzl", "hedron_compile_commands_setup_transitive_transitive")
+hedron_compile_commands_setup_transitive_transitive()
+load("@hedron_compile_commands//:workspace_setup_transitive_transitive_transitive.bzl", "hedron_compile_commands_setup_transitive_transitive_transitive")
+hedron_compile_commands_setup_transitive_transitive_transitive()
+
 http_archive(
     name = "io_tweag_rules_nixpkgs",
     strip_prefix = "rules_nixpkgs-6c96398f601e92f9a9190732796ffbdf1ae8f954",
@@ -17,10 +35,10 @@ nixpkgs_git_repository(
     sha256 = "" # optional sha to verify package integrity!
 )
 
-
 nixpkgs_cc_configure(
   repository = "@nixpkgs",
   name = "nixpkgs_config_cc",
+  attribute_path = "clang_18",
 )
 
 # load rules_cc
