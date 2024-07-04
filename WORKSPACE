@@ -20,8 +20,8 @@ hedron_compile_commands_setup_transitive_transitive_transitive()
 
 http_archive(
     name = "io_tweag_rules_nixpkgs",
-    strip_prefix = "rules_nixpkgs-6c96398f601e92f9a9190732796ffbdf1ae8f954",
-    urls = ["https://github.com/tweag/rules_nixpkgs/archive/6c96398f601e92f9a9190732796ffbdf1ae8f954.tar.gz"],
+    strip_prefix = "rules_nixpkgs-ecd3028f3a586a5bdd3eeb73d3d621dc822a10a7",
+    urls = ["https://github.com/tweag/rules_nixpkgs/archive/ecd3028f3a586a5bdd3eeb73d3d621dc822a10a7.tar.gz"],
 )
 
 load("@io_tweag_rules_nixpkgs//nixpkgs:repositories.bzl", "rules_nixpkgs_dependencies")
@@ -38,7 +38,7 @@ nixpkgs_git_repository(
 nixpkgs_cc_configure(
   repository = "@nixpkgs",
   name = "nixpkgs_config_cc",
-  attribute_path = "clang_18",
+  attribute_path = "gcc14",
 )
 
 # load rules_cc

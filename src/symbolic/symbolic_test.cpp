@@ -24,8 +24,10 @@ auto main() -> int {
   "Addition"_test = [] {
     constexpr auto a = SYMBOL();
     constexpr auto b = SYMBOL();
+    constexpr auto c = SYMBOL();
     static_assert((a + a)(Substitution{a = 5}) == 10);
     static_assert((a + b)(Substitution{a = 5, b = 2}) == 7);
+    static_assert((a + b + c)(Substitution{a = 5, b = 2, c = 1}) == 8);
   };
 
   "Subtraction"_test = [] {
@@ -49,5 +51,13 @@ auto main() -> int {
     static_assert((a / b)(Substitution{a = 10, b = 2}) == 5);
   };
 
-  return 0;
+  "Power"_test = [] {
+    constexpr auto a = SYMBOL();
+    constexpr auto b = SYMBOL();
+    static_assert((a ^ a)(Substitution{a = 5}) == 3125);
+    static_assert((a ^ b)(Substitution{a = 10, b = 2}) == 100);
+  };
+
+  return TestRegistry::result();
 }
+

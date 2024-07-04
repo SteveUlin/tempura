@@ -1,10 +1,12 @@
 #pragma once
 
-#include "src/compile_time_string.h"
+#include "src/type_list.h"
 
 #include <cmath>
 #include <functional>
+#include <format>
 #include <numeric>
+#include <string>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -89,13 +91,16 @@ struct Constant {
 };
 
 template <auto LHS, auto RHS>
-constexpr auto operator==(const Constant<LHS>&, const Constant<RHS>&) {
+constexpr auto operator==(Constant<LHS>, Constant<RHS>) -> bool {
   return LHS == RHS;
 }
 
-template <auto LHS, auto RHS>
-constexpr auto operator!=(const Constant<LHS>&, const Constant<RHS>&) {
-  return LHS != RHS;
+constexpr auto operator==(Symbolic auto lhs, Symbolic auto rhs) -> bool {
+  return std::is_same_v<decltype(lhs), decltype(rhs)>;
+}
+
+constexpr auto operator!=(Symbolic auto lhs, Symbolic auto rhs) -> bool {
+  return !(lhs == rhs);
 }
 
 template <auto VALUE>
@@ -126,55 +131,70 @@ struct Symbol {
 // parameters, each Symbol will also be a distinct type. Further when clang pretty
 // prints the Symbol type it will include the source file line and offset. This
 // is convenient for sorting types.
-#define SYMBOL() Symbol<[]{}>{}
-
-template <auto kLhs, auto kRhs>
-constexpr auto operator==(const Symbol<kLhs>&, const Symbol<kRhs>&) {
-  return kLhs == kRhs;
-}
-
-template <auto kLhs, auto kRhs>
-constexpr auto operator!=(const Symbol<kLhs>&, const Symbol<kRhs>&) {
-  return kLhs != kRhs;
-}
+#define SYMBOL() Symbol<__COUNTER__>{}
 
 template <auto kId>
 inline constexpr bool internal::SymbolicTypeTrait<Symbol<kId>> = true;
 
 // --- Symbolic Expressions ---
 
-template <typename Op, Symbolic... Args>
-struct SymbolicExpression {
-  template<BinderT... Binders>
-  constexpr auto operator()(const Substitution<Binders...>& substitution) {
-    return Op{}(Args{}(substitution)...);
-  }
-};
-
-// --- Matcher Expressions ---
-
-template <typename Op, Matcher... Matchers>
-struct MatcherExpression {};
-
-// --- Display ---
-
-// Symbols cannot be displayed and must be substituted for string constants
-// before converting an expression to a string.
-
-template <auto VALUE>
-constexpr auto toCTS(const Constant<VALUE>&) {
-  return CompileTimeString(VALUE);
-}
-
 enum class DisplayMode {
   kInfix,
   kPrefix,
 };
 
-template <typename>
-struct OpDisplayPolicy {
-  static constexpr DisplayMode mode = DisplayMode::kPrefix;
-  static constexpr CompileTimeString symbol = "UNKNOWN"_cts;
+template <typename T>
+concept Operator = requires {
+  []<typename... Args>(T t) {
+    t(Args{}...);
+  };
+
+  requires std::is_same_v<decltype(T::kDisplayMode), const DisplayMode>;
+
+  requires std::is_same_v<decltype(T::kSymbol), const std::string_view>;
 };
+
+consteval auto operator==(Operator auto lhs, Operator auto rhs) -> bool {
+  return std::is_same_v<decltype(lhs), decltype(rhs)>;
+}
+
+template <Operator Op, Symbolic... Args>
+struct SymbolicExpression {
+  constexpr SymbolicExpression() = default;
+  constexpr SymbolicExpression(const SymbolicExpression&) = default;
+  constexpr auto operator=(const SymbolicExpression&) -> SymbolicExpression& {};
+
+  constexpr SymbolicExpression(Op, Args...) {};
+
+  template<BinderT... Binders>
+  constexpr auto operator()(const Substitution<Binders...>& substitution) {
+    return Op{}(Args{}(substitution)...);
+  }
+
+  consteval static auto terms() {
+    return TypeList<Args...>{};
+  }
+
+  consteval static auto op() {
+    return Op{};
+  }
+};
+
+template <Operator Op, Symbolic... Args>
+inline constexpr bool internal::SymbolicTypeTrait<SymbolicExpression<Op, Args...>> = true;
+
+// --- Matcher Expressions ---
+
+template <Operator Op, Matcher... Matchers>
+struct MatcherExpression {
+  constexpr MatcherExpression() = default;
+  constexpr MatcherExpression(const MatcherExpression&) = default;
+  constexpr auto operator=(const MatcherExpression&) -> MatcherExpression& {};
+
+  constexpr MatcherExpression(Op, Matchers...) {};
+};
+
+template <Operator Op, Matcher... Args>
+inline constexpr bool internal::MatcherTypeTrait<MatcherExpression<Op, Args...>> = true;
 
 }  // namespace tempura::symbolic

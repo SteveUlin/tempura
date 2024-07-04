@@ -353,8 +353,8 @@ consteval auto match(AnySymbolicExpression, SymbolicExpression<OperatorRhs, Term
   return true;
 }
 
-
 namespace internal {
+
 consteval auto cmpTypeLists(TypeListed auto lhs,TypeListed auto rhs) {
   if constexpr (lhs.empty() && rhs.empty()) {
     return true;
@@ -371,6 +371,7 @@ consteval auto cmpTypeLists(TypeListed auto lhs,TypeListed auto rhs) {
     return cmpTypeLists(lhs.tail(), rhs.tail());
   }
 }
+
 }  // namespace internal
 
 template <typename OperatorLhs, Symbolic... TermsLhs,
