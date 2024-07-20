@@ -24,6 +24,7 @@ auto main() -> int {
     static_assert(constantPart(Constant<3>{}) == Constant<3>{});
     static_assert(constantPart(a) == Constant<1>{});
     static_assert(constantPart(a + b) == Constant<1>{});
+
     static_assert(constantPart(Constant<3>{} * a) == Constant<3>{});
     static_assert(constantPart(a * Constant<3>{}) == Constant<3>{});
     static_assert(constantPart(π * a) == π);

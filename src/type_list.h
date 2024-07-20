@@ -3,37 +3,18 @@
 #include "type_name.h"
 
 #include <cstddef>
+#include <type_traits>
 
 namespace tempura {
 
-// A bunch of forward declarations because things are pretty interdependent
-template <typename... Args>
-struct TypeList;
-
-namespace internal {
-
-template <typename T>
-struct TypeListTrait {
-  constexpr static bool value = false;
-};
-
-template <typename... Args>
-struct TypeListTrait<TypeList<Args...>> {
-  constexpr static bool value = true;
-};
-
-} // namespace internal
-
-template <typename T>
-concept TypeListed = internal::TypeListTrait<T>::value;
-
-constexpr auto concat(TypeListed auto first, TypeListed auto... rest);
+template<typename... Args>
+consteval auto concat(Args...);
 
 // An empty struct that holds a list of types
 template <typename... Args>
 struct TypeList {
-  constexpr TypeList() = default;
-  constexpr TypeList(Args...) requires (sizeof...(Args) > 0) {};
+  consteval TypeList() = default;
+  consteval TypeList(Args...) requires (sizeof...(Args) > 0) {};
 
   // Get the list of types out of the TypeList by using a lambda
   // typelist.apply([](auto... args) { ... });
@@ -46,62 +27,80 @@ struct TypeList {
     return apply(func);
   }
 
-  static constexpr auto empty() -> bool {
+  static consteval auto empty() -> bool {
     return (sizeof...(Args) == 0);
   }
 
-  static constexpr auto size() -> size_t {
+  static consteval auto size() -> size_t {
     return sizeof...(Args);
   }
 
-  static constexpr auto head()
+  static consteval auto head()
   requires (sizeof...(Args) > 0) {
     return apply([](auto head, auto...) { return head; });
   };
 
-  static constexpr auto tail()
+  static consteval auto tail()
   requires (sizeof...(Args) > 0) {
     return apply([](auto, auto... rest) {
       return TypeList<decltype(rest)...>{};
     });
   }
 
-  template<typename Fn>
-  static constexpr auto filter() {
-    constexpr auto helper = []<typename Arg>() constexpr {
-      if constexpr (Fn::template operator()<Arg>()) {
-        return TypeList<Arg>{};
-      } else {
-        return TypeList<>{};
-      }
-    };
-    return concat(helper.template operator()<Args>()...);
+  template <size_t N>
+  static consteval auto get() {
+    if constexpr (N == 0) {
+      return head();
+    } else {
+      return tail().template get<N - 1>();
+    }
+  }
+
+  template <template <typename> typename Predicate>
+  static consteval auto filter() {
+    return concat(std::conditional_t<Predicate<Args>::value, TypeList<Args>, TypeList<>>{}...);
+  }
+
+  template <template <typename> typename Predicate>
+  static consteval auto invFilter() {
+    return concat(std::conditional_t<Predicate<Args>::value, TypeList<>, TypeList<Args>>{}...);
   }
 };
 
 consteval auto concat() -> TypeList<> {
   return TypeList{};
 }
-
-constexpr auto concat(TypeListed auto first, TypeListed auto... rest) {
-  return first >>= [&](auto... firsts) {
-    return concat(rest...) >>= [&](auto... rests) {
-      return TypeList(firsts..., rests...);
-    };
-  };
+template <typename... Args>
+consteval auto concat(TypeList<Args...>) {
+  return TypeList<Args...>{};
 }
 
-namespace internal {
+template <typename... Lhs, typename... Rhs>
+consteval auto concat(TypeList<Lhs...>, TypeList<Rhs...>) {
+  return TypeList<Lhs..., Rhs...>{};
+}
 
-template <typename T>
-struct TypeNameCmp {
-  constexpr TypeNameCmp() = default;
+template <typename... Args, typename... Rest>
+consteval auto concat(TypeList<Args...>, Rest...) {
+  return concat(TypeList<Args...>{}, concat(Rest{}...));
+}
 
-  template <typename U>
-  static constexpr auto operator()() -> bool {
-    return typeName<T>() < typeName<U>();
-  }
-};
+template <typename... Lhs, typename... Rhs>
+consteval auto operator==(TypeList<Lhs...>, TypeList<Rhs...>) -> bool {
+  return std::is_same_v<TypeList<Lhs...>, TypeList<Rhs...>>;
+}
+
+template <typename T, typename U>
+struct TypeNameCmp : std::conditional_t<
+    (typeName<T>() < typeName<U>()), std::true_type, std::false_type>{};
+
+template <typename T, typename U>
+struct TypeNameLess: std::conditional_t<
+    (typeName<T>() < typeName<U>()), std::true_type, std::false_type>{};
+
+template <typename T, typename U>
+struct TypeNameEq: std::conditional_t<
+    (typeName<T>() == typeName<U>()), std::true_type, std::false_type>{};
 
 template <typename T>
 struct Not {
@@ -113,22 +112,55 @@ struct Not {
   }
 };
 
-} // namespace internal
-
-template <template <typename> typename Fn, typename... Args>
-constexpr auto sort(TypeList<Args...> list) {
-
+template <template <typename, typename> typename Cmp, typename... Args>
+consteval auto sort(TypeList<Args...> list) {
   if constexpr (sizeof...(Args) <= 1) {
     return TypeList<Args...>{};
   } else {
+    // not constexpr to not add const to the output type
     auto pivot = list.head();
-    auto lhs = list.tail().template filter<internal::Not<Fn<decltype(pivot)>>>();
-    auto rhs = list.tail().template filter<Fn<decltype(pivot)>>();
-
-    return concat(sort<Fn>(lhs), TypeList<decltype(pivot)>{}, sort<Fn>(rhs));
+    auto lhs = list.tail() >>= [](auto... terms) {
+      return concat(std::conditional_t<!Cmp<decltype(pivot), decltype(terms)>::value,
+                                       TypeList<decltype(terms)>, TypeList<>>{}...);
+    };
+    auto rhs = list.tail() >>= [](auto... terms) {
+      return concat(std::conditional_t<Cmp<decltype(pivot), decltype(terms)>::value,
+                                       TypeList<decltype(terms)>, TypeList<>>{}...);
+    };
+    return concat(sort<Cmp>(lhs), TypeList<decltype(pivot)>{}, sort<Cmp>(rhs));
   }
 }
 
+namespace internal {
 
+template <template <typename, typename> typename Cmp, typename... Lhs, typename... Rhs>
+  requires (sizeof...(Lhs) > 0)
+consteval auto takeWhile(TypeList<Lhs...> lhs, TypeList<Rhs...> rhs) {
+  if constexpr (rhs.empty()) {
+    return TypeList{lhs, TypeList{}};
+  } else if constexpr (Cmp<decltype(lhs.head()), decltype(rhs.head())>::value) {
+    return takeWhile<Cmp>(concat(lhs, TypeList{rhs.head()}), rhs.tail());
+  } else {
+    return TypeList{lhs, rhs};
+  }
+}
+
+}  // namespace internal
+
+template <template <typename, typename> typename Cmp, typename... Args>
+consteval auto groupBy(TypeList<Args...> list) {
+  if constexpr (list.empty()) {
+    return TypeList{};
+  } else {
+    auto group = internal::takeWhile<Cmp>(TypeList{list.head()}, list.tail());
+    auto lhs = group.template get<0>();
+    auto rhs = group.template get<1>();
+    if constexpr (rhs.empty()) {
+      return TypeList{lhs};
+    } else {
+      return concat(TypeList<decltype(TypeList{lhs})>{}, TypeList<decltype(groupBy<Cmp>(rhs))>{});
+    }
+  }
+}
 
 } // namespace

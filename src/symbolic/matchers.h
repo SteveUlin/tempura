@@ -79,7 +79,8 @@ static_assert(Operator<AnyOp>);
 
 namespace internal {
 
-consteval auto cmpTypeLists(TypeListed auto lhs,TypeListed auto rhs) {
+template<Matcher... Lhs, Matcher... Rhs>
+consteval auto cmpTypeLists(TypeList<Lhs...> lhs,TypeList<Rhs...> rhs) {
   if constexpr (lhs.empty() && rhs.empty()) {
     return true;
   } else if constexpr (lhs.empty()) {

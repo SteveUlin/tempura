@@ -12,9 +12,7 @@ C++ Examples and Experimentation
 - [ ] Rational Numbers Examples
 
 # Symbolic
-- [ ] Fix tests
-- [ ] Compile time show statements
-- [ ] Better Static Assert Error Messages
-- [ ] Exponents
+- [x] Fix tests
+- [x] Exponents
 - [ ] Derivatives
-- [ ] Create it's own directory
+- [x] Create it's own directory

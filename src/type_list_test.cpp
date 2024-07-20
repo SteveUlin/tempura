@@ -6,12 +6,9 @@
 using namespace tempura;
 using namespace std::string_view_literals;
 
-struct FilterFn {
-  template <typename T>
-  static constexpr auto operator()() {
-    return typeName<T>() <= "float"sv;
-  }
-};
+template <typename T>
+struct LessEqualFloat
+    : std::conditional_t<typeName<T>() <= "float"sv, std::true_type, std::false_type> {};
 
 auto main() -> int {
   "TypeList Constructor"_test = [] {
@@ -45,6 +42,14 @@ auto main() -> int {
     // TypeList{}.tail();
   };
 
+  "TypeList Get"_test = [] {
+    constexpr auto list = TypeList<int, double, float, char>();
+    static_assert(std::is_same_v<int, decltype(list.get<0>())>);
+    static_assert(std::is_same_v<char, decltype(list.get<3>())>);
+    // Not defined
+    // TypeList{}.tail();
+  };
+
   "TypeList Size"_test = [] {
     constexpr auto list = TypeList<int, double, float, char>{};
     static_assert(4ULL == list.size());
@@ -61,13 +66,23 @@ auto main() -> int {
   "TypeList Filter"_test = [] {
     constexpr auto list = TypeList<int, double, float, char, int>{};
 
-    static_assert(std::is_same_v<decltype(list.filter<FilterFn>()), TypeList<double, float, char>>);
+    constexpr auto left = list.filter<LessEqualFloat>();
+    constexpr auto right = list.invFilter<LessEqualFloat>();
+    // This compiles but clang doesn't think so
+    static_assert(left == TypeList<double, float, char>{});
+    static_assert(right == TypeList<int, int>{});
   };
 
-  "TypeList Sort"_test = [] {
+  "TypeList sort"_test = [] {
     constexpr auto list = TypeList<int, double, float, char>{};
 
-    static_assert(std::is_same_v<decltype(sort<internal::TypeNameCmp>(list)), TypeList<char, double, float, int>>);
+    static_assert(std::is_same_v<decltype(sort<TypeNameCmp>(list)), TypeList<char, double, float, int>>);
+  };
+
+  "TypeList groupBy"_test = [] {
+    constexpr auto list = TypeList<double, double, float, char>{};
+
+    std::cout << typeName(groupBy<TypeNameEq>(list)) << std::endl;
   };
 
   return 0;

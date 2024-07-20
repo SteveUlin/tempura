@@ -7,28 +7,28 @@
 
 namespace tempura::symbolic {
 
-template <auto ID, BinderT... Binders>
+template <auto ID, typename... Binders>
 auto toString(Symbol<ID>, const Substitution<Binders...>& substitution) -> std::string {
   return std::string(substitution[Symbol<ID>{}]);
 }
 
-template <auto VALUE, BinderT... Binders>
+template <auto VALUE, typename... Binders>
 auto toString(Constant<VALUE>, const Substitution<Binders...>& substitution) -> std::string {
   return std::to_string(VALUE);
 }
 
-template <BinderT... Binders>
+template <typename... Binders>
 auto wrap(Symbolic auto expr, const Substitution<Binders...>& substitution) -> std::string {
   return toString(expr, substitution);
 }
 
-template<typename Op, Symbolic... Args, BinderT... Binders>
+template<typename Op, Symbolic... Args, typename... Binders>
 requires (sizeof...(Args) >= 1) && (Op::kDisplayMode == DisplayMode::kInfix)
 auto wrap(SymbolicExpression<Op, Args...> expr, const Substitution<Binders...>& substitution) -> std::string {
   return std::format("({})", toString(expr, substitution));
 };
 
-template <typename Op, Symbolic... Args, BinderT... Binders>
+template <typename Op, Symbolic... Args, typename... Binders>
 auto toString(SymbolicExpression<Op, Args...>, const Substitution<Binders...>& substitution) -> std::string {
   constexpr TypeList<Args...> args;
   if constexpr (args.size() == 0) {

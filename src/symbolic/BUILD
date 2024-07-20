@@ -25,6 +25,9 @@ cc_library(
   hdrs = ["meta.h"],
   deps = [
     ":symbolic",
+    ":operators",
+    ":matchers",
+    "//src:type_list",
   ],
 )
 

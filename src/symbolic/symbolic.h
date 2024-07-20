@@ -3,10 +3,6 @@
 #include "src/type_list.h"
 
 #include <cmath>
-#include <functional>
-#include <format>
-#include <numeric>
-#include <string>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -42,12 +38,6 @@ inline constexpr bool MatcherTypeTrait = false;
 template <typename T>
 inline constexpr bool SymbolicTypeTrait = false;
 
-template <typename T>
-inline constexpr bool TypeValueBinderTypeTrait = false;
-
-template <typename T, typename U>
-inline constexpr bool TypeValueBinderTypeTrait<TypeValueBinder<T, U>> = true;
-
 }  // namespace internal
 
 // All symbols can also be used as matchers
@@ -59,19 +49,19 @@ concept Matcher = internal::MatcherTypeTrait<T> || internal::SymbolicTypeTrait<T
 template <typename T>
 concept Symbolic = Matcher<T> && internal::SymbolicTypeTrait<T>;
 
-template <typename T>
-concept BinderT = internal::TypeValueBinderTypeTrait<T>;
-
-template <BinderT... Binders>
+template <typename... Binders>
 class Substitution : Binders... {
 public:
-  constexpr Substitution(Binders&&... binders) : Binders(std::forward<Binders>(binders))... {}
+  template <typename... Ts, typename... Us>
+  constexpr Substitution(internal::TypeValueBinder<Ts, Us>&&... binders) :
+    Binders(std::forward<internal::TypeValueBinder<Ts, Us>>(binders))... {}
 
   using Binders::operator[]...;
 };
 
-template <BinderT... Binders>
-Substitution(Binders...) -> Substitution<Binders...>;
+template <typename... Ts, typename... Us>
+Substitution(internal::TypeValueBinder<Ts, Us>...)
+    -> Substitution<internal::TypeValueBinder<Ts, Us>...>;
 
 // --- Constants ---
 
@@ -84,8 +74,8 @@ struct Constant {
     return VALUE;
   }
 
-  template<BinderT... Binders>
-  constexpr auto operator()(const Substitution<Binders...>&) {
+  template<typename... Ts, typename... Us>
+  constexpr auto operator()(const Substitution<internal::TypeValueBinder<Ts, Us>...>&) {
     return value();
   }
 };
@@ -121,8 +111,9 @@ struct Symbol {
     return internal::TypeValueBinder<Symbol<ID>, T>{std::forward<T>(t)};
   };
 
-  template<BinderT... Binders>
-  constexpr auto operator()(const Substitution<Binders...>& substitution) const {
+  template <typename... Ts, typename... Us>
+  constexpr auto operator()(
+      const Substitution<internal::TypeValueBinder<Ts, Us>...>& substitution) const {
     return substitution[*this];
   }
 };
@@ -165,9 +156,10 @@ struct SymbolicExpression {
   constexpr auto operator=(const SymbolicExpression&) -> SymbolicExpression& {};
 
   constexpr SymbolicExpression(Op, Args...) {};
+  constexpr SymbolicExpression(Op, TypeList<Args...>) {};
 
-  template<BinderT... Binders>
-  constexpr auto operator()(const Substitution<Binders...>& substitution) {
+  template<typename... Ts, typename... Us>
+  constexpr auto operator()(const Substitution<internal::TypeValueBinder<Ts, Us>...>& substitution) {
     return Op{}(Args{}(substitution)...);
   }
 

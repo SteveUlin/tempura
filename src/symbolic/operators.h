@@ -61,7 +61,7 @@ constexpr auto operator*(Symbolic auto lhs, Symbolic auto rhs) {
 }
 
 constexpr auto operator*(Matcher auto lhs, Matcher auto rhs) {
-  return MatcherExpression<std::multiplies<>, decltype(lhs), decltype(rhs)>{};
+  return MatcherExpression<Multiplies, decltype(lhs), decltype(rhs)>{};
 }
 
 class Divides {
