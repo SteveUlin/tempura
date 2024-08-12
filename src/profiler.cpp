@@ -2,7 +2,7 @@
 
 #include <cassert>
 #include <format>
-#include <print>
+#include <iostream>
 #include <ratio>
 
 namespace tempura {
@@ -83,15 +83,16 @@ auto Profiler::endAndPrintStats() -> void {
           (static_cast<double>(anchor.inclusive.count()) / static_cast<double>(elapsed.count())) * 100;
       auto avg = anchor.inclusive / anchor.hits;
 
-      std::print("{}[{}]: {} {:.2f}% avg: {}",
-                 anchor.label, anchor.hits,  toHumanReadable(anchor.inclusive), percent, toHumanReadable(avg));
+      std::cout << std::format("{}[{}]: {} {:.2f}% avg: {}", anchor.label, anchor.hits,
+                               toHumanReadable(anchor.inclusive), percent, toHumanReadable(avg));
     }
     {
       auto percent =
           (static_cast<double>(anchor.exclusive.count()) / static_cast<double>(elapsed.count())) *
           100;
       auto avg = anchor.exclusive / anchor.hits;
-      std::println(", w/o children: {} ns, {:.2f}% avg: {}", toHumanReadable(anchor.exclusive), percent, toHumanReadable(avg));
+      std::cout << std::format(", w/o children: {} ns, {:.2f}% avg: {}",
+                               toHumanReadable(anchor.exclusive), percent, toHumanReadable(avg));
     }
   }
 }

@@ -1,0 +1,16 @@
+/home/ulins/tempura/build/CMakeFiles/edit_cache.dir
+/home/ulins/tempura/build/CMakeFiles/rebuild_cache.dir
+/home/ulins/tempura/build/src/CMakeFiles/benchmark.dir
+/home/ulins/tempura/build/src/CMakeFiles/profiler.dir
+/home/ulins/tempura/build/src/CMakeFiles/unit.dir
+/home/ulins/tempura/build/src/CMakeFiles/fifo_queue.dir
+/home/ulins/tempura/build/src/CMakeFiles/fifo_queue_test.dir
+/home/ulins/tempura/build/src/CMakeFiles/guarded.dir
+/home/ulins/tempura/build/src/CMakeFiles/guarded_test.dir
+/home/ulins/tempura/build/src/CMakeFiles/edit_cache.dir
+/home/ulins/tempura/build/src/CMakeFiles/rebuild_cache.dir
+/home/ulins/tempura/build/src/cuda/CMakeFiles/hello_cuda.dir
+/home/ulins/tempura/build/src/cuda/CMakeFiles/add_ten.dir
+/home/ulins/tempura/build/src/cuda/CMakeFiles/pi.dir
+/home/ulins/tempura/build/src/cuda/CMakeFiles/edit_cache.dir
+/home/ulins/tempura/build/src/cuda/CMakeFiles/rebuild_cache.dir

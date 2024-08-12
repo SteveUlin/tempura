@@ -37,9 +37,9 @@ auto main() -> int {
 
     expectTrue(queue.push(1));
     expectEq(1, *queue.pop());
-    expectTrue(queue.push(2));
-    expectEq(2, *queue.pop());
-    expectTrue(queue.push(3));
+    expectTrue{queue.push(2)};
+    expectEq{2, *queue.pop()};
+    expectTrue{queue.push(3)};
     expectEq(3, *queue.pop());
   };
 
@@ -66,7 +66,7 @@ auto main() -> int {
     t2.join();
   };
 
-  constexpr std::size_t N = 1'000'000'000;
+  constexpr std::size_t N = 1'000'000;
   "Threads"_bench.ops(N) = [] {
     auto queue = tempura::FIFOQueue<int, 1024>{};
     auto t1 = std::thread([&] {

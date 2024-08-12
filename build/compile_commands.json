@@ -1,0 +1,38 @@
+[
+{
+  "directory": "/home/ulins/tempura/build/src",
+  "command": "/nix/store/1rxqqb3m7k2c36kvsm0alqljbb01x138-clang-wrapper-18.1.8/bin/clang++  -isystem /nix/store/1k0mrm2nih4apz0j1g0p6kk1zcispjq5-cuda-merged-12.1/include -isystem /nix/store/9w3yyrs3r9samcg2dyyzhny4s0c8nkfs-cuda_cudart-12.1.105-dev/include -isystem /nix/store/4vkj3qipw2rkfrjj3s79w2w8jraf1lyp-compiler-rt-libc-18.1.8-dev/include -isystem /nix/store/kacxs7yfq39sl3sqf3gzksipqhyg3gcp-libcxx-18.1.8-dev/include -isystem /nix/store/3s3rjkl3mx05wp0lmxgwkaqhbz9sy6kk-gcc-13.3.0/include/c++/13.3.0 -isystem /nix/store/3s3rjkl3mx05wp0lmxgwkaqhbz9sy6kk-gcc-13.3.0/include/c++/13.3.0/x86_64-unknown-linux-gnu -isystem /nix/store/1rxqqb3m7k2c36kvsm0alqljbb01x138-clang-wrapper-18.1.8/resource-root/include -isystem /nix/store/09lv9r3dx6ql0lzpdv8w2b1r6b358481-glibc-2.39-52-dev/include -Wall -Wextra -std=gnu++23 -o CMakeFiles/profiler.dir/profiler.cpp.o -c /home/ulins/tempura/src/profiler.cpp",
+  "file": "/home/ulins/tempura/src/profiler.cpp",
+  "output": "src/CMakeFiles/profiler.dir/profiler.cpp.o"
+},
+{
+  "directory": "/home/ulins/tempura/build/src",
+  "command": "/nix/store/1rxqqb3m7k2c36kvsm0alqljbb01x138-clang-wrapper-18.1.8/bin/clang++  -isystem /nix/store/1k0mrm2nih4apz0j1g0p6kk1zcispjq5-cuda-merged-12.1/include -isystem /nix/store/9w3yyrs3r9samcg2dyyzhny4s0c8nkfs-cuda_cudart-12.1.105-dev/include -isystem /nix/store/4vkj3qipw2rkfrjj3s79w2w8jraf1lyp-compiler-rt-libc-18.1.8-dev/include -isystem /nix/store/kacxs7yfq39sl3sqf3gzksipqhyg3gcp-libcxx-18.1.8-dev/include -isystem /nix/store/3s3rjkl3mx05wp0lmxgwkaqhbz9sy6kk-gcc-13.3.0/include/c++/13.3.0 -isystem /nix/store/3s3rjkl3mx05wp0lmxgwkaqhbz9sy6kk-gcc-13.3.0/include/c++/13.3.0/x86_64-unknown-linux-gnu -isystem /nix/store/1rxqqb3m7k2c36kvsm0alqljbb01x138-clang-wrapper-18.1.8/resource-root/include -isystem /nix/store/09lv9r3dx6ql0lzpdv8w2b1r6b358481-glibc-2.39-52-dev/include -Wall -Wextra -std=gnu++23 -o CMakeFiles/fifo_queue_test.dir/fifo_queue_test.cpp.o -c /home/ulins/tempura/src/fifo_queue_test.cpp",
+  "file": "/home/ulins/tempura/src/fifo_queue_test.cpp",
+  "output": "src/CMakeFiles/fifo_queue_test.dir/fifo_queue_test.cpp.o"
+},
+{
+  "directory": "/home/ulins/tempura/build/src",
+  "command": "/nix/store/1rxqqb3m7k2c36kvsm0alqljbb01x138-clang-wrapper-18.1.8/bin/clang++  -isystem /nix/store/1k0mrm2nih4apz0j1g0p6kk1zcispjq5-cuda-merged-12.1/include -isystem /nix/store/9w3yyrs3r9samcg2dyyzhny4s0c8nkfs-cuda_cudart-12.1.105-dev/include -isystem /nix/store/4vkj3qipw2rkfrjj3s79w2w8jraf1lyp-compiler-rt-libc-18.1.8-dev/include -isystem /nix/store/kacxs7yfq39sl3sqf3gzksipqhyg3gcp-libcxx-18.1.8-dev/include -isystem /nix/store/3s3rjkl3mx05wp0lmxgwkaqhbz9sy6kk-gcc-13.3.0/include/c++/13.3.0 -isystem /nix/store/3s3rjkl3mx05wp0lmxgwkaqhbz9sy6kk-gcc-13.3.0/include/c++/13.3.0/x86_64-unknown-linux-gnu -isystem /nix/store/1rxqqb3m7k2c36kvsm0alqljbb01x138-clang-wrapper-18.1.8/resource-root/include -isystem /nix/store/09lv9r3dx6ql0lzpdv8w2b1r6b358481-glibc-2.39-52-dev/include -Wall -Wextra -std=gnu++23 -o CMakeFiles/guarded_test.dir/guarded_test.cpp.o -c /home/ulins/tempura/src/guarded_test.cpp",
+  "file": "/home/ulins/tempura/src/guarded_test.cpp",
+  "output": "src/CMakeFiles/guarded_test.dir/guarded_test.cpp.o"
+},
+{
+  "directory": "/home/ulins/tempura/build/src/cuda",
+  "command": "/nix/store/1k0mrm2nih4apz0j1g0p6kk1zcispjq5-cuda-merged-12.1/bin/nvcc -forward-unknown-to-host-compiler   -std=c++20 \"--generate-code=arch=compute_52,code=[compute_52,sm_52]\" -x cu -c /home/ulins/tempura/src/cuda/hello_world.cu -o CMakeFiles/hello_cuda.dir/hello_world.cu.o",
+  "file": "/home/ulins/tempura/src/cuda/hello_world.cu",
+  "output": "src/cuda/CMakeFiles/hello_cuda.dir/hello_world.cu.o"
+},
+{
+  "directory": "/home/ulins/tempura/build/src/cuda",
+  "command": "/nix/store/1k0mrm2nih4apz0j1g0p6kk1zcispjq5-cuda-merged-12.1/bin/nvcc -forward-unknown-to-host-compiler   -std=c++20 \"--generate-code=arch=compute_52,code=[compute_52,sm_52]\" -x cu -c /home/ulins/tempura/src/cuda/add_ten.cu -o CMakeFiles/add_ten.dir/add_ten.cu.o",
+  "file": "/home/ulins/tempura/src/cuda/add_ten.cu",
+  "output": "src/cuda/CMakeFiles/add_ten.dir/add_ten.cu.o"
+},
+{
+  "directory": "/home/ulins/tempura/build/src/cuda",
+  "command": "/nix/store/1k0mrm2nih4apz0j1g0p6kk1zcispjq5-cuda-merged-12.1/bin/nvcc -forward-unknown-to-host-compiler   -std=c++20 \"--generate-code=arch=compute_52,code=[compute_52,sm_52]\" -x cu -c /home/ulins/tempura/src/cuda/pi.cu -o CMakeFiles/pi.dir/pi.cu.o",
+  "file": "/home/ulins/tempura/src/cuda/pi.cu",
+  "output": "src/cuda/CMakeFiles/pi.dir/pi.cu.o"
+}
+]

@@ -1,0 +1,19 @@
+CompileFlags:
+  CompilationDatabase: build/
+  Add:
+    #  - --cuda-gpu-arch=sm_86
+    - -std=c++23
+  Remove:
+    #  - -forward-unknown-to-host-compiler
+    #- --generate-code*
+  #   - -rdc=*
+  #   - -Xcompiler*
+Diagnostics:
+  UnusedIncludes: Strict
+  MissingIncludes: Strict
+  ClangTidy:
+    Add: modernize-*,
+    Add: readability-*,
+    Add: performance-*,
+    Add: bugprone-*,
+    Remove: bugprone-unused-raii

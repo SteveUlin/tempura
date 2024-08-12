@@ -17,7 +17,7 @@ using namespace std::chrono_literals;
 // a new anchor may add a few nanoseconds to a trace.
 
 class Profiler {
-public:
+ public:
   // Information about an anchor point. i.e. TEMPURA_TRACE("Some Label");
   struct Anchor {
     const char* label;
@@ -28,15 +28,15 @@ public:
 
   // RAII class for tracing a block of code.
   class Tracer {
-  public:
+   public:
     // Automatically starts the timer and sets the global current anchor.
-    explicit Tracer(Anchor &anchor);
+    explicit Tracer(Anchor& anchor);
 
     // Automatically stops the timer and sets the global current anchor to the
     // parent.
     ~Tracer();
 
-  private:
+   private:
     Anchor& anchor_;
     Anchor& parent_anchor_;
 
@@ -46,8 +46,8 @@ public:
     std::chrono::time_point<std::chrono::high_resolution_clock> start_;
   };
 
-  static auto
-  now() -> std::chrono::time_point<std::chrono::high_resolution_clock>;
+  static auto now()
+      -> std::chrono::time_point<std::chrono::high_resolution_clock>;
 
   static auto beginTracing() -> void;
 
@@ -55,7 +55,7 @@ public:
 
   static auto endAndPrintStats() -> void;
 
-private:
+ private:
   static Profiler& instance_;
   std::deque<Anchor> anchors_;
 
@@ -64,10 +64,9 @@ private:
   std::chrono::time_point<std::chrono::high_resolution_clock> global_start_;
 };
 
-#define TEMPURA_TRACE(label) \
-  static auto __kLabel = label; \
+#define TEMPURA_TRACE(label)                                           \
+  static auto __kLabel = label;                                        \
   static auto& __anchor = ::tempura::Profiler::getNewAnchor(__kLabel); \
   auto __tracer = ::tempura::Profiler::Tracer(__anchor);
 
-}  // namespace
-
+}  // namespace tempura

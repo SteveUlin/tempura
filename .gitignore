@@ -1,5 +1,4 @@
-bazel-*/
-bazel-*
+build/
 
 # Prerequisites
 *.d

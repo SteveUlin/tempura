@@ -13,7 +13,7 @@ indent_style = space
 indent_size = 2
 
 # Max line length
-max_line_length = 100
+max_line_length = 80
 
 [*.{cpp,h,hpp}]
 cpp_standard = c++26

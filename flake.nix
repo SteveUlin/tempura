@@ -14,22 +14,31 @@
     flake-utils.lib.eachDefaultSystem (system: let
       pkgs = import nixpkgs {
         inherit system;
+        config.allowUnfree = true;
+        config.cudaSupport = true;
       };
       in {
-        devShells.default = pkgs.mkShell.override {
-            stdenv = pkgs.llvmPackages_18.libcxxStdenv;
-        } {
+        devShells.default = pkgs.mkShell rec {
           name = "Tempura";
 
+
           packages = with pkgs; [
+            clang
+            gcc12
             bazel
             cmake
             ninja
+            cudaPackages_12_1.cudatoolkit
+            cudaPackages_12_1.cuda_cudart
+            linuxPackages.nvidia_x11
           ];
-
-          shellHook = ''
-            export CMAKE_GENERATOR="Ninja";
-          '';
+          
+          env = {
+            LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath packages;
+            CUDA_HOME = pkgs.cudaPackages_12_1.cudatoolkit;
+            CUDA_PATH = pkgs.cudaPackages_12_1.cudatoolkit;
+            CMAKE_CUDA_COMPILER = "${pkgs.cudaPackages_12_1.cudatoolkit}/bin/nvcc";
+          };
         };
       }
     );

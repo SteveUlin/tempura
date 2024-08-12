@@ -1,8 +1,9 @@
+#include <sys/wait.h>
+#include <unistd.h>
+
 #include <cstdint>
 #include <iostream>
 #include <print>
-#include <sys/wait.h>
-#include <unistd.h>
 
 // Linux (unix?) has an odd method of creating new processes, the system calls
 // fork and exec.
@@ -14,7 +15,7 @@
 // Exec:
 //   Replaces the current process with a new process. This literally overwrites
 //   the code segment of the current process with the code of the new process.
-int main() {
+auto main() -> int {
   const int64_t data = 100;
 
   pid_t pid = fork();
@@ -22,14 +23,15 @@ int main() {
   if (pid < 0) {
     std::cerr << "Failed to fork\n";
     return 1;
-  } else if (pid == 0) {
+  }
+  if (pid == 0) {
     std::println("Child process: {}", getpid());
-    std::println("Child data: {}", data); // 100
+    std::println("Child data: {}", data);  // 100
   } else {
     // Do not run until the child process has completed
     wait(nullptr);
     std::println("Parent process: {}", getpid());
-    std::println("Parent data: {}", data); // 100
+    std::println("Parent data: {}", data);  // 100
   }
 
   return 0;
