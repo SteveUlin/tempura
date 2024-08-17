@@ -1,4 +1,4 @@
-#include "kernel.h"
+#include "cuda/kernel.h"
 
 auto main() -> int {
   launch();

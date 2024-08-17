@@ -1,4 +1,5 @@
 add_subdirectory(cuda)
+add_subdirectory(matrix)
 
 add_library(benchmark INTERFACE benchmark.h)
 add_library(profiler STATIC profiler.h profiler.cpp)

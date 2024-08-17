@@ -1,19 +1,34 @@
+If:
+  PathMatch: .*\.cu
 CompileFlags:
-  CompilationDatabase: build/
   Add:
-    #  - --cuda-gpu-arch=sm_86
-    - -std=c++23
+    - --cuda-gpu-arch=sm_86
+    - -std=c++17
+    - -xcuda
+    #- -I $CUDA_PATH/include/
   Remove:
-    #  - -forward-unknown-to-host-compiler
-    #- --generate-code*
-  #   - -rdc=*
-  #   - -Xcompiler*
+    - -forward-unknown-to-host-compiler
+    - --generate-code*
+    - -rdc=*
+    - -Xcompiler*
+
+---
+
+If:
+  PathMatch: [.*\.h .*\.cpp]
 Diagnostics:
   UnusedIncludes: Strict
   MissingIncludes: Strict
+---
+
+CompileFlags:
+  CompilationDatabase: build/
+Diagnostics:
   ClangTidy:
-    Add: modernize-*,
-    Add: readability-*,
-    Add: performance-*,
-    Add: bugprone-*,
-    Remove: bugprone-unused-raii
+    Add: 
+      - modernize-*,
+      - readability-*,
+      - performance-*,
+      - bugprone-*,
+    Remove:
+      - bugprone-unused-raii

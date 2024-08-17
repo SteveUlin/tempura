@@ -18,12 +18,14 @@
         config.cudaSupport = true;
       };
       in {
-        devShells.default = pkgs.mkShell rec {
+        devShells.default = pkgs.mkShell.override {
+        stdenv = pkgs.llvmPackages_18.libcxxStdenv;
+      } rec {
           name = "Tempura";
 
 
           packages = with pkgs; [
-            clang
+            pkgs.llvmPackages_18.clang
             gcc12
             bazel
             cmake
