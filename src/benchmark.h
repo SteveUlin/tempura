@@ -1,18 +1,21 @@
+#pragma once
+
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <functional>
 #include <iostream>
 #include <numeric>
 #include <string_view>
 #include <vector>
-#include <cmath>
 
 namespace tempura {
 
 namespace internal {
 
 inline constexpr auto diff(timespec start, timespec end) -> timespec {
-  return {.tv_sec = end.tv_sec - start.tv_sec, .tv_nsec = end.tv_nsec - start.tv_nsec};
+  return {.tv_sec = end.tv_sec - start.tv_sec,
+          .tv_nsec = end.tv_nsec - start.tv_nsec};
 }
 
 inline constexpr auto toDuration(timespec t) -> std::chrono::nanoseconds {
@@ -25,31 +28,42 @@ auto toHumanReadable(std::chrono::nanoseconds duration) -> std::string {
     return std::format("{} ns", duration.count());
   }
   if (duration < 1ms) {
-    return std::format("{:.2f} μs",
-                       std::chrono::duration<double, std::chrono::microseconds::period>(duration).count());
+    return std::format(
+        "{:.2f} μs",
+        std::chrono::duration<double, std::chrono::microseconds::period>(
+            duration)
+            .count());
   }
   if (duration < 10s) {
     return std::format(
         "{:.2f} ms",
-        std::chrono::duration<double, std::chrono::milliseconds::period>(duration).count());
+        std::chrono::duration<double, std::chrono::milliseconds::period>(
+            duration)
+            .count());
   }
   if (duration < 5min) {
-    return std::format("{:.2f} s",
-                     std::chrono::duration<double, std::chrono::seconds::period>(duration).count());
+    return std::format(
+        "{:.2f} s",
+        std::chrono::duration<double, std::chrono::seconds::period>(duration)
+            .count());
   }
   if (duration < 120min) {
-    return std::format("{:.2f} s",
-                     std::chrono::duration<double, std::chrono::hours::period>(duration).count());
+    return std::format(
+        "{:.2f} s",
+        std::chrono::duration<double, std::chrono::hours::period>(duration)
+            .count());
   }
-  return std::format("{:.2f} h",
-                   std::chrono::duration<double, std::chrono::hours::period>(duration).count());
+  return std::format(
+      "{:.2f} h",
+      std::chrono::duration<double, std::chrono::hours::period>(duration)
+          .count());
 }
 }  // namespace internal
 
 using namespace std::chrono_literals;
 
 class Benchmark {
-public:
+ public:
   auto ops(std::size_t ops) -> Benchmark& {
     op_scaling_factor_ = ops;
     return *this;
@@ -82,7 +96,8 @@ public:
       wall_end = std::chrono::high_resolution_clock::now();
       std::atomic_signal_fence(std::memory_order::seq_cst);
 
-      cpu_times.push_back(internal::toDuration(internal::diff(cpu_start, cpu_end)));
+      cpu_times.push_back(
+          internal::toDuration(internal::diff(cpu_start, cpu_end)));
       wall_times.push_back(wall_end - wall_start);
 
       total_wall_time += wall_times.back();
@@ -95,20 +110,25 @@ public:
     auto std_dev_wall = std::chrono::nanoseconds((std::size_t)std::sqrt(
         std::accumulate(wall_times.begin(), wall_times.end(), 0,
                         [avg_wall](auto acc, auto val) {
-                          return acc + std::pow(val.count() - avg_wall.count(), 2);
+                          return acc +
+                                 std::pow(val.count() - avg_wall.count(), 2);
                         }) /
         i));
-
 
     std::clog << "Number of iterations: " << i << '\n';
     std::clog << "Average wall time: "
               << internal::toHumanReadable(std::chrono::nanoseconds{
-                     std::accumulate(wall_times.begin(), wall_times.end(), 0ns).count() / i})
+                     std::accumulate(wall_times.begin(), wall_times.end(), 0ns)
+                         .count() /
+                     i})
               << '\n';
 
-    std::clog << std::format(std::locale(""), "Ops per sec: {:L}\n", (size_t) (op_scaling_factor_ * i * 1e9 / avg_wall.count()));
+    std::clog << std::format(
+        std::locale(""), "Ops per sec: {:L}\n",
+        (size_t)(op_scaling_factor_ * i * 1e9 / avg_wall.count()));
   }
-private:
+
+ private:
   constexpr Benchmark(std::string_view name) : name_(name) {}
 
   friend constexpr auto operator""_bench(const char*, std::size_t) -> Benchmark;
@@ -118,7 +138,8 @@ private:
   std::chrono::nanoseconds max_runtime = 30s;
 };
 
-[[nodiscard]] constexpr auto operator""_bench(const char* name, std::size_t size) -> Benchmark {
+[[nodiscard]] constexpr auto operator""_bench(const char* name,
+                                              std::size_t size) -> Benchmark {
   return Benchmark{std::string_view{name, size}};
 }
-} // namespace tempura
+}  // namespace tempura

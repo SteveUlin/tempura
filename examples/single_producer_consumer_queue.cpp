@@ -8,7 +8,7 @@ void runNaive(size_t N = 1'000'000) {
   std::queue<size_t> queue;
   std::mutex mut;
   std::atomic<bool> done = false;
-  TEMPURA_TRACE("runNaieve");
+  TEMPURA_TRACE();
   std::thread producer{[&] {
     for (size_t i = 0; i < N; i++) {
       std::lock_guard lock{mut};
@@ -38,7 +38,5 @@ auto repeat(std::invocable auto func) -> void {
 }
 
 auto main() -> int {
-  tempura::Profiler::beginTracing();
   repeat<10>([] { runNaive(); });
-  tempura::Profiler::endAndPrintStats();
 }

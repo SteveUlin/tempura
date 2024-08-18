@@ -24,3 +24,4 @@ INCLUDE_DIRECTORIES("${BASEPATH}")
 # set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -arch=sm68)
 
 add_subdirectory(src)
+add_subdirectory(examples)

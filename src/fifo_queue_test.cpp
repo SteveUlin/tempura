@@ -9,7 +9,6 @@
 using namespace tempura;
 
 auto main() -> int {
-  Profiler::beginTracing();
   "Capacity is N"_test = [] {
     expectEq(16ULL, tempura::FIFOQueue<int, 16>::capacity());
   };
@@ -44,7 +43,7 @@ auto main() -> int {
   };
 
   "Threads 1M"_test = [] {
-    TEMPURA_TRACE("Threads 1M");
+    TEMPURA_TRACE();
     auto queue = tempura::FIFOQueue<int, 1024>{};
     auto t1 = std::thread([&] {
       for (int i = 0; i < 1'000'000; ++i) {
@@ -88,6 +87,4 @@ auto main() -> int {
     t1.join();
     t2.join();
   };
-
-  Profiler::endAndPrintStats();
 }

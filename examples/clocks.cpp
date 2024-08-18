@@ -1,6 +1,6 @@
-#include <print>
 #include <chrono>
 #include <functional>
+#include <iostream>
 
 // Clocks:
 //
@@ -48,16 +48,16 @@ auto measureFidelity(std::function<int64_t()> func) {
 }
 
 int main() {
-  // ≈ 12.4 ± 4.1 ns 
+  // ≈ 12.4 ± 4.1 ns
   auto [cpp, cppStd] = measureFidelity(getCppDelta);
-  std::println("C++ clock: {} ns, std: {}", cpp, cppStd);
+  std::cout << std::format("C++ clock: {} ns, std: {}", cpp, cppStd);
 
-  // ≈ 21.1 ± 2.8 ns 
+  // ≈ 21.1 ± 2.8 ns
   auto [cpu, cpuStd] = measureFidelity(getCpuDelta);
-  std::println("CPU clock: {} cycles, std: {}", cpu, cpuStd);
+  std::cout << std::format("CPU clock: {} cycles, std: {}", cpu, cpuStd);
 
-  // ≈ 11.8 ± 3.7 ns 
+  // ≈ 11.8 ± 3.7 ns
   auto [sys, sysStd] = measureFidelity(getSysCallDelta);
-  std::println("Sys call clock: {} ns, std: {}", sys, sysStd);
+  std::cout << std::format("Sys call clock: {} ns, std: {}", sys, sysStd);
   return 0;
 }

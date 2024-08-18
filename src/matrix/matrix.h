@@ -1,6 +1,7 @@
 #include <cassert>
 #include <cstddef>
-#include <memory>
+#include <cstdlib>
+#include <span>
 #include <vector>
 
 namespace tempura::matrix {
@@ -11,21 +12,21 @@ struct Extent {
   constexpr Extent(bool has_value, size_t value)
       : has_value(has_value), value(value) {}
 
-  bool has_value = true;
+  bool has_value;
   size_t value;
 };
 
-static constexpr Extent kDynamicExtent = Extent{false, 0};
+static constexpr Extent kDynamic = Extent{false, 0};
 
-constexpr bool operator==(Extent lhs, Extent rhs) {
+constexpr auto operator==(Extent lhs, Extent rhs) -> bool {
   return lhs.has_value == rhs.has_value and lhs.value == rhs.value;
 }
-constexpr bool shapesMatch(std::pair<Extent, Extent> lhs,
-                           std::pair<Extent, Extent> rhs) {
-  bool lhs_math = lhs.first == kDynamicExtent or rhs.first == kDynamicExtent or
-                  lhs.first == rhs.first;
-  bool rhs_math = lhs.second == kDynamicExtent or
-                  rhs.second == kDynamicExtent or lhs.second == rhs.second;
+constexpr auto match(std::pair<Extent, Extent> lhs,
+                     std::pair<Extent, Extent> rhs) -> bool {
+  bool lhs_math =
+      lhs.first == kDynamic or rhs.first == kDynamic or lhs.first == rhs.first;
+  bool rhs_math = lhs.second == kDynamic or rhs.second == kDynamic or
+                  lhs.second == rhs.second;
   return lhs_math and rhs_math;
 }
 
@@ -33,6 +34,10 @@ struct Shape {
   size_t row;
   size_t col;
 };
+
+constexpr auto operator==(Shape lhs, Shape rhs) -> bool {
+  return lhs.row == rhs.row and lhs.col == rhs.col;
+}
 
 enum class IndexOrder {
   kRowMajor,
@@ -70,17 +75,28 @@ class Matrix {
   }
 };
 
+// Crash if a dynamic size is set and the shape is different from the
+// size defined in the type.
+template <typename M>
+auto verifyShape(const M& m) -> void {
+  if (M::kRow.has_value and M::kRow.value != m.shape().row) {
+    abort();
+  }
+  if (M::kCol.has_value and M::kCol.value != m.shape().col) {
+    abort();
+  }
+}
+
+
 template <typename Scalar, Extent Row, Extent Col,
           IndexOrder Order = IndexOrder::kColMajor>
 class Dense : public Matrix<Row, Col> {
  public:
-  Dense()
-    requires(Row.has_value and Col.has_value)
-      : row_(Row.value), col_(Col.value), data_(row_ * col_) {}
+  Dense() : row_(Row.value), col_(Col.value), data_(row_ * col_) {}
 
   Dense(const Dense& other)
       : row_(other.row_), col_(other.col_), data_(other.data_) {}
-  Dense(Dense&& other)
+  Dense(Dense&& other) noexcept
       : row_(other.row_), col_(other.col_), data_(std::move(other.data_)) {}
   auto operator=(const Dense& other) -> Dense& {
     row_ = other.row_;
@@ -88,68 +104,61 @@ class Dense : public Matrix<Row, Col> {
     data_ = other.data_;
     return *this;
   }
-  auto operator=(Dense&& other) -> Dense& {
+  auto operator=(Dense&& other) noexcept -> Dense& {
     row_ = other.row_;
     col_ = other.col_;
     data_ = std::move(other.data_);
     return *this;
   }
 
-  auto verifyShape() const -> void {
-    if (Row.has_value and Row.value != row_) {
-      abort();
-    }
-    if (Col.has_value and Col.value != col_) {
-      abort();
-    }
+  template <Extent OtherRow, Extent OtherCol>
+    requires(match({Row, Col}, {OtherRow, OtherCol}))
+  Dense(const Dense<Scalar, OtherRow, OtherCol, Order>& other)
+      : row_(other.shape().row), col_(other.shape().col), data_(other.data()) {
+    verifyShape(*this);
+  }
+  template <Extent OtherRow, Extent OtherCol>
+    requires(match({Row, Col}, {OtherRow, OtherCol}))
+  Dense(Dense<Scalar, OtherRow, OtherCol, Order>&& other)
+      : row_(other.shape().col), col_(other.shape().col), data_(other.data()) {
+    verifyShape(*this);
   }
 
   template <Extent OtherRow, Extent OtherCol>
-    requires(shapesMatch({Row, Col}, {OtherRow, OtherCol}))
-  explicit Dense(
-      const Dense<Scalar, OtherRow, OtherCol, Order>& other)
-      : row_(other.row_), col_(other.col_), data_(other.data_) {
-    verifyShape();
-  }
-
-  template <Extent OtherRow, Extent OtherCol>
-    requires(shapesMatch({Row, Col}, {OtherRow, OtherCol}))
-  explicit Dense(
-      Dense<Scalar, OtherRow, OtherCol, Order>&& other)
-      : row_(other.row_), col_(other.col_), data_(std::move(other.data_)) {
-    verifyShape();
-  }
-
-  template <Extent OtherRow, Extent OtherCol>
-    requires(shapesMatch({Row, Col}, {OtherRow, OtherCol}))
-  auto operator=(const Dense<Scalar, OtherRow, OtherCol, Order>&
-                     other) -> Dense& {
-    row_ = other.row_;
-    col_ = other.col_;
-    data_ = other.data_;
-    verifyShape();
+    requires(match({Row, Col}, {OtherRow, OtherCol}))
+  auto operator=(const Dense<Scalar, OtherRow, OtherCol, Order>& other)
+      -> Dense& {
+    row_ = other.shape().row;
+    col_ = other.shape().col;
+    data_ = other.data();
+    verifyShape(*this);
     return *this;
   }
 
   template <Extent OtherRow, Extent OtherCol>
-    requires(shapesMatch({Row, Col}, {OtherRow, OtherCol}))
-  auto operator=(Dense<Scalar, OtherRow, OtherCol, Order>&&
-                     other) -> Dense& {
-    row_ = other.row_;
-    col_ = other.col_;
-    data_ = std::move(other.data_);
-    verifyShape();
+    requires(match({Row, Col}, {OtherRow, OtherCol}))
+  auto operator=(Dense<Scalar, OtherRow, OtherCol, Order>&& other) -> Dense& {
+    row_ = other.shape().row;
+    col_ = other.shape().col;
+    data_ = std::move(other.data());
+    verifyShape(*this);
     return *this;
   }
 
   // Array initialization
   // auto m = matrix::Dense{{0., 1.}, {2., 3.}};
-  template <size_t... Sizes>
-    requires(Row.has_value and Col.has_value and (sizeof...(Sizes) == Row) and
-             ((Sizes == Col) and ...))
-  explicit Dense(const Scalar (&... rows)[Sizes])
-      : row_(Row.value), col_(Col.value), data_(row_ * col_) {
-    size_t i = 0;
+  //
+  // Use C-Arrays to get the nice syntax
+  // NOLINTBEGIN(*-avoid-c-arrays)
+  template <size_t First, size_t... Sizes>
+    requires((!Row.has_value or (sizeof...(Sizes) + 1 == Row)) and
+             (!Col.has_value or (First == Col)) and ((First == Sizes) and ...))
+  Dense(const Scalar (&first)[First], const Scalar (&... rows)[Sizes])
+      : row_(sizeof...(Sizes) + 1), col_(First), data_(row_ * col_) {
+    for (size_t j = 0; j < First; ++j) {
+      (*this)[0, j] = first[j];
+    }
+    size_t i = 1;
     (
         [this, &rows, &i]() {
           for (size_t j = 0; j < col_; ++j) {
@@ -159,12 +168,14 @@ class Dense : public Matrix<Row, Col> {
         }(),
         ...);
   }
+  // NOLINTEND(*-avoid-c-arrays)
+
   template <typename M>
     requires(std::derived_from<M, Matrix<M::kRow, M::kCol>> and
-             shapesMatch({Row, Col}, {M::kRow, M::kCol}))
+             match({Row, Col}, {M::kRow, M::kCol}))
   Dense(const M& other)
       : row_(other.shape().row), col_(other.shape().col), data_(row_ * col_) {
-    verifyShape();
+    verifyShape(*this);
     for (size_t i = 0; i < row_; ++i) {
       for (size_t j = 0; j < col_; ++j) {
         (*this)[i, j] = other[i, j];
@@ -174,10 +185,10 @@ class Dense : public Matrix<Row, Col> {
 
   template <typename M>
     requires(std::derived_from<M, Matrix<M::kRow, M::kCol>> and
-             shapesMatch({Row, Col}, {M::kRow, M::kCol}))
+             match({Row, Col}, {M::kRow, M::kCol}))
   Dense(M&& other)
       : row_(other.shape().row), col_(other.shape().col), data_(row_ * col_) {
-    verifyShape();
+    verifyShape(*this);
     for (size_t i = 0; i < row_; ++i) {
       for (size_t j = 0; j < col_; ++j) {
         (*this)[i, j] = std::move(other[i, j]);
@@ -187,12 +198,28 @@ class Dense : public Matrix<Row, Col> {
 
   template <typename M>
     requires(std::derived_from<M, Matrix<M::kRow, M::kCol>> and
-             shapesMatch({Row, Col}, {M::kRow, M::kCol}))
+             match({Row, Col}, {M::kRow, M::kCol}))
+  auto operator=(const M& other) -> Dense& {
+    row_ = other.shape().row;
+    col_ = other.shape().col;
+    data_.resize(row_ * col_);
+    verifyShape(*this);
+    for (size_t i = 0; i < row_; ++i) {
+      for (size_t j = 0; j < col_; ++j) {
+        (*this)[i, j] = other[i, j];
+      }
+    }
+    return *this;
+  }
+
+  template <typename M>
+    requires(std::derived_from<M, Matrix<M::kRow, M::kCol>> and
+             match({Row, Col}, {M::kRow, M::kCol}))
   auto operator=(M&& other) -> Dense& {
     row_ = other.shape().row;
     col_ = other.shape().col;
     data_.resize(row_ * col_);
-    verifyShape();
+    verifyShape(*this);
     for (size_t i = 0; i < row_; ++i) {
       for (size_t j = 0; j < col_; ++j) {
         (*this)[i, j] = std::move(other[i, j]);
@@ -201,6 +228,24 @@ class Dense : public Matrix<Row, Col> {
     return *this;
   }
 
+  explicit Dense(Shape shape)
+      : row_(shape.row), col_(shape.col), data_(row_ * col_) {
+    verifyShape(*this);
+  }
+
+  explicit Dense(Shape shape, std::span<Scalar> data)
+      : row_(shape.row), col_(shape.col), data_(data) {
+    verifyShape(*this);
+  }
+
+  explicit Dense(Shape shape, std::vector<Scalar>&& data)
+      : row_(shape.row), col_(shape.col), data_(data) {
+    verifyShape(*this);
+  }
+
+  auto data() const -> const std::vector<Scalar>& { return data_; }
+
+  auto data() && -> std::vector<Scalar>& { return data_; }
 
  private:
   friend Matrix<Row, Col>;
@@ -220,8 +265,10 @@ class Dense : public Matrix<Row, Col> {
   std::vector<Scalar> data_;
 };
 
+// NOLINTBEGIN(*-avoid-c-arrays)
 template <typename Scalar, size_t First, size_t... Sizes>
 explicit Dense(const Scalar (&)[First], const Scalar (&... rows)[Sizes])
     -> Dense<Scalar, sizeof...(Sizes) + 1, First>;
+// NOLINTEND(*-avoid-c-arrays)
 
 }  // namespace tempura::matrix

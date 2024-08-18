@@ -15,7 +15,7 @@ class Test;
 // Unit test binaries should indicate success or failure by returning
 // TestRegistry::result().
 class TestRegistry final {
-public:
+ public:
   TestRegistry(const TestRegistry&) = delete;
   TestRegistry(TestRegistry&&) = delete;
   auto operator=(const TestRegistry&) -> TestRegistry& = delete;
@@ -37,7 +37,7 @@ public:
     return static_cast<int>(getInstance().total_failures_);
   }
 
-private:
+ private:
   TestRegistry() = default;
 
   static auto getInstance() -> TestRegistry& {
@@ -52,13 +52,14 @@ private:
 };
 
 class Test {
-public:
+ public:
   auto operator=(const std::function<void()>& func) -> void {
     TestRegistry::setCurrent(*this);
     std::clog << "Running... " << name_ << '\n';
     func();
   }
-private:
+
+ private:
   constexpr Test(std::string_view name) : name_(name) {}
 
   friend constexpr auto operator""_test(const char*, std::size_t) -> Test;
@@ -66,15 +67,14 @@ private:
   std::string_view name_;
 };
 
-[[nodiscard]] constexpr auto operator""_test(
-  const char* name, std::size_t size) -> Test {
+[[nodiscard]] constexpr auto operator""_test(const char* name,
+                                             std::size_t size) -> Test {
   return Test{{name, size}};
 }
 
-
 template <class TLhs, class TRhs>
 class expectEq final {
-public:
+ public:
   constexpr expectEq(
       const TLhs& lhs, const TRhs& rhs,
       std::source_location location = std::source_location::current())
@@ -82,19 +82,14 @@ public:
 
   ~expectEq() {
     if (not *this) {
-      std::cerr << location_.file_name() << ":"
-            << location_.line() << ":"
-            << "error: "
-            << "Expected " << lhs_ << " == " << rhs_ << '\n';
+      std::cerr << location_.file_name() << ":" << location_.line();
       TestRegistry::setFailure();
     }
   }
 
-  [[nodiscard]] constexpr operator bool() const {
-    return lhs_ == rhs_;
-  }
+  [[nodiscard]] constexpr operator bool() const { return lhs_ == rhs_; }
 
-private:
+ private:
   const TLhs& lhs_;
   const TRhs& rhs_;
   std::source_location location_;
@@ -102,7 +97,7 @@ private:
 
 template <class TLhs, class TRhs>
 class expectNeq final {
-public:
+ public:
   constexpr expectNeq(
       const TLhs& lhs, const TRhs& rhs,
       std::source_location location = std::source_location::current())
@@ -110,73 +105,58 @@ public:
 
   ~expectNeq() {
     if (not *this) {
-      std::cerr << location_.file_name() << ":"
-            << location_.line() << ":"
-            << "error: "
-            << "Expected " << lhs_ << " != " << rhs_ << '\n';
+      std::cerr << location_.file_name() << ":" << location_.line();
       TestRegistry::setFailure();
     }
   }
 
-  [[nodiscard]] constexpr operator bool() const {
-    return lhs_ != rhs_;
-  }
+  [[nodiscard]] constexpr operator bool() const { return lhs_ != rhs_; }
 
-private:
+ private:
   const TLhs& lhs_;
   const TRhs& rhs_;
   std::source_location location_;
 };
 
 class expectTrue final {
-public:
+ public:
   constexpr expectTrue(bool value) : value_(value) {}
 
   ~expectTrue() {
     if (not *this) {
-      std::cerr << location_.file_name() << ":"
-            << location_.line() << ":"
-            << "error: "
-            << "Expected true got false";
+      std::cerr << location_.file_name() << ":" << location_.line();
       TestRegistry::setFailure();
     }
   }
 
-  [[nodiscard]] constexpr operator bool() const {
-    return value_;
-  }
+  [[nodiscard]] constexpr operator bool() const { return value_; }
 
-private:
+ private:
   bool value_;
   std::source_location location_;
 };
 
 class expectFalse final {
-public:
+ public:
   constexpr expectFalse(bool value) : value_(value) {}
 
   ~expectFalse() {
     if (not *this) {
-      std::cerr << location_.file_name() << ":"
-            << location_.line() << ":"
-            << "error: "
-            << "Expected false got true";
+      std::cerr << location_.file_name() << ":" << location_.line();
       TestRegistry::setFailure();
     }
   }
 
-  [[nodiscard]] constexpr operator bool() const {
-    return value_;
-  }
+  [[nodiscard]] constexpr operator bool() const { return value_; }
 
-private:
+ private:
   bool value_;
   std::source_location location_;
 };
 
 template <class TLhs, class TRhs>
 class expectApproxEq final {
-public:
+ public:
   constexpr expectApproxEq(
       const TLhs& lhs, const TRhs& rhs,
       std::source_location location = std::source_location::current())
@@ -184,22 +164,17 @@ public:
 
   ~expectApproxEq() {
     if (not *this) {
-      std::cerr << location_.file_name() << ":"
-            << location_.line() << ":"
-            << "error: "
-            << "Expected " << lhs_ << " ≈ " << rhs_ << '\n';
+      std::cerr << location_.file_name() << ":" << location_.line();
       TestRegistry::setFailure();
     }
   }
 
-  [[nodiscard]] constexpr operator bool() const {
-    return lhs_ - rhs_ < 0.0001;
-  }
+  [[nodiscard]] constexpr operator bool() const { return lhs_ - rhs_ < 0.0001; }
 
-private:
+ private:
   const TLhs& lhs_;
   const TRhs& rhs_;
   std::source_location location_;
 };
 
-}
+}  // namespace tempura

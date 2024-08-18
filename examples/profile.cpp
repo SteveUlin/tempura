@@ -1,20 +1,19 @@
+#include <iostream>
 #include "profiler.h"
 
 auto main() -> int {
-  tempura::Profiler::beginTracing();
   {
-    TEMPURA_TRACE("Scope 0");
+    TEMPURA_TRACE();
     for (int i = 0; i < 10; i++) {
-      TEMPURA_TRACE("Scope 1");
+      TEMPURA_TRACE();
       for (int j = 0; j < 10; j++) {
-        TEMPURA_TRACE("Scope 2");
+        TEMPURA_TRACE();
         for (int k = 0; k < 10; k++) {
-          TEMPURA_TRACE("Scope 3");
+          TEMPURA_TRACE();
         }
       }
     }
   }
-  tempura::Profiler::endAndPrintStats();
   return 0;
 }
 

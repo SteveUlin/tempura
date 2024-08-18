@@ -12,3 +12,6 @@ target_link_libraries(fifo_queue_test fifo_queue unit benchmark profiler)
 add_library(guarded INTERFACE guarded.h)
 add_executable(guarded_test guarded_test.cpp)
 target_link_libraries(guarded_test guarded unit)
+
+add_library(image INTERFACE image.h)
+add_executable(image_test image_test.cpp)

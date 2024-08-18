@@ -2,6 +2,8 @@
 
 #include <chrono>
 #include <deque>
+#include <iostream>
+#include <source_location>
 
 namespace tempura {
 
@@ -10,17 +12,43 @@ using namespace std::chrono_literals;
 // Basic single-threaded profiler.
 //
 // Supports Scoped RAII tracking:
-// TEMPURA_TRACE("Some Label");
+// TEMPURA_TRACE();
 //
 // Not super high fidelity as the Profiler allocates new anchor points as
 // needed, but this is more than accurate enough for most tasks. Allocating
 // a new anchor may add a few nanoseconds to a trace.
 
+// Idea:
+//
+// We always have a "current tracing anchor" that is accruing "exclusive" time.
+//
+// When we hit another tracing anchor:
+//   - store a pointer to the previous anchor
+//   - add "exclusive" time to the previous anchor
+//   - start accruing "exclusive" time for the new anchor
+//
+// When an anchor goes out of scope:
+//   - add "exclusive" time to the parent anchor
+//   - log total time since construction, "inclusive" time
+//   - set the current anchor to the parent anchor
+//
+// If the parent anchor is ever the same as the current anchor, don't do
+// anything. Just log a hit on construction.
+
 class Profiler {
  public:
-  // Information about an anchor point. i.e. TEMPURA_TRACE("Some Label");
+  Profiler() {
+    Anchor& anchor =
+        anchors_.emplace_back(std::source_location::current());
+    anchor.hits = 1;
+    global_current_ = &anchor;
+    global_start_ = std::chrono::high_resolution_clock::now();
+    atexit(endAndPrintStats);
+  }
+  // Information about an anchor point. i.e. TEMPURA_TRACE();
   struct Anchor {
-    const char* label;
+    explicit Anchor(std::source_location location) : location(location) {}
+    std::source_location location;
     std::chrono::nanoseconds inclusive = 0ns;
     std::chrono::nanoseconds exclusive = 0ns;
     uint64_t hits = 0;
@@ -30,7 +58,7 @@ class Profiler {
   class Tracer {
    public:
     // Automatically starts the timer and sets the global current anchor.
-    explicit Tracer(Anchor& anchor);
+    [[nodiscard]] explicit Tracer(Anchor& anchor);
 
     // Automatically stops the timer and sets the global current anchor to the
     // parent.
@@ -46,12 +74,11 @@ class Profiler {
     std::chrono::time_point<std::chrono::high_resolution_clock> start_;
   };
 
-  static auto now()
-      -> std::chrono::time_point<std::chrono::high_resolution_clock>;
-
-  static auto beginTracing() -> void;
-
-  static auto getNewAnchor(const char* label) -> Anchor&;
+  static auto getNewAnchor(std::source_location location =
+                               std::source_location::current()) -> Anchor& {
+    Anchor& anchor = instance_.anchors_.emplace_back(location);
+    return anchor;
+  }
 
   static auto endAndPrintStats() -> void;
 
@@ -64,9 +91,8 @@ class Profiler {
   std::chrono::time_point<std::chrono::high_resolution_clock> global_start_;
 };
 
-#define TEMPURA_TRACE(label)                                           \
-  static auto __kLabel = label;                                        \
-  static auto& __anchor = ::tempura::Profiler::getNewAnchor(__kLabel); \
+#define TEMPURA_TRACE()                                        \
+  static auto& __anchor = ::tempura::Profiler::getNewAnchor(); \
   auto __tracer = ::tempura::Profiler::Tracer(__anchor);
 
 }  // namespace tempura
