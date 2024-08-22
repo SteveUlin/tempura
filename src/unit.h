@@ -82,7 +82,7 @@ class expectEq final {
 
   ~expectEq() {
     if (not *this) {
-      std::cerr << location_.file_name() << ":" << location_.line();
+      std::cerr << location_.file_name() << ":" << location_.line() << std::endl;
       TestRegistry::setFailure();
     }
   }

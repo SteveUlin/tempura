@@ -2,11 +2,14 @@
 C++ Examples and Experimentation
 
 # Wishlist
-- [ ] Guarded (mutex wrapper)
-- [ ] Lock Free Queue
+- [ ] Simple logging library - (move matrix::check macro)
+- [ ] MatMul
+
+- [ ] Rework Benchmark Lib
+- [x] Guarded (mutex wrapper)
+- [ ] Lock Free FIFO Queue
 - [ ] Compile Time Strings
-- [ ] Profiler should have a global RAII handle
-- [ ] Profiler should crash if you try to create an anchor without init the global handle
+
 - [ ] Why would you want to write a custom allocator?
 - [ ] Coroutine Examples
 - [ ] Rational Numbers Examples

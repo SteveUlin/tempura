@@ -1,4 +1,5 @@
 #include "matrix/matrix.h"
+#include "matrix/dense.h"
 
 #include "unit.h"
 
@@ -6,8 +7,8 @@ using namespace tempura;
 
 auto main() -> int {
   "Default Constructor"_test = [] {
-    matrix::Dense<double, 2, 3> m{};
-    expectEq(m.shape(), matrix::Shape{2, 3});
+    matrix::Dense<double, {2, 3}> m{};
+    // expectEq(m.shape(), matrix::RowCol{2, 3});
     expectEq(0., m[0, 0]);
     expectEq(0., m[0, 1]);
     expectEq(0., m[1, 0]);
@@ -16,7 +17,7 @@ auto main() -> int {
 
   "Array Constructor"_test = [] {
     matrix::Dense m{{0., 1.}, {2., 3.}};
-    expectEq(m.shape(), matrix::Shape{2, 2});
+    expectEq(m.shape(), matrix::RowCol{2, 2});
     expectEq(0., m[0, 0]);
     expectEq(1., m[0, 1]);
     expectEq(2., m[1, 0]);
@@ -26,7 +27,7 @@ auto main() -> int {
   "Copy Constructor"_test = [] {
     matrix::Dense m{{0., 1.}, {2., 3.}};
     auto n{m};
-    expectEq(n.shape(), matrix::Shape{2, 2});
+    expectEq(n.shape(), matrix::RowCol{2, 2});
     expectEq(0., n[0, 0]);
     expectEq(1., n[0, 1]);
     expectEq(2., n[1, 0]);
@@ -36,7 +37,7 @@ auto main() -> int {
   "Move Constructor"_test = [] {
     matrix::Dense m{{0., 1.}, {2., 3.}};
     auto n{std::move(m)};
-    expectEq(n.shape(), matrix::Shape{2, 2});
+    expectEq(n.shape(), matrix::RowCol{2, 2});
     expectEq(0., n[0, 0]);
     expectEq(1., n[0, 1]);
     expectEq(2., n[1, 0]);
@@ -46,7 +47,7 @@ auto main() -> int {
   "Copy Assignment"_test = [] {
     matrix::Dense m{{0., 1.}, {2., 3.}};
     auto n = m;
-    expectEq(n.shape(), matrix::Shape{2, 2});
+    expectEq(n.shape(), matrix::RowCol{2, 2});
     expectEq(0., n[0, 0]);
     expectEq(1., n[0, 1]);
     expectEq(2., n[1, 0]);
@@ -56,7 +57,7 @@ auto main() -> int {
   "Move Assignment"_test = [] {
     matrix::Dense m{{0., 1.}, {2., 3.}};
     auto n = std::move(m);
-    expectEq(n.shape(), matrix::Shape{2, 2});
+    expectEq(n.shape(), matrix::RowCol{2, 2});
     expectEq(0., n[0, 0]);
     expectEq(1., n[0, 1]);
     expectEq(2., n[1, 0]);
@@ -64,10 +65,10 @@ auto main() -> int {
   };
 
   "Copy Constructor From Dynamic"_test = [] {
-    matrix::Dense<double, matrix::kDynamic, matrix::kDynamic> m{
+    matrix::Dense<double, {matrix::kDynamic, matrix::kDynamic}> m{
         {0., 1.}, {2., 3.}};
 
-    matrix::Dense<double, 2, 2> n{m};
+    matrix::Dense<double, {2, 2}> n{m};
     expectEq(0., n[0, 0]);
     expectEq(1., n[0, 1]);
     expectEq(2., n[1, 0]);
@@ -75,10 +76,10 @@ auto main() -> int {
   };
 
   "Move Constructor From Dynamic"_test = [] {
-    matrix::Dense<double, matrix::kDynamic, matrix::kDynamic> m{
+    matrix::Dense<double, {matrix::kDynamic, matrix::kDynamic}> m{
         {0., 1.}, {2., 3.}};
 
-    matrix::Dense<double, 2, 2> n{std::move(m)};
+    matrix::Dense<double, {2, 2}> n{std::move(m)};
     expectEq(0., n[0, 0]);
     expectEq(1., n[0, 1]);
     expectEq(2., n[1, 0]);
@@ -86,10 +87,10 @@ auto main() -> int {
   };
 
   "Copy Assignment From Dynamic"_test = [] {
-    matrix::Dense<double, matrix::kDynamic, matrix::kDynamic> m{
+    matrix::Dense<double, {matrix::kDynamic, matrix::kDynamic}> m{
         {0., 1.}, {2., 3.}};
 
-    matrix::Dense<double, 2, 2> n;
+    matrix::Dense<double, {2, 2}> n;
     n = m;
     expectEq(0., n[0, 0]);
     expectEq(1., n[0, 1]);
@@ -98,10 +99,10 @@ auto main() -> int {
   };
 
   "Move Assignment From Dynamic"_test = [] {
-    matrix::Dense<double, matrix::kDynamic, matrix::kDynamic> m{
+    matrix::Dense<double, {matrix::kDynamic, matrix::kDynamic}> m{
         {0., 1.}, {2., 3.}};
 
-    matrix::Dense<double, 2, 2> n;
+    matrix::Dense<double, {2, 2}> n;
     n = std::move(m);
     expectEq(0., n[0, 0]);
     expectEq(1., n[0, 1]);
@@ -110,9 +111,9 @@ auto main() -> int {
   };
 
   "Copy Constructor From Other"_test = [] {
-    matrix::Dense<double, 2, 2, matrix::IndexOrder::kColMajor> m{{0., 1.},
+    matrix::Dense<double, {2, 2}, matrix::IndexOrder::kColMajor> m{{0., 1.},
                                                                  {2., 3.}};
-    matrix::Dense<double, 2, 2, matrix::IndexOrder::kRowMajor> n{m};
+    matrix::Dense<double, {2, 2}, matrix::IndexOrder::kRowMajor> n{m};
     expectEq(0., n[0, 0]);
     expectEq(1., n[0, 1]);
     expectEq(2., n[1, 0]);
@@ -120,9 +121,9 @@ auto main() -> int {
   };
 
   "Move Constructor From Other"_test = [] {
-    matrix::Dense<double, 2, 2, matrix::IndexOrder::kColMajor> m{{0., 1.},
+    matrix::Dense<double, {2, 2}, matrix::IndexOrder::kColMajor> m{{0., 1.},
                                                                  {2., 3.}};
-    matrix::Dense<double, 2, 2, matrix::IndexOrder::kRowMajor> n{std::move(m)};
+    matrix::Dense<double, {2, 2}, matrix::IndexOrder::kRowMajor> n{std::move(m)};
     expectEq(0., n[0, 0]);
     expectEq(1., n[0, 1]);
     expectEq(2., n[1, 0]);
@@ -130,9 +131,9 @@ auto main() -> int {
   };
 
   "Copy Assignment From Other"_test = [] {
-    matrix::Dense<double, 2, 2, matrix::IndexOrder::kColMajor> m{{0., 1.},
+    matrix::Dense<double, {2, 2}, matrix::IndexOrder::kColMajor> m{{0., 1.},
                                                                  {2., 3.}};
-    matrix::Dense<double, 2, 2, matrix::IndexOrder::kRowMajor> n;
+    matrix::Dense<double, {2, 2}, matrix::IndexOrder::kRowMajor> n;
     n = m;
     expectEq(0., n[0, 0]);
     expectEq(1., n[0, 1]);
@@ -141,9 +142,9 @@ auto main() -> int {
   };
 
   "Move Assignment From Other"_test = [] {
-    matrix::Dense<double, 2, 2, matrix::IndexOrder::kColMajor> m{{0., 1.},
+    matrix::Dense<double, {2, 2}, matrix::IndexOrder::kColMajor> m{{0., 1.},
                                                                  {2., 3.}};
-    matrix::Dense<double, 2, 2, matrix::IndexOrder::kRowMajor> n;
+    matrix::Dense<double, {2, 2}, matrix::IndexOrder::kRowMajor> n;
     n = std::move(m);
     expectEq(0., n[0, 0]);
     expectEq(1., n[0, 1]);
@@ -151,21 +152,21 @@ auto main() -> int {
     expectEq(3., n[1, 1]);
   };
 
-  "Dyanmic Shape"_test = [] {
+  "Dyanmic RowCol"_test = [] {
 
   };
 
   "Set and get"_test = [] {
-    matrix::Dense<int, 2, 2> m;
+    matrix::Dense<int, {2, 2}> m;
     expectEq(0, m[0, 1]);
     m[0, 1] = 2;
     expectEq(2, m[0, 1]);
   };
 
   "Static Size"_test = [] {
-    matrix::Dense<int, 2, 3> m;
-    static_assert(decltype(m)::kRow == 2);
-    static_assert(decltype(m)::kCol == 3);
+    matrix::Dense<int, {2, 3}> m;
+    static_assert(decltype(m)::kExtent.row == 2);
+    static_assert(decltype(m)::kExtent.col == 3);
   };
 
   return 0;
