@@ -90,6 +90,7 @@ class Profiler {
   Anchor* global_current_;
   std::chrono::time_point<std::chrono::high_resolution_clock> global_start_;
 };
+inline Profiler& Profiler::instance_{*(new Profiler{})};
 
 #define TEMPURA_TRACE()                                        \
   static auto& __anchor = ::tempura::Profiler::getNewAnchor(); \

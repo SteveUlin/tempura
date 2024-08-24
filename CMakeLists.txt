@@ -9,6 +9,7 @@ if(CMAKE_EXPORT_COMPILE_COMMANDS)
       ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
 endif()
 
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
 set(CMAKE_CXX_FLAGS_RELEASE "-Ofast -ftree-vectorize -march=native -ffast-math")
 
 find_package(CUDAToolkit)

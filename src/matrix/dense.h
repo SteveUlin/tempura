@@ -11,8 +11,78 @@ template <typename Scalar, RowCol extent,
           IndexOrder order = IndexOrder::kColMajor>
 class Dense final : public Matrix<extent> {
  public:
-  Dense() : shape_({.row = (extent.row == kDynamic) ? 0 : extent.row,
-                    .col = (extent.col == kDynamic) ? 0 : extent.row}),
+  struct Sentinel {
+    Dense& parent;
+  };
+
+  template <typename Mat>
+  class Iterator {
+   public:
+    Iterator(Mat& parent, RowCol location)
+        : parent_(parent), ptr_(&parent_.get(location)) {}
+
+    auto operator*() -> decltype(auto) { return *ptr_; }
+
+    auto operator++() -> Iterator& {
+      if constexpr (order == IndexOrder::kRowMajor) {
+        return incCol();
+      } else {
+        return incRow();
+      }
+    }
+
+    auto operator--() -> Iterator& {
+      --ptr_;
+      return *this;
+    }
+
+    auto incRow() -> Iterator& {
+      location_ += RowCol{1, 0};
+      if constexpr (order == IndexOrder::kColMajor) {
+        ++ptr_;
+      } else if (extent.row == kDynamic) {
+        ptr_ += parent_.shape().col;
+      } else {
+        ptr_ += extent.col;
+      }
+      return *this;
+    }
+
+    auto incCol() -> Iterator& {
+      location_ += RowCol{0, 1};
+      if constexpr (order == IndexOrder::kRowMajor) {
+        ++ptr_;
+      } else if (extent.col == kDynamic) {
+        ptr_ += parent_.shape().row;
+      } else {
+        ptr_ += extent.row;
+      }
+      return *this;
+    }
+
+    auto location() const -> RowCol { return location_; }
+
+    auto operator<=>(const Iterator& iter) { return ptr_ <=> iter.ptr_; }
+    auto operator!=(const Iterator& iter) { return !(ptr_ == iter.ptr_); }
+
+    auto operator!=(Sentinel sentinel) {
+      return ptr_ < &*sentinel.parent.data().end();
+    }
+
+    RowCol location_{0, 0};
+
+   private:
+    Mat& parent_;
+    decltype(&parent_.get({0, 0})) ptr_;
+  };
+  template <typename Mat>
+  Iterator(Mat& parent, RowCol location) -> Iterator<Mat&>;
+
+  using ScalarT = Scalar;
+
+  Dense()
+      : shape_({.row = (extent.row == kDynamic) ? 0 : extent.row,
+                .col = (extent.col == kDynamic) ? 0 : extent.row}),
         data_(shape_.row * shape_.col) {}
 
   Dense(const Dense& other)
@@ -69,7 +139,8 @@ class Dense final : public Matrix<extent> {
   // Use C-Arrays to get the nice syntax
   // NOLINTBEGIN(*-avoid-c-arrays)
   template <size_t First, size_t... Sizes>
-    requires(((extent.row == kDynamic) or (sizeof...(Sizes) + 1 == extent.row)) and
+    requires(((extent.row == kDynamic) or
+              (sizeof...(Sizes) + 1 == extent.row)) and
              ((extent.col == kDynamic) or (First == extent.col)) and
              ((First == Sizes) and ...))
   Dense(const Scalar (&first)[First], const Scalar (&... rows)[Sizes])
@@ -138,15 +209,28 @@ class Dense final : public Matrix<extent> {
     CHECK(verifyShape(*this));
   }
 
-  explicit Dense(RowCol shape, std::span<Scalar> data)
-      : shape_(shape), data_(data) {
+  explicit Dense(std::ranges::input_range auto&& data)
+    requires(extent.row != kDynamic and extent.col != kDynamic)
+      : shape_(extent), data_({}) {
+    data_.reserve(shape_.row * shape_.col);
+    std::ranges::copy(data, std::back_inserter(data_));
     CHECK(verifyShape(*this));
   }
 
-  explicit Dense(RowCol shape, std::vector<Scalar>&& data)
-      : shape_(shape), data_(data) {
+  explicit Dense(RowCol shape, std::ranges::input_range auto&& data)
+      : shape_(shape), data_({}) {
+    data_.reserve(shape_.row * shape_.col);
+    std::ranges::copy(data, std::back_inserter(data_));
     CHECK(verifyShape(*this));
   }
+
+  auto begin() { return Iterator{*this, {0, 0}}; }
+  auto end() { return sentinel_; }
+  // auto end() { return Iterator<false>{*this, &*data_.end()}; }
+
+  auto cbegin() const { return Iterator{*this, {0, 0}}; }
+  auto cend() const { return sentinel_; }
+  // auto cend() const { return Iterator<true>{*this, &*data_.cend()}; }
 
   auto data() const -> const std::vector<Scalar>& { return data_; }
 
@@ -157,16 +241,17 @@ class Dense final : public Matrix<extent> {
 
   auto shapeImpl() const -> RowCol { return shape_; }
 
-  auto getImpl(this auto&& self, RowCol index) -> decltype(auto) {
+  auto getImpl(this auto&& self, size_t row, size_t col) -> decltype(auto) {
     if constexpr (order == IndexOrder::kRowMajor) {
-      return self.data_[index.row * self.shape_.col + index.col];
+      return self.data_[row * self.shape_.col + col];
     } else {
-      return self.data_[index.col * self.shape_.row + index.row];
+      return self.data_[col * self.shape_.row + row];
     }
   }
 
   RowCol shape_;
   std::vector<Scalar> data_;
+  Sentinel sentinel_ = Sentinel{*this};
 };
 
 // NOLINTBEGIN(*-avoid-c-arrays)

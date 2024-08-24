@@ -29,8 +29,28 @@ struct RowCol {
   size_t col;
   auto operator<=>(const RowCol&) const = default;
 
+  auto operator+=(const RowCol& rhs) -> RowCol& {
+    row += rhs.row;
+    col += rhs.col;
+    return *this;
+  }
+
+  auto operator-=(const RowCol& rhs) -> RowCol& {
+    row -= rhs.row;
+    col -= rhs.col;
+    return *this;
+  }
+
   auto operator+(const RowCol& rhs) const -> RowCol {
     return {.row = row + rhs.row, .col = col + rhs.col};
+  }
+
+  auto operator-(const RowCol& rhs) const -> RowCol {
+    return {.row = row + rhs.row, .col = col + rhs.col};
+  }
+
+  auto operator*(int n) const -> RowCol {
+    return {.row = n * row, .col = n * col};
   }
 };
 
@@ -43,6 +63,7 @@ constexpr auto matchExtent(RowCol lhs, RowCol rhs) -> bool {
 }
 
 enum class IndexOrder {
+  kNone,
   kRowMajor,
   kColMajor,
 };
@@ -53,19 +74,20 @@ enum class IndexOrder {
 //   May return any kind of object for this const version.
 // - shapeImpl()
 //   Return the current shape of the matrix.
-template <RowCol extent>
+template <RowCol extent, IndexOrder index_order = IndexOrder::kColMajor>
 class Matrix {
  public:
   inline static constexpr RowCol kExtent = extent;
+  inline static constexpr IndexOrder kIndexOrder = index_order;
 
   auto shape(this auto&& self) -> RowCol { return self.shapeImpl(); }
 
-  auto operator[](this auto&& self, size_t row, size_t col) -> decltype(auto) {
-    return self.getImpl({row, col});
+  inline auto operator[](this auto&& self, size_t row, size_t col) -> decltype(auto) {
+    return self.getImpl(row, col);
   }
 
   auto get(this auto&& self, RowCol index) -> decltype(auto) {
-    return self.getImpl(index);
+    return self.getImpl(index.row, index.col);
   }
 
   // Vector accessors

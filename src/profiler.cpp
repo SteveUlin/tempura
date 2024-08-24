@@ -11,8 +11,15 @@ namespace {
 
 auto toHumanReadable(std::chrono::nanoseconds duration) -> std::string {
   using namespace std::chrono_literals;
-  if (duration < 1ms) {
+  if (duration < 10us) {
     return std::format("{} ns", duration.count());
+  }
+  if (duration < 1ms) {
+    return std::format(
+        "{:.2f} μs",
+        std::chrono::duration<double, std::chrono::microseconds::period>(
+            duration)
+            .count());
   }
   if (duration < 10s) {
     return std::format(
@@ -40,8 +47,6 @@ auto toHumanReadable(std::chrono::nanoseconds duration) -> std::string {
 }
 
 };  // namespace
-
-Profiler& Profiler::instance_ = *(new Profiler{});
 
 Profiler::Tracer::Tracer(Anchor& anchor)
     : anchor_(anchor),
@@ -76,7 +81,7 @@ auto Profiler::endAndPrintStats() -> void {
       auto avg = anchor.inclusive / anchor.hits;
 
       std::cout << std::format(
-          "{}:{} {}[{}]: {} {:.2f}% avg: {}\n", anchor.location.file_name(),
+          "{}:{} {}[{}]:\n\t\t\t{} {:.2f}% avg: {}\n", anchor.location.file_name(),
           anchor.location.line(), anchor.location.function_name(), anchor.hits,
           toHumanReadable(anchor.inclusive), percent, toHumanReadable(avg));
     }
@@ -85,7 +90,7 @@ auto Profiler::endAndPrintStats() -> void {
                       static_cast<double>(elapsed.count())) *
                      100;
       auto avg = anchor.exclusive / anchor.hits;
-      std::cout << std::format("\tw/o children: {} ns, {:.2f}% avg: {}\n",
+      std::cout << std::format("\tw/o children: \t{}, {:.2f}% avg: {}\n",
                                toHumanReadable(anchor.exclusive), percent,
                                toHumanReadable(avg));
     }
