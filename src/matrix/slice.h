@@ -3,66 +3,6 @@
 
 namespace tempura::matrix {
 
-class IteratorOpMixin {
- public:
-  auto operator++(this auto&& self, int) {
-    auto copy = self;
-    ++self;
-    return copy;
-  }
-  auto operator--(this auto&& self, int) {
-    auto copy = self;
-    --self;
-    return copy;
-  }
-  auto operator<=>(this const auto& self, const decltype(self)& iter) {
-    return self.index_ <=> iter.index_;
-  }
-  auto operator!=(this const auto& self, const decltype(self)& iter) {
-    return !(self.index_ == iter.index_);
-  }
-};
-
-template <MatrixT M>
-class IterElements {
- public:
-  class Iterator {
-   public:
-    Iterator(M& parent, RowCol index) : parent_(parent), index_(index) {}
-
-    auto operator*() -> decltype(auto) { return parent_.get(index_); }
-    auto operator++() -> Iterator& {
-      index_ = index_ + RowCol{1, 0};
-      if (index_.row == parent_.shape().row) {
-        index_ = {0, index_.col + 1};
-      }
-      return *this;
-    }
-    auto operator--() -> Iterator& {
-      index_ = index_ - RowCol{1, 0};
-      if (index_.row == -1) {
-        index_ = {parent_.shape().row - 1, index_.col - 1};
-      }
-      return *this;
-    }
-    auto operator<=>(const Iterator& iter) { return index_ <=> iter.index_; }
-    auto operator!=(const Iterator& iter) { return index_ != iter.index_; }
-
-   private:
-    M& parent_;
-    RowCol index_;
-  };
-
-  IterElements(M& parent) : parent_(parent) {}
-
-  auto begin() -> Iterator { return Iterator(parent_, {0, 0}); }
-
-  auto end() -> Iterator { return Iterator(parent_, {0, parent_.shape().col}); }
-
- private:
-  M& parent_;
-};
-
 template <RowCol extent, MatrixT M>
   requires((extent.row == kDynamic or M::extnet == kDynamic or
             extent.row <= M::kExtent.row) and
@@ -75,7 +15,7 @@ class Slice : public Matrix<extent> {
     requires((extent.row != kDynamic) and (extent.col != kDynamic))
       : shape_(extent), offset_(offset), parent_(mat) {}
 
-  Slice(RowCol shape, RowCol offset, M&& mat)
+  Slice(RowCol shape, RowCol offset, M& mat)
       : shape_(shape), offset_(offset), parent_(mat) {
     CHECK(verifyShape(*this));
   }
@@ -90,44 +30,51 @@ class Slice : public Matrix<extent> {
   auto parent() -> M& { return parent_; }
   auto offset() const -> RowCol { return offset_; }
 
+  template <typename ParentIterT>
   class Iterator {
    public:
-    explicit Iterator(auto parent_iter) : parent_iter_(parent_iter) {}
+    explicit Iterator(ParentIterT parent_iter) : parent_iter_(parent_iter) {}
 
     auto operator*() -> decltype(auto) { return *parent_iter_; }
 
-    auto operator++() -> Iterator& {
-      if constexpr (extent.row == 1) {
+    auto operator++() -> Iterator& requires (extent.row == 1) {
         parent_iter_.incCol();
         return *this;
-      } else if (extent.col == 1) {
+    }
+
+    auto operator++() -> Iterator& requires (extent.col == 1) {
         parent_iter_.incRow();
         return *this;
-      }
-      return *this;
     }
+
+    auto operator++() -> Iterator& {
+        parent_iter_.incRow();
+        return *this;
+    }
+
     auto operator<=>(const Iterator& iter) {
       return parent_iter_ <=> iter.parent_iter_;
     }
+
     auto operator!=(const Iterator& iter) {
       return parent_iter_ != iter.parent_iter_;
     }
 
    private:
-    M::template Iterator<M&> parent_iter_;
+    ParentIterT parent_iter_;
   };
 
-  auto begin() -> Iterator {
-    return Iterator{typename M::Iterator{parent_, offset_}};
+  auto beginImpl(this auto&& self) {
+    return Iterator{typename M::Iterator{self.parent_, self.offset_}};
   }
 
-  auto end() -> Iterator {
+  auto endImpl(this auto&& self) {
     if constexpr (extent.row == 1) {
-      return Iterator{
-          typename M::Iterator{parent_, offset_ + RowCol{0, shape_.col}}};
+      return Iterator{typename M::Iterator{
+          self.parent_, self.offset_ + RowCol{0, self.shape_.col}}};
     } else if (extent.col == 1) {
-      return Iterator{
-          typename M::Iterator{parent_, offset_ + RowCol{shape_.row, 0}}};
+      return Iterator{typename M::Iterator{
+          self.parent_, self.offset_ + RowCol{self.shape_.row, 0}}};
     }
   }
 
@@ -161,39 +108,39 @@ struct Slicer {
 template <MatrixT M>
 class IterRows {
  public:
-  class Iterator : public IteratorOpMixin {
-   public:
-    Iterator() = default;
-    Iterator(const Iterator&) = default;
-    Iterator(Iterator&&) = default;
-    auto operator=(const Iterator&) -> Iterator& = default;
-    auto operator=(Iterator&&) -> Iterator& = default;
+  IterRows(M& matrix) : matrix_(matrix) {}
 
+  class Iterator {
+   public:
     Iterator(size_t index, M& parent) : index_(index), matrix_(parent) {}
 
     auto operator*() -> Slice<{1, M::kExtent.col}, M> {
       return Slicer<{1, M::kExtent.col}>::at(RowCol{index_, 0}, matrix_);
     }
+
     auto operator++() -> Iterator& {
       index_++;
       return *this;
     }
+
     auto operator--() -> Iterator& {
       index_--;
       return *this;
     }
 
-   private:
-    friend class IteratorOpMixin;
+    auto operator!=(const Iterator& iter) { return index_ != iter.index_; }
 
+   private:
     size_t index_;
     M& matrix_;
   };
 
-  IterRows(M& matrix) : matrix_(matrix) {}
-
-  auto begin() -> Iterator { return Iterator{0, matrix_}; }
-  auto end() -> Iterator { return Iterator{matrix_.shape().row, matrix_}; }
+  auto begin(this auto&& self) {
+    return Iterator{0, self.matrix_};
+  }
+  auto end(this auto&& self) {
+    return Iterator{self.matrix_.shape().row, self.matrix_};
+  }
 
  private:
   M& matrix_;
@@ -202,7 +149,7 @@ class IterRows {
 template <MatrixT M>
 class IterCols {
  public:
-  class Iterator : public IteratorOpMixin {
+  class Iterator {
    public:
     Iterator() = default;
     Iterator(const Iterator&) = default;
@@ -224,9 +171,9 @@ class IterCols {
       return *this;
     }
 
-   private:
-    friend class IteratorOpMixin;
+    auto operator!=(const Iterator& iter) { return index_ != iter.index_; }
 
+   private:
     size_t index_;
     M& matrix_;
   };

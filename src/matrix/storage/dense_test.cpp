@@ -1,4 +1,5 @@
-#include "matrix/dense.h"
+#include "matrix/storage/dense.h"
+
 #include <ranges>
 
 #include "matrix/matrix.h"
@@ -9,8 +10,8 @@ using namespace tempura;
 
 auto main() -> int {
   "Default Constructor"_test = [] {
-    matrix::Dense<double, {2, 3}> m{};
-    // expectEq(m.shape(), matrix::RowCol{2, 3});
+    matrix::Dense<double, {2, 3}> m;
+    expectEq(m.shape(), matrix::RowCol{2, 3});
     expectEq(0., m[0, 0]);
     expectEq(0., m[0, 1]);
     expectEq(0., m[1, 0]);
@@ -172,14 +173,15 @@ auto main() -> int {
     matrix::Dense<int, {2, 2}, tempura::matrix::IndexOrder::kRowMajor> m{
         {0, 1}, {2, 3}};
     int i = 0;
-    for (const int& val : m) {
+    for (const int val : m) {
       expectEq(i++, val);
     }
     expectEq(4, i);
   };
 
   "Iteration Single"_test = [] {
-    matrix::Dense<int, {10'000, 10'000}> m;
+    matrix::Dense<int, {10'000, 10'000}> m(
+      {10'000, 10'000}, std::ranges::views::iota(0, 10'000 * 10'000));
     int sum = 0;
     {
       TEMPURA_TRACE();
@@ -187,24 +189,11 @@ auto main() -> int {
           sum += m.data()[i];
       }
     }
-    expectEq(sum, 0);
-  };
-  "Iteration Tripple"_test = [] {
-    matrix::Dense<int, {10'000, 10'000}> m(
-      {10'000, 10'000}, std::ranges::views::iota(0, 10'000 * 10'000));
-    int sum = 0;
-    {
-      TEMPURA_TRACE();
-      for (int val : m.data()) {
-        sum += val;
-      }
-    }
     std::cout << "SUM: " << sum << '\n';
-    expectEq(sum, 0);
   };
 
-  "Iteration Double"_test = [] {
-    matrix::Dense<int, {10'000, 10'000}> m(
+  "Iter Elements"_test = [] {
+    const matrix::Dense<int, {10'000, 10'000}> m(
       {10'000, 10'000}, std::ranges::views::iota(0, 10'000 * 10'000));
     int sum = 0;
     {
@@ -214,69 +203,25 @@ auto main() -> int {
       }
     }
     std::cout << "SUM: " << sum << '\n';
+  };
+
+  "Iteration Double For"_test = [] {
+    matrix::Dense<int, {10'000, 10'000}> m(
+      {10'000, 10'000}, std::ranges::views::iota(0, 10'000 * 10'000));
+    int sum = 0;
+    {
+      TEMPURA_TRACE();
+      for (int i = 0; i < 10'000; ++i) {
+        for (int j = 0; j < 10'000; ++j) {
+          sum += m[i, j];
+        }
+      }
+    }
+    std::cout << "SUM: " << sum << '\n';
     expectEq(sum, 0);
   };
 
-  "Iteration Double"_test = [] {
-    matrix::Dense<int, {10'000, 10'000}> m(
-      {10'000, 10'000}, std::ranges::views::iota(0, 10'000 * 10'000));
-    int sum = 0;
-    {
-      TEMPURA_TRACE();
-      const auto* end = &*m.data().end();
-      for (const auto* ptr = m.data().data(); ptr != end; ++ptr) {
-        sum += *ptr;
-      }
-    }
-    std::cout << "SUM: " << sum << '\n';
-    expectEq(sum, 0);
-  };
-  "Iteration for"_test = [] {
-    matrix::Dense<int, {10'000, 10'000}> m(
-      {10'000, 10'000}, std::ranges::views::iota(0, 10'000 * 10'000));
-    int sum = 0;
-    {
-      TEMPURA_TRACE();
-      for (int i = 0; i < 10'000; ++i) {
-        for (int j = 0; j < 10'000; ++j) {
-          sum += m[i, j];
-        }
-      }
-    }
-    std::cout << "SUM: " << sum << '\n';
-    expectEq(sum, 0);
-  };
-  "Iteration for"_test = [] {
-    matrix::Dense<int, {10'000, 10'000}> m(
-      {10'000, 10'000}, std::ranges::views::iota(0, 10'000 * 10'000));
-    int sum = 0;
-    {
-      TEMPURA_TRACE();
-      for (int i = 0; i < 10'000; ++i) {
-        for (int j = 0; j < 10'000; ++j) {
-          sum += m.data()[i * 10'000 + j];
-        }
-      }
-    }
-    std::cout << "SUM: " << sum << '\n';
-    expectEq(sum, 0);
-  };
-  "Iteration for"_test = [] {
-    matrix::Dense<int, {10'000, 10'000}> m(
-      {10'000, 10'000}, std::ranges::views::iota(0, 10'000 * 10'000));
-    int sum = 0;
-    {
-      TEMPURA_TRACE();
-      for (int j = 0; j < 10'000; ++j) {
-        for (int i = 0; i < 10'000; ++i) {
-          sum += m.data()[i * 10'000 + j];
-        }
-      }
-    }
-    std::cout << "SUM: " << sum << '\n';
-    expectEq(sum, 0);
-  };
-  "Iteration for"_test = [] {
+  "Iteration Double For Reversed"_test = [] {
     matrix::Dense<int, {10'000, 10'000}> m(
       {10'000, 10'000}, std::ranges::views::iota(0, 10'000 * 10'000));
     int sum = 0;
@@ -291,6 +236,51 @@ auto main() -> int {
     std::cout << "SUM: " << sum << '\n';
     expectEq(sum, 0);
   };
+
+  "Iteration rows "_test = [] {
+    const matrix::Dense<int, {10'000, 10'000}> m(
+      {10'000, 10'000}, std::ranges::views::iota(0, 10'000 * 10'000));
+    int sum = 0;
+    {
+      TEMPURA_TRACE();
+      for (auto row : m.rows()) {
+        for (const int val : row) {
+          sum += val;
+        }
+      }
+    }
+    std::cout << "SUM: " << sum << '\n';
+  };
+
+  "Iteration cols"_test = [] {
+    const matrix::Dense<int, {10'000, 10'000}> m(
+      {10'000, 10'000}, std::ranges::views::iota(0, 10'000 * 10'000));
+    int sum = 0;
+    {
+      TEMPURA_TRACE();
+      for (auto col : m.cols()) {
+        for (const int val : col) {
+          sum += val;
+        }
+      }
+    }
+    std::cout << "SUM: " << sum << '\n';
+  };
+
+  // "Iteration cols"_test = [] {
+  //   const matrix::Dense<int, {10'000, 10'000}> m(
+  //     {10'000, 10'000}, std::ranges::views::iota(0, 10'000 * 10'000));
+  //   int sum = 0;
+  //   {
+  //     TEMPURA_TRACE();
+  //     for (const auto col : m.cols()) {
+  //       for (int val : col) {
+  //         sum += val;
+  //       }
+  //     }
+  //   }
+  //   std::cout << "SUM: " << sum << '\n';
+  // };
 
   return 0;
 }

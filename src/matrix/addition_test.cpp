@@ -1,6 +1,6 @@
 #include "matrix/addition.h"
 
-#include "matrix/dense.h"
+#include "matrix/storage/dense.h"
 #include "unit.h"
 
 using namespace tempura;

@@ -1,9 +1,10 @@
 #pragma once
-#include <span>
+
 #include <utility>
 #include <vector>
 
 #include "matrix/matrix.h"
+#include "matrix/slice.h"
 
 namespace tempura::matrix {
 
@@ -11,73 +12,6 @@ template <typename Scalar, RowCol extent,
           IndexOrder order = IndexOrder::kColMajor>
 class Dense final : public Matrix<extent> {
  public:
-  struct Sentinel {
-    Dense& parent;
-  };
-
-  template <typename Mat>
-  class Iterator {
-   public:
-    Iterator(Mat& parent, RowCol location)
-        : parent_(parent), ptr_(&parent_.get(location)) {}
-
-    auto operator*() -> decltype(auto) { return *ptr_; }
-
-    auto operator++() -> Iterator& {
-      if constexpr (order == IndexOrder::kRowMajor) {
-        return incCol();
-      } else {
-        return incRow();
-      }
-    }
-
-    auto operator--() -> Iterator& {
-      --ptr_;
-      return *this;
-    }
-
-    auto incRow() -> Iterator& {
-      location_ += RowCol{1, 0};
-      if constexpr (order == IndexOrder::kColMajor) {
-        ++ptr_;
-      } else if (extent.row == kDynamic) {
-        ptr_ += parent_.shape().col;
-      } else {
-        ptr_ += extent.col;
-      }
-      return *this;
-    }
-
-    auto incCol() -> Iterator& {
-      location_ += RowCol{0, 1};
-      if constexpr (order == IndexOrder::kRowMajor) {
-        ++ptr_;
-      } else if (extent.col == kDynamic) {
-        ptr_ += parent_.shape().row;
-      } else {
-        ptr_ += extent.row;
-      }
-      return *this;
-    }
-
-    auto location() const -> RowCol { return location_; }
-
-    auto operator<=>(const Iterator& iter) { return ptr_ <=> iter.ptr_; }
-    auto operator!=(const Iterator& iter) { return !(ptr_ == iter.ptr_); }
-
-    auto operator!=(Sentinel sentinel) {
-      return ptr_ < &*sentinel.parent.data().end();
-    }
-
-    RowCol location_{0, 0};
-
-   private:
-    Mat& parent_;
-    decltype(&parent_.get({0, 0})) ptr_;
-  };
-  template <typename Mat>
-  Iterator(Mat& parent, RowCol location) -> Iterator<Mat&>;
-
   using ScalarT = Scalar;
 
   Dense()
@@ -88,14 +22,17 @@ class Dense final : public Matrix<extent> {
   Dense(const Dense& other)
       : shape_{.row = other.shape().row, .col = other.shape().col},
         data_(other.data_) {}
+
   Dense(Dense&& other) noexcept
       : shape_{.row = other.shape().row, .col = other.shape().col},
         data_(std::move(other.data_)) {}
+
   auto operator=(const Dense& other) -> Dense& {
     shape_ = other.shape_;
     data_ = other.data_;
     return *this;
   }
+
   auto operator=(Dense&& other) noexcept -> Dense& {
     shape_ = other.shape_;
     data_ = std::move(other.data_);
@@ -224,13 +161,75 @@ class Dense final : public Matrix<extent> {
     CHECK(verifyShape(*this));
   }
 
-  auto begin() { return Iterator{*this, {0, 0}}; }
-  auto end() { return sentinel_; }
-  // auto end() { return Iterator<false>{*this, &*data_.end()}; }
+  struct Sentinel {};
 
-  auto cbegin() const { return Iterator{*this, {0, 0}}; }
-  auto cend() const { return sentinel_; }
-  // auto cend() const { return Iterator<true>{*this, &*data_.cend()}; }
+  template <typename Mat>
+  class Iterator {
+   public:
+    Iterator(Mat& parent, RowCol location)
+        : parent_(parent), location_(location), ptr_(&parent_.get(location)) {}
+
+    auto operator*() -> decltype(auto) { return *ptr_; }
+
+    auto operator++() -> Iterator& {
+      if constexpr (order == IndexOrder::kRowMajor) {
+        return incCol();
+      } else {
+        return incRow();
+      }
+    }
+
+    template <RowCol delta>
+    auto update() -> Iterator& {
+      location_ += delta;
+      if constexpr (order == IndexOrder::kColMajor) {
+        if constexpr (extent.row != kDynamic) {
+          ptr_ += delta.row + extent.row * delta.col;
+        } else {
+          ptr_ += delta.row + parent_.shape().row * delta.col;
+        }
+      } else if constexpr (order == IndexOrder::kRowMajor) {
+        if constexpr (extent.row != kDynamic) {
+          ptr_ += extent.col * delta.row + delta.col;
+        } else {
+          ptr_ += parent_.shape().col * delta.row + delta.col;
+        }
+      } else {
+        static_assert(false, "Not implented for Index Order");
+      }
+      return *this;
+    }
+
+    auto incRow() -> Iterator& {
+      return update<{1, 0}>();
+    }
+
+    auto incCol() -> Iterator& {
+      return update<{0, 1}>();
+    }
+
+    auto location() const -> RowCol { return location_; }
+    auto operator!=(const Iterator& iter) { return !(ptr_ == iter.ptr_); }
+    auto operator!=(Sentinel /*unused*/) {
+      return ptr_ < &*parent_.data().end();
+    }
+
+   private:
+    Mat& parent_;
+    RowCol location_;
+    decltype(&parent_.get(std::declval<RowCol>())) ptr_;
+  };
+
+  template <typename Mat>
+  Iterator(Mat& parent, RowCol location) -> Iterator<Mat&>;
+
+  auto beginImpl(this auto&& self) { return Iterator{self, {0, 0}}; }
+
+  auto endImpl() const -> Sentinel { return {}; }
+
+  auto rowsImpl(this auto&& self) { return IterRows(self); }
+
+  auto colsImpl(this auto&& self) { return IterCols(self); }
 
   auto data() const -> const std::vector<Scalar>& { return data_; }
 
@@ -251,7 +250,6 @@ class Dense final : public Matrix<extent> {
 
   RowCol shape_;
   std::vector<Scalar> data_;
-  Sentinel sentinel_ = Sentinel{*this};
 };
 
 // NOLINTBEGIN(*-avoid-c-arrays)
@@ -261,3 +259,4 @@ explicit Dense(const Scalar (&)[First], const Scalar (&... rows)[Sizes])
 // NOLINTEND(*-avoid-c-arrays)
 
 }  // namespace tempura::matrix
+

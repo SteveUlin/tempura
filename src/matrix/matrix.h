@@ -82,7 +82,8 @@ class Matrix {
 
   auto shape(this auto&& self) -> RowCol { return self.shapeImpl(); }
 
-  inline auto operator[](this auto&& self, size_t row, size_t col) -> decltype(auto) {
+  inline auto operator[](this auto&& self, size_t row,
+                         size_t col) -> decltype(auto) {
     return self.getImpl(row, col);
   }
 
@@ -96,11 +97,21 @@ class Matrix {
   {
     return self[0, col];
   }
+
   auto operator[](this auto&& self, size_t row) -> decltype(auto)
     requires(kExtent.col == 1)
   {
     return self[row, 0];
   }
+
+  // Iteration
+  auto begin(this auto&& self) { return self.beginImpl(); }
+
+  auto end(this auto&& self) { return self.endImpl(); }
+
+  auto rows(this auto&& self) { return self.rowsImpl(); }
+
+  auto cols(this auto&& self) { return self.colsImpl(); }
 };
 
 template <typename M>
