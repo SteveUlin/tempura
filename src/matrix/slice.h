@@ -82,7 +82,7 @@ class Slice : public Matrix<extent> {
   friend class Matrix<extent>;
 
   auto getImpl(this auto&& self, size_t row, size_t col) -> decltype(auto) {
-    return self.parent_[row, col];
+    return self.parent_[(row + self.offset_.row), (col + self.offset_.col)];
   }
 
   auto shapeImpl(this auto&& self) -> RowCol { return self.shape_; }
@@ -91,6 +91,8 @@ class Slice : public Matrix<extent> {
   RowCol offset_;
   M& parent_;
 };
+template <MatrixT M>
+Slice(RowCol shape, RowCol offset, M& mat) -> Slice<{kDynamic, kDynamic}, M>;
 
 template <RowCol extent>
 struct Slicer {

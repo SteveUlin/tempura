@@ -6,3 +6,7 @@ add_library(identity INTERFACE identity.h)
 add_executable(identity_test identity_test.cpp)
 target_link_libraries(identity_test identity unit)
 
+add_library(permutation INTERFACE permutation.h)
+add_executable(permutation_test permutation_test.cpp)
+target_link_libraries(permutation_test permutation unit printer identity)
+

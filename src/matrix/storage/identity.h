@@ -4,10 +4,10 @@
 
 namespace tempura::matrix {
 
-template <typename Scalar, size_t extent>
+template <size_t extent>
 class Identity final : public Matrix<{extent, extent}> {
 public:
-  using ScalarT = Scalar;
+  using ScalarT = bool;
 
   Identity() {
     const size_t n = (extent == kDynamic) ? 0 : extent;
@@ -23,8 +23,8 @@ private:
 
   auto shapeImpl() const -> RowCol { return shape_; }
 
-  auto getImpl(size_t row, size_t col) const -> ScalarT {
-    return (row == col) ? ScalarT{1} : ScalarT{0};
+  auto getImpl(size_t row, size_t col) const -> bool {
+    return row == col;
   }
 
   RowCol shape_;

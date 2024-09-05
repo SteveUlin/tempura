@@ -10,7 +10,8 @@ if(CMAKE_EXPORT_COMPILE_COMMANDS)
 endif()
 
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
-set(CMAKE_CXX_FLAGS_RELEASE "-Ofast -ftree-vectorize -march=native -ffast-math")
+set(CMAKE_CXX_FLAGS_RELEASE "-ftree-vectorize -march=native -ffast-math -O3 -funroll-loops")
+# set(CMAKE_CXX_FLAGS_RELEASE "-ftree-vectorize -march=native -O2 -funroll-loops")
 
 find_package(CUDAToolkit)
 

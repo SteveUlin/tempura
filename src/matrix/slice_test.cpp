@@ -75,6 +75,8 @@ auto main() -> int {
     }
     std::cout << "SUM: " << sum << '\n';
     expectEq(sum, 0);
+    matrix::Dense<double, {matrix::kDynamic, matrix::kDynamic}, matrix::IndexOrder::kColMajor>
+        r_buf = matrix::Slicer<{2, 2}>::at({2, 2}, m);
   };
   return 0;
 }

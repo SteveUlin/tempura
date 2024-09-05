@@ -26,16 +26,17 @@ template <MatrixT Lhs, MatrixT Rhs>
 class KroneckerProduct
     : public Matrix<internal::kroneckerExtent(Lhs::kExtent, Rhs::kExtent)> {
  public:
-  using ScalarT =
-      decltype(std::declval<Lhs::ScalarT>() * std::declval<Rhs::ScalarT>());
+  using ScalarT = decltype(std::declval<typename Lhs::ScalarT>() *
+                           std::declval<typename Rhs::ScalarT>());
   KroneckerProduct(const Lhs& lhs, const Rhs& rhs)
       : lhs_(lhs),
         rhs_(rhs),
-        shape_(kroneckerExtent(lhs_.shape(), rhs_.shape())) {
+        shape_(internal::kroneckerExtent(lhs_.shape(), rhs_.shape())) {
     CHECK(verifyShape(*this));
   }
 
  private:
+  friend Matrix<internal::kroneckerExtent(Lhs::kExtent, Rhs::kExtent)>;
   auto getImpl(size_t row, size_t col) const {
     const auto lhs_row = row / rhs_.shape().row;
     const auto rhs_row = row % rhs_.shape().row;
@@ -44,7 +45,7 @@ class KroneckerProduct
     return lhs_[lhs_row, lhs_col] * rhs_[rhs_row, rhs_col];
   }
 
-  auto getShapeImpl() const -> RowCol { return shape_; }
+  auto shapeImpl() const -> RowCol { return shape_; }
 
   const Lhs& lhs_;
   const Rhs& rhs_;

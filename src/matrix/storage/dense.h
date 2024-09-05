@@ -13,6 +13,7 @@ template <typename Scalar, RowCol extent,
 class Dense final : public Matrix<extent> {
  public:
   using ScalarT = Scalar;
+  inline static constexpr IndexOrder kIndexOrder = order;
 
   Dense()
       : shape_({.row = (extent.row == kDynamic) ? 0 : extent.row,
@@ -98,7 +99,9 @@ class Dense final : public Matrix<extent> {
   }
   // NOLINTEND(*-avoid-c-arrays)
 
-  Dense(const SizedMatrixT<extent> auto& other)
+  template <typename M>
+    requires (MatrixT<M> && matchExtent(M::kExtent, extent))
+  Dense(const M& other)
       : shape_{other.shape()}, data_(shape_.row * shape_.col) {
     CHECK(verifyShape(*this));
     for (size_t i = 0; i < shape_.row; ++i) {
@@ -108,7 +111,9 @@ class Dense final : public Matrix<extent> {
     }
   }
 
-  Dense(SizedMatrixT<extent> auto&& other)
+  template <typename M>
+    requires (MatrixT<M> && matchExtent(M::kExtent, extent))
+  Dense(M&& other)
       : shape_{other.shape()}, data_(shape_.row * shape_.col) {
     CHECK(verifyShape(*this));
     for (size_t i = 0; i < shape_.row; ++i) {
@@ -118,7 +123,9 @@ class Dense final : public Matrix<extent> {
     }
   }
 
-  auto operator=(const SizedMatrixT<extent> auto& other) -> Dense& {
+  template <typename M>
+    requires (MatrixT<M> && matchExtent(M::kExtent, extent))
+  auto operator=(const M& other) -> Dense& {
     shape_ = other.shape();
     data_.resize(shape_.row * shape_.col);
     CHECK(verifyShape(*this));
@@ -130,7 +137,9 @@ class Dense final : public Matrix<extent> {
     return *this;
   }
 
-  auto operator=(SizedMatrixT<extent> auto&& other) -> Dense& {
+  template <typename M>
+    requires (MatrixT<M> && matchExtent(M::kExtent, extent))
+  auto operator=(M&& other) -> Dense& {
     shape_ = other.shape();
     data_.resize(shape_.row * shape_.col);
     CHECK(verifyShape(*this));
@@ -233,7 +242,7 @@ class Dense final : public Matrix<extent> {
 
   auto data() const -> const std::vector<Scalar>& { return data_; }
 
-  auto data() && -> std::vector<Scalar>& { return data_; }
+  auto data() -> std::vector<Scalar>& { return data_; }
 
  private:
   friend Matrix<extent>;

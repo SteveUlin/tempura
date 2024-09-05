@@ -68,6 +68,12 @@ enum class IndexOrder {
   kColMajor,
 };
 
+enum class Pivoting {
+  None,
+  Partial
+  // Full
+};
+
 // Subclasses must define the following functions
 // - get(size_t row, size_t col)
 //   Return a reference like object to the given index.
@@ -105,9 +111,13 @@ class Matrix {
   }
 
   // Iteration
-  auto begin(this auto&& self) { return self.beginImpl(); }
+  auto begin(this auto& self) requires(!std::is_const_v<decltype(self)>){ return self.beginImpl(); }
 
-  auto end(this auto&& self) { return self.endImpl(); }
+  auto end(this auto& self) { return self.endImpl(); }
+
+  auto cbegin(this auto&& self) { return self.cbeginImpl(); }
+
+  auto cend(this auto&& self) { return self.cendImpl(); }
 
   auto rows(this auto&& self) { return self.rowsImpl(); }
 
@@ -130,6 +140,21 @@ constexpr auto verifyShape(const M& m) -> bool {
   const bool col_match =
       (M::kExtent.col == kDynamic) or (M::kExtent.col == m.shape().col);
   return row_match and col_match;
+}
+
+template<MatrixT Lhs, MatrixT Rhs>
+constexpr auto operator==(const Lhs& lhs, const Rhs& rhs) -> bool {
+  if (lhs.shape() != rhs.shape()) {
+    return false;
+  }
+  for (size_t i = 0; i < lhs.shape().row; ++i) {
+    for (size_t j = 0; j < lhs.shape().col; ++j) {
+      if (lhs[i, j] != rhs[i, j]) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 }  // namespace tempura::matrix

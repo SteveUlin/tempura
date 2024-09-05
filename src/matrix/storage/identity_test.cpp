@@ -6,7 +6,7 @@ using namespace tempura;
 
 auto main() -> int {
   "Default Constructor"_test = [] {
-    matrix::Identity<int, 3> I;
+    matrix::Identity<3> I;
     expectEq(I.shape(), matrix::RowCol{3, 3});
     expectEq(I[0, 0], 1);
     expectEq(I[0, 1], 0);
