@@ -22,34 +22,37 @@ void check(bool condition, std::string_view message,
 #define CHECK(condition) ::tempura::matrix::check(condition, #condition)
 
 // Size of a matrix to be determined at runtime
-inline static constexpr size_t kDynamic = std::numeric_limits<size_t>::max();
+inline static constexpr auto kDynamic = std::numeric_limits<int64_t>::max();
 
 struct RowCol {
-  size_t row;
-  size_t col;
-  auto operator<=>(const RowCol&) const = default;
+  // Fit a RowCol into a 64-bit integer for efficient indexing
+  //
+  // Use signed integers so users can express negative deltas
+  int64_t row;
+  int64_t col;
 
-  auto operator+=(const RowCol& rhs) -> RowCol& {
+  auto operator<=>(const RowCol&) const = default;
+  auto operator+=(RowCol rhs) -> RowCol& {
     row += rhs.row;
     col += rhs.col;
     return *this;
   }
 
-  auto operator-=(const RowCol& rhs) -> RowCol& {
+  auto operator-=(RowCol rhs) -> RowCol& {
     row -= rhs.row;
     col -= rhs.col;
     return *this;
   }
 
-  auto operator+(const RowCol& rhs) const -> RowCol {
+  auto operator+(RowCol rhs) const -> RowCol {
     return {.row = row + rhs.row, .col = col + rhs.col};
   }
 
-  auto operator-(const RowCol& rhs) const -> RowCol {
+  auto operator-(RowCol rhs) const -> RowCol {
     return {.row = row + rhs.row, .col = col + rhs.col};
   }
 
-  auto operator*(int n) const -> RowCol {
+  auto operator*(int64_t n) const -> RowCol {
     return {.row = n * row, .col = n * col};
   }
 };
@@ -67,6 +70,9 @@ enum class IndexOrder {
   kRowMajor,
   kColMajor,
 };
+constexpr auto kNone = IndexOrder::kNone;
+constexpr auto kRowMajor = IndexOrder::kRowMajor;
+constexpr auto kColMajor = IndexOrder::kColMajor;
 
 enum class Pivoting {
   None,
@@ -75,7 +81,7 @@ enum class Pivoting {
 };
 
 // Subclasses must define the following functions
-// - get(size_t row, size_t col)
+// - get(int64_t row, int64_t col)
 //   Return a reference like object to the given index.
 //   May return any kind of object for this const version.
 // - shapeImpl()
@@ -88,8 +94,8 @@ class Matrix {
 
   auto shape(this auto&& self) -> RowCol { return self.shapeImpl(); }
 
-  inline auto operator[](this auto&& self, size_t row,
-                         size_t col) -> decltype(auto) {
+  inline auto operator[](this auto&& self, int64_t row,
+                         int64_t col) -> decltype(auto) {
     return self.getImpl(row, col);
   }
 
@@ -98,20 +104,24 @@ class Matrix {
   }
 
   // Vector accessors
-  auto operator[](this auto&& self, size_t col) -> decltype(auto)
+  auto operator[](this auto&& self, int64_t col) -> decltype(auto)
     requires(kExtent.row == 1)
   {
     return self[0, col];
   }
 
-  auto operator[](this auto&& self, size_t row) -> decltype(auto)
+  auto operator[](this auto&& self, int64_t row) -> decltype(auto)
     requires(kExtent.col == 1)
   {
     return self[row, 0];
   }
 
   // Iteration
-  auto begin(this auto& self) requires(!std::is_const_v<decltype(self)>){ return self.beginImpl(); }
+  auto begin(this auto& self)
+    requires(!std::is_const_v<decltype(self)>)
+  {
+    return self.beginImpl();
+  }
 
   auto end(this auto& self) { return self.endImpl(); }
 
@@ -142,13 +152,13 @@ constexpr auto verifyShape(const M& m) -> bool {
   return row_match and col_match;
 }
 
-template<MatrixT Lhs, MatrixT Rhs>
+template <MatrixT Lhs, MatrixT Rhs>
 constexpr auto operator==(const Lhs& lhs, const Rhs& rhs) -> bool {
   if (lhs.shape() != rhs.shape()) {
     return false;
   }
-  for (size_t i = 0; i < lhs.shape().row; ++i) {
-    for (size_t j = 0; j < lhs.shape().col; ++j) {
+  for (int64_t i = 0; i < lhs.shape().row; ++i) {
+    for (int64_t j = 0; j < lhs.shape().col; ++j) {
       if (lhs[i, j] != rhs[i, j]) {
         return false;
       }

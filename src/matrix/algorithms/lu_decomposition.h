@@ -31,7 +31,8 @@ class LU;
 template <MatrixT M>
   requires(M::kExtent.row == kDynamic || M::kExtent.col == kDynamic ||
            M::kExtent.row == M::kExtent.col)
-class LU<M, Pivoting::Partial> final {
+class LU<M, Pivoting::None> final {
+public:
   constexpr static RowCol kExtent =
       (M::kExtent.row != kDynamic) ? RowCol{M::kExtent.row, M::kExtent.row}
                                    : RowCol{M::kExtent.col, M::kExtent.col};
@@ -39,38 +40,56 @@ class LU<M, Pivoting::Partial> final {
   explicit LU(M matrix) : matrix_(std::move(matrix)) {
     CHECK(matrix_.shape().row == matrix_.shape().col);
 
-    const size_t n = size();
-    for (size_t i = 0; i < n; ++i) {
-      for (size_t j = i + 1; j < n; ++j) {
+    const int64_t n = size();
+    for (int64_t i = 0; i < n; ++i) {
+      for (int64_t j = i + 1; j < n; ++j) {
         matrix_[j, i] /= matrix_[i, i];
-        for (size_t k = i + 1; k < n; ++k) {
+        for (int64_t k = i + 1; k < n; ++k) {
           matrix_[j, k] -= matrix_[j, i] * matrix_[i, k];
         }
       }
     }
   }
 
-  auto size() const -> size_t { return matrix_.shape().row; }
+  auto size() const -> int64_t { return matrix_.shape().row; }
 
-  auto matrix() const -> const M& { return matrix; }
+  auto matrix() const -> const M& { return matrix_; }
 
   auto determinant() const {
     CHECK(size() == matrix_.shape().col);
     auto det = matrix_[0, 0];
-    for (size_t i = 1; i < size(); ++i) {
+    for (int64_t i = 1; i < size(); ++i) {
       det *= matrix_[i, i];
     }
     return det;
   }
 
   template <MatrixT B>
-    requires(matchingExtent({kExtent.row, 1}, B::kExtent))
+    requires(M::kExent == kDynamic || B::kExtent.row == kDynamic ||
+             B::kExtent.row == M::kExtent.row)
   auto solve(B b) const -> B {
-    return solveLU(matrix_, b);
+    CHECK(size() == b.shape().row);
+    for (int64_t i = 1; i < size(); ++i) {
+      for (int64_t j = 0; j < i; ++j) {
+        b.rows()[i] -= matrix_[i, j] * b.rows()[j];
+      }
+    }
+    for (int64_t i = size() - 1; i >= 0; --i) {
+      for (int64_t j = i + 1; j < size(); ++j) {
+        b.rows()[i] -= matrix_[i, j] * b.rows()[j];
+      }
+      b.rows()[i] /= matrix_[i, i];
+    }
+    return b;
   }
 
  private:
   M matrix_;
 };
+
+template <MatrixT M>
+  requires(M::kExtent.row == kDynamic || M::kExtent.col == kDynamic ||
+           M::kExtent.row == M::kExtent.col)
+LU(M matrix) -> LU<M>;
 
 }  // namespace tempura::matrix

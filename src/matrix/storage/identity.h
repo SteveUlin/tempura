@@ -4,17 +4,17 @@
 
 namespace tempura::matrix {
 
-template <size_t extent>
+template <int64_t extent>
 class Identity final : public Matrix<{extent, extent}> {
 public:
   using ScalarT = bool;
 
   Identity() {
-    const size_t n = (extent == kDynamic) ? 0 : extent;
+    const int64_t n = (extent == kDynamic) ? 0 : extent;
     shape_ = {n, n};
   }
 
-  Identity(size_t N) requires (extent == kDynamic) {
+  Identity(int64_t N) requires (extent == kDynamic) {
     shape_ = {N, N};
   }
 
@@ -23,7 +23,7 @@ private:
 
   auto shapeImpl() const -> RowCol { return shape_; }
 
-  auto getImpl(size_t row, size_t col) const -> bool {
+  auto getImpl(int64_t row, int64_t col) const -> bool {
     return row == col;
   }
 

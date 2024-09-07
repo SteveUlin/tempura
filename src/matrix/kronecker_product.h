@@ -37,7 +37,7 @@ class KroneckerProduct
 
  private:
   friend Matrix<internal::kroneckerExtent(Lhs::kExtent, Rhs::kExtent)>;
-  auto getImpl(size_t row, size_t col) const {
+  auto getImpl(int64_t row, int64_t col) const {
     const auto lhs_row = row / rhs_.shape().row;
     const auto rhs_row = row % rhs_.shape().row;
     const auto lhs_col = col / rhs_.shape().col;

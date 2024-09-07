@@ -27,6 +27,7 @@
           packages = with pkgs; [
             pkgs.llvmPackages_18.clang
             gcc12
+            gdb
             bazel
             cmake
             ninja

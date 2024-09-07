@@ -12,16 +12,7 @@ using namespace tempura;
 
 constexpr int N = 1024 + 16;
 
-void print(const matrix::MatrixT auto& m) {
-  for (const auto& row : m.rows()) {
-    for (const auto val : row) {
-      std::cout << val << " ";
-    }
-    std::cout << std::endl;
-  }
-}
-
-template <size_t N>
+template <int64_t N>
 void target_function() {
   matrix::Dense<int, {10'000, 10'000}, matrix::IndexOrder::kRowMajor> m{
       std::views::iota(0, 10'000 * 10'000)};
@@ -170,6 +161,19 @@ auto main() -> int {
       matrix::bufMultiplyThreadpool<8, 16>(m, n, o);
     }
     std::cout << "-----------" << std::endl;
+  };
+
+  "Test mul"_test = [] {
+    constexpr int K = 4;
+    matrix::Dense<double, {K, K}, matrix::kRowMajor> n{
+        std::views::iota(0, K * K)};
+    std::cout << matrix::toString(n) << std::endl;
+
+    n *= 2.0;
+    std::cout << matrix::toString(n) << std::endl;
+    std::cout << matrix::toString(2.0 * n) << std::endl;
+    matrix::Slicer<{1, 3}>::at({0, 1}, n) *= -1;
+    std::cout << matrix::toString(n) << std::endl;
   };
 
   // "Test Better Buf"_test = [] {

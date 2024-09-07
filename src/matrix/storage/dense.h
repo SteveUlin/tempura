@@ -17,7 +17,7 @@ class Dense final : public Matrix<extent> {
 
   Dense()
       : shape_({.row = (extent.row == kDynamic) ? 0 : extent.row,
-                .col = (extent.col == kDynamic) ? 0 : extent.row}),
+                .col = (extent.col == kDynamic) ? 0 : extent.col}),
         data_(shape_.row * shape_.col) {}
 
   Dense(const Dense& other)
@@ -76,7 +76,7 @@ class Dense final : public Matrix<extent> {
   //
   // Use C-Arrays to get the nice syntax
   // NOLINTBEGIN(*-avoid-c-arrays)
-  template <size_t First, size_t... Sizes>
+  template <int64_t First, int64_t... Sizes>
     requires(((extent.row == kDynamic) or
               (sizeof...(Sizes) + 1 == extent.row)) and
              ((extent.col == kDynamic) or (First == extent.col)) and
@@ -84,13 +84,13 @@ class Dense final : public Matrix<extent> {
   Dense(const Scalar (&first)[First], const Scalar (&... rows)[Sizes])
       : shape_{.row = (sizeof...(Sizes) + 1), .col = First},
         data_(shape_.row * shape_.col) {
-    for (size_t j = 0; j < First; ++j) {
+    for (int64_t j = 0; j < First; ++j) {
       (*this)[0, j] = first[j];
     }
-    size_t i = 1;
+    int64_t i = 1;
     (
         [this, &rows, &i]() {
-          for (size_t j = 0; j < shape_.row; ++j) {
+          for (int64_t j = 0; j < shape_.row; ++j) {
             (*this)[i, j] = rows[j];
           }
           ++i;
@@ -104,8 +104,8 @@ class Dense final : public Matrix<extent> {
   Dense(const M& other)
       : shape_{other.shape()}, data_(shape_.row * shape_.col) {
     CHECK(verifyShape(*this));
-    for (size_t i = 0; i < shape_.row; ++i) {
-      for (size_t j = 0; j < shape_.col; ++j) {
+    for (int64_t i = 0; i < shape_.row; ++i) {
+      for (int64_t j = 0; j < shape_.col; ++j) {
         (*this)[i, j] = other[i, j];
       }
     }
@@ -116,8 +116,8 @@ class Dense final : public Matrix<extent> {
   Dense(M&& other)
       : shape_{other.shape()}, data_(shape_.row * shape_.col) {
     CHECK(verifyShape(*this));
-    for (size_t i = 0; i < shape_.row; ++i) {
-      for (size_t j = 0; j < shape_.col; ++j) {
+    for (int64_t i = 0; i < shape_.row; ++i) {
+      for (int64_t j = 0; j < shape_.col; ++j) {
         (*this)[i, j] = std::move(other[i, j]);
       }
     }
@@ -129,8 +129,8 @@ class Dense final : public Matrix<extent> {
     shape_ = other.shape();
     data_.resize(shape_.row * shape_.col);
     CHECK(verifyShape(*this));
-    for (size_t i = 0; i < shape_.row; ++i) {
-      for (size_t j = 0; j < shape_.col; ++j) {
+    for (int64_t i = 0; i < shape_.row; ++i) {
+      for (int64_t j = 0; j < shape_.col; ++j) {
         (*this)[i, j] = other[i, j];
       }
     }
@@ -143,8 +143,8 @@ class Dense final : public Matrix<extent> {
     shape_ = other.shape();
     data_.resize(shape_.row * shape_.col);
     CHECK(verifyShape(*this));
-    for (size_t i = 0; i < shape_.row; ++i) {
-      for (size_t j = 0; j < shape_.col; ++j) {
+    for (int64_t i = 0; i < shape_.row; ++i) {
+      for (int64_t j = 0; j < shape_.col; ++j) {
         (*this)[i, j] = std::move(other[i, j]);
       }
     }
@@ -249,7 +249,7 @@ class Dense final : public Matrix<extent> {
 
   auto shapeImpl() const -> RowCol { return shape_; }
 
-  auto getImpl(this auto&& self, size_t row, size_t col) -> decltype(auto) {
+  auto getImpl(this auto&& self, int64_t row, int64_t col) -> decltype(auto) {
     if constexpr (order == IndexOrder::kRowMajor) {
       return self.data_[row * self.shape_.col + col];
     } else {
@@ -262,7 +262,7 @@ class Dense final : public Matrix<extent> {
 };
 
 // NOLINTBEGIN(*-avoid-c-arrays)
-template <typename Scalar, size_t First, size_t... Sizes>
+template <typename Scalar, int64_t First, int64_t... Sizes>
 explicit Dense(const Scalar (&)[First], const Scalar (&... rows)[Sizes])
     -> Dense<Scalar, {sizeof...(Sizes) + 1, First}>;
 // NOLINTEND(*-avoid-c-arrays)

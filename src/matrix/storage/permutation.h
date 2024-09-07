@@ -2,14 +2,13 @@
 
 #include <algorithm>
 #include <numeric>
-#include <ranges>
 #include <vector>
 
 #include "matrix/matrix.h"
 
 namespace tempura::matrix {
 
-template <size_t extent>
+template <int64_t extent>
 class RowPermutation final : public Matrix<{extent, extent}> {
  public:
   using ScalarT = bool;
@@ -20,45 +19,48 @@ class RowPermutation final : public Matrix<{extent, extent}> {
     iota(data_.begin(), data_.end(), 0);
   }
 
-  RowPermutation(size_t n)
+  RowPermutation(int64_t n)
     requires(extent == kDynamic)
   {
     data_.resize(n);
     iota(data_.begin(), data_.end(), 0);
   }
 
-  RowPermutation(std::initializer_list<size_t> perm) {
+  RowPermutation(std::initializer_list<int64_t> perm) {
     if constexpr (extent != kDynamic) {
       CHECK(perm.size() == extent);
     }
     data_.assign(perm.begin(), perm.end());
     auto sorted = data_;
     std::ranges::sort(sorted);
-    for (size_t i = 0; i < data_.size(); ++i) {
+    for (int64_t i = 0; i < data_.size(); ++i) {
       CHECK(sorted[i] == i);
     }
   }
 
-  void swap(size_t i, size_t j) {
+  void swap(int64_t i, int64_t j) {
     CHECK(i < data_.size());
     CHECK(j < data_.size());
     std::swap(data_[i], data_[j]);
   }
 
-  auto indexAt(size_t i) const -> size_t {
+  auto indexAt(int64_t i) const -> int64_t {
     return data_[i];
   }
 
  private:
   friend class Matrix<{extent, extent}>;
 
-  auto getImpl(size_t row, size_t col) const {
+  auto getImpl(int64_t row, int64_t col) const {
     return static_cast<int>(data_[row] == col);
   }
 
-  auto shapeImpl() const -> RowCol { return {data_.size(), data_.size()}; }
+  auto shapeImpl() const -> RowCol {
+    return {static_cast<int64_t>(data_.size()),
+            static_cast<int64_t>(data_.size())};
+  }
 
-  std::vector<size_t> data_;
+  std::vector<int64_t> data_;
 };
 
 template <typename M>
@@ -72,14 +74,14 @@ public:
   RowPermuted(M&& matrix) requires (MatT::kExtent.row == kDynamic)
     : matrix_(std::forward<M>(matrix)), permutation_(matrix.shape().row) {}
 
-  auto swap(size_t i, size_t j) {
+  auto swap(int64_t i, int64_t j) {
     permutation_.swap(i, j);
   }
 
 private:
   friend Matrix<MatT::kExtent>;
 
-  auto getImpl(this auto&& self, size_t row, size_t col) -> decltype(auto) {
+  auto getImpl(this auto&& self, int64_t row, int64_t col) -> decltype(auto) {
     return self.matrix_[self.permutation_.indexAt(row), col];
   }
 

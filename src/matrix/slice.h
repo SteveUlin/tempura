@@ -81,7 +81,7 @@ class Slice : public Matrix<extent> {
  private:
   friend class Matrix<extent>;
 
-  auto getImpl(this auto&& self, size_t row, size_t col) -> decltype(auto) {
+  auto getImpl(this auto&& self, int64_t row, int64_t col) -> decltype(auto) {
     return self.parent_[(row + self.offset_.row), (col + self.offset_.col)];
   }
 
@@ -112,9 +112,13 @@ class IterRows {
  public:
   IterRows(M& matrix) : matrix_(matrix) {}
 
+  auto operator[](int64_t index) {
+    return Slicer<{1, M::kExtent.col}>::at(RowCol{index, 0}, matrix_);
+  }
+
   class Iterator {
    public:
-    Iterator(size_t index, M& parent) : index_(index), matrix_(parent) {}
+    Iterator(int64_t index, M& parent) : index_(index), matrix_(parent) {}
 
     auto operator*() -> Slice<{1, M::kExtent.col}, M> {
       return Slicer<{1, M::kExtent.col}>::at(RowCol{index_, 0}, matrix_);
@@ -133,7 +137,7 @@ class IterRows {
     auto operator!=(const Iterator& iter) { return index_ != iter.index_; }
 
    private:
-    size_t index_;
+    int64_t index_;
     M& matrix_;
   };
 
@@ -159,7 +163,7 @@ class IterCols {
     auto operator=(const Iterator&) -> Iterator& = default;
     auto operator=(Iterator&&) -> Iterator& = default;
 
-    Iterator(size_t index, M& parent) : index_(index), matrix_(parent) {}
+    Iterator(int64_t index, M& parent) : index_(index), matrix_(parent) {}
 
     auto operator*() -> Slice<{M::kExtent.row, 1}, M> {
       return Slicer<{M::kExtent.row, 1}>::at(RowCol{0, index_}, matrix_);
@@ -176,7 +180,7 @@ class IterCols {
     auto operator!=(const Iterator& iter) { return index_ != iter.index_; }
 
    private:
-    size_t index_;
+    int64_t index_;
     M& matrix_;
   };
 
