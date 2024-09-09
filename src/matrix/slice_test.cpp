@@ -67,7 +67,24 @@ auto main() -> int {
     int sum = 0;
     {
       TEMPURA_TRACE();
-      for (auto col : matrix::IterRows(m)) {
+      for (auto col : matrix::Rows(m)) {
+        for (int val : col) {
+          sum += val;
+        }
+      }
+    }
+    std::cout << "SUM: " << sum << '\n';
+    expectEq(sum, 0);
+    matrix::Dense<double, {matrix::kDynamic, matrix::kDynamic}, matrix::IndexOrder::kColMajor>
+        r_buf = matrix::Slicer<{2, 2}>::at({2, 2}, m);
+  };
+  "Iteration Basic"_test = [] {
+    matrix::Dense<int, {10'000, 10'000}> m{
+        std::views::iota(0, 10'000 * 10'000)};
+    int sum = 0;
+    {
+      TEMPURA_TRACE();
+      for (auto col : matrix::Cols(m)) {
         for (int val : col) {
           sum += val;
         }

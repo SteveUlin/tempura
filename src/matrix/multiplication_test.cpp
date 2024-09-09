@@ -34,6 +34,7 @@ auto main() -> int {
       matrix::naiveMultiplyAdd(m, n, o);
     }
   };
+
   "Test Better Naive"_test = [] {
     matrix::Dense<int, {N, N}, matrix::IndexOrder::kRowMajor> m{
         std::views::iota(0, N * N)};
