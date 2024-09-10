@@ -351,6 +351,10 @@ class Cols {
 
   Cols(M& matrix) : matrix_(matrix) {}
 
+  auto operator[](int64_t index) {
+    return Slicer<{M::kExtent.row, 1}>::at(RowCol{0, index}, matrix_);
+  }
+
   auto begin() -> Iterator { return Iterator{0, matrix_}; }
   auto end() -> Iterator { return Iterator{matrix_.shape().col, matrix_}; }
 
