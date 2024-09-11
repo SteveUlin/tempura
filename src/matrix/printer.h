@@ -12,7 +12,7 @@ namespace tempura::matrix {
 template <MatrixT MatT>
 auto toString(const MatT& m) -> std::string {
   constexpr std::string_view base_fmt_str =
-      (std::is_floating_point_v<decltype(m[0, 0])>) ? "{:.4f}" : "{}";
+      (std::is_floating_point_v<std::remove_cvref_t<decltype(m[0, 0])>>) ? "{:.4f}" : "{}";
   std::cout << MatT::kExtent.row << std::endl;
   std::cout << MatT::kExtent.col << std::endl;
   const int64_t row = m.shape().row;
@@ -26,7 +26,7 @@ auto toString(const MatT& m) -> std::string {
     }
   }
   constexpr std::string_view fmt_str =
-      (std::is_floating_point_v<decltype(m[0, 0])>) ? "{:{}.4f}" : "{:{}}";
+      (std::is_floating_point_v<std::remove_cvref_t<decltype(m[0, 0])>>) ? "{:{}.4f}" : "{:{}}";
   std::stringstream ss;
   if (row == 1) {
     ss << "[ ";

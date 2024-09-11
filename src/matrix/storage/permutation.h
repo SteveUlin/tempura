@@ -48,6 +48,24 @@ class RowPermutation final : public Matrix<{extent, extent}> {
     return data_[i];
   }
 
+  auto permute(auto&& matrix) -> decltype(auto) {
+    auto visited = std::vector<bool>(data_.size(), false);
+    for (int64_t i = 0; i < data_.size(); ++i) {
+      if (visited[i]) {
+        continue;
+      }
+      int64_t j = data_[i];
+      while (j != i) {
+        for (int64_t k = 0; k < matrix.shape().col; ++k) {
+          std::swap(matrix[i, k], matrix[j, k]);
+        }
+        visited[j] = true;
+        j = data_[j];
+      }
+    }
+    return matrix;
+  }
+
  private:
   friend class Matrix<{extent, extent}>;
 
@@ -76,6 +94,10 @@ public:
 
   auto swap(int64_t i, int64_t j) {
     permutation_.swap(i, j);
+  }
+
+  auto permutation() const -> const RowPermutation<MatT::kExtent.row>& {
+    return permutation_;
   }
 
 private:
