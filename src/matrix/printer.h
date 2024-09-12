@@ -2,10 +2,20 @@
 
 #include <matrix/matrix.h>
 
+#include <complex>
 #include <format>
 #include <sstream>
 #include <type_traits>
 #include <vector>
+#include <string>
+
+template <>
+struct std::formatter<std::complex<double>> : std::formatter<std::string> {
+   auto format(std::complex<double> num, std::format_context& ctx) const {
+    return std::formatter<std::string>::format(
+      std::format("{:.2f}e^({:.4f}i)", std::abs(num), std::arg(num)), ctx);
+    }
+};
 
 namespace tempura::matrix {
 
@@ -26,7 +36,7 @@ auto toString(const MatT& m) -> std::string {
     }
   }
   constexpr std::string_view fmt_str =
-      (std::is_floating_point_v<std::remove_cvref_t<decltype(m[0, 0])>>) ? "{:{}.4f}" : "{:{}}";
+      (std::is_floating_point_v<std::remove_cvref_t<decltype(m[0, 0])>>) ? "{:{}.4f}" : "{:>{}}";
   std::stringstream ss;
   if (row == 1) {
     ss << "[ ";
