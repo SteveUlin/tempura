@@ -4,7 +4,6 @@
 #include <vector>
 
 #include "matrix/matrix.h"
-#include "matrix/slice.h"
 
 namespace tempura::matrix {
 
@@ -20,26 +19,6 @@ class Dense final : public Matrix<extent> {
                 .col = (extent.col == kDynamic) ? 0 : extent.col}),
         data_(shape_.row * shape_.col) {}
 
-  Dense(const Dense& other)
-      : shape_{.row = other.shape().row, .col = other.shape().col},
-        data_(other.data_) {}
-
-  Dense(Dense&& other) noexcept
-      : shape_{.row = other.shape().row, .col = other.shape().col},
-        data_(std::move(other.data_)) {}
-
-  auto operator=(const Dense& other) -> Dense& {
-    shape_ = other.shape_;
-    data_ = other.data_;
-    return *this;
-  }
-
-  auto operator=(Dense&& other) noexcept -> Dense& {
-    shape_ = other.shape_;
-    data_ = std::move(other.data_);
-    return *this;
-  }
-
   template <RowCol other_extent>
     requires(matchExtent(extent, other_extent))
   Dense(const Dense<Scalar, other_extent, order>& other)
@@ -49,7 +28,7 @@ class Dense final : public Matrix<extent> {
   template <RowCol other_extent>
     requires(matchExtent(extent, other_extent))
   Dense(Dense<Scalar, other_extent, order>&& other)
-      : shape_{other.shape()}, data_(other.data()) {
+      : shape_{other.shape()}, data_(std::move(other.data())) {
     CHECK(verifyShape(*this));
   }
 
