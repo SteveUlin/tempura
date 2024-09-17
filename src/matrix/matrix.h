@@ -203,16 +203,6 @@ class Slice : public Matrix<extent> {
 
     auto operator*() -> decltype(auto) { return *parent_iter_; }
 
-    auto operator++() -> Iterator& requires(extent.row == 1) {
-      parent_iter_.incCol();
-      return *this;
-    }
-
-    auto operator++() -> Iterator& requires(extent.col == 1) {
-      parent_iter_.incRow();
-      return *this;
-    }
-
     auto operator++() -> Iterator& {
       parent_iter_.incRow();
       return *this;
@@ -258,14 +248,49 @@ class Slice : public Matrix<extent> {
   M parent_;
 };
 
+// We only overload of rvalues. lvalues should be handled by the matrix
+// definitions themselves.
+template<RowCol extent, typename M>
+auto operator*=(Slice<extent, M>&& lhs, const auto& rhs) -> Slice<extent, M> {
+  for (int64_t i = 0; i < lhs.shape().row; ++i) {
+    for (int64_t j = 0; j < lhs.shape().col; ++j) {
+      lhs[i, j] *= rhs;
+    }
+  }
+  return lhs;
+}
+
+template<RowCol extent, typename M>
+auto operator/=(Slice<extent, M>&& lhs, const auto& rhs) -> Slice<extent, M> {
+  for (auto& val : lhs) {
+    val /= rhs;
+  }
+  return lhs;
+}
+
+
 template <typename M>
 Slice(RowCol shape, RowCol offset, M&& mat) -> Slice<{kDynamic, kDynamic}, M>;
+
+// Calling swap on Slices will not change the location they point to,
+template <RowCol extent_lhs, RowCol extent_rhs, typename Lhs, typename Rhs>
+auto swap(Slice<extent_lhs, Lhs> lhs, Slice<extent_rhs, Rhs> rhs) -> void
+  requires(matchExtent(extent_lhs, extent_rhs))
+{
+  CHECK(matchExtent(lhs.shape(), rhs.shape()));
+  for (int64_t i = 0; i < lhs.shape().row; ++i) {
+    for (int64_t j = 0; j < lhs.shape().col; ++j) {
+      // Grab swap from the current namespace
+      using std::swap;
+      swap(lhs[i, j], rhs[i, j]);
+    }
+  }
+}
 
 template <RowCol extent>
 struct Slicer {
   template <RowCol other_extent, MatrixT M>
-  static auto at(RowCol offset,
-                 Slice<other_extent, M>& mat) {
+  static auto at(RowCol offset, Slice<other_extent, M>& mat) {
     return Slice{offset, mat};
   }
   template <typename M>
@@ -278,6 +303,8 @@ template <MatrixT M>
 class Rows {
  public:
   Rows(M& matrix) : matrix_(matrix) {}
+
+  auto size() const { return matrix_.shape().row; }
 
   auto operator[](int64_t index) {
     return Slicer<{1, M::kExtent.col}>::at(RowCol{index, 0}, matrix_);

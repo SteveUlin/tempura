@@ -276,7 +276,7 @@ auto operator*(const Lhs& left, const Rhs& right) {
 
 template <MatrixT Lhs, typename Rhs>
   requires(!MatrixT<Rhs>)
-auto operator*=(Lhs& left, const Rhs& right) {
+auto operator*=(Lhs& left, const Rhs& right) -> Lhs& {
   for (int64_t i = 0; i < left.shape().col; ++i) {
     for (int64_t j = 0; j < left.shape().row; ++j) {
       left[i, j] *= right;
@@ -287,29 +287,7 @@ auto operator*=(Lhs& left, const Rhs& right) {
 
 template <MatrixT Lhs, typename Rhs>
   requires(!MatrixT<Rhs>)
-auto operator*=(Lhs&& left, const Rhs& right) {
-  for (int64_t i = 0; i < left.shape().col; ++i) {
-    for (int64_t j = 0; j < left.shape().row; ++j) {
-      left[i, j] *= right;
-    }
-  }
-  return left;
-}
-
-template <MatrixT Lhs, typename Rhs>
-  requires(!MatrixT<Rhs>)
-auto operator/=(Lhs& left, const Rhs& right) {
-  for (int64_t i = 0; i < left.shape().col; ++i) {
-    for (int64_t j = 0; j < left.shape().row; ++j) {
-      left[i, j] /= right;
-    }
-  }
-  return left;
-}
-
-template <MatrixT Lhs, typename Rhs>
-  requires(!MatrixT<Rhs>)
-auto operator/=(Lhs&& left, const Rhs& right) {
+auto operator/=(Lhs& left, const Rhs& right) -> Lhs& {
   for (int64_t i = 0; i < left.shape().col; ++i) {
     for (int64_t j = 0; j < left.shape().row; ++j) {
       left[i, j] /= right;

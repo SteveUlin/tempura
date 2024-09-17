@@ -25,37 +25,41 @@ auto fft_radix2(MatrixT auto& m) {
   const int64_t col = m.shape().col;
   // Is power of 2
   CHECK((row & (row - 1)) == 0);
-  RowPermutation<kDynamic> perm(row);
+  Permutation<kDynamic> perm(row);
   for (int64_t delta = row; delta > 1; delta /= 2) {
+    std::vector<int64_t> curr(row);
     for (int64_t start = 0; start < row; start += delta) {
       for (int64_t i = 0; i < delta / 2; ++i) {
-        const int64_t j = i + start;
-        const int64_t k = i + start + delta / 2;
-        perm.swap(j, k);
+        curr[start + i] = start + i * 2;
+        curr[start + delta / 2 + i] = start + i * 2 + 1;
       }
     }
-    std::cout << toString(perm);
+    Permutation{std::move(curr)}.permute(perm);
   }
-  std::cout << toString(perm);
-  std::cout << "==============\n";
+  std::cout << toString(m) << std::endl;
+  perm.permute(m.rows());
   std::cout << toString(m);
-  perm.permute(m);
-  std::cout << toString(m);
-  std::cout << "==============\n";
-  for (int64_t delta = 2; delta < row; delta *= 2) {
+
+  for (int64_t delta = 2; delta <= row; delta *= 2) {
     for (int64_t start = 0; start < row; start += delta) {
       Dense<std::complex<double>, {kDynamic, kDynamic}> lhs =
           Slice{{delta/2, col}, {start, 0}, m};
       Dense<std::complex<double>, {kDynamic, kDynamic}> rhs =
           Slice{{delta/2, col}, {start/2, 0}, m};
       for (int i = 0; i < delta / 2; ++i) {
+        std::cout << "------------" << std::endl;
+        std::cout << toString(rhs) << '\n';
         std::complex<double> omega =
             std::polar(1.0, i * 2.0 * std::numbers::pi / static_cast<double>(delta));
+        std::cout << "OMEGA: " << omega << '\n';
         Slice{{1, col}, {i, 0}, rhs} *= omega;
+        std::cout << toString(rhs) << '\n';
+        std::cout << "------------" << std::endl;
       }
       std::tie(lhs, rhs) = std::pair{rhs + lhs, rhs - lhs};
     }
   }
+  std::cout << toString(m);
 }
 
 auto main() -> int {

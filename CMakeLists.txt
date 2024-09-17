@@ -9,8 +9,8 @@ if(CMAKE_EXPORT_COMPILE_COMMANDS)
       ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
 endif()
 
-set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
-set(CMAKE_CXX_FLAGS_RELEASE "-ftree-vectorize -march=native -ffast-math -O3 -funroll-loops")
+# set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+# set(CMAKE_CXX_FLAGS_RELEASE "-ftree-vectorize -march=native -ffast-math -O3 -funroll-loops")
 # set(CMAKE_CXX_FLAGS_RELEASE "-ftree-vectorize -march=native -O2 -funroll-loops")
 
 find_package(CUDAToolkit)

@@ -1,8 +1,7 @@
 add_library(matrix INTERFACE matrix.h)
 
-add_library(slice INTERFACE slice.h)
 add_executable(slice_test slice_test.cpp)
-target_link_libraries(slice_test matrix dense slice unit profiler)
+target_link_libraries(slice_test matrix dense unit profiler)
 
 add_library(addition INTERFACE addition.h)
 add_executable(addition_test addition_test.cpp)
