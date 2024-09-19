@@ -23,12 +23,8 @@ template <MatrixT MatT>
 auto toString(const MatT& m) -> std::string {
   constexpr std::string_view base_fmt_str =
       (std::is_floating_point_v<std::remove_cvref_t<decltype(m[0, 0])>>) ? "{:.4f}" : "{}";
-  std::cout << MatT::kExtent.row << std::endl;
-  std::cout << MatT::kExtent.col << std::endl;
   const int64_t row = m.shape().row;
   const int64_t col = m.shape().col;
-  std::cout << m.shape().row << std::endl;
-  std::cout << m.shape().col << std::endl;
   std::vector<size_t> widths(col, 0);
   for (int64_t i = 0; i < row; ++i) {
     for (int64_t j = 0; j < col; ++j) {

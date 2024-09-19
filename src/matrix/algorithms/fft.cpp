@@ -36,30 +36,33 @@ auto fft_radix2(MatrixT auto& m) {
     }
     Permutation{std::move(curr)}.permute(perm);
   }
-  std::cout << toString(m) << std::endl;
-  perm.permute(m.rows());
-  std::cout << toString(m);
-
-  for (int64_t delta = 2; delta <= row; delta *= 2) {
-    for (int64_t start = 0; start < row; start += delta) {
-      Dense<std::complex<double>, {kDynamic, kDynamic}> lhs =
-          Slice{{delta/2, col}, {start, 0}, m};
-      Dense<std::complex<double>, {kDynamic, kDynamic}> rhs =
-          Slice{{delta/2, col}, {start/2, 0}, m};
-      for (int i = 0; i < delta / 2; ++i) {
-        std::cout << "------------" << std::endl;
-        std::cout << toString(rhs) << '\n';
-        std::complex<double> omega =
-            std::polar(1.0, i * 2.0 * std::numbers::pi / static_cast<double>(delta));
-        std::cout << "OMEGA: " << omega << '\n';
-        Slice{{1, col}, {i, 0}, rhs} *= omega;
-        std::cout << toString(rhs) << '\n';
-        std::cout << "------------" << std::endl;
-      }
-      std::tie(lhs, rhs) = std::pair{rhs + lhs, rhs - lhs};
-    }
+  for (int i = 0; i < perm.size(); ++i) {
+    std::cout << perm[i] << ' ';
   }
-  std::cout << toString(m);
+  // std::cout << toString(m) << std::endl;
+  // perm.permute(m.rows());
+  // std::cout << toString(m);
+
+  // for (int64_t delta = 2; delta <= row; delta *= 2) {
+  //   for (int64_t start = 0; start < row; start += delta) {
+  //     Dense<std::complex<double>, {kDynamic, kDynamic}> lhs =
+  //         Slice{{delta/2, col}, {start, 0}, m};
+  //     Dense<std::complex<double>, {kDynamic, kDynamic}> rhs =
+  //         Slice{{delta/2, col}, {start/2, 0}, m};
+  //     for (int i = 0; i < delta / 2; ++i) {
+  //       std::cout << "------------" << std::endl;
+  //       std::cout << toString(rhs) << '\n';
+  //       std::complex<double> omega =
+  //           std::polar(1.0, i * 2.0 * std::numbers::pi / static_cast<double>(delta));
+  //       std::cout << "OMEGA: " << omega << '\n';
+  //       Slice{{1, col}, {i, 0}, rhs} *= omega;
+  //       std::cout << toString(rhs) << '\n';
+  //       std::cout << "------------" << std::endl;
+  //     }
+  //     std::tie(lhs, rhs) = std::pair{rhs + lhs, rhs - lhs};
+  //   }
+  // }
+  // std::cout << toString(m);
 }
 
 auto main() -> int {
@@ -68,10 +71,12 @@ auto main() -> int {
   Dense<double, {3, 3}> m{{8, 0., 0.}, {0., 2., 0.}, {0., 0., 1.}};
   std::cout << toString(dft_matrix(4));
 
-  Dense<std::complex<double>, {8, 1}> vec{
-      std::vector<std::complex<double>>(8, std::complex<double>{1., 0.})};
-  for (int i = 0; i < 8; ++i) {
-    vec[i, 0] = std::sin(2. * std::numbers::pi * i / 8);
+  constexpr int64_t N = 8;
+  Dense<std::complex<double>, {N, 1}> vec{
+      std::vector<std::complex<double>>(N, std::complex<double>{1., 0.})};
+  for (int i = 0; i < N; ++i) {
+    // vec[i, 0] = std::sin(2. * std::numbers::pi * i / N);
+    vec[i] = 1;
   }
   std::cout << toString(vec);
   fft_radix2(vec);

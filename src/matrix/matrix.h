@@ -178,61 +178,71 @@ class Slice : public Matrix<extent> {
 
   Slice(RowCol offset, M&& mat)
     requires((extent.row != kDynamic) and (extent.col != kDynamic))
-      : shape_(extent), offset_(offset), parent_(std::forward<M>(mat)) {}
+      : shape_{extent}, offset_{offset}, parent_{std::forward<M>(mat)} {}
 
   Slice(RowCol shape, RowCol offset, M&& mat)
-      : shape_(shape), offset_(offset), parent_(mat) {
+      : shape_{shape}, offset_{offset}, parent_{mat} {
     CHECK(verifyShape(*this));
   }
 
   template <RowCol other_extent>
   Slice(RowCol offset, Slice<other_extent, M>& other)
     requires((extent.row != kDynamic) and (extent.col != kDynamic))
-      : shape_(extent),
-        offset_(offset + other.offset()),
-        parent_(other.parent()) {}
+      : shape_{extent},
+        offset_{offset + other.offset()},
+        parent_{other.parent()} {}
 
   auto parent() -> M& { return parent_; }
 
   auto offset() const -> RowCol { return offset_; }
 
-  template <typename ParentIterT>
+  struct Sentinel {};
+
+  template <typename ParentIter>
   class Iterator {
    public:
-    explicit Iterator(ParentIterT parent_iter) : parent_iter_(parent_iter) {}
+    Iterator(const Slice& slice, ParentIter iter) : slice_{slice}, iter_{iter} {}
 
-    auto operator*() -> decltype(auto) { return *parent_iter_; }
+    auto operator*() -> decltype(auto) { return *iter_; }
 
     auto operator++() -> Iterator& {
-      parent_iter_.incRow();
+      // TODO: Implement a preferred direction
+      iter_.update({0, 1});
+      if constexpr (Slice::kExtent.row != 1) {
+        if (iter_.location().col - slice_.offset().col == slice_.shape().col) {
+          iter_.update({1, -slice_.shape().col});
+        }
+      }
       return *this;
     }
 
-    auto operator<=>(const Iterator& iter) {
-      return parent_iter_ <=> iter.parent_iter_;
-    }
-
-    auto operator!=(const Iterator& iter) {
-      return parent_iter_ != iter.parent_iter_;
+    auto location() const -> RowCol { return iter_.location() - slice_.offset(); }
+    auto operator!=(const Iterator& other) { return iter_ != other.iter_; }
+    auto operator!=(Sentinel /*unused*/) {
+      if constexpr (Slice::kExtent.row != 1) {
+        return iter_.location().row - slice_.offset().row < slice_.shape().row;
+      } else {
+        return iter_.location().col - slice_.offset().col < slice_.shape().col;
+      }
     }
 
    private:
-    ParentIterT parent_iter_;
+    const Slice& slice_;
+    ParentIter iter_;
   };
+  template <typename ParentIter>
+  Iterator(const Slice& slice, ParentIter iter) -> Iterator<ParentIter>;
 
-  auto beginImpl(this auto&& self) {
-    return Iterator{typename MatT::Iterator{self.parent_, self.offset_}};
-  }
+  auto beginImpl(this auto&& self) { return Iterator{self, self.parent_.begin().update(self.offset_)}; }
 
-  auto endImpl(this auto&& self) {
+   auto endImpl(this auto&& self) {
     if constexpr (extent.row == 1) {
-      return Iterator{typename MatT::Iterator{
-          self.parent_, self.offset_ + RowCol{0, self.shape_.col}}};
-    } else if (extent.col == 1) {
-      return Iterator{typename MatT::Iterator{
-          self.parent_, self.offset_ + RowCol{self.shape_.row, 0}}};
+      return Iterator{self, self.parent_.begin().update(self.offset_ + RowCol{0, self.shape_.col})};
+    } else {
+      return Iterator{self, self.parent_.begin().update(self.offset_ + RowCol{self.shape_.row, 0})};
     }
   }
+  // auto endImpl() const -> Sentinel { return {}; }
 
  private:
   friend class Matrix<extent>;

@@ -15,35 +15,20 @@ class Dense final : public Matrix<extent> {
   inline static constexpr IndexOrder kIndexOrder = order;
 
   Dense()
-      : shape_({.row = (extent.row == kDynamic) ? 0 : extent.row,
-                .col = (extent.col == kDynamic) ? 0 : extent.col}),
+      : shape_{.row = (extent.row == kDynamic) ? 0 : extent.row,
+               .col = (extent.col == kDynamic) ? 0 : extent.col},
         data_(shape_.row * shape_.col) {}
 
   template <RowCol other_extent>
     requires(matchExtent(extent, other_extent))
-  Dense(const Dense<Scalar, other_extent, order>& other)
-      : shape_{other.shape()}, data_(other.data()) {
-    CHECK(verifyShape(*this));
-  }
-  template <RowCol other_extent>
-    requires(matchExtent(extent, other_extent))
-  Dense(Dense<Scalar, other_extent, order>&& other)
+  Dense(Dense<Scalar, other_extent, order> other)
       : shape_{other.shape()}, data_(std::move(other.data())) {
     CHECK(verifyShape(*this));
   }
 
   template <RowCol other_extent>
     requires(matchExtent(extent, other_extent))
-  auto operator=(const Dense<Scalar, other_extent, order>& other) -> Dense& {
-    shape_ = other.shape();
-    data_ = other.data();
-    CHECK(verifyShape(*this));
-    return *this;
-  }
-
-  template <RowCol other_extent>
-    requires(matchExtent(extent, other_extent))
-  auto operator=(Dense<Scalar, other_extent, order>&& other) -> Dense& {
+  auto operator=(Dense<Scalar, other_extent, order> other) -> Dense& {
     shape_ = other.shape();
     data_ = std::move(other.data());
     CHECK(verifyShape(*this));
@@ -79,7 +64,7 @@ class Dense final : public Matrix<extent> {
   // NOLINTEND(*-avoid-c-arrays)
 
   template <typename M>
-    requires (MatrixT<M> && matchExtent(M::kExtent, extent))
+    requires(MatrixT<M> && matchExtent(M::kExtent, extent))
   Dense(const M& other)
       : shape_{other.shape()}, data_(shape_.row * shape_.col) {
     CHECK(verifyShape(*this));
@@ -91,9 +76,8 @@ class Dense final : public Matrix<extent> {
   }
 
   template <typename M>
-    requires (MatrixT<M> && matchExtent(M::kExtent, extent))
-  Dense(M&& other)
-      : shape_{other.shape()}, data_(shape_.row * shape_.col) {
+    requires(MatrixT<M> && matchExtent(M::kExtent, extent))
+  Dense(M&& other) : shape_{other.shape()}, data_(shape_.row * shape_.col) {
     CHECK(verifyShape(*this));
     for (int64_t i = 0; i < shape_.row; ++i) {
       for (int64_t j = 0; j < shape_.col; ++j) {
@@ -103,7 +87,7 @@ class Dense final : public Matrix<extent> {
   }
 
   template <typename M>
-    requires (MatrixT<M> && matchExtent(M::kExtent, extent))
+    requires(MatrixT<M> && matchExtent(M::kExtent, extent))
   auto operator=(const M& other) -> Dense& {
     shape_ = other.shape();
     data_.resize(shape_.row * shape_.col);
@@ -117,7 +101,7 @@ class Dense final : public Matrix<extent> {
   }
 
   template <typename M>
-    requires (MatrixT<M> && matchExtent(M::kExtent, extent))
+    requires(MatrixT<M> && matchExtent(M::kExtent, extent))
   auto operator=(M&& other) -> Dense& {
     shape_ = other.shape();
     data_.resize(shape_.row * shape_.col);
@@ -136,14 +120,14 @@ class Dense final : public Matrix<extent> {
 
   explicit Dense(std::ranges::input_range auto&& data)
     requires(extent.row != kDynamic and extent.col != kDynamic)
-      : shape_(extent), data_({}) {
+      : shape_{extent}, data_{} {
     data_.reserve(shape_.row * shape_.col);
     std::ranges::copy(data, std::back_inserter(data_));
     CHECK(verifyShape(*this));
   }
 
   explicit Dense(RowCol shape, std::ranges::input_range auto&& data)
-      : shape_(shape), data_({}) {
+      : shape_{shape}, data_{} {
     data_.reserve(shape_.row * shape_.col);
     std::ranges::copy(data, std::back_inserter(data_));
     CHECK(verifyShape(*this));
@@ -161,14 +145,13 @@ class Dense final : public Matrix<extent> {
 
     auto operator++() -> Iterator& {
       if constexpr (order == IndexOrder::kRowMajor) {
-        return incCol();
+        return update({0, 1});
       } else {
-        return incRow();
+        return update({1, 0});
       }
     }
 
-    template <RowCol delta>
-    auto update() -> Iterator& {
+    auto update(RowCol delta) -> Iterator& {
       location_ += delta;
       if constexpr (order == IndexOrder::kColMajor) {
         if constexpr (extent.row != kDynamic) {
@@ -186,14 +169,6 @@ class Dense final : public Matrix<extent> {
         static_assert(false, "Not implented for Index Order");
       }
       return *this;
-    }
-
-    auto incRow() -> Iterator& {
-      return update<{1, 0}>();
-    }
-
-    auto incCol() -> Iterator& {
-      return update<{0, 1}>();
     }
 
     auto location() const -> RowCol { return location_; }
@@ -247,4 +222,3 @@ explicit Dense(const Scalar (&)[First], const Scalar (&... rows)[Sizes])
 // NOLINTEND(*-avoid-c-arrays)
 
 }  // namespace tempura::matrix
-

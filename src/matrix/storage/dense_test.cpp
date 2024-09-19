@@ -3,6 +3,7 @@
 #include <ranges>
 
 #include "matrix/matrix.h"
+#include "matrix/printer.h"
 #include "profiler.h"
 #include "unit.h"
 
