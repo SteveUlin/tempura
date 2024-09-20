@@ -7,6 +7,9 @@
 
 namespace tempura {
 
+template <typename T>
+concept Ostreamable = requires(T t) { std::cout << t; };
+
 class Test;
 
 // TestRegistry stores global data about the currently running test and
@@ -82,7 +85,11 @@ class expectEq final {
 
   ~expectEq() {
     if (not *this) {
-      std::cerr << location_.file_name() << ":" << location_.line() << std::endl;
+      std::cerr << "Error at" << location_.file_name() << ":"
+                << location_.line() << std::endl;
+      if constexpr (Ostreamable<TLhs> and Ostreamable<TRhs>) {
+        std::cerr << "Expected: " << lhs_ << " got: " << rhs_ << std::endl;
+      }
       TestRegistry::setFailure();
     }
   }

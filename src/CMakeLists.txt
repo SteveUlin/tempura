@@ -16,3 +16,8 @@ target_link_libraries(guarded_test guarded unit)
 
 add_library(image INTERFACE image.h)
 add_executable(image_test image_test.cpp)
+target_link_libraries(image_test image unit)
+
+add_library(dual INTERFACE dual.h)
+add_executable(dual_test dual_test.cpp)
+target_link_libraries(dual_test dual unit)
