@@ -25,7 +25,7 @@
 
 
           packages = with pkgs; [
-            pkgs.llvmPackages_18.clang
+            pkgs.llvmPackages_19.clang
             gcc12
             gdb
             bazel
