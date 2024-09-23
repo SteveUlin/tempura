@@ -1,6 +1,10 @@
+#pragma once
+
 #include <cmath>
-#include <functional>
 #include <ostream>
+
+#include "function_traits.h"
+
 namespace tempura {
 
 // https://en.wikipedia.org/wiki/Dual_number
@@ -14,7 +18,8 @@ namespace tempura {
 // and its derivative at the same time. Sometimes called the forward
 // differentiation.
 
-// TODO: Support objects where the derivative is not a scalar
+// TODO: Support objects where the derivative is not the same type as
+// the value.
 template <typename T>
 struct Dual {
   T value;
@@ -22,72 +27,30 @@ struct Dual {
 };
 
 template <typename T>
-struct function_traits;
-
-template <typename R, typename... Args>
-struct function_traits<R(Args...)> {
-  static const size_t nargs = sizeof...(Args);
-
-  using result_type = R;
-
-  template <size_t i>
-  struct arg {
-    using type = typename std::tuple_element<i, std::tuple<Args...>>::type;
-  };
-};
-template <typename R, typename... Args>
-struct function_traits<R (*)(Args...)> : public function_traits<R(Args...)> {};
-
-template <typename R, typename... Args>
-struct function_traits<std::function<R(Args...)>> {
-  static const size_t nargs = sizeof...(Args);
-
-  using result_type = R;
-
-  template <size_t i>
-  struct arg {
-    using type = typename std::tuple_element<i, std::tuple<Args...>>::type;
-  };
-};
-
-template <typename ClassType, typename ReturnType, typename... Args>
-struct function_traits<ReturnType (ClassType::*)(Args...) const> {
-  using result_type = ReturnType;
-
-  template <size_t i>
-  struct arg {
-    using type = typename std::tuple_element<i, std::tuple<Args...>>::type;
-  };
-};
-
-template <typename T>
-struct function_traits : public function_traits<decltype(&T::operator())> {};
-
-template <typename T>
 struct IsDual : std::false_type {};
 template <typename T>
 struct IsDual<Dual<T>> : std::true_type {};
 
-template <size_t N, typename F, typename... Inputs, size_t... I>
-auto evalWrt_impl(const F& func, std::index_sequence<I...> /*unused*/,
-                  Inputs&&... inputs) {
+// Evaluate a function by setting all Dual gradients to zero except the
+// provided index, which is set to one.
+template <size_t N, typename F, typename... Inputs>
+auto evalWrt(const F& func, Inputs&&... inputs) {
   auto map_arg_impl = [&]<size_t index>(auto&& arg) {
-    using ArgT = std::remove_cvref_t<
-        typename function_traits<F>::template arg<index>::type>;
+    using ArgT =
+        std::remove_cvref_t<typename FunctionTraits<F>::template ArgT<index>>;
+    static_assert(N != index or IsDual<ArgT>::value,
+                  "You can only eval with respect to a Dual number.");
     if constexpr (IsDual<ArgT>::value) {
       return ArgT{.value = arg, .gradient = (index == N ? 1 : 0)};
     } else {
       return std::forward<decltype(arg)>(arg);
     }
   };
-  return func(
-      map_arg_impl.template operator()<I>(std::forward<Inputs>(inputs))...);
-}
 
-template <size_t N, typename F, typename... Inputs>
-auto evalWrt(const F& func, Inputs&&... inputs) {
-  return evalWrt_impl<N>(func, std::make_index_sequence<sizeof...(Inputs)>{},
-                         std::forward<Inputs>(inputs)...);
+  return [&]<size_t... I>(std::index_sequence<I...> /*unused*/) {
+    return func(
+        map_arg_impl.template operator()<I>(std::forward<Inputs>(inputs))...);
+  }(std::make_index_sequence<sizeof...(Inputs)>{});
 }
 
 // TODO: Update the mathe functions to constexpr as compilers start to support

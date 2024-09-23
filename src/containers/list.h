@@ -193,7 +193,7 @@ public:
     --size_;
   }
 
-  [[nodiscard]] auto size() const -> size_t {
+  auto size() const -> size_t {
     return size_;
   }
 
