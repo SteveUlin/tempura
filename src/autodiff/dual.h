@@ -24,6 +24,8 @@ template <typename T>
 struct Dual {
   T value;
   T gradient;
+
+  auto operator<=>(const Dual<T>&) const = default;
 };
 
 template <typename T>
@@ -53,27 +55,19 @@ auto evalWrt(const F& func, Inputs&&... inputs) {
   }(std::make_index_sequence<sizeof...(Inputs)>{});
 }
 
+template <typename F, typename... Inputs>
+auto jacobian(const F& func, Inputs&&... inputs) {
+  return [&]<size_t... I>(std::index_sequence<I...> /*unused*/) {
+    return std::array{evalWrt<I>(func, inputs...)...};
+  }(std::make_index_sequence<sizeof...(Inputs)>{});
+}
+
 // TODO: Update the mathe functions to constexpr as compilers start to support
 // c++26
 
 // -- Relational Operators --
 // For calculations, we typically only work with the value of the dual number
 // not the derivative
-
-template <typename T>
-constexpr auto operator<=>(const Dual<T>& lhs, const Dual<T>& rhs) {
-  return lhs.value <=> rhs.value;
-}
-
-template <typename T>
-constexpr auto operator==(const Dual<T>& lhs, const Dual<T>& rhs) {
-  return lhs.value == rhs.value;
-}
-
-template <typename T>
-constexpr auto operator!=(const Dual<T>& lhs, const Dual<T>& rhs) {
-  return lhs.value != rhs.value;
-}
 
 // --- Arithmetic Operators ---
 

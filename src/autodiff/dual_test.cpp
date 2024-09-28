@@ -177,5 +177,10 @@ auto main() -> int {
                    2.0, 3.0));
   };
 
+  "jacobian"_test = [] {
+    for (const auto& val : jacobian(f, 2.0, 3.0)) {
+      std::cout << val << std::endl;
+    }
+  };
   return 0;
 }
