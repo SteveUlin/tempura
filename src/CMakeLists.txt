@@ -1,6 +1,7 @@
 add_subdirectory(autodiff)
 add_subdirectory(cuda)
 add_subdirectory(matrix)
+add_subdirectory(symbolic)
 
 add_library(benchmark INTERFACE benchmark.h)
 
@@ -8,8 +9,6 @@ add_library(profiler SHARED)
 target_sources(profiler PUBLIC profiler.h profiler.cpp)
 
 add_library(unit INTERFACE unit.h)
-
-add_library(type_list INTERFACE type_list.h)
 
 add_library(function_traits INTERFACE function_traits.h)
 

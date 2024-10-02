@@ -1,10 +1,21 @@
-#include "src/symbolic/symbolic.h"
-#include "src/symbolic/operators.h"
+#include "symbolic/symbolic.h"
 
-#include "src/unit.h"
+#include "unit.h"
 
 using namespace tempura;
 using namespace tempura::symbolic;
+
+class Plus {
+ public:
+  static inline constexpr std::string_view kSymbol = "+"sv;
+  static inline constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
+
+  template <typename... Args>
+  static constexpr auto operator()(Args... args) {
+    return (args + ...);
+  }
+};
+static_assert(Operator<Plus>);
 
 auto main() -> int {
   "Constants"_test = [] {
@@ -14,50 +25,29 @@ auto main() -> int {
     static_assert(a != b);
   };
 
+  "Comparision"_test = [] {
+    constexpr Constant<3> a;
+    constexpr Constant<4> b;
+    static_assert(a < b);
+    static_assert(b > a);
+
+    TEMPURA_SYMBOLS(d, c);
+    static_assert(c < d);
+    static_assert(d > c);
+  };
+
   "Symbols"_test = [] {
-    constexpr auto a = SYMBOL();
-    constexpr auto b = SYMBOL();
+    TEMPURA_SYMBOLS(a, b);
     static_assert(a == a);
     static_assert(a != b);
   };
 
-  "Addition"_test = [] {
-    constexpr auto a = SYMBOL();
-    constexpr auto b = SYMBOL();
-    constexpr auto c = SYMBOL();
-    static_assert((a + a)(Substitution{a = 5}) == 10);
-    static_assert((a + b)(Substitution{a = 5, b = 2}) == 7);
-    static_assert((a + b + c)(Substitution{a = 5, b = 2, c = 1}) == 8);
-  };
-
-  "Subtraction"_test = [] {
-    constexpr auto a = SYMBOL();
-    constexpr auto b = SYMBOL();
-    static_assert((a - a)(Substitution{a = 5}) == 0);
-    static_assert((a - b)(Substitution{a = 5, b = 1}) == 4);
-  };
-
-  "Multiplication"_test = [] {
-    constexpr auto a = SYMBOL();
-    constexpr auto b = SYMBOL();
-    static_assert((a * a)(Substitution{a = 5}) == 25);
-    static_assert((a * b)(Substitution{a = 5, b = 2}) == 10);
-  };
-
-  "Division"_test = [] {
-    constexpr auto a = SYMBOL();
-    constexpr auto b = SYMBOL();
-    static_assert((a / a)(Substitution{a = 5}) == 1);
-    static_assert((a / b)(Substitution{a = 10, b = 2}) == 5);
-  };
-
-  "Power"_test = [] {
-    constexpr auto a = SYMBOL();
-    constexpr auto b = SYMBOL();
-    static_assert((a ^ a)(Substitution{a = 5}) == 3125);
-    static_assert((a ^ b)(Substitution{a = 10, b = 2}) == 100);
+  "Substitution"_test = [] {
+    TEMPURA_SYMBOLS(a, b);
+    static_assert(SymbolicExpression(Plus{}, a, a)(Substitution{a = 5}) == 10);
+    static_assert(
+        SymbolicExpression(Plus{}, a, b)(Substitution{a = 5, b = 2}) == 7);
   };
 
   return TestRegistry::result();
 }
-

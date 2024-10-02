@@ -120,16 +120,16 @@ auto expectTrue(const auto& arg, const std::source_location location =
 }
 
 template <double delta = 0.0001>
-auto expectApproxEq(const auto& lhs, const auto& rhs,
-                    const std::source_location location =
-                        std::source_location::current()) -> bool {
+auto expectNear(const auto& lhs, const auto& rhs,
+                const std::source_location location =
+                    std::source_location::current()) -> bool {
   if (std::abs(lhs - rhs) < delta) {
     return true;
   }
   std::cerr << "Error at" << location.file_name() << ":" << location.line()
             << std::endl;
   if constexpr (Ostreamable<decltype(lhs)> and Ostreamable<decltype(rhs)>) {
-    std::cerr << "Expected Approx Equal: " << lhs << " got: " << rhs
+    std::cerr << "Expected Near ±(" << delta << "): " << lhs << " got: " << rhs
               << std::endl;
   }
   TestRegistry::setFailure();

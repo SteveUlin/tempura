@@ -10,6 +10,8 @@ if(CMAKE_EXPORT_COMPILE_COMMANDS)
 endif()
 
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+# set(CMAKE_CXX_FLAGS "-Wall -Wextra -fbracket-depth=1024")
+set(CMAKE_CXX_FLAGS "-Wall -Wextra")
 set(CMAKE_CXX_FLAGS_RELEASE "-ftree-vectorize -march=native -ffast-math -O3 -funroll-loops")
 # set(CMAKE_CXX_FLAGS_RELEASE "-ftree-vectorize -march=native -O2 -funroll-loops")
 
@@ -21,7 +23,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 set(CMAKE_CUDA_STANDARD 20)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
-set(CMAKE_CXX_FLAGS "-Wall -Wextra")
 set(BASEPATH "${CMAKE_SOURCE_DIR}/src")
 INCLUDE_DIRECTORIES("${BASEPATH}")
  

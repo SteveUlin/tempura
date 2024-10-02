@@ -31,8 +31,10 @@ Diagnostics:
       - performance-*
       - bugprone-*
     Remove:
-      - bugprone-unused-raii
       - bugprone-easily-swappable-parameters
-      - readability-magic-numbers
-      - readability-identifier-length
       - modernize-use-nodiscard
+      - readability-identifier-length
+      - readability-magic-numbers
+      - readability-static-accessed-through-instance
+      - readability-function-cognitive-complexity
+

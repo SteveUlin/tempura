@@ -1,38 +1,60 @@
-#include "src/symbolic/operators.h"
-#include "src/symbolic/symbolic.h"
-#include "src/symbolic/to_string.h"
-#include "src/unit.h"
+#include "symbolic/to_string.h"
+
+#include "symbolic/operators.h"
+#include "symbolic/symbolic.h"
+#include "unit.h"
 
 using namespace tempura;
 using namespace tempura::symbolic;
 
 auto main() -> int {
-  "Constants"_test = [] {
-    expectEq("2", toString(Constant<2>{}, Substitution{}));
-  };
+  "Constants"_test = [] { expectEq("2", toString(Constant<2>{})); };
 
   "Symbols"_test = [] {
-    constexpr auto a = SYMBOL();
+    TEMPURA_SYMBOL(a);
 
-    expectEq("a", toString(a, Substitution{a = "a"}));
-    expectEq("b", toString(a, Substitution{a = "b"}));
+    expectEq("a", toString(a));
   };
 
   "Addition"_test = [] {
-    constexpr auto a = SYMBOL();
-    constexpr auto b = SYMBOL();
-    constexpr auto c = SYMBOL();
+    TEMPURA_SYMBOLS(a, b, c);
 
-    expectEq("(a + b) + c", toString(a + b + c, Substitution{a = "a", b = "b", c = "c"}));
+    expectEq("(a + b) + c", toString(a + b + c));
+  };
+
+  "Subtraction"_test = [] {
+    TEMPURA_SYMBOLS(a, b, c);
+    expectEq("(a - b) - c", toString(a - b - c));
+  };
+
+  "Multiplication"_test = [] {
+    TEMPURA_SYMBOLS(a, b, c);
+    expectEq("(a * b) * c", toString(a * b * c));
+  };
+
+  "Division"_test = [] {
+    TEMPURA_SYMBOLS(a, b, c);
+    expectEq("(a / b) / c", toString(a / b / c));
   };
 
   "Sin"_test = [] {
-    constexpr auto a = SYMBOL();
-    constexpr auto b = SYMBOL();
-    constexpr auto c = SYMBOL();
-
-    expectEq("sin(a + b) + c", toString(sin(a + b) + c, Substitution{a = "a", b = "b", c = "c"}));
+    TEMPURA_SYMBOLS(a, b, c);
+    expectEq("sin(a + b) + c", toString(sin(a + b) + c));
   };
+
+  "Cos"_test = [] {
+    TEMPURA_SYMBOLS(a, b, c);
+    expectEq("cos(a + b) + c", toString(cos(a + b) + c));
+  };
+
+  "Tan"_test = [] {
+    TEMPURA_SYMBOLS(a, b, c);
+    expectEq("tan(a + b) + c", toString(tan(a + b) + c));
+  };
+
+  "E"_test = [] { expectEq("e", toString(e)); };
+
+  "Pi"_test = [] { expectEq("π", toString(π)); };
 
   return TestRegistry::result();
 }

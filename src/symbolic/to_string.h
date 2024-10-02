@@ -3,55 +3,64 @@
 #include <format>
 #include <string>
 
-#include "src/symbolic/symbolic.h"
+#include "symbolic/symbolic.h"
 
 namespace tempura::symbolic {
 
-template <auto ID, typename... Binders>
-auto toString(Symbol<ID>, const Substitution<Binders...>& substitution) -> std::string {
-  return std::string(substitution[Symbol<ID>{}]);
+template <StringLiteral name, auto ID>
+auto toString(Symbol<name, ID> /*unused*/) {
+  return std::string(name.value);
 }
 
-template <auto VALUE, typename... Binders>
-auto toString(Constant<VALUE>, const Substitution<Binders...>& substitution) -> std::string {
+template <auto VALUE>
+auto toString(Constant<VALUE> /*unused*/) {
   return std::to_string(VALUE);
 }
 
-template <typename... Binders>
-auto wrap(Symbolic auto expr, const Substitution<Binders...>& substitution) -> std::string {
-  return toString(expr, substitution);
-}
+auto wrap(Symbolic auto expr) { return toString(expr); }
 
-template<typename Op, Symbolic... Args, typename... Binders>
-requires (sizeof...(Args) >= 1) && (Op::kDisplayMode == DisplayMode::kInfix)
-auto wrap(SymbolicExpression<Op, Args...> expr, const Substitution<Binders...>& substitution) -> std::string {
-  return std::format("({})", toString(expr, substitution));
+template <typename Op, Symbolic... Args>
+  requires(sizeof...(Args) >= 1) && (Op::kDisplayMode == DisplayMode::kInfix)
+auto wrap(SymbolicExpression<Op, Args...> expr) {
+  return std::format("({})", toString(expr));
 };
 
-template <typename Op, Symbolic... Args, typename... Binders>
-auto toString(SymbolicExpression<Op, Args...>, const Substitution<Binders...>& substitution) -> std::string {
-  constexpr TypeList<Args...> args;
-  if constexpr (args.size() == 0) {
+auto wrapIfNotMatching(auto /*unused*/, Symbolic auto expr) {
+  return toString(expr);
+}
+
+template <typename OpA, typename Op, Symbolic... Args>
+  requires(sizeof...(Args) >= 1) && (Op::kDisplayMode == DisplayMode::kInfix)
+auto wrapIfNotMatching(OpA op, SymbolicExpression<Op, Args...> expr) {
+  if (op == expr.op()) {
+    return toString(expr);
+  }
+  return std::format("({})", toString(expr));
+};
+
+template <typename Op, Symbolic... Args>
+auto toString(SymbolicExpression<Op, Args...> /*unused*/) -> std::string {
+  using ArgsList = TypeList<Args...>;
+  if constexpr (ArgsList::empty) {
     return std::string{Op::kSymbol};
   } else if constexpr (Op::kDisplayMode == DisplayMode::kInfix) {
     std::string out;
-    out.append(wrap(args.head(), substitution));
-    args.tail() >>= [&](auto... rest) {
-      (out.append(std::format(" {} {}", Op::kSymbol, wrap(rest, substitution))),
-        ...);
-    };
+    out.append(wrap(typename ArgsList::HeadType{}));
+    [&]<typename... Rest>(TypeList<Rest...> /*unused*/) {
+      (out.append(
+           std::format(" {} {}", Op::kSymbol, wrapIfNotMatching(Op{}, Rest{}))),
+       ...);
+    }(typename ArgsList::TailType{});
     return out;
   } else if constexpr (Op::kDisplayMode == DisplayMode::kPrefix) {
     std::string out;
-    out.append(toString(args.head(), substitution));
-    args.tail() >>= [&](auto... rest) {
-      (out.append(std::format(", {}", toString(rest, substitution))),
-        ...);
-    };
+    out.append(toString(typename ArgsList::HeadType{}));
+    [&]<typename... Rest>(TypeList<Rest...> /*unused*/) {
+      (out.append(std::format(", {}", toString(Rest{}))), ...);
+    }(typename ArgsList::TailType{});
     return std::format("{}({})", Op::kSymbol, out);
   }
   std::unreachable();
 }
 
 }  // namespace tempura::symbolic
-
