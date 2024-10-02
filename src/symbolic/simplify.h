@@ -17,13 +17,13 @@ namespace tempura::symbolic {
 // 2 * 7 -> 14
 // 2 * (3 + 4) -> 2 * (3 + 4)
 template <Symbolic Expr>
-consteval auto evalIfConstantExpr(Expr expr) {
+consteval auto evalIfConstexprExpr(Expr expr) {
   return expr;
 }
 
 template <Operator Op, auto... VALUES>
-  requires(requires() { [] constexpr { return Op{}(VALUES...); }; })
-consteval auto evalIfConstantExpr(
+  requires(requires() { Constant<Op{}(VALUES...)>{}; })
+consteval auto evalIfConstexprExpr(
     SymbolicExpression<Op, Constant<VALUES>...> /*unused*/) {
   return Constant<Op{}(VALUES...)>{};
 }
@@ -103,7 +103,7 @@ consteval auto mergeAddition(TypeList<Terms...> list) {
 
     else if constexpr (match(a, Any{} * Any{}) and match(b, Any{} * Any{})) {
       if constexpr (match(a.right(), b.right())) {
-        auto coeff = evalIfConstantExpr(a.left() + b.left());
+        auto coeff = evalIfConstexprExpr(a.left() + b.left());
         return mergeAddition(concat(
             TypeList{multiplicationIdentities(coeff * a.right())}, rest));
       } else {
@@ -113,7 +113,7 @@ consteval auto mergeAddition(TypeList<Terms...> list) {
 
     else if constexpr (match(a, Any{} * Any{})) {
       if constexpr (match(a.right(), b)) {
-        auto coeff = evalIfConstantExpr(1_c + a.left());
+        auto coeff = evalIfConstexprExpr(1_c + a.left());
         return mergeAddition(
             concat(TypeList{multiplicationIdentities(coeff * b)}, rest));
       } else {
@@ -123,7 +123,7 @@ consteval auto mergeAddition(TypeList<Terms...> list) {
 
     else if constexpr (match(b, Any{} * Any{})) {
       if constexpr (match(a, b.right())) {
-        auto coeff = evalIfConstantExpr(1_c + b.left());
+        auto coeff = evalIfConstexprExpr(1_c + b.left());
         return mergeAddition(
             concat(TypeList{multiplicationIdentities(coeff * a)}, rest));
       } else {
@@ -209,7 +209,7 @@ consteval auto mergeMultiplication(TypeList<Terms...> list) {
     else if constexpr (match(a, pow(Any{}, Any{})) and
                        match(b, pow(Any{}, Any{}))) {
       if constexpr (match(a.left(), b.left())) {
-        auto power = evalIfConstantExpr(a.right() + b.right());
+        auto power = evalIfConstexprExpr(a.right() + b.right());
         return mergeMultiplication(
             concat(TypeList{powIdentities(pow(a.left(), power))}, rest));
       } else {
@@ -219,7 +219,7 @@ consteval auto mergeMultiplication(TypeList<Terms...> list) {
 
     else if constexpr (match(a, pow(Any{}, Any{}))) {
       if constexpr (match(a.left(), b)) {
-        auto power = evalIfConstantExpr(1_c + a.right());
+        auto power = evalIfConstexprExpr(1_c + a.right());
         return mergeMultiplication(
             concat(TypeList{powIdentities(pow(a.left(), power))}, rest));
       } else {
@@ -229,7 +229,7 @@ consteval auto mergeMultiplication(TypeList<Terms...> list) {
 
     else if constexpr (match(b, pow(Any{}, Any{}))) {
       if constexpr (match(a, b.left())) {
-        auto power = evalIfConstantExpr(1_c + b.right());
+        auto power = evalIfConstexprExpr(1_c + b.right());
         return mergeMultiplication(
             concat(TypeList{powIdentities(pow(b.left(), power))}, rest));
       } else {
@@ -319,11 +319,37 @@ consteval auto simplifyChildren(Symbolic auto expr) {
   auto result = [&]<typename... Args>(TypeList<Args...> /*unused*/) {
     return makeExpr(expr.op(), simplify(Args{})...);
   }(expr.terms());
-  return evalIfConstantExpr(result);
+  return evalIfConstexprExpr(result);
+}
+
+consteval auto normalize(Symbolic auto expr) {
+  if constexpr (match(expr, -Any{})) {
+    return normalize(Constant<-1>{} * expr.operand());
+  }
+
+  else if constexpr (match(expr, Any{} - Any{})) {
+    return normalize(expr.left() + Constant<-1>{} * expr.right());
+  }
+
+  else if constexpr(match(expr, Any{} / Any{})) {
+    return normalize(expr.left() * pow(expr.right(), Constant<-1>{}));
+  }
+
+  else if constexpr(match(expr, exp(Any{}))) {
+    return normalize(pow(e, expr.operand()));
+  }
+
+  else {
+    return expr;
+  }
 }
 
 consteval auto simplify(Symbolic auto expr) {
-  if constexpr (match(expr, Any{} + Any{})) {
+  if constexpr (match(expr, AnyConstantExpr{})) {
+    return evalIfConstexprExpr(expr);
+  }
+
+  else if constexpr (match(expr, Any{} + Any{})) {
     return simplifyAddition(expr);
   }
 

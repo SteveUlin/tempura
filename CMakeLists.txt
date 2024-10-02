@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(tempura LANGUAGES CUDA CXX)
+project(tempura LANGUAGES CXX)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Get clang to find stdlib
@@ -11,17 +11,17 @@ endif()
 
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
 # set(CMAKE_CXX_FLAGS "-Wall -Wextra -fbracket-depth=1024")
-set(CMAKE_CXX_FLAGS "-Wall -Wextra")
+set(CMAKE_CXX_FLAGS "-Wall -Wextra -std=c++2c")
 set(CMAKE_CXX_FLAGS_RELEASE "-ftree-vectorize -march=native -ffast-math -O3 -funroll-loops")
 # set(CMAKE_CXX_FLAGS_RELEASE "-ftree-vectorize -march=native -O2 -funroll-loops")
 
-find_package(CUDAToolkit)
+# find_package(CUDAToolkit)
 
-set(CMAKE_CXX_STANDARD 26)
+# set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 
-set(CMAKE_CUDA_STANDARD 20)
-set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+# set(CMAKE_CUDA_STANDARD 20)
+# set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 set(BASEPATH "${CMAKE_SOURCE_DIR}/src")
 INCLUDE_DIRECTORIES("${BASEPATH}")

@@ -116,6 +116,60 @@ constexpr auto pow(Matcher auto lhs, Matcher auto rhs) {
   return MatcherExpression<Power, decltype(lhs), decltype(rhs)>{};
 }
 
+struct Sqrt {
+  inline static constexpr std::string_view kSymbol = "sqrt"sv;
+  inline static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
+
+  static constexpr auto operator()(auto x) {
+    using std::sqrt;
+    return sqrt(x);
+  }
+};
+
+constexpr auto sqrt(Symbolic auto x) {
+  return SymbolicExpression<Sqrt, decltype(x)>{};
+}
+
+constexpr auto sqrt(Matcher auto x) {
+  return MatcherExpression<Sqrt, decltype(x)>{};
+}
+
+struct Exp {
+  inline static constexpr std::string_view kSymbol = "exp"sv;
+  inline static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
+
+  static constexpr auto operator()(auto x) {
+    using std::exp;
+    return exp(x);
+  }
+};
+
+constexpr auto exp(Symbolic auto x) {
+  return SymbolicExpression<Exp, decltype(x)>{};
+}
+
+constexpr auto exp(Matcher auto x) {
+  return MatcherExpression<Exp, decltype(x)>{};
+}
+
+struct Log {
+  inline static constexpr std::string_view kSymbol = "log"sv;
+  inline static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
+
+  static constexpr auto operator()(auto x) {
+    using std::log;
+    return log(x);
+  }
+};
+
+constexpr auto log(Symbolic auto x) {
+  return SymbolicExpression<Log, decltype(x)>{};
+}
+
+constexpr auto log(Matcher auto x) {
+  return MatcherExpression<Log, decltype(x)>{};
+}
+
 struct Sin {
   inline static constexpr std::string_view kSymbol = "sin"sv;
   inline static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;

@@ -236,6 +236,13 @@ struct SymbolicExpression {
 
   constexpr static auto op() { return Op{}; }
   constexpr static auto terms() { return TypeList<Args...>{}; }
+
+  constexpr static auto operand()
+    requires (sizeof...(Args) == 1)
+  {
+    return terms().head();
+  }
+
   constexpr static auto left()
     requires(sizeof...(Args) == 2)
   {

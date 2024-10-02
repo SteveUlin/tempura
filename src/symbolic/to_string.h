@@ -64,3 +64,10 @@ auto toString(SymbolicExpression<Op, Args...> /*unused*/) -> std::string {
 }
 
 }  // namespace tempura::symbolic
+
+namespace std {
+auto operator<<(std::ostream& os,
+                tempura::symbolic::Symbolic auto expr) -> std::ostream& {
+  return os << tempura::symbolic::toString(expr);
+}
+}  // namespace std
