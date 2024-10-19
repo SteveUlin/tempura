@@ -2,6 +2,7 @@ add_subdirectory(autodiff)
 # add_subdirectory(cuda)
 add_subdirectory(matrix)
 add_subdirectory(symbolic)
+add_subdirectory(bayes)
 
 add_library(benchmark INTERFACE benchmark.h)
 

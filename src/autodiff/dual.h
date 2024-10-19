@@ -62,10 +62,8 @@ auto jacobian(const F& func, Inputs&&... inputs) {
   }(std::make_index_sequence<sizeof...(Inputs)>{});
 }
 
-// TODO: Update the mathe functions to constexpr as compilers start to support
-// c++26
-
 // -- Relational Operators --
+
 // For calculations, we typically only work with the value of the dual number
 // not the derivative
 

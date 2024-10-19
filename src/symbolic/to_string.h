@@ -45,7 +45,7 @@ auto toString(SymbolicExpression<Op, Args...> /*unused*/) -> std::string {
     return std::string{Op::kSymbol};
   } else if constexpr (Op::kDisplayMode == DisplayMode::kInfix) {
     std::string out;
-    out.append(wrap(typename ArgsList::HeadType{}));
+    out.append(wrapIfNotMatching(Op{}, typename ArgsList::HeadType{}));
     [&]<typename... Rest>(TypeList<Rest...> /*unused*/) {
       (out.append(
            std::format(" {} {}", Op::kSymbol, wrapIfNotMatching(Op{}, Rest{}))),

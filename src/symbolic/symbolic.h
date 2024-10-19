@@ -2,9 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
-#include <charconv>
 #include <cmath>
-#include <string>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -89,11 +87,6 @@ struct Constant {
     return value();
   }
 };
-
-template <auto VALUE>
-auto operator-(Constant<VALUE> /*unused*/) {
-  return Constant<-VALUE>{};
-}
 
 template <auto VALUE>
 inline constexpr bool internal::SymbolicTypeTrait<Constant<VALUE>> = true;

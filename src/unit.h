@@ -136,4 +136,34 @@ auto expectNear(const auto& lhs, const auto& rhs,
   return false;
 }
 
+auto expectLessThan(const auto& lhs, const auto& rhs,
+              const std::source_location location =
+                  std::source_location::current()) -> bool {
+  if (lhs <= rhs) {
+    return true;
+  }
+  std::cerr << "Error at" << location.file_name() << ":" << location.line()
+            << std::endl;
+  if constexpr (Ostreamable<decltype(lhs)> and Ostreamable<decltype(rhs)>) {
+    std::cerr << "Expected: " << lhs << " less than: " << rhs << std::endl;
+  }
+  TestRegistry::setFailure();
+  return false;
+}
+
+auto expectGreaterThan(const auto& lhs, const auto& rhs,
+              const std::source_location location =
+                  std::source_location::current()) -> bool {
+  if (lhs >= rhs) {
+    return true;
+  }
+  std::cerr << "Error at" << location.file_name() << ":" << location.line()
+            << std::endl;
+  if constexpr (Ostreamable<decltype(lhs)> and Ostreamable<decltype(rhs)>) {
+    std::cerr << "Expected: " << lhs << " greater than: " << rhs << std::endl;
+  }
+  TestRegistry::setFailure();
+  return false;
+}
+
 }  // namespace tempura

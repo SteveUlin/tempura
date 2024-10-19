@@ -194,7 +194,7 @@ consteval auto mergeMultiplication(TypeList<Terms...> list) {
     constexpr auto b = list.tail().head();
     constexpr auto rest = list.tail().tail();
 
-    if constexpr (match(a, 0_c) || match(b, 0_c)) {
+    if constexpr (match(a, 0_c) or match(b, 0_c)) {
       return TypeList{0_c};
     }
 
@@ -365,6 +365,10 @@ consteval auto simplify(Symbolic auto expr) {
   else if constexpr (match(expr, pow(Any{}, Any{}))) {
     auto tmp = simplifyChildren(expr);
     return powIdentities(tmp);
+  }
+
+  else if constexpr (match(expr, log(pow(Any{}, Any{})))) {
+    return simplify(log(expr.operand().left()) * expr.operand().right());
   }
 
   else if constexpr (match(expr, makeExpr(AnyOp{}, AnyNTerms{}))) {

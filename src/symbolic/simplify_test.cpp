@@ -121,19 +121,16 @@ auto main() -> int {
 
   "Simplify sin(0)"_test = [] {
     auto expr = sin(0_c);
-    // Unfortunately sin is not constexpr yet T.T
     static_assert(simplify(expr) == 0_c);
   };
 
   "Simplify cos(0)"_test = [] {
     auto expr = cos(0_c);
-    // Unfortunately cos is not constexpr yet T.T
     static_assert(simplify(expr) == 1_c);
   };
 
-  "Sim[lify tan(0)"_test = [] {
+  "Simplify tan(0)"_test = [] {
     auto expr = tan(0_c);
-    // Unfortunately tan is not constexpr yet T.T
     static_assert(simplify(expr) == 0_c);
   };
 
