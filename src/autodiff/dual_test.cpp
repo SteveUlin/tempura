@@ -5,11 +5,11 @@
 
 using namespace tempura;
 
-template <double delta = 0.0001, typename Lhs, typename Rhs>
-auto expectApproxEq(const Dual<Lhs>& lhs, const Dual<Rhs>& rhs,
+template <double delta = 0.0001>
+auto expectApproxEq(const Dual<double>& lhs, const Dual<double>& rhs,
                     const std::source_location location =
                         std::source_location::current()) -> bool {
-  // Avoid the early stopping behavior of "and"
+  // Print all errors by avoiding the early stopping behavior of "and".
   bool v = expectApproxEq<delta>(lhs.value, rhs.value, location);
   bool g = expectApproxEq<delta>(lhs.gradient, rhs.gradient, location);
   return v and g;
@@ -54,7 +54,7 @@ auto main() -> int {
     static_assert(dualEq(Dual{4.0, 6.0}, lhs + rhs));
   };
 
-  "inplace addtion"_test = [] {
+  "inplace addition"_test = [] {
     Dual<double> lhs{1.0, 2.0};
     Dual<double> rhs{3.0, 4.0};
     lhs += rhs;
@@ -69,7 +69,7 @@ auto main() -> int {
   "constexpr subtraction"_test = [] {
     constexpr Dual<double> lhs{1.0, 2.0};
     constexpr Dual<double> rhs{3.0, 4.0};
-    static_assert(Dual{-2.0, 6.0} == lhs - rhs);
+    static_assert(Dual{-2.0, -2.0} == lhs - rhs);
   };
 
   "inplace subtraction"_test = [] {

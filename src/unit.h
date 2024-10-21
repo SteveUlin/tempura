@@ -166,4 +166,21 @@ auto expectGreaterThan(const auto& lhs, const auto& rhs,
   return false;
 }
 
+template <double delta = 0.0001>
+auto expectApproxEq(const auto& lhs, const auto& rhs,
+                    const std::source_location location =
+                        std::source_location::current()) -> bool {
+  if (std::abs(lhs - rhs) < delta) {
+    return true;
+  }
+  std::cerr << "Error at" << location.file_name() << ":" << location.line()
+            << std::endl;
+  if constexpr (Ostreamable<decltype(lhs)> and Ostreamable<decltype(rhs)>) {
+    std::cerr << "Expected Approximate Equal ±(" << delta << "): " << lhs
+              << " got: " << rhs << std::endl;
+  }
+  TestRegistry::setFailure();
+  return false;
+}
+
 }  // namespace tempura
