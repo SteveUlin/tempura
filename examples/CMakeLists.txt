@@ -5,6 +5,8 @@ target_link_libraries(profile_main PRIVATE profiler)
 
 add_executable(sample_normal_main sample_normal.cpp)
 
+add_executable(normal_reverse_autodiff_main normal_reverse_autodiff.cpp)
+
 # add_executable(single_producer_consumer_queue single_producer_consumer_queue.cpp)
 # target_link_libraries(single_producer_consumer_queue PRIVATE profiler)
 
