@@ -7,20 +7,540 @@
 
 namespace tempura::autodiff {
 
-template <typename Forward, typename Reverse>
+template <typename T>
 class Node {
  public:
   virtual ~Node() = default;
 
-  virtual auto value() -> const Forward& = 0;
+  virtual auto value() -> const T& = 0;
 
-  virtual void clear() = 0;
+  virtual void clearValue() = 0;
 
-  virtual void propagate(const Reverse& derivative) = 0;
+  virtual void propagate(const T& derivative) = 0;
+
+  virtual void propagateNode(std::shared_ptr<Node> node) = 0;
+};
+template <typename T>
+class IndependentVariable : public Node<T> {
+ public:
+  static auto make(auto&& value) {
+    return std::shared_ptr<IndependentVariable>(
+        new IndependentVariable(std::forward<decltype(value)>(value)));
+  }
+
+  auto value() -> const T& override { return value_.value(); }
+
+  // Do nothing as IndependentVariables represent constants in the expression
+  // and we are not going to rebind data to them
+  void clearValue() override {}
+
+  void propagate(const T& /*unused*/) override {}
+
+  void propagateNode(std::shared_ptr<Node<T>> /*unused*/) override {}
+
+ private:
+  IndependentVariable() = default;
+  IndependentVariable(T forward) : value_{std::move(forward)} {}
+
+  std::optional<T> value_ = std::nullopt;
 };
 
-template <typename Forward, typename Reverse>
-class DependantVariable : public Node<Forward, Reverse> {
+template <typename T>
+class PlusNode : public Node<T> {
+ public:
+  static auto make(std::shared_ptr<Node<T>> left,
+                   std::shared_ptr<Node<T>> right) {
+    return std::shared_ptr<PlusNode>(
+        new PlusNode(std::move(left), std::move(right)));
+  }
+
+  auto value() -> const T& override {
+    if (!value_.has_value()) {
+      value_.emplace(left_->value() + right_->value());
+    }
+    return *value_;
+  }
+
+  void clearValue() override {
+    value_ = std::nullopt;
+    left_->clearValue();
+    right_->clearValue();
+  }
+
+  void propagate(const T& derivative) override {
+    left_->propagate(derivative);
+    right_->propagate(derivative);
+  }
+
+  void propagateNode(std::shared_ptr<Node<T>> node) override {
+    left_->propagateNode(node);
+    right_->propagateNode(node);
+  }
+
+ private:
+  PlusNode(std::shared_ptr<Node<T>> left, std::shared_ptr<Node<T>> right)
+      : left_{std::move(left)}, right_{std::move(right)} {}
+
+  std::shared_ptr<Node<T>> left_;
+  std::shared_ptr<Node<T>> right_;
+  std::optional<T> value_ = std::nullopt;
+};
+
+template <typename T>
+class PosNode : public Node<T> {
+ public:
+  static auto make(std::shared_ptr<Node<T>> node) {
+    return std::shared_ptr{new PlusNode(std::move(node))};
+  }
+
+ private:
+  std::shared_ptr<Node<T>> node_;
+  std::optional<T> value_ = std::nullopt;
+};
+
+template <typename T>
+class NegateNode : public Node<T> {
+ public:
+  static auto make(std::shared_ptr<Node<T>> node) {
+    return std::shared_ptr<NegateNode>(new NegateNode(std::move(node)));
+  }
+
+  auto value() -> const T& override {
+    if (!value_.has_value()) {
+      value_.emplace(-node_->value());
+    }
+    return *value_;
+  }
+
+  void clearValue() override {
+    value_ = std::nullopt;
+    node_->clearValue();
+  }
+
+  void propagate(const T& derivative) override {
+    node_->propagate(-derivative);
+  }
+
+  void propagateNode(std::shared_ptr<Node<T>> node) override {
+    node_->propagateNode(NegateNode<T>::make(node));
+  }
+
+ private:
+  NegateNode(std::shared_ptr<Node<T>> node) : node_{std::move(node)} {}
+
+  std::shared_ptr<Node<T>> node_;
+  std::optional<T> value_ = std::nullopt;
+};
+
+template <typename T>
+class MinusNode : public Node<T> {
+ public:
+  static auto make(std::shared_ptr<Node<T>> left,
+                   std::shared_ptr<Node<T>> right) {
+    return std::shared_ptr<Node<T>>(
+        new MinusNode<T>(std::move(left), std::move(right)));
+  }
+
+  auto value() -> const T& override {
+    if (!value_.has_value()) {
+      value_.emplace(left_->value() - right_->value());
+    }
+    return *value_;
+  }
+
+  void clearValue() override {
+    value_ = std::nullopt;
+    left_->clearValue();
+    right_->clearValue();
+  }
+
+  void propagate(const T& derivative) override {
+    left_->propagate(derivative);
+    right_->propagate(-derivative);
+  }
+
+  void propagateNode(std::shared_ptr<Node<T>> node) override {
+    left_->propagateNode(node);
+    right_->propagateNode(NegateNode<T>::make(node));
+  }
+
+ private:
+  MinusNode(std::shared_ptr<Node<T>> left, std::shared_ptr<Node<T>> right)
+      : left_{std::move(left)}, right_{std::move(right)} {}
+
+  std::shared_ptr<Node<T>> left_;
+  std::shared_ptr<Node<T>> right_;
+  std::optional<T> value_ = std::nullopt;
+};
+
+template <typename T>
+class MultipliesNode : public Node<T> {
+ public:
+  static auto make(std::shared_ptr<Node<T>> left,
+                   std::shared_ptr<Node<T>> right) {
+    return std::shared_ptr<MultipliesNode>(
+        new MultipliesNode(std::move(left), std::move(right)));
+  }
+
+  auto value() -> const T& override {
+    if (!value_.has_value()) {
+      value_.emplace(left_->value() * right_->value());
+    }
+    return *value_;
+  }
+
+  void clearValue() override {
+    value_ = std::nullopt;
+    left_->clearValue();
+    right_->clearValue();
+  }
+
+  void propagate(const T& derivative) override {
+    left_->propagate(derivative * right_->value());
+    right_->propagate(derivative * left_->value());
+  }
+
+  void propagateNode(std::shared_ptr<Node<T>> node) override {
+    left_->propagateNode(MultipliesNode<T>::make(node, right_));
+    right_->propagateNode(MultipliesNode<T>::make(node, left_));
+  }
+
+ private:
+  MultipliesNode(std::shared_ptr<Node<T>> left, std::shared_ptr<Node<T>> right)
+      : left_{std::move(left)}, right_{std::move(right)} {}
+
+  std::shared_ptr<Node<T>> left_;
+  std::shared_ptr<Node<T>> right_;
+  std::optional<T> value_ = std::nullopt;
+};
+
+template <typename T>
+class DividesNode : public Node<T> {
+ public:
+  static auto make(std::shared_ptr<Node<T>> left,
+                   std::shared_ptr<Node<T>> right) {
+    return std::shared_ptr<DividesNode>(
+        new DividesNode(std::move(left), std::move(right)));
+  }
+
+  auto value() -> const T& override {
+    if (!value_.has_value()) {
+      value_.emplace(left_->value() / right_->value());
+    }
+    return *value_;
+  }
+
+  void clearValue() override {
+    value_ = std::nullopt;
+    left_->clearValue();
+    right_->clearValue();
+  }
+
+  void propagate(const T& derivative) override {
+    left_->propagate(derivative / right_->value());
+    right_->propagate(-derivative * left_->value() /
+                      (right_->value() * right_->value()));
+  }
+
+  void propagateNode(std::shared_ptr<Node<T>> node) override {
+    left_->propagateNode(DividesNode<T>::make(node, right_));
+    right_->propagateNode(NegateNode<T>::make(
+        DividesNode<T>::make(MultipliesNode<T>::make(node, left_),
+                             MultipliesNode<T>::make(right_, right_))));
+  }
+
+ private:
+  DividesNode(std::shared_ptr<Node<T>> left, std::shared_ptr<Node<T>> right)
+      : left_{std::move(left)}, right_{std::move(right)} {}
+
+  std::shared_ptr<Node<T>> left_;
+  std::shared_ptr<Node<T>> right_;
+  std::optional<T> value_ = std::nullopt;
+};
+
+template <typename T>
+class SqrtNode : public Node<T> {
+ public:
+  static auto make(std::shared_ptr<Node<T>> node) {
+    return std::shared_ptr<SqrtNode>(new SqrtNode(std::move(node)));
+  }
+
+  auto value() -> const T& override {
+    if (!value_.has_value()) {
+      using std::sqrt;
+      value_.emplace(sqrt(node_->value()));
+    }
+    return *value_;
+  }
+
+  void clearValue() override {
+    value_ = std::nullopt;
+    node_->clearValue();
+  }
+
+  void propagate(const T& derivative) override {
+    using std::sqrt;
+    node_->propagate(derivative / (T{2.} * sqrt(node_->value())));
+  }
+
+  void propagateNode(std::shared_ptr<Node<T>> node) override {
+    node_->propagateNode(MultipliesNode<T>::make(
+        DividesNode<T>::make(node, IndependentVariable<T>::make(T{2.})),
+        SqrtNode<T>::make(node_)));
+  }
+
+ private:
+  SqrtNode(std::shared_ptr<Node<T>> node) : node_{std::move(node)} {}
+
+  std::shared_ptr<Node<T>> node_;
+  std::optional<T> value_ = std::nullopt;
+};
+
+template <typename T>
+class LogNode : public Node<T> {
+ public:
+  static auto make(std::shared_ptr<Node<T>> node) {
+    return std::shared_ptr<LogNode>(new LogNode(std::move(node)));
+  }
+
+  auto value() -> const T& override {
+    if (!value_.has_value()) {
+      using std::log;
+      value_.emplace(log(node_->value()));
+    }
+    return *value_;
+  }
+
+  void clearValue() override {
+    value_ = std::nullopt;
+    node_->clearValue();
+  }
+
+  void propagate(const T& derivative) override {
+    node_->propagate(derivative / node_->value());
+  }
+
+  void propagateNode(std::shared_ptr<Node<T>> node) override {
+    node_->propagateNode(DividesNode<T>::make(node, node_));
+  }
+
+ private:
+  LogNode(std::shared_ptr<Node<T>> node) : node_{std::move(node)} {}
+  std::shared_ptr<Node<T>> node_;
+  std::optional<T> value_ = std::nullopt;
+};
+
+template <typename T>
+class PowNode : public Node<T> {
+ public:
+  static auto make(std::shared_ptr<Node<T>> base,
+                   std::shared_ptr<Node<T>> exponent) {
+    return std::shared_ptr<PowNode>(
+        new PowNode(std::move(base), std::move(exponent)));
+  }
+
+  auto value() -> const T& override {
+    if (!value_.has_value()) {
+      using std::pow;
+      value_.emplace(pow(base_->value(), exponent_->value()));
+    }
+    return *value_;
+  }
+
+  void clearValue() override {
+    value_ = std::nullopt;
+    base_->clearValue();
+    exponent_->clearValue();
+  }
+
+  void propagate(const T& derivative) override {
+    using std::pow;
+    base_->propagate(derivative * exponent_->value() *
+                     pow(base_->value(), exponent_->value() - 1));
+    if (base_->value() == T{0}) {
+      exponent_->propagate(T{0});
+      return;
+    }
+    exponent_->propagate(derivative * pow(base_->value(), exponent_->value()) *
+                         std::log(base_->value()));
+  }
+
+  void propagateNode(std::shared_ptr<Node<T>> node) override {
+    base_->propagateNode(MultipliesNode<T>::make(
+        MultipliesNode<T>::make(
+            exponent_,
+            PowNode<T>::make(
+                base_, MinusNode<T>::make(
+                           exponent_, IndependentVariable<T>::make(T{1.})))),
+        node));
+    if (base_->value() == T{0}) {
+      exponent_->propagateNode(IndependentVariable<T>::make(T{0.}));
+      return;
+    }
+    exponent_->propagateNode(MultipliesNode<T>::make(
+        MultipliesNode<T>::make(node, PowNode<T>::make(base_, exponent_)),
+        LogNode<T>::make(base_)));
+  }
+
+ private:
+  PowNode(std::shared_ptr<Node<T>> base, std::shared_ptr<Node<T>> exponent)
+      : base_{std::move(base)}, exponent_{std::move(exponent)} {}
+  std::shared_ptr<Node<T>> base_;
+  std::shared_ptr<Node<T>> exponent_;
+  std::optional<T> value_ = std::nullopt;
+};
+
+template <typename T>
+class ExpNode : public Node<T> {
+ public:
+  static auto make(std::shared_ptr<Node<T>> node) {
+    return std::shared_ptr<ExpNode>(new ExpNode(std::move(node)));
+  }
+
+  auto value() -> const T& {
+    if (!value_.has_value()) {
+      using std::exp;
+      value_.emplace(exp(node_->value()));
+    }
+    return *value_;
+  }
+
+  void clearValue() {
+    value_ = std::nullopt;
+    node_->clearValue();
+  }
+
+  void propagate(const T& derivative) {
+    using std::exp;
+    node_->propagate(derivative * exp(node_->value()));
+  }
+
+  void propagateNode(std::shared_ptr<Node<T>> node) {
+    node_->propagateNode(
+        MultipliesNode<T>::make(ExpNode<T>::make(node_), node));
+  }
+
+ private:
+  ExpNode(std::shared_ptr<Node<T>> node) : node_{std::move(node)} {}
+
+  std::shared_ptr<Node<T>> node_;
+  std::optional<T> value_ = std::nullopt;
+};
+
+template <typename T>
+class CosNode;
+
+template <typename T>
+class SinNode : public Node<T> {
+ public:
+  static auto make(std::shared_ptr<Node<T>> node) {
+    return std::shared_ptr<SinNode>(new SinNode(std::move(node)));
+  }
+
+  auto value() -> const T& override {
+    if (!value_.has_value()) {
+      using std::sin;
+      value_.emplace(sin(node_->value()));
+    }
+    return *value_;
+  }
+
+  void clearValue() override {
+    value_ = std::nullopt;
+    node_->clearValue();
+  }
+
+  void propagate(const T& derivative) override {
+    using std::cos;
+    node_->propagate(derivative * cos(node_->value()));
+  }
+
+  void propagateNode(std::shared_ptr<Node<T>> node) override {
+    node_->propagateNode(
+        MultipliesNode<T>::make(CosNode<T>::make(node_), node));
+  }
+
+ private:
+  SinNode(std::shared_ptr<Node<T>> node) : node_{std::move(node)} {}
+  std::shared_ptr<Node<T>> node_;
+  std::optional<T> value_ = std::nullopt;
+};
+
+template <typename T>
+class CosNode : public Node<T> {
+ public:
+  static auto make(std::shared_ptr<Node<T>> node) {
+    return std::shared_ptr<CosNode>(new CosNode(std::move(node)));
+  }
+
+  auto value() -> const T& {
+    if (!value_.has_value()) {
+      using std::cos;
+      value_.emplace(cos(node_->value()));
+    }
+    return *value_;
+  }
+
+  void clearValue() {
+    value_ = std::nullopt;
+    node_->clearValue();
+  }
+
+  void propagate(const T& derivative) {
+    using std::sin;
+    node_->propagate(-derivative * sin(node_->value()));
+  }
+
+  void propagateNode(std::shared_ptr<Node<T>> node) {
+    node_->propagateNode(MultipliesNode<T>::make(
+        NegateNode<T>::make(SinNode<T>::make(node_)), node));
+  }
+
+ private:
+  CosNode(std::shared_ptr<Node<T>> node) : node_{std::move(node)} {}
+  std::shared_ptr<Node<T>> node_;
+  std::optional<T> value_ = std::nullopt;
+};
+
+template <typename T>
+class TanNode : public Node<T> {
+ public:
+  static auto make(std::shared_ptr<Node<T>> node) {
+    return std::shared_ptr<TanNode>(new TanNode(std::move(node)));
+  }
+
+  auto value() -> const T& {
+    if (!value_.has_value()) {
+      using std::tan;
+      value_.emplace(tan(node_->value()));
+    }
+    return *value_;
+  }
+
+  void clearValue() {
+    value_ = std::nullopt;
+    node_->clearValue();
+  }
+
+  void propagate(const T& derivative) {
+    using std::cos;
+    node_->propagate(derivative / (cos(node_->value()) * cos(node_->value())));
+  }
+
+  void propagateNode(std::shared_ptr<Node<T>> node) {
+    auto cos_node = CosNode<T>::make(node_);
+    node_->propagateNode(DividesNode<T>::make(
+        node, MultipliesNode<T>::make(cos_node, cos_node)));
+  }
+
+ private:
+  TanNode(std::shared_ptr<Node<T>> node) : node_{std::move(node)} {}
+  std::shared_ptr<Node<T>> node_;
+  std::optional<T> value_ = std::nullopt;
+};
+
+template <typename T>
+class DependantVariable : public Node<T> {
  public:
   static auto make() {
     return std::shared_ptr<DependantVariable>(new DependantVariable());
@@ -31,23 +551,29 @@ class DependantVariable : public Node<Forward, Reverse> {
         new DependantVariable(std::forward<decltype(value)>(value)));
   }
 
-  void bind(const Forward* value) { forward_ = value; }
+  void bind(T value) { value_ = std::move(value); }
 
-  auto value() -> const Forward& override {
-    if (forward_ == nullptr) [[unlikely]] {
+  auto value() -> const T& override {
+    if (!value_.has_value()) [[unlikely]] {
       throw std::runtime_error("No value bound to DependantVariable");
     }
-    return *forward_;
+    return *value_;
   }
 
-  auto derivative() const -> const Reverse& { return reverse_.value(); }
+  auto derivative() const -> const T& { return reverse_.value(); }
 
-  void clear() override {
-    forward_ = nullptr;
+  auto derivativeNode() { return reverse_node_; }
+
+  void clearValue() override {
+    value_ = std::nullopt;
+  }
+
+  void clearDerivative() {
     reverse_ = std::nullopt;
+    reverse_node_ = nullptr;
   }
 
-  void propagate(const Reverse& derivative) override {
+  void propagate(const T& derivative) override {
     if (!reverse_.has_value()) {
       reverse_ = derivative;
       return;
@@ -55,677 +581,231 @@ class DependantVariable : public Node<Forward, Reverse> {
     *reverse_ += derivative;
   }
 
- private:
-  DependantVariable() = default;
-  DependantVariable(Forward forward) : forward_{std::move(forward)} {}
-
-  const Forward* forward_ = nullptr;
-  std::optional<Reverse> reverse_ = std::nullopt;
-};
-
-template <typename Forward, typename Reverse>
-class IndependentVariable : public Node<Forward, Reverse> {
- public:
-  static auto make(auto&& value) {
-    return std::shared_ptr<IndependentVariable>(
-        new IndependentVariable(std::forward<decltype(value)>(value)));
-  }
-
-  auto value() -> const Forward& override { return forward_.value(); }
-
-  // Do nothing as IndependentVariables represent constants in the expression
-  // and we are not going to rebind data to them
-  void clear() override {}
-
-  void propagate(const Reverse& /*unused*/) override {}
-
- private:
-  IndependentVariable() = default;
-  IndependentVariable(Forward forward) : forward_{std::move(forward)} {}
-
-  std::optional<Forward> forward_ = std::nullopt;
-};
-
-template <typename Forward, typename Reverse>
-class PlusNode : public Node<Forward, Reverse> {
- public:
-  static auto make(std::shared_ptr<Node<Forward, Reverse>> left,
-                   std::shared_ptr<Node<Forward, Reverse>> right) {
-    return std::shared_ptr<PlusNode>(
-        new PlusNode(std::move(left), std::move(right)));
-  }
-
-  auto value() -> const Forward& override {
-    if (!forward_.has_value()) {
-      forward_.emplace(left_->value() + right_->value());
-    }
-    return *forward_;
-  }
-
-  void clear() override {
-    forward_ = std::nullopt;
-    left_->clear();
-    right_->clear();
-  }
-
-  void propagate(const Reverse& derivative) override {
-    left_->propagate(derivative);
-    right_->propagate(derivative);
-  }
-
- private:
-  PlusNode(std::shared_ptr<Node<Forward, Reverse>> left,
-           std::shared_ptr<Node<Forward, Reverse>> right)
-      : left_{std::move(left)}, right_{std::move(right)} {}
-
-  std::shared_ptr<Node<Forward, Reverse>> left_;
-  std::shared_ptr<Node<Forward, Reverse>> right_;
-  std::optional<Forward> forward_ = std::nullopt;
-};
-
-template <typename Forward, typename Reverse>
-class PosNode : public Node<Forward, Reverse> {
- public:
-  static auto make(std::shared_ptr<Node<Forward, Reverse>> node) {
-    return std::shared_ptr{new PlusNode(std::move(node))};
-  }
-
- private:
-  std::shared_ptr<Node<Forward, Reverse>> node_;
-  std::optional<Forward> forward_ = std::nullopt;
-};
-
-template <typename Forward, typename Reverse>
-class MinusNode : public Node<Forward, Reverse> {
- public:
-  static auto make(std::shared_ptr<Node<Forward, Reverse>> left,
-                   std::shared_ptr<Node<Forward, Reverse>> right) {
-    return std::shared_ptr<Node<Forward, Reverse>>(
-        new MinusNode<Forward, Reverse>(std::move(left), std::move(right)));
-  }
-
-  auto value() -> const Forward& override {
-    if (!forward_.has_value()) {
-      forward_.emplace(left_->value() - right_->value());
-    }
-    return *forward_;
-  }
-
-  void clear() override {
-    forward_ = std::nullopt;
-    left_->clear();
-    right_->clear();
-  }
-
-  void propagate(const Reverse& derivative) override {
-    left_->propagate(derivative);
-    right_->propagate(-derivative);
-  }
-
- private:
-  MinusNode(std::shared_ptr<Node<Forward, Reverse>> left,
-            std::shared_ptr<Node<Forward, Reverse>> right)
-      : left_{std::move(left)}, right_{std::move(right)} {}
-
-  std::shared_ptr<Node<Forward, Reverse>> left_;
-  std::shared_ptr<Node<Forward, Reverse>> right_;
-  std::optional<Forward> forward_ = std::nullopt;
-};
-
-template <typename Forward, typename Reverse>
-class NegateNode : public Node<Forward, Reverse> {
- public:
-  static auto make(Node<Forward, Reverse> node) {
-    return std::shared_ptr<NegateNode>(new NegateNode(std::move(node.node)));
-  }
-
-  auto value() -> const Forward& override {
-    if (!forward_.has_value()) {
-      forward_.emplace(-node_->value());
-    }
-    return *forward_;
-  }
-
-  void clear() override {
-    forward_ = std::nullopt;
-    node_->clear();
-  }
-
-  void propagate(const Reverse& derivative) override {
-    forward_->propagate(-derivative);
-  }
-
- private:
-  NegateNode(std::shared_ptr<Node<Forward, Reverse>> node)
-      : node_{std::move(node)} {}
-
-  std::shared_ptr<Node<Forward, Reverse>> node_;
-  std::optional<Forward> forward_ = std::nullopt;
-};
-
-template <typename Forward, typename Reverse>
-class MultipliesNode : public Node<Forward, Reverse> {
- public:
-  static auto make(std::shared_ptr<Node<Forward, Reverse>> left,
-                   std::shared_ptr<Node<Forward, Reverse>> right) {
-    return std::shared_ptr<MultipliesNode>(
-        new MultipliesNode(std::move(left), std::move(right)));
-  }
-
-  auto value() -> const Forward& override {
-    if (!forward_.has_value()) {
-      forward_.emplace(left_->value() * right_->value());
-    }
-    return *forward_;
-  }
-
-  void clear() override {
-    forward_ = std::nullopt;
-    left_->clear();
-    right_->clear();
-  }
-
-  void propagate(const Reverse& derivative) override {
-    left_->propagate(derivative * right_->value());
-    right_->propagate(derivative * left_->value());
-  }
-
- private:
-  MultipliesNode(std::shared_ptr<Node<Forward, Reverse>> left,
-                 std::shared_ptr<Node<Forward, Reverse>> right)
-      : left_{std::move(left)}, right_{std::move(right)} {}
-
-  std::shared_ptr<Node<Forward, Reverse>> left_;
-  std::shared_ptr<Node<Forward, Reverse>> right_;
-  std::optional<Forward> forward_ = std::nullopt;
-};
-
-template <typename Forward, typename Reverse>
-class DividesNode : public Node<Forward, Reverse> {
- public:
-  static auto make(std::shared_ptr<Node<Forward, Reverse>> left,
-                   std::shared_ptr<Node<Forward, Reverse>> right) {
-    return std::shared_ptr<DividesNode>(
-        new DividesNode(std::move(left), std::move(right)));
-  }
-
-  auto value() -> const Forward& override {
-    if (!forward_.has_value()) {
-      forward_.emplace(left_->value() / right_->value());
-    }
-    return *forward_;
-  }
-
-  void clear() override {
-    forward_ = std::nullopt;
-    left_->clear();
-    right_->clear();
-  }
-
-  void propagate(const Reverse& derivative) override {
-    left_->propagate(derivative / right_->value());
-    right_->propagate(-derivative * left_->value() /
-                      (right_->value() * right_->value()));
-  }
-
- private:
-  DividesNode(std::shared_ptr<Node<Forward, Reverse>> left,
-              std::shared_ptr<Node<Forward, Reverse>> right)
-      : left_{std::move(left)}, right_{std::move(right)} {}
-
-  std::shared_ptr<Node<Forward, Reverse>> left_;
-  std::shared_ptr<Node<Forward, Reverse>> right_;
-  std::optional<Forward> forward_ = std::nullopt;
-};
-
-template <typename Forward, typename Reverse>
-class SqrtNode : public Node<Forward, Reverse> {
- public:
-  static auto make(std::shared_ptr<Node<Forward, Reverse>> node) {
-    return std::shared_ptr<SqrtNode>(new SqrtNode(std::move(node)));
-  }
-
-  auto value() -> const Forward& override {
-    if (!forward_.has_value()) {
-      using std::sqrt;
-      forward_.emplace(sqrt(node_->value()));
-    }
-    return *forward_;
-  }
-
-  void clear() override {
-    forward_ = std::nullopt;
-    node_->clear();
-  }
-
-  void propagate(const Reverse& derivative) override {
-    using std::sqrt;
-    node_->propagate(derivative / (2. * sqrt(node_->value())));
-  }
-
- private:
-  SqrtNode(std::shared_ptr<Node<Forward, Reverse>> node)
-      : node_{std::move(node)} {}
-
-  std::shared_ptr<Node<Forward, Reverse>> node_;
-  std::optional<Forward> forward_ = std::nullopt;
-};
-
-template <typename Forward, typename Reverse>
-class PowNode : public Node<Forward, Reverse> {
- public:
-  static auto make(std::shared_ptr<Node<Forward, Reverse>> base,
-                   std::shared_ptr<Node<Forward, Reverse>> exponent) {
-    return std::shared_ptr<PowNode>(
-        new PowNode(std::move(base), std::move(exponent)));
-  }
-
-  auto value() -> const Forward& override {
-    if (!forward_.has_value()) {
-      using std::pow;
-      forward_.emplace(pow(base_->value(), exponent_->value()));
-    }
-    return *forward_;
-  }
-
-  void clear() override {
-    forward_ = std::nullopt;
-    base_->clear();
-    exponent_->clear();
-  }
-
-  void propagate(const Reverse& derivative) override {
-    using std::pow;
-    base_->propagate(derivative * exponent_->value() *
-                     pow(base_->value(), exponent_->value() - 1));
-    if (base_->value() == Forward{0}) {
-      exponent_->propagate(Reverse{0});
+  void propagateNode(std::shared_ptr<Node<T>> node) override {
+    if (reverse_node_ == nullptr) {
+      reverse_node_ = node;
       return;
     }
-    exponent_->propagate(derivative * pow(base_->value(), exponent_->value()) *
-                         std::log(base_->value()));
+    reverse_node_ = PlusNode<T>::make(reverse_node_, node);
   }
 
  private:
-  PowNode(std::shared_ptr<Node<Forward, Reverse>> base,
-          std::shared_ptr<Node<Forward, Reverse>> exponent)
-      : base_{std::move(base)}, exponent_{std::move(exponent)} {}
-  std::shared_ptr<Node<Forward, Reverse>> base_;
-  std::shared_ptr<Node<Forward, Reverse>> exponent_;
-  std::optional<Forward> forward_ = std::nullopt;
+  DependantVariable() = default;
+  DependantVariable(T value) : value_{std::move(value)} {}
+
+  std::optional<T> value_ = std::nullopt;
+  std::optional<T> reverse_ = std::nullopt;
+  std::shared_ptr<Node<T>> reverse_node_ = nullptr;
 };
 
-template <typename Forward, typename Reverse>
-class LogNode : public Node<Forward, Reverse> {
- public:
-  static auto make(std::shared_ptr<Node<Forward, Reverse>> node) {
-    return std::shared_ptr<LogNode>(new LogNode(std::move(node)));
-  }
-
-  auto value() -> const Forward& override {
-    if (!forward_.has_value()) {
-      using std::log;
-      forward_.emplace(log(node_->value()));
-    }
-    return *forward_;
-  }
-
-  void clear() override {
-    forward_ = std::nullopt;
-    node_->clear();
-  }
-
-  void propagate(const Reverse& derivative) override {
-    node_->propagate(derivative / node_->value());
-  }
-
- private:
-  LogNode(std::shared_ptr<Node<Forward, Reverse>> node)
-      : node_{std::move(node)} {}
-  std::shared_ptr<Node<Forward, Reverse>> node_;
-  std::optional<Forward> forward_ = std::nullopt;
-};
-
-template <typename Forward, typename Reverse>
-class SinNode : public Node<Forward, Reverse> {
- public:
-  static auto make(std::shared_ptr<Node<Forward, Reverse>> node) {
-    return std::shared_ptr<SinNode>(new SinNode(std::move(node)));
-  }
-  auto value() -> const Forward& override {
-    if (!forward_.has_value()) {
-      using std::sin;
-      forward_.emplace(sin(node_->value()));
-    }
-    return *forward_;
-  }
-  void clear() override {
-    forward_ = std::nullopt;
-    node_->clear();
-  }
-  void propagate(const Reverse& derivative) override {
-    using std::cos;
-    node_->propagate(derivative * cos(node_->value()));
-  }
- private:
-  SinNode(std::shared_ptr<Node<Forward, Reverse>> node)
-      : node_{std::move(node)} {}
-  std::shared_ptr<Node<Forward, Reverse>> node_;
-  std::optional<Forward> forward_ = std::nullopt;
-};
-
-template <typename Forward, typename Reverse>
-class ExpNode : public Node<Forward, Reverse> {
- public:
-  static auto make(std::shared_ptr<Node<Forward, Reverse>> node) {
-    return std::shared_ptr<ExpNode>(new ExpNode(std::move(node)));
-  }
-
-  auto value() -> const Forward& {
-    if (!forward_.has_value()) {
-      using std::exp;
-      forward_.emplace(exp(node_->value()));
-    }
-    return *forward_;
-  }
-
-  void clear() {
-    forward_ = std::nullopt;
-    node_->clear();
-  }
-
-  void propagate(const Reverse& derivative) {
-    using std::exp;
-    node_->propagate(derivative * exp(node_->value()));
-  }
-
- private:
-  ExpNode(std::shared_ptr<Node<Forward, Reverse>> node)
-      : node_{std::move(node)} {}
-
-  std::shared_ptr<Node<Forward, Reverse>> node_;
-  std::optional<Forward> forward_ = std::nullopt;
-};
-
-template <typename Forward, typename Reverse>
-class CosNode : public Node<Forward, Reverse> {
- public:
-  static auto make(std::shared_ptr<Node<Forward, Reverse>> node) {
-    return std::shared_ptr<CosNode>(new CosNode(std::move(node)));
-  }
-  auto value() -> const Forward& {
-    if (!forward_.has_value()) {
-      using std::cos;
-      forward_.emplace(cos(node_->value()));
-    }
-    return *forward_;
-  }
-  void clear() {
-    forward_ = std::nullopt;
-    node_->clear();
-  }
-  void propagate(const Reverse& derivative) {
-    using std::sin;
-    node_->propagate(-derivative * sin(node_->value()));
-  }
- private:
-  CosNode(std::shared_ptr<Node<Forward, Reverse>> node)
-      : node_{std::move(node)} {}
-  std::shared_ptr<Node<Forward, Reverse>> node_;
-  std::optional<Forward> forward_ = std::nullopt;
-};
-
-template <typename Forward, typename Reverse>
-class TanNode : public Node<Forward, Reverse> {
- public:
-  static auto make(std::shared_ptr<Node<Forward, Reverse>> node) {
-    return std::shared_ptr<TanNode>(new TanNode(std::move(node)));
-  }
-  auto value() -> const Forward& {
-    if (!forward_.has_value()) {
-      using std::tan;
-      forward_.emplace(tan(node_->value()));
-    }
-    return *forward_;
-  }
-  void clear() {
-    forward_ = std::nullopt;
-    node_->clear();
-  }
-  void propagate(const Reverse& derivative) {
-    using std::cos;
-    node_->propagate(derivative / (cos(node_->value()) * cos(node_->value())));
-  }
- private:
-  TanNode(std::shared_ptr<Node<Forward, Reverse>> node)
-      : node_{std::move(node)} {}
-  std::shared_ptr<Node<Forward, Reverse>> node_;
-  std::optional<Forward> forward_ = std::nullopt;
-};
-
-template <typename Forward, typename Reverse>
+template <typename T>
 struct NodeExpr {
-  explicit NodeExpr(std::shared_ptr<Node<Forward, Reverse>> arg)
-      : node{std::move(arg)} {}
+  explicit NodeExpr(std::shared_ptr<Node<T>> arg) : node{std::move(arg)} {}
 
   virtual ~NodeExpr() = default;
 
-  auto value() const -> const Forward& { return node->value(); }
+  auto value() const -> const T& { return node->value(); }
 
-  std::shared_ptr<Node<Forward, Reverse>> node;
+  std::shared_ptr<Node<T>> node;
 };
 
-template <template <typename, typename> typename NodeT, typename Forward,
-          typename Reverse>
-NodeExpr(std::shared_ptr<NodeT<Forward, Reverse>>)
-    -> NodeExpr<Forward, Reverse>;
+template <template <typename> typename NodeT, typename T>
+NodeExpr(std::shared_ptr<NodeT<T>>) -> NodeExpr<T>;
 
-template <typename Forward = double, typename Reverse = Forward>
-struct Variable : public NodeExpr<Forward, Reverse> {
-  Variable()
-      : NodeExpr<Forward, Reverse>{
-            DependantVariable<Forward, Reverse>::make()} {}
+template <typename T = double>
+struct Variable : public NodeExpr<T> {
+  Variable() : NodeExpr<T>{DependantVariable<T>::make()} {}
 
-  auto bind(const Forward* value) -> void {
-    std::static_pointer_cast<DependantVariable<Forward, Reverse>>(this->node)
-        ->bind(value);
+  auto bind(T value) -> void {
+    std::static_pointer_cast<DependantVariable<T>>(this->node)->bind(value);
   }
 
-  auto derivative() -> const Reverse& {
-    return std::static_pointer_cast<DependantVariable<Forward, Reverse>>(
-               this->node)
+  auto derivative() const -> const T& {
+    return std::static_pointer_cast<DependantVariable<T>>(this->node)
         ->derivative();
   }
+
+  auto derivativeNode() {
+    return std::static_pointer_cast<DependantVariable<T>>(this->node)
+        ->derivativeNode();
+  }
+
+  void clearDerivative() {
+    std::static_pointer_cast<DependantVariable<T>>(this->node)
+        ->clearDerivative();
+  }
 };
 
-template <typename Forward, typename Reverse>
-auto operator+(NodeExpr<Forward, Reverse> left,
-               NodeExpr<Forward, Reverse> right) {
-  return NodeExpr(PlusNode<Forward, Reverse>::make(std::move(left.node),
-                                                   std::move(right.node)));
+template <typename T>
+auto operator+(NodeExpr<T> left, NodeExpr<T> right) {
+  return NodeExpr(
+      PlusNode<T>::make(std::move(left.node), std::move(right.node)));
 }
 
-template <typename Forward, typename Reverse>
-auto operator+(NodeExpr<Forward, Reverse> left, Forward right) {
-  return std::move(left) + NodeExpr{IndependentVariable<Forward, Reverse>::make(
-                               std::move(right))};
+template <typename T>
+auto operator+(NodeExpr<T> left, T right) {
+  return std::move(left) +
+         NodeExpr{IndependentVariable<T>::make(std::move(right))};
 }
 
-template <typename Forward, typename Reverse>
-auto operator+(Forward left, NodeExpr<Forward, Reverse> right) {
-  return NodeExpr{
-             IndependentVariable<Forward, Reverse>::make(std::move(left))} +
+template <typename T>
+auto operator+(T left, NodeExpr<T> right) {
+  return NodeExpr{IndependentVariable<T>::make(std::move(left))} +
          std::move(right);
 }
 
-template <typename Forward, typename Reverse>
-auto operator+=(NodeExpr<Forward, Reverse>& left,
-                NodeExpr<Forward, Reverse> right) {
+template <typename T>
+auto operator+=(NodeExpr<T>& left, NodeExpr<T> right) {
   left = std::move(left) + std::move(right);
   return left;
 }
 
-template <typename Forward, typename Reverse>
-auto operator+=(NodeExpr<Forward, Reverse>& left, Forward right) {
-  left =
-      std::move(left) +
-      NodeExpr{IndependentVariable<Forward, Reverse>::make(std::move(right))};
+template <typename T>
+auto operator+=(NodeExpr<T>& left, T right) {
+  left = std::move(left) +
+         NodeExpr{IndependentVariable<T>::make(std::move(right))};
   return left;
 }
 
-template <typename Forward, typename Reverse>
-auto operator-(NodeExpr<Forward, Reverse> left,
-               NodeExpr<Forward, Reverse> right) {
-  return NodeExpr{MinusNode<Forward, Reverse>::make(std::move(left.node),
-                                                    std::move(right.node))};
-}
-
-template <typename Forward, typename Reverse>
-auto operator-(NodeExpr<Forward, Reverse> left, Forward right) {
-  return std::move(left) - NodeExpr{IndependentVariable<Forward, Reverse>::make(
-                               std::move(right))};
-}
-
-template <typename Forward, typename Reverse>
-auto operator-(Forward left, NodeExpr<Forward, Reverse> right) {
+template <typename T>
+auto operator-(NodeExpr<T> left, NodeExpr<T> right) {
   return NodeExpr{
-             IndependentVariable<Forward, Reverse>::make(std::move(left))} -
+      MinusNode<T>::make(std::move(left.node), std::move(right.node))};
+}
+
+template <typename T>
+auto operator-(NodeExpr<T> left, T right) {
+  return std::move(left) -
+         NodeExpr{IndependentVariable<T>::make(std::move(right))};
+}
+
+template <typename T>
+auto operator-(T left, NodeExpr<T> right) {
+  return NodeExpr{IndependentVariable<T>::make(std::move(left))} -
          std::move(right);
 }
 
-template <typename Forward, typename Reverse = Forward>
-auto operator-=(NodeExpr<Forward, Reverse>& left,
-                NodeExpr<Forward, Reverse> right) {
+template <typename T>
+auto operator-=(NodeExpr<T>& left, NodeExpr<T> right) {
   left = std::move(left) - std::move(right);
   return left;
 }
 
-template <typename Forward, typename Reverse = Forward>
-auto operator-=(NodeExpr<Forward, Reverse>& left, Forward right) {
-  left =
-      std::move(left) -
-      NodeExpr{IndependentVariable<Forward, Reverse>::make(std::move(right))};
+template <typename T>
+auto operator-=(NodeExpr<T>& left, T right) {
+  left = std::move(left) -
+         NodeExpr{IndependentVariable<T>::make(std::move(right))};
   return left;
 }
 
-template <typename Forward, typename Reverse>
-auto operator*(NodeExpr<Forward, Reverse> left,
-               NodeExpr<Forward, Reverse> right) {
-  return NodeExpr{MultipliesNode<Forward, Reverse>::make(
-      std::move(left.node), std::move(right.node))};
-}
-
-template <typename Forward, typename Reverse>
-auto operator*(NodeExpr<Forward, Reverse> left, Forward right) {
-  return std::move(left) * NodeExpr{IndependentVariable<Forward, Reverse>::make(
-                               std::move(right))};
-}
-
-template <typename Forward, typename Reverse>
-auto operator*(Forward left, NodeExpr<Forward, Reverse> right) {
+template <typename T>
+auto operator*(NodeExpr<T> left, NodeExpr<T> right) {
   return NodeExpr{
-             IndependentVariable<Forward, Reverse>::make(std::move(left))} *
+      MultipliesNode<T>::make(std::move(left.node), std::move(right.node))};
+}
+
+template <typename T>
+auto operator*(NodeExpr<T> left, T right) {
+  return std::move(left) *
+         NodeExpr{IndependentVariable<T>::make(std::move(right))};
+}
+
+template <typename T>
+auto operator*(T left, NodeExpr<T> right) {
+  return NodeExpr{IndependentVariable<T>::make(std::move(left))} *
          std::move(right);
 }
 
-template <typename Forward, typename Reverse = Forward>
-auto operator*=(NodeExpr<Forward, Reverse>& left,
-                NodeExpr<Forward, Reverse> right) {
+template <typename T>
+auto operator*=(NodeExpr<T>& left, NodeExpr<T> right) {
   left = std::move(left) * std::move(right);
   return left;
 }
 
-template <typename Forward, typename Reverse = Forward>
-auto operator*=(NodeExpr<Forward, Reverse>& left, Forward right) {
-  left =
-      std::move(left) *
-      NodeExpr{IndependentVariable<Forward, Reverse>::make(std::move(right))};
+template <typename T>
+auto operator*=(NodeExpr<T>& left, T right) {
+  left = std::move(left) *
+         NodeExpr{IndependentVariable<T>::make(std::move(right))};
   return left;
 }
 
-template <typename Forward, typename Reverse>
-auto operator/(NodeExpr<Forward, Reverse> left,
-               NodeExpr<Forward, Reverse> right) {
-  return NodeExpr{DividesNode<Forward, Reverse>::make(std::move(left.node),
-                                                      std::move(right.node))};
-}
-
-template <typename Forward, typename Reverse>
-auto operator/(NodeExpr<Forward, Reverse> left, Forward right) {
-  return std::move(left) / NodeExpr{IndependentVariable<Forward, Reverse>::make(
-                               std::move(right))};
-}
-
-template <typename Forward, typename Reverse>
-auto operator/(Forward left, NodeExpr<Forward, Reverse> right) {
+template <typename T>
+auto operator/(NodeExpr<T> left, NodeExpr<T> right) {
   return NodeExpr{
-             IndependentVariable<Forward, Reverse>::make(std::move(left))} /
+      DividesNode<T>::make(std::move(left.node), std::move(right.node))};
+}
+
+template <typename T>
+auto operator/(NodeExpr<T> left, T right) {
+  return std::move(left) /
+         NodeExpr{IndependentVariable<T>::make(std::move(right))};
+}
+
+template <typename T>
+auto operator/(T left, NodeExpr<T> right) {
+  return NodeExpr{IndependentVariable<T>::make(std::move(left))} /
          std::move(right);
 }
 
-template <typename Forward, typename Reverse = Forward>
-auto operator/=(NodeExpr<Forward, Reverse>& left,
-                NodeExpr<Forward, Reverse> right) {
+template <typename T>
+auto operator/=(NodeExpr<T>& left, NodeExpr<T> right) {
   left = std::move(left) / std::move(right);
   return left;
 }
 
-template <typename Forward, typename Reverse = Forward>
-auto operator/=(NodeExpr<Forward, Reverse>& left, Forward right) {
-  left =
-      std::move(left) /
-      NodeExpr{IndependentVariable<Forward, Reverse>::make(std::move(right))};
+template <typename T>
+auto operator/=(NodeExpr<T>& left, T right) {
+  left = std::move(left) /
+         NodeExpr{IndependentVariable<T>::make(std::move(right))};
   return left;
 }
 
-template <typename Forward, typename Reverse>
-auto sqrt(NodeExpr<Forward, Reverse> expr) {
-  return NodeExpr{SqrtNode<Forward, Reverse>::make(std::move(expr.node))};
+template <typename T>
+auto sqrt(NodeExpr<T> expr) {
+  return NodeExpr{SqrtNode<T>::make(std::move(expr.node))};
 }
 
-template <typename Forward, typename Reverse>
-auto pow(NodeExpr<Forward, Reverse> base, NodeExpr<Forward, Reverse> exponent) {
-  return NodeExpr{PowNode<Forward, Reverse>::make(std::move(base.node),
-                                                  std::move(exponent.node))};
+template <typename T>
+auto pow(NodeExpr<T> base, NodeExpr<T> exponent) {
+  return NodeExpr{
+      PowNode<T>::make(std::move(base.node), std::move(exponent.node))};
 }
 
-template <typename Forward, typename Reverse>
-auto pow(NodeExpr<Forward, Reverse> base, Forward exponent) {
+template <typename T>
+auto pow(NodeExpr<T> base, T exponent) {
   return pow(std::move(base),
-             NodeExpr{IndependentVariable<Forward, Reverse>::make(
-                 std::move(exponent))});
+             NodeExpr{IndependentVariable<T>::make(std::move(exponent))});
 }
 
-template <typename Forward, typename Reverse>
-auto pow(Forward base, NodeExpr<Forward, Reverse> exponent) {
-  return pow(
-      NodeExpr{IndependentVariable<Forward, Reverse>::make(std::move(base))},
-      std::move(exponent));
+template <typename T>
+auto pow(T base, NodeExpr<T> exponent) {
+  return pow(NodeExpr{IndependentVariable<T>::make(std::move(base))},
+             std::move(exponent));
 }
 
-template <typename Forward, typename Reverse>
-auto exp(NodeExpr<Forward, Reverse> expr) {
-  return NodeExpr{ExpNode<Forward, Reverse>::make(std::move(expr.node))};
+template <typename T>
+auto exp(NodeExpr<T> expr) {
+  return NodeExpr{ExpNode<T>::make(std::move(expr.node))};
 }
 
-template <typename Forward, typename Reverse>
-auto log(NodeExpr<Forward, Reverse> expr) {
-  return NodeExpr{LogNode<Forward, Reverse>::make(std::move(expr.node))};
+template <typename T>
+auto log(NodeExpr<T> expr) {
+  return NodeExpr{LogNode<T>::make(std::move(expr.node))};
 }
 
-template <typename Forward, typename Reverse>
-auto sin(NodeExpr<Forward, Reverse> expr) {
-  return NodeExpr{SinNode<Forward, Reverse>::make(std::move(expr.node))};
+template <typename T>
+auto sin(NodeExpr<T> expr) {
+  return NodeExpr{SinNode<T>::make(std::move(expr.node))};
 }
 
-template <typename Forward, typename Reverse>
-auto cos(NodeExpr<Forward, Reverse> expr) {
-  return NodeExpr{CosNode<Forward, Reverse>::make(std::move(expr.node))};
+template <typename T>
+auto cos(NodeExpr<T> expr) {
+  return NodeExpr{CosNode<T>::make(std::move(expr.node))};
 }
 
-template <typename Forward, typename Reverse>
-auto tan(NodeExpr<Forward, Reverse> expr) {
-  return NodeExpr{TanNode<Forward, Reverse>::make(std::move(expr.node))};
+template <typename T>
+auto tan(NodeExpr<T> expr) {
+  return NodeExpr{TanNode<T>::make(std::move(expr.node))};
 }
 
 template <typename... Args>
@@ -742,24 +822,22 @@ struct At {
 template <typename... Args>
 At(Args&&... args) -> At<Args...>;
 
-template <typename Forward, typename Reverse, typename... Vars,
-          typename... Args>
+template <typename T, typename... Vars, typename... Args>
   requires(sizeof...(Vars) == sizeof...(Args))
-auto differentiate(NodeExpr<Forward, Reverse> expr, Wrt<Vars...> wrt,
-                   const At<Args...>& at) {
+auto differentiate(NodeExpr<T> expr, Wrt<Vars...> wrt, const At<Args...>& at) {
   // clang-format off
   std::apply([&](auto&... symbol) {
     std::apply([&](auto&... value) {
-      (symbol.bind(&value),
+      (symbol.bind(value),
        ...);
     }, at.values);
   }, wrt.symbols);
-  expr.node->propagate(Reverse{1.});
+  expr.node->propagate(T{1.});
   auto out = std::apply([&](auto&... symbol) {
     return std::tuple{expr.value(), symbol.derivative()...};
   }, wrt.symbols);
   // clang-format on
-  expr.node->clear();
+  expr.node->clearValue();
   return out;
 }
 

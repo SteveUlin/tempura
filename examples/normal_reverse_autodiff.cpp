@@ -6,10 +6,16 @@ using namespace tempura;
 using namespace tempura::autodiff;
 
 auto main() -> int {
-  auto x = Variable{};
-  auto normal = 1.0 / (std::sqrt(2.0 * std::numbers::pi)) * exp(-0.5 * x * x);
+  Variable x{};
+  NodeExpr normal = 1.0 / (std::sqrt(2.0 * std::numbers::pi)) * exp(-0.5 * x * x);
   for (double i = -5; i < 5; i += 0.1) {
-    auto [val, dx] = differentiate(normal, Wrt{x}, At{i});
-    std::print("{}\n", val);
+    x.bind(i);
+    normal.node->propagateNode(IndependentVariable<double>::make(1.0));
+    normal.node->propagate(1.0);
+    // x.derivativeNode()->propagate(1.0);
+    // std::print("{}\n", x.derivative());
+    std::print("{}\n", normal.value());
+    normal.node->clearValue();
+    x.clearDerivative();
   }
 }
