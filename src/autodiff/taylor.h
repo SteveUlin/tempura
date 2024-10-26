@@ -6,7 +6,7 @@
 #include <ostream>
 #include <utility>
 
-namespace tempura {
+namespace tempura::autodiff {
 
 // In a standard Taylor series expansion, you divide by the factorial of the
 // order of the derivative:
@@ -24,7 +24,7 @@ namespace tempura {
 // The general strategy is to create an aux Taylor object to model [f'(g(x))]⁽ⁿ⁾
 // and use that to calculate the nth derivative of the composition.
 //
-// Sometimes we can forgot about the aux Taylor object and just calculate the
+// Sometimes we can forget about the aux Taylor object and just calculate the
 // derivative directly.
 
 template <size_t i, size_t j>
@@ -236,12 +236,12 @@ auto tan(const Taylor<T, N>& taylor) -> Taylor<T, N> {
   return result;
 }
 
-};  // namespace tempura
+};  // namespace tempura::autodiff
 
 namespace std {
 template <typename T, std::size_t N>
-auto operator<<(std::ostream& os,
-                const tempura::Taylor<T, N>& taylor) -> std::ostream& {
+auto operator<<(std::ostream& os, const tempura::autodiff::Taylor<T, N>& taylor)
+    -> std::ostream& {
   os << "Taylor: [";
   for (const auto& value : taylor) {
     os << value << ", ";

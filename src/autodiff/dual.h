@@ -5,7 +5,7 @@
 
 #include "function_traits.h"
 
-namespace tempura {
+namespace tempura::autodiff {
 
 // https://en.wikipedia.org/wiki/Dual_number
 //
@@ -222,12 +222,12 @@ auto atan(Dual<T, G> dual) -> Dual<T, G> {
   return dual;
 }
 
-};  // namespace tempura
+};  // namespace tempura::autodiff
 
 namespace std {
 template <typename T, typename G>
 auto operator<<(std::ostream& os,
-                const tempura::Dual<T, G>& dual) -> std::ostream& {
+                const tempura::autodiff::Dual<T, G>& dual) -> std::ostream& {
   os << dual.value << " + " << dual.gradient << "ε";
   return os;
 }

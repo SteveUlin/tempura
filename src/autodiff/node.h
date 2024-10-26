@@ -564,9 +564,7 @@ class DependantVariable : public Node<T> {
 
   auto derivativeNode() { return reverse_node_; }
 
-  void clearValue() override {
-    value_ = std::nullopt;
-  }
+  void clearValue() override { value_ = std::nullopt; }
 
   void clearDerivative() {
     reverse_ = std::nullopt;
@@ -616,8 +614,9 @@ template <typename T = double>
 struct Variable : public NodeExpr<T> {
   Variable() : NodeExpr<T>{DependantVariable<T>::make()} {}
 
-  auto bind(T value) -> void {
-    std::static_pointer_cast<DependantVariable<T>>(this->node)->bind(value);
+  auto bind(auto&& value) -> void {
+    std::static_pointer_cast<DependantVariable<T>>(this->node)
+        ->bind(std::forward<decltype(value)>(value));
   }
 
   auto derivative() const -> const T& {
@@ -633,6 +632,31 @@ struct Variable : public NodeExpr<T> {
   void clearDerivative() {
     std::static_pointer_cast<DependantVariable<T>>(this->node)
         ->clearDerivative();
+  }
+
+  void clearValue() {
+    std::static_pointer_cast<DependantVariable<T>>(this->node)->clearValue();
+  }
+
+  class Binder {
+   public:
+    Binder(Variable<T>& parent, auto&& value) : parent_{&parent} {
+      parent_->bind(std::forward<decltype(value)>(value));
+    }
+
+    ~Binder() {
+      parent_->clearDerivative();
+      parent_->clearValue();
+    }
+
+    auto parent() -> Variable<T>* { return parent_; }
+
+   private:
+    Variable<T>* parent_;
+  };
+
+  auto operator=(auto&& value) -> Binder {
+    return Binder{*this, std::forward<decltype(value)>(value)};
   }
 };
 
@@ -808,34 +832,10 @@ auto tan(NodeExpr<T> expr) {
   return NodeExpr{TanNode<T>::make(std::move(expr.node))};
 }
 
-template <typename... Args>
-struct Wrt {
-  Wrt(Args... args) : symbols{args...} {}
-  std::tuple<Args...> symbols;
-};
-
-template <typename... Args>
-struct At {
-  At(Args&&... args) : values(std::forward<Args>(args)...) {}
-  std::tuple<Args...> values;
-};
-template <typename... Args>
-At(Args&&... args) -> At<Args...>;
-
-template <typename T, typename... Vars, typename... Args>
-  requires(sizeof...(Vars) == sizeof...(Args))
-auto differentiate(NodeExpr<T> expr, Wrt<Vars...> wrt, const At<Args...>& at) {
-  // clang-format off
-  std::apply([&](auto&... symbol) {
-    std::apply([&](auto&... value) {
-      (symbol.bind(value),
-       ...);
-    }, at.values);
-  }, wrt.symbols);
+template <typename T>
+auto differentiate(NodeExpr<T> expr, auto... binder) {
   expr.node->propagate(T{1.});
-  auto out = std::apply([&](auto&... symbol) {
-    return std::tuple{expr.value(), symbol.derivative()...};
-  }, wrt.symbols);
+  auto out = std::tuple{expr.value(), binder.parent()->derivative()...};
   // clang-format on
   expr.node->clearValue();
   return out;

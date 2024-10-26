@@ -1,11 +1,9 @@
 #include "autodiff/node.h"
 
-#include <iostream>
-
 #include "unit.h"
 
 using namespace tempura;
-using namespace autodiff;
+using namespace tempura::autodiff;
 
 auto main() -> int {
   "Addition"_test = [] {
@@ -13,7 +11,7 @@ auto main() -> int {
       Variable x;
       Variable y;
       auto z = x + y;
-      const auto [val, dx, dy] = differentiate(z, Wrt{x, y}, At{1., 2.});
+      const auto [val, dx, dy] = differentiate(z, x = 1., y = 2.);
       expectNear(3., val);
       expectNear(1., dx);
       expectNear(1., dy);
@@ -23,7 +21,7 @@ auto main() -> int {
       Variable y;
       NodeExpr z = x;
       z += y;
-      const auto [val, dx, dy] = differentiate(z, Wrt{x, y}, At{1., 2.});
+      const auto [val, dx, dy] = differentiate(z, x = 1., y = 2.);
       expectNear(3., val);
       expectNear(1., dx);
       expectNear(1., dy);
@@ -34,14 +32,14 @@ auto main() -> int {
     {
       Variable x;
       auto z = x + 1.;
-      const auto [val, dx] = differentiate(z, Wrt{x}, At{1.});
+      const auto [val, dx] = differentiate(z, x = 1.);
       expectNear(2., val);
       expectNear(1., dx);
     }
     {
       Variable x;
       auto z = 1. + x;
-      const auto [val, dx] = differentiate(z, Wrt{x}, At{1.});
+      const auto [val, dx] = differentiate(z, x = 1.);
       expectNear(2., val);
       expectNear(1., dx);
     }
@@ -49,7 +47,7 @@ auto main() -> int {
       Variable x;
       NodeExpr z = x;
       z += 1.;
-      const auto [val, dx] = differentiate(z, Wrt{x}, At{1.});
+      const auto [val, dx] = differentiate(z, x = 1.);
       expectNear(2., val);
       expectNear(1., dx);
     }
@@ -60,7 +58,7 @@ auto main() -> int {
       Variable x;
       Variable y;
       auto z = x - y;
-      const auto [val, dx, dy] = differentiate(z, Wrt{x, y}, At{1., 2.});
+      const auto [val, dx, dy] = differentiate(z, x = 1., y = 2);
       expectNear(-1., val);
       expectNear(1., dx);
       expectNear(-1., dy);
@@ -70,7 +68,7 @@ auto main() -> int {
       Variable y;
       NodeExpr z = x;
       z -= y;
-      const auto [val, dx, dy] = differentiate(z, Wrt{x, y}, At{1., 2.});
+      const auto [val, dx, dy] = differentiate(z, x = 1., y = 2.);
       expectNear(-1., val);
       expectNear(1., dx);
       expectNear(-1., dy);
@@ -81,14 +79,14 @@ auto main() -> int {
     {
       Variable x;
       auto z = x - 1.;
-      const auto [val, dx] = differentiate(z, Wrt{x}, At{1.});
+      const auto [val, dx] = differentiate(z, x = 1.);
       expectNear(0., val);
       expectNear(1., dx);
     }
     {
       Variable x;
       auto z = 1. - x;
-      const auto [val, dx] = differentiate(z, Wrt{x}, At{1.});
+      const auto [val, dx] = differentiate(z, x = 1.);
       expectNear(0., val);
       expectNear(-1., dx);
     }
@@ -96,7 +94,7 @@ auto main() -> int {
       Variable x;
       NodeExpr z = x;
       z -= 1.;
-      const auto [val, dx] = differentiate(z, Wrt{x}, At{1.});
+      const auto [val, dx] = differentiate(z, x = 1.);
       expectNear(0., val);
       expectNear(1., dx);
     }
@@ -107,7 +105,7 @@ auto main() -> int {
       Variable x;
       Variable y;
       auto z = x * y;
-      const auto [val, dx, dy] = differentiate(z, Wrt{x, y}, At{2., 3.});
+      const auto [val, dx, dy] = differentiate(z, x = 2., y = 3.);
       expectNear(6., val);
       expectNear(3., dx);
       expectNear(2., dy);
@@ -117,7 +115,7 @@ auto main() -> int {
       Variable y;
       NodeExpr z = x;
       z *= y;
-      const auto [val, dx, dy] = differentiate(z, Wrt{x, y}, At{2., 3.});
+      const auto [val, dx, dy] = differentiate(z, x = 2., y = 3.);
       expectNear(6., val);
       expectNear(3., dx);
       expectNear(2., dy);
@@ -128,14 +126,14 @@ auto main() -> int {
     {
       Variable x;
       auto z = x * 2.;
-      const auto [val, dx] = differentiate(z, Wrt{x}, At{2.});
+      const auto [val, dx] = differentiate(z, x =  2.);
       expectNear(4., val);
       expectNear(2., dx);
     }
     {
       Variable x;
       auto z = 2. * x;
-      const auto [val, dx] = differentiate(z, Wrt{x}, At{2.});
+      const auto [val, dx] = differentiate(z, x = 2.);
       expectNear(4., val);
       expectNear(2., dx);
     }
@@ -143,7 +141,7 @@ auto main() -> int {
       Variable x;
       NodeExpr z = x;
       z *= 2.;
-      const auto [val, dx] = differentiate(z, Wrt{x}, At{2.});
+      const auto [val, dx] = differentiate(z, x = 2.);
       expectNear(4., val);
       expectNear(2., dx);
     }
@@ -154,7 +152,7 @@ auto main() -> int {
       Variable x;
       Variable y;
       auto z = x / y;
-      const auto [val, dx, dy] = differentiate(z, Wrt{x, y}, At{1., 2.});
+      const auto [val, dx, dy] = differentiate(z, x = 1., y = 2.);
       expectNear(0.5, val);
       expectNear(0.5, dx);
       expectNear(-0.25, dy);
@@ -164,7 +162,7 @@ auto main() -> int {
       Variable y;
       NodeExpr z = x;
       z /= y;
-      const auto [val, dx, dy] = differentiate(z, Wrt{x, y}, At{1., 2.});
+      const auto [val, dx, dy] = differentiate(z, x = 1., y = 2.);
       expectNear(0.5, val);
       expectNear(0.5, dx);
       expectNear(-0.25, dy);
@@ -175,14 +173,14 @@ auto main() -> int {
     {
       Variable x;
       auto z = x / 2.;
-      const auto [val, dx] = differentiate(z, Wrt{x}, At{2.});
+      const auto [val, dx] = differentiate(z, x = 2.);
       expectNear(1., val);
       expectNear(0.5, dx);
     }
     {
       Variable x;
       auto z = 2. / x;
-      const auto [val, dx] = differentiate(z, Wrt{x}, At{2.});
+      const auto [val, dx] = differentiate(z, x = 2.);
       expectNear(1., val);
       expectNear(-0.5, dx);
     }
@@ -190,7 +188,7 @@ auto main() -> int {
       Variable x;
       NodeExpr z = x;
       z /= 2.;
-      const auto [val, dx] = differentiate(z, Wrt{x}, At{2.});
+      const auto [val, dx] = differentiate(z, x = 2.);
       expectNear(1., val);
       expectNear(0.5, dx);
     }
@@ -199,7 +197,7 @@ auto main() -> int {
   "Sqrt"_test = [] {
     Variable x;
     auto z = sqrt(x);
-    const auto [val, dx] = differentiate(z, Wrt{x}, At{4.});
+    const auto [val, dx] = differentiate(z, x = 4.);
     expectNear(2., val);
     expectNear(0.25, dx);
   };
@@ -208,7 +206,7 @@ auto main() -> int {
     Variable x;
     Variable y;
     auto z = pow(x, y);
-    const auto [val, dx, dy] = differentiate(z, Wrt{x, y}, At{2., 3.});
+    const auto [val, dx, dy] = differentiate(z, x = 2., y = 3.);
     expectNear(8., val);
     expectNear(12., dx);
     expectNear(8. * std::log(2.), dy);
@@ -218,14 +216,14 @@ auto main() -> int {
     {
       Variable x;
       auto z = pow(x, 3.);
-      const auto [val, dx] = differentiate(z, Wrt{x}, At{2.});
+      const auto [val, dx] = differentiate(z, x = 2.);
       expectNear(8., val);
       expectNear(12., dx);
     }
     {
       Variable x;
       auto z = pow(2., x);
-      const auto [val, dx] = differentiate(z, Wrt{x}, At{3.});
+      const auto [val, dx] = differentiate(z, x = 3.);
       expectNear(8., val);
       expectNear(8. * std::log(2.), dx);
     }
@@ -234,7 +232,7 @@ auto main() -> int {
   "Exp"_test = [] {
     Variable x;
     auto z = exp(x);
-    const auto [val, dx] = differentiate(z, Wrt{x}, At{1.});
+    const auto [val, dx] = differentiate(z, x = 1.);
     expectNear(std::numbers::e, val);
     expectNear(std::numbers::e, dx);
   };
@@ -242,7 +240,7 @@ auto main() -> int {
   "Log"_test = [] {
     Variable x;
     auto z = log(x);
-    const auto [val, dx] = differentiate(z, Wrt{x}, At{std::numbers::e});
+    const auto [val, dx] = differentiate(z, x = std::numbers::e);
     expectNear(1., val);
     expectNear(1. / std::numbers::e, dx);
   };
@@ -250,7 +248,7 @@ auto main() -> int {
   "Sin"_test = [] {
     Variable x;
     auto z = sin(x);
-    const auto [val, dx] = differentiate(z, Wrt{x}, At{std::numbers::pi / 2.});
+    const auto [val, dx] = differentiate(z, x = std::numbers::pi / 2.);
     expectNear(1., val);
     expectNear(0., dx);
   };
@@ -258,7 +256,7 @@ auto main() -> int {
   "Cos"_test = [] {
     Variable x;
     auto z = cos(x);
-    const auto [val, dx] = differentiate(z, Wrt{x}, At{0.});
+    const auto [val, dx] = differentiate(z, x = 0.);
     expectNear(1., val);
     expectNear(0., dx);
   };
@@ -266,7 +264,7 @@ auto main() -> int {
   "Tan"_test = [] {
     Variable x;
     auto z = tan(x);
-    const auto [val, dx] = differentiate(z, Wrt{x}, At{0.});
+    const auto [val, dx] = differentiate(z, x = 0.);
     expectNear(0., val);
     expectNear(1., dx);
   };

@@ -4,6 +4,7 @@
 #include "unit.h"
 
 using namespace tempura;
+using namespace tempura::autodiff;
 
 template <double delta = 0.0001>
 auto expectApproxEq(const Dual<double>& lhs, const Dual<double>& rhs,
