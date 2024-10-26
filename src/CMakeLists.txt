@@ -6,6 +6,10 @@ add_subdirectory(bayes)
 
 add_library(benchmark INTERFACE benchmark.h)
 
+add_library(broadcast_array INTERFACE broadcast_array.h)
+add_executable(broadcast_array_test broadcast_array_test.cpp)
+target_link_libraries(broadcast_array_test broadcast_array unit)
+
 add_library(profiler SHARED)
 target_sources(profiler PUBLIC profiler.h profiler.cpp)
 

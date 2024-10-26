@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <iostream>
+#include <ranges>
 #include <source_location>
 #include <string_view>
 
@@ -65,7 +66,8 @@ class Test {
  private:
   constexpr Test(std::string_view name) : name_(name) {}
 
-  friend constexpr auto operator""_test(const char*, std::size_t) -> Test;
+  friend constexpr auto operator""_test(const char* /*name*/,
+                                        std::size_t /*size*/) -> Test;
 
   std::string_view name_;
 };
@@ -119,8 +121,38 @@ auto expectTrue(const auto& arg, const std::source_location location =
   return false;
 }
 
+auto expectLessThan(const auto& lhs, const auto& rhs,
+                    const std::source_location location =
+                        std::source_location::current()) -> bool {
+  if (lhs <= rhs) {
+    return true;
+  }
+  std::cerr << "Error at" << location.file_name() << ":" << location.line()
+            << std::endl;
+  if constexpr (Ostreamable<decltype(lhs)> and Ostreamable<decltype(rhs)>) {
+    std::cerr << "Expected: " << lhs << " less than: " << rhs << std::endl;
+  }
+  TestRegistry::setFailure();
+  return false;
+}
+
+auto expectGreaterThan(const auto& lhs, const auto& rhs,
+                       const std::source_location location =
+                           std::source_location::current()) -> bool {
+  if (lhs >= rhs) {
+    return true;
+  }
+  std::cerr << "Error at" << location.file_name() << ":" << location.line()
+            << std::endl;
+  if constexpr (Ostreamable<decltype(lhs)> and Ostreamable<decltype(rhs)>) {
+    std::cerr << "Expected: " << lhs << " greater than: " << rhs << std::endl;
+  }
+  TestRegistry::setFailure();
+  return false;
+}
+
 template <double delta = 0.0001>
-auto expectNear(const auto& lhs, const auto& rhs,
+constexpr auto expectNear(const auto& lhs, const auto& rhs,
                 const std::source_location location =
                     std::source_location::current()) -> bool {
   if (std::abs(lhs - rhs) < delta) {
@@ -136,51 +168,52 @@ auto expectNear(const auto& lhs, const auto& rhs,
   return false;
 }
 
-auto expectLessThan(const auto& lhs, const auto& rhs,
-              const std::source_location location =
-                  std::source_location::current()) -> bool {
-  if (lhs <= rhs) {
-    return true;
-  }
-  std::cerr << "Error at" << location.file_name() << ":" << location.line()
-            << std::endl;
-  if constexpr (Ostreamable<decltype(lhs)> and Ostreamable<decltype(rhs)>) {
-    std::cerr << "Expected: " << lhs << " less than: " << rhs << std::endl;
-  }
-  TestRegistry::setFailure();
-  return false;
-}
-
-auto expectGreaterThan(const auto& lhs, const auto& rhs,
-              const std::source_location location =
-                  std::source_location::current()) -> bool {
-  if (lhs >= rhs) {
-    return true;
-  }
-  std::cerr << "Error at" << location.file_name() << ":" << location.line()
-            << std::endl;
-  if constexpr (Ostreamable<decltype(lhs)> and Ostreamable<decltype(rhs)>) {
-    std::cerr << "Expected: " << lhs << " greater than: " << rhs << std::endl;
-  }
-  TestRegistry::setFailure();
-  return false;
+template <double delta = 0.0001>
+[[deprecated]] auto expectApproxEq(
+    const auto& lhs, const auto& rhs,
+    const std::source_location location = std::source_location::current())
+    -> bool {
+  return expectNear<delta>(lhs, rhs, location);
 }
 
 template <double delta = 0.0001>
-auto expectApproxEq(const auto& lhs, const auto& rhs,
-                    const std::source_location location =
-                        std::source_location::current()) -> bool {
-  if (std::abs(lhs - rhs) < delta) {
-    return true;
+constexpr auto expectRangeNear(std::ranges::input_range auto&& lhs,
+                     std::ranges::input_range auto&& rhs,
+                     const std::source_location location =
+                         std::source_location::current()) -> bool {
+  for (auto [l, r, idx] : std::views::zip(lhs, rhs, std::views::iota(0))) {
+    if (std::abs(l - r) > delta) {
+      std::print(std::cerr, "Error at {}:{}\n", location.file_name(),
+                 location.line());
+      std::print(std::cerr, "\tError at index {} of range\n", idx);
+      if constexpr (Ostreamable<decltype(l)> and Ostreamable<decltype(r)>) {
+        std::print(std::cerr, "\tExpected Near ±({}): {} got: {}\n", delta, l,
+                   r);
+      }
+      TestRegistry::setFailure();
+      return false;
+    }
   }
-  std::cerr << "Error at" << location.file_name() << ":" << location.line()
-            << std::endl;
-  if constexpr (Ostreamable<decltype(lhs)> and Ostreamable<decltype(rhs)>) {
-    std::cerr << "Expected Approximate Equal ±(" << delta << "): " << lhs
-              << " got: " << rhs << std::endl;
+  return true;
+}
+constexpr auto expectRangeEq(std::ranges::input_range auto&& lhs,
+                   std::ranges::input_range auto&& rhs,
+                   const std::source_location location =
+                       std::source_location::current()) -> bool {
+  for (auto [l, r, idx] : std::views::zip(lhs, rhs, std::views::iota(0))) {
+    if (l != r) {
+      std::print(std::cerr, "Error at {}:{}\n", location.file_name(),
+                 location.line());
+      std::print(std::cerr, "\tError at index {} of range\n", idx);
+      if constexpr (Ostreamable<decltype(l)> and Ostreamable<decltype(r)>) {
+        std::print(std::cerr, "\tExpected Equal: {} got: {}\n", l, r);
+      }
+      TestRegistry::setFailure();
+      return false;
+    }
   }
-  TestRegistry::setFailure();
   return false;
 }
+
 
 }  // namespace tempura

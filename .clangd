@@ -23,6 +23,8 @@ Diagnostics:
 
 CompileFlags:
   CompilationDatabase: build/
+  Add:
+    - -std=c++2c
 Diagnostics:
   ClangTidy:
     Add: 
