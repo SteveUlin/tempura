@@ -47,6 +47,16 @@ class BroadcastArray {
   std::array<T, N> data_;
 };
 
+template <size_t I, typename T, size_t N>
+auto get(BroadcastArray<T, N>& array) -> T& {
+  return array[I];
+}
+
+template <size_t I, typename T, size_t N>
+auto get(const BroadcastArray<T, N>& array) -> const T& {
+  return array[I];
+}
+
 // deduction guide
 template <typename... Args>
 BroadcastArray(Args&&...)
@@ -189,8 +199,8 @@ template <typename T, typename U, size_t N>
 constexpr auto operator*(const BroadcastArray<T, N>& left, const U& right) {
   using V = decltype(std::declval<T>() * std::declval<U>());
   BroadcastArray<V, N> result;
-  for (auto [l, res] : std::views::zip(left, result)) {
-    res = l * right;
+  for (int i = 0; i < N; ++i) {
+    result[i] = left[i] * right;
   }
   return result;
 }
@@ -266,6 +276,37 @@ constexpr auto operator-(const BroadcastArray<T, N>& array) {
 template <typename T, size_t N>
 constexpr auto operator+(const BroadcastArray<T, N>& array) {
   return array;
+}
+
+template <typename T, typename U, size_t N>
+constexpr auto pow(const BroadcastArray<T, N>& base,
+                   const BroadcastArray<U, N>& exponent) {
+  BroadcastArray<T, N> result;
+  for (auto [b, e, res] : std::views::zip(base, exponent, result)) {
+    using std::pow;
+    res = pow(b, e);
+  }
+  return result;
+}
+
+template <typename T, typename U, size_t N>
+constexpr auto pow(const BroadcastArray<T, N>& base, const U& exponent) {
+  BroadcastArray<T, N> result;
+  for (auto [b, res] : std::views::zip(base, result)) {
+    using std::pow;
+    res = pow(b, exponent);
+  }
+  return result;
+}
+
+template <typename T, typename U, size_t N>
+constexpr auto pow(const T& base, const BroadcastArray<U, N>& exponent) {
+  BroadcastArray<T, N> result;
+  for (auto [e, res] : std::views::zip(exponent, result)) {
+    using std::pow;
+    res = pow(base, e);
+  }
+  return result;
 }
 
 template <typename T, size_t N>

@@ -18,15 +18,23 @@ namespace tempura::autodiff {
 // and its derivative at the same time. Sometimes called the forward
 // differentiation.
 
-// TODO: Support objects where the derivative is not the same type as
-// the value.
 template <typename T, typename G = T>
 struct Dual {
+  Dual() = default;
+  Dual(const auto& value) : value(value), gradient(0) {}
+  Dual(const auto& value, const G& gradient)
+      : value(value), gradient(gradient) {}
+
   T value;
   G gradient;
 
   auto operator<=>(const Dual<T, G>&) const = default;
 };
+template <typename T>
+Dual(T) -> Dual<T>;
+
+template <typename T, typename G>
+Dual(T, G) -> Dual<T, G>;
 
 template <typename T>
 struct IsDual : std::false_type {};
@@ -55,12 +63,12 @@ auto evalWrt(const F& func, Inputs&&... inputs) {
   }(std::make_index_sequence<sizeof...(Inputs)>{});
 }
 
-template <typename F, typename... Inputs>
-auto jacobian(const F& func, Inputs&&... inputs) {
-  return [&]<size_t... I>(std::index_sequence<I...> /*unused*/) {
-    return std::array{evalWrt<I>(func, inputs...)...};
-  }(std::make_index_sequence<sizeof...(Inputs)>{});
-}
+// template <typename F, typename... Inputs>
+// auto jacobian(const F& func, Inputs&&... inputs) {
+//   return [&]<size_t... I>(std::index_sequence<I...> /*unused*/) {
+//     return std::array{evalWrt<I>(func, inputs...)...};
+//   }(std::make_index_sequence<sizeof...(Inputs)>{});
+// }
 
 // -- Relational Operators --
 
@@ -102,6 +110,16 @@ constexpr auto operator-(Dual<T, G> lhs, const Dual<T, G>& rhs) -> Dual<T, G> {
   return lhs;
 }
 
+template <typename T, typename G, typename U>
+constexpr auto operator-(const Dual<T, G>& lhs, const U& rhs) {
+  return lhs - Dual<U, G>{rhs};
+}
+
+template <typename T, typename G, typename U, typename H>
+constexpr auto operator-(const Dual<T, G>& lhs, const Dual<U, H>& rhs) {
+  return Dual{lhs.value - rhs.value, lhs.gradient - rhs.gradient};
+}
+
 template <typename T, typename G>
 constexpr auto operator-(Dual<T, G> dual) -> Dual<T, G> {
   dual.gradient = -dual.gradient;
@@ -115,6 +133,11 @@ constexpr auto operator*=(Dual<T, G>& lhs,
   lhs.gradient = lhs.gradient * rhs.value + lhs.value * rhs.gradient;
   lhs.value *= rhs.value;
   return lhs;
+}
+
+template <typename T, typename U, typename G>
+constexpr auto operator*(T lhs, const Dual<U, G>& rhs) -> Dual<T, G> {
+  return Dual{lhs * rhs.value, lhs * rhs.gradient};
 }
 
 template <typename T, typename G>
@@ -142,39 +165,45 @@ constexpr auto operator/(Dual<T, G> lhs, const Dual<T, G>& rhs) -> Dual<T, G> {
 
 template <typename T, typename G>
 auto sqrt(Dual<T, G> dual) -> Dual<T, G> {
-  dual.gradient /= 2 * std::sqrt(dual.value);
-  dual.value = std::sqrt(dual.value);
+  using std::sqrt;
+  dual.gradient /= 2 * sqrt(dual.value);
+  dual.value = sqrt(dual.value);
   return dual;
 }
 
 template <typename T, typename G>
 auto exp(Dual<T, G> dual) -> Dual<T, G> {
-  dual.gradient *= std::exp(dual.value);
-  dual.value = std::exp(dual.value);
+  using std::exp;
+  dual.gradient *= exp(dual.value);
+  dual.value = exp(dual.value);
   return dual;
 }
 
 template <typename T, typename G>
 auto log(Dual<T, G> dual) -> Dual<T, G> {
+  using std::log;
   dual.gradient /= dual.value;
-  dual.value = std::log(dual.value);
+  dual.value = log(dual.value);
   return dual;
 }
 
 template <typename T, typename G>
 auto pow(Dual<T, G> dual, const T& exponent) -> Dual<T, G> {
-  dual.gradient *= exponent * std::pow(dual.value, exponent - 1);
-  dual.value = std::pow(dual.value, exponent);
+  using std::pow;
+  dual.gradient *= exponent * pow(dual.value, exponent - 1);
+  dual.value = pow(dual.value, exponent);
   return dual;
 }
 
 template <typename T, typename G>
 auto pow(Dual<T, G> dual, const Dual<T, G>& exponent) -> Dual<T, G> {
   // https://math.stackexchange.com/questions/1914591/dual-number-ab-varepsilon-raised-to-a-dual-power-e-g-ab-varepsilon
+  using std::log;
+  using std::pow;
   const auto& [a, b] = dual;
   const auto& [c, d] = exponent;
-  dual.gradient = c * std::pow(a, c - 1) * b + std::log(a) * std::pow(a, c) * d;
-  dual.value = std::pow(a, c);
+  dual.gradient = c * pow(a, c - 1) * b + log(a) * pow(a, c) * d;
+  dual.value = pow(a, c);
   return dual;
 }
 
@@ -182,43 +211,54 @@ auto pow(Dual<T, G> dual, const Dual<T, G>& exponent) -> Dual<T, G> {
 
 template <typename T, typename G>
 auto sin(Dual<T, G> dual) -> Dual<T, G> {
-  dual.gradient *= std::cos(dual.value);
-  dual.value = std::sin(dual.value);
+  using std::cos;
+  using std::sin;
+  dual.gradient *= cos(dual.value);
+  dual.value = sin(dual.value);
   return dual;
 }
 
 template <typename T, typename G>
 auto cos(Dual<T, G> dual) -> Dual<T, G> {
-  dual.gradient *= -std::sin(dual.value);
-  dual.value = std::cos(dual.value);
+  using std::cos;
+  using std::sin;
+  dual.gradient *= -sin(dual.value);
+  dual.value = cos(dual.value);
   return dual;
 }
 
 template <typename T, typename G>
 auto tan(Dual<T, G> dual) -> Dual<T, G> {
-  dual.gradient *= 1 / (std::cos(dual.value) * std::cos(dual.value));
-  dual.value = std::tan(dual.value);
+  using std::cos;
+  using std::tan;
+  dual.gradient *= 1 / (cos(dual.value) * cos(dual.value));
+  dual.value = tan(dual.value);
   return dual;
 }
 
 template <typename T, typename G>
 auto asin(Dual<T, G> dual) -> Dual<T, G> {
-  dual.gradient *= 1 / std::sqrt(1 - dual.value * dual.value);
-  dual.value = std::asin(dual.value);
+  using std::asin;
+  using std::sqrt;
+  dual.gradient *= 1 / sqrt(1 - dual.value * dual.value);
+  dual.value = asin(dual.value);
   return dual;
 }
 
 template <typename T, typename G>
 auto acos(Dual<T, G> dual) -> Dual<T, G> {
-  dual.gradient *= -1 / std::sqrt(1 - dual.value * dual.value);
-  dual.value = std::acos(dual.value);
+  using std::acos;
+  using std::sqrt;
+  dual.gradient *= -1 / sqrt(1 - dual.value * dual.value);
+  dual.value = acos(dual.value);
   return dual;
 }
 
 template <typename T, typename G>
 auto atan(Dual<T, G> dual) -> Dual<T, G> {
+  using std::atan;
   dual.gradient *= 1 / (1 + dual.value * dual.value);
-  dual.value = std::atan(dual.value);
+  dual.value = atan(dual.value);
   return dual;
 }
 

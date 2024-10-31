@@ -20,6 +20,7 @@ class Node {
 
   virtual void propagateNode(std::shared_ptr<Node> node) = 0;
 };
+
 template <typename T>
 class IndependentVariable : public Node<T> {
  public:
@@ -355,6 +356,7 @@ class PowNode : public Node<T> {
 
   void propagate(const T& derivative) override {
     using std::pow;
+    using std::log;
     base_->propagate(derivative * exponent_->value() *
                      pow(base_->value(), exponent_->value() - 1));
     if (base_->value() == T{0}) {
@@ -362,7 +364,7 @@ class PowNode : public Node<T> {
       return;
     }
     exponent_->propagate(derivative * pow(base_->value(), exponent_->value()) *
-                         std::log(base_->value()));
+                         log(base_->value()));
   }
 
   void propagateNode(std::shared_ptr<Node<T>> node) override {
@@ -598,6 +600,7 @@ class DependantVariable : public Node<T> {
 
 template <typename T>
 struct NodeExpr {
+  NodeExpr() : node{IndependentVariable<T>::make(T{0.})} {}
   explicit NodeExpr(std::shared_ptr<Node<T>> arg) : node{std::move(arg)} {}
 
   virtual ~NodeExpr() = default;
@@ -795,10 +798,10 @@ auto pow(NodeExpr<T> base, NodeExpr<T> exponent) {
       PowNode<T>::make(std::move(base.node), std::move(exponent.node))};
 }
 
-template <typename T>
-auto pow(NodeExpr<T> base, T exponent) {
+template <typename T, typename U>
+auto pow(NodeExpr<T> base, U exponent) {
   return pow(std::move(base),
-             NodeExpr{IndependentVariable<T>::make(std::move(exponent))});
+             NodeExpr{IndependentVariable<T>::make(T{exponent})});
 }
 
 template <typename T>

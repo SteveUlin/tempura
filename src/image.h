@@ -2,7 +2,6 @@
 
 #include <cstdint>
 #include <ranges>
-#include <vector>
 
 namespace tempura {
 

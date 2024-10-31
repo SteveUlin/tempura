@@ -29,3 +29,8 @@ add_library(image INTERFACE image.h)
 add_executable(image_test image_test.cpp)
 target_link_libraries(image_test image unit)
 
+add_library(json INTERFACE json.h)
+add_executable(json_test json_test.cpp)
+target_link_libraries(json_test json unit)
+
+

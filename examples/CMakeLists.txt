@@ -1,5 +1,7 @@
 add_executable(hello_world_main hello_world.cpp)
 
+add_executable(hessian_main hessian.cpp)
+
 add_executable(profile_main profile.cpp)
 target_link_libraries(profile_main PRIVATE profiler)
 

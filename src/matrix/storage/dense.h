@@ -54,7 +54,7 @@ class Dense final : public Matrix<extent> {
     int64_t i = 1;
     (
         [this, &rows, &i]() {
-          for (int64_t j = 0; j < shape_.row; ++j) {
+          for (int64_t j = 0; j < Sizes; ++j) {
             (*this)[i, j] = rows[j];
           }
           ++i;
