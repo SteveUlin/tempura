@@ -71,11 +71,16 @@ auto toString(const JsonValue& obj, size_t indentLevel = 0) -> std::string {
               return "[]";
             }
             std::string output = "[\n";
+            bool first = true;
             for (const auto& element : curr) {
-              output += std::format("  {}{},\n", indent,
+              if (!first) {
+                output += ",\n";
+              }
+              first = false;
+              output += std::format("  {}{}", indent,
                                     toString(element, indentLevel + 1));
             }
-            output += std::format("{}]", indent);
+            output += std::format("\n{}]", indent);
             return output;
           },
 
@@ -84,12 +89,17 @@ auto toString(const JsonValue& obj, size_t indentLevel = 0) -> std::string {
               return "{}";
             }
             std::string output = "{\n";
+            bool first = true;
             for (const auto& [key, value] : curr) {
+              if (!first) {
+                output += ",\n";
+              }
+              first = false;
               output +=
-                  std::format("  {}\"{}\" : {},\n", indent, escapeJson(key),
+                  std::format("  {}\"{}\" : {}", indent, escapeJson(key),
                               toString(value, indentLevel + 1));
             }
-            output += std::format("{}}}", indent);
+            output += std::format("\n{}}}", indent);
             return output;
           }},
       obj);

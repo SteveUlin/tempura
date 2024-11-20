@@ -24,8 +24,6 @@ void check(bool condition, std::string_view message,
 inline static constexpr auto kDynamic = std::numeric_limits<int64_t>::max();
 
 struct RowCol {
-  // Fit a RowCol into a 64-bit integer for efficient indexing
-  //
   // Use signed integers so users can express negative deltas
   int64_t row;
   int64_t col;
@@ -73,7 +71,7 @@ constexpr auto matchExtent(RowCol lhs, RowCol rhs) -> bool {
   return match_row and match_col;
 }
 
-enum class IndexOrder {
+enum class IndexOrder : std::uint8_t {
   kNone,
   kRowMajor,
   kColMajor,
@@ -82,7 +80,7 @@ constexpr auto kNone = IndexOrder::kNone;
 constexpr auto kRowMajor = IndexOrder::kRowMajor;
 constexpr auto kColMajor = IndexOrder::kColMajor;
 
-enum class Pivoting {
+enum class Pivoting : std::uint8_t {
   None,
   Partial
   // Full
@@ -109,12 +107,12 @@ class Cols;
 template <RowCol extent>
 class Matrix {
  public:
-  inline static constexpr RowCol kExtent = extent;
+  static constexpr RowCol kExtent = extent;
 
   auto shape(this auto&& self) -> RowCol { return self.shapeImpl(); }
 
-  inline auto operator[](this auto&& self, int64_t row,
-                         int64_t col) -> decltype(auto) {
+  auto operator[](this auto&& self, int64_t row, int64_t col)
+      -> decltype(auto) {
     return self.getImpl(row, col);
   }
 
@@ -201,7 +199,8 @@ class Slice : public Matrix<extent> {
   template <typename ParentIter>
   class Iterator {
    public:
-    Iterator(const Slice& slice, ParentIter iter) : slice_{slice}, iter_{iter} {}
+    Iterator(const Slice& slice, ParentIter iter)
+        : slice_{slice}, iter_{iter} {}
 
     auto operator*() -> decltype(auto) { return *iter_; }
 
@@ -216,7 +215,9 @@ class Slice : public Matrix<extent> {
       return *this;
     }
 
-    auto location() const -> RowCol { return iter_.location() - slice_.offset(); }
+    auto location() const -> RowCol {
+      return iter_.location() - slice_.offset();
+    }
     auto operator!=(const Iterator& other) { return iter_ != other.iter_; }
     auto operator!=(Sentinel /*unused*/) {
       if constexpr (Slice::kExtent.row != 1) {
@@ -233,13 +234,17 @@ class Slice : public Matrix<extent> {
   template <typename ParentIter>
   Iterator(const Slice& slice, ParentIter iter) -> Iterator<ParentIter>;
 
-  auto beginImpl(this auto&& self) { return Iterator{self, self.parent_.begin().update(self.offset_)}; }
+  auto beginImpl(this auto&& self) {
+    return Iterator{self, self.parent_.begin().update(self.offset_)};
+  }
 
-   auto endImpl(this auto&& self) {
+  auto endImpl(this auto&& self) {
     if constexpr (extent.row == 1) {
-      return Iterator{self, self.parent_.begin().update(self.offset_ + RowCol{0, self.shape_.col})};
+      return Iterator{self, self.parent_.begin().update(
+                                self.offset_ + RowCol{0, self.shape_.col})};
     } else {
-      return Iterator{self, self.parent_.begin().update(self.offset_ + RowCol{self.shape_.row, 0})};
+      return Iterator{self, self.parent_.begin().update(
+                                self.offset_ + RowCol{self.shape_.row, 0})};
     }
   }
   // auto endImpl() const -> Sentinel { return {}; }
@@ -260,7 +265,7 @@ class Slice : public Matrix<extent> {
 
 // We only overload of rvalues. lvalues should be handled by the matrix
 // definitions themselves.
-template<RowCol extent, typename M>
+template <RowCol extent, typename M>
 auto operator*=(Slice<extent, M>&& lhs, const auto& rhs) -> Slice<extent, M> {
   for (int64_t i = 0; i < lhs.shape().row; ++i) {
     for (int64_t j = 0; j < lhs.shape().col; ++j) {
@@ -270,14 +275,13 @@ auto operator*=(Slice<extent, M>&& lhs, const auto& rhs) -> Slice<extent, M> {
   return lhs;
 }
 
-template<RowCol extent, typename M>
+template <RowCol extent, typename M>
 auto operator/=(Slice<extent, M>&& lhs, const auto& rhs) -> Slice<extent, M> {
   for (auto& val : lhs) {
     val /= rhs;
   }
   return lhs;
 }
-
 
 template <typename M>
 Slice(RowCol shape, RowCol offset, M&& mat) -> Slice<{kDynamic, kDynamic}, M>;
@@ -389,7 +393,8 @@ class Cols {
   Cols(M& matrix) : matrix_(matrix) {}
 
   auto operator[](int64_t index) {
-    return Slicer<{M::kExtent.row, 1}>::at(RowCol{0, index}, matrix_);
+    return Slicer<{M::kExtent.row, 1}>::at(RowCol{.row = 0, .col = index},
+                                           matrix_);
   }
 
   auto begin() -> Iterator { return Iterator{0, matrix_}; }

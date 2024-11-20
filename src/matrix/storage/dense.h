@@ -55,7 +55,7 @@ class Dense final : public Matrix<extent> {
     (
         [this, &rows, &i]() {
           for (int64_t j = 0; j < Sizes; ++j) {
-            (*this)[i, j] = rows[j];
+            (*this)[i, j ] = rows[j];
           }
           ++i;
         }(),
