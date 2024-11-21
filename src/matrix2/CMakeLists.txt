@@ -1,5 +1,15 @@
-add_library(matrix2 INTERFACE matrix.h)
-add_executable(matrix2_test matrix_test.cpp)
-target_link_libraries(matrix2_test matrix2 unit)
+add_library(matrix2_matrix INTERFACE matrix.h)
+add_executable(matrix2_matrix_test matrix_test.cpp)
+target_link_libraries(matrix2_matrix_test matrix2_matrix unit)
 
-add_library(dense2 INTERFACE dense.h)
+add_library(matrix2_dense INTERFACE dense.h)
+add_executable(matrix2_dense_test dense_test.cpp)
+target_link_libraries(matrix2_dense_test matrix2_dense unit)
+
+add_library(matrix2_multiplication INTERFACE multiplication.h)
+add_executable(matrix2_multiplication_test multiplication_test.cpp)
+target_link_libraries(matrix2_multiplication_test matrix2_dense matrix2_multiplication unit)
+
+add_library(matrix2_identity INTERFACE identity.h)
+add_executable(matrix2_identity_test identity_test.cpp)
+target_link_libraries(matrix2_identity_test matrix2_dense matrix2_identity unit)

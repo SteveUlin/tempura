@@ -1,18 +1,29 @@
 #pragma once
 
-#include <array>
+#include <cassert>
+#include <compare>
+#include <concepts>
 #include <cstdint>
+#include <print>
+#include <source_location>
+#include <string_view>
 #include <type_traits>
-#include <utility>
 
 namespace tempura::matrix {
 
+constexpr void check(
+    bool condition, std::string_view message,
+    std::source_location loc = std::source_location::current()) {
+  if (!condition) [[unlikely]] {
+    std::print("FATAL {}:{}:{}: {}\n", loc.file_name(), loc.line(),
+               loc.column(), message);
+    std::terminate();
+  }
+}
+#define CHECK(condition) ::tempura::matrix::check(condition, #condition)
+
 struct DynamicExtent {};
 inline static constexpr auto kDynamic = DynamicExtent{};
-
-template <typename T>
-concept ExtentT =
-    std::is_same_v<T, DynamicExtent> or std::is_same_v<T, int64_t>;
 
 struct RowCol {
   int64_t row;
@@ -61,131 +72,69 @@ enum class IndexOrder : uint8_t {
 inline static constexpr auto kRowMajor = IndexOrder::kRowMajor;
 inline static constexpr auto kColMajor = IndexOrder::kColMajor;
 
-// For tagged dispatch
-template <typename>
-struct Tag {};
-template <auto>
-struct ValueTag {};
+template <typename T>
+concept MatrixT = requires(T matrix, int64_t row, int64_t col) {
+  { matrix[row, col] } -> std::convertible_to<typename T::ValueType>;
+  { matrix.shape() } -> std::same_as<RowCol>;
+  requires std::same_as<decltype(T::kRow), const int64_t> or
+               std::same_as<decltype(T::kRow), const DynamicExtent>;
+  requires std::same_as<decltype(T::kCol), const int64_t> or
+               std::same_as<decltype(T::kCol), const DynamicExtent>;
+};
 
-template <typename Scalar, int64_t Row, int64_t Col,
-          IndexOrder order = kColMajor>
-class Dense {
- public:
-  using ScalarT = Scalar;
-  static constexpr IndexOrder kIndexOrder = order;
+template <typename T, typename U>
+concept MatchingExtent =
+    (std::same_as<decltype(T::kRow), const DynamicExtent> or
+     std::same_as<decltype(U::kRow), const DynamicExtent> or
+     T::kRow == U::kRow) and
+    (std::same_as<decltype(T::kCol), const DynamicExtent> or
+     std::same_as<decltype(U::kCol), const DynamicExtent> or
+     T::kCol == U::kCol);
 
-  // Declare that the default constructor is constexpr
-  constexpr Dense() = default;
+template <typename T>
+concept HasDynamicExtent =
+    std::same_as<decltype(T::kRow), const DynamicExtent> or
+    std::same_as<decltype(T::kCol), const DynamicExtent>;
 
-  constexpr Dense(std::array<Scalar, Row * Col> data) : data_{data} {}
-
-  // Array initialization
-  // auto m = matrix::Dense{{0., 1.}, {2., 3.}};
-  //
-  // Use C-Arrays to get the nice syntax
-  //
-  // "First" is split from the rest of the sizes to make the deduction guide
-  // easier to write.
-  // NOLINTBEGIN(*-avoid-c-arrays)
-  template <int64_t First, int64_t... Sizes>
-    requires((sizeof...(Sizes) + 1 == Row) and (First == Col) and
-             ((Sizes == Col) and ...))
-  constexpr Dense(const Scalar (&first)[First],
-                  const Scalar (&... rows)[Sizes]) {
-    for (int64_t j = 0; j < First; ++j) {
-      (*this)[0, j] = first[j];
-    }
-    [&, this]<int64_t... I>(std::integer_sequence<int64_t, I...> /*unused*/) {
-      (
-          [&, this]() {
-            for (int64_t j = 0; j < Sizes; ++j) {
-              (*this)[I + 1, j] = rows[j];
-            }
-          }(),
-          ...);
-    }(std::make_integer_sequence<int64_t, sizeof...(rows)>());
+// Checks the shape field if there are dynamic extents
+//
+// This also imposes a constraint that the extents must match, so technically
+// you don't need to explicitly add the MatchingExtent requires clause to
+// functions that call this check as it will be applied implicitly.
+template <typename Lhs, typename Rhs>
+  requires MatchingExtent<Lhs, Rhs>
+void checkSameShape(const Lhs& lhs, const Rhs& rhs) {
+  if constexpr (HasDynamicExtent<Lhs> or HasDynamicExtent<Rhs>) {
+    CHECK(lhs.shape() == rhs.shape());
   }
-  // NOLINTEND(*-avoid-c-arrays)
+}
 
-  constexpr auto shape() const -> RowCol { return {.row = Row, .col = Col}; }
-
-  constexpr auto operator[](this auto&& self, int64_t row, int64_t col)
-      -> decltype(auto) {
-    if constexpr (order == IndexOrder::kRowMajor) {
-      return self.data_[(row * Col) + col];
-    } else if constexpr (order == IndexOrder::kColMajor) {
-      return self.data_[(col * Row) + row];
-    } else {
-      static_assert(false, "Not implented for Index Order");
+// Default Equality
+template <MatrixT Lhs, MatrixT Rhs>
+constexpr auto operator==(const Lhs& lhs, const Rhs& rhs) -> bool {
+  checkSameShape(lhs, rhs);
+  for (int64_t row = 0; row < lhs.shape().row; ++row) {
+    for (int64_t col = 0; col < lhs.shape().col; ++col) {
+      if (lhs[row, col] != rhs[row, col]) {
+        return false;
+      }
     }
   }
+  return true;
+}
 
-  constexpr auto operator[](this auto&& self, int64_t index) -> decltype(auto)
-    requires(Row == 1 or Col == 1)
-  {
-    return self.data_[index];
+template <auto delta = 0.0001, MatrixT Lhs, MatrixT Rhs>
+  requires MatchingExtent<Lhs, Rhs>
+constexpr auto approxEqual(const Lhs& lhs, const Rhs& rhs) -> bool {
+  checkSameShape(lhs, rhs);
+  for (int64_t row = 0; row < lhs.shape().row; ++row) {
+    for (int64_t col = 0; col < lhs.shape().col; ++col) {
+      if (std::abs(lhs[row, col] - rhs[row, col]) > delta) {
+        return false;
+      }
+    }
   }
-
-  constexpr auto data() const -> const std::array<Scalar, Row * Col>& {
-    return data_;
-  }
-
-  constexpr auto operator==(const Dense& other) const -> bool {
-    return data_ == other.data_;
-  }
-
-  constexpr auto begin(this auto&& self) { return self.data_.begin(); }
-
-  constexpr auto end(this auto&& self) { return self.data_.end(); }
-
- private:
-  std::array<Scalar, Row * Col> data_ = {};
-};
-
-// NOLINTBEGIN(*-avoid-c-arrays)
-template <typename Scalar, int64_t First, int64_t... Sizes>
-explicit Dense(const Scalar (&)[First], const Scalar (&... rows)[Sizes])
-    -> Dense<Scalar, sizeof...(Sizes) + 1, First>;
-
-template <typename Scalar, int64_t Row, int64_t Col>
-class DenseRowMajor : public Dense<Scalar, Row, Col, kRowMajor> {
- public:
-  constexpr DenseRowMajor() = default;
-
-  constexpr DenseRowMajor(std::array<Scalar, Row * Col> data)
-      : Dense<Scalar, Row, Col, kRowMajor>{data} {}
-
-  template <int64_t First, int64_t... Sizes>
-    requires((sizeof...(Sizes) + 1 == Row) and (First == Col) and
-             ((Sizes == Col) and ...))
-  constexpr DenseRowMajor(const Scalar (&first)[First],
-                          const Scalar (&... rows)[Sizes])
-      : Dense<Scalar, Row, Col, kRowMajor>{first, rows...} {}
-};
-
-template <typename Scalar, int64_t First, int64_t... Sizes>
-explicit DenseRowMajor(const Scalar (&)[First], const Scalar (&... rows)[Sizes])
-    -> DenseRowMajor<Scalar, sizeof...(Sizes) + 1, First>;
-
-template <typename Scalar, int64_t Row, int64_t Col>
-class DenseColMajor : public Dense<Scalar, Row, Col, kColMajor> {
- public:
-  constexpr DenseColMajor() = default;
-
-  constexpr DenseColMajor(std::array<Scalar, Row * Col> data)
-      : Dense<Scalar, Row, Col, kColMajor>{data} {}
-
-  template <int64_t First, int64_t... Sizes>
-    requires((sizeof...(Sizes) + 1 == Row) and (First == Col) and
-             ((Sizes == Col) and ...))
-  constexpr DenseColMajor(const Scalar (&first)[First],
-                          const Scalar (&... rows)[Sizes])
-      : Dense<Scalar, Row, Col, kColMajor>{first, rows...} {}
-};
-
-template <typename Scalar, int64_t First, int64_t... Sizes>
-explicit DenseColMajor(const Scalar (&)[First], const Scalar (&... rows)[Sizes])
-    -> DenseColMajor<Scalar, sizeof...(Sizes) + 1, First>;
-// NOLINTEND(*-avoid-c-arrays)
+  return true;
+}
 
 }  // namespace tempura::matrix
