@@ -8,7 +8,7 @@ using namespace tempura;
 auto main() -> int {
   "Permutation - Default Constructor"_test = [] {
     constexpr matrix::Permutation<4> m{};
-    constexpr matrix::Dense d{
+    constexpr matrix::InlineDense d{
         {1, 0, 0, 0},
         {0, 1, 0, 0},
         {0, 0, 1, 0},
@@ -31,7 +31,7 @@ auto main() -> int {
 
   "Permutation - init list constructor"_test = [] {
     constexpr matrix::Permutation<4> m{3, 2, 1, 0};
-    constexpr matrix::Dense d{
+    constexpr matrix::InlineDense d{
         {0, 0, 0, 1},
         {0, 0, 1, 0},
         {0, 1, 0, 0},
@@ -43,7 +43,7 @@ auto main() -> int {
   "Permutation - init list assignment"_test = [] {
     constexpr matrix::Permutation<4> m = {3, 2, 1, 0};
     constexpr matrix::Permutation<4> n = m;
-    constexpr matrix::Dense d{
+    constexpr matrix::InlineDense d{
         {0, 0, 0, 1},
         {0, 0, 1, 0},
         {0, 1, 0, 0},
@@ -60,7 +60,7 @@ auto main() -> int {
       return m;
     }();
 
-    constexpr matrix::Dense d{
+    constexpr matrix::InlineDense d{
         {0, 1, 0, 0},
         {1, 0, 0, 0},
         {0, 0, 0, 1},

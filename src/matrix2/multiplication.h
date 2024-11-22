@@ -9,7 +9,7 @@ template <int64_t block_size = 16, MatrixT Lhs, MatrixT Rhs>
 constexpr auto tileMultiply(const Lhs& left, const Rhs& right)
   requires(Lhs::kCol == Rhs::kRow) {
   using ScalarT = decltype(left[0, 0] * right[0, 0]);
-  Dense<ScalarT, Lhs::kRow, Rhs::kCol> out;
+  InlineDense<ScalarT, Lhs::kRow, Rhs::kCol> out;
 
   for (int64_t jblock = 0; jblock < right.shape().col; jblock += block_size) {
     for (int64_t i = 0; i < left.shape().row; ++i) {

@@ -7,11 +7,11 @@ using namespace tempura;
 
 auto main() -> int {
   "Approx Equal"_test = [] {
-    constexpr matrix::Dense m{
+    constexpr matrix::InlineDense m{
         {0., 1.},
         {2., 3.},
     };
-    constexpr matrix::Dense n{
+    constexpr matrix::InlineDense n{
         {0.00001, 1.00001},
         {2.00001, 3.00001},
     };

@@ -9,7 +9,7 @@
 namespace tempura::matrix {
 
 template <typename T, int64_t Row, int64_t Col, IndexOrder order = kColMajor>
-class Dense {
+class InlineDense {
  public:
   using ValueType = T;
   static constexpr IndexOrder kIndexOrder = order;
@@ -17,18 +17,18 @@ class Dense {
   static constexpr int64_t kCol = Col;
 
   // Declare that the default constructor is constexpr
-  constexpr Dense() = default;
-  constexpr Dense(const Dense&) = default;
-  constexpr auto operator=(const Dense&) -> Dense& = default;
+  constexpr InlineDense() = default;
+  constexpr InlineDense(const InlineDense&) = default;
+  constexpr auto operator=(const InlineDense&) -> InlineDense& = default;
 
-  constexpr Dense(std::array<T, Row * Col> data) : data_{data} {}
+  constexpr InlineDense(std::array<T, Row * Col> data) : data_{data} {}
 
   template <MatrixT M>
     requires(((std::is_same_v<decltype(M::kRow), DynamicExtent>) or
               (M::kRow == Row)) and
              ((std::is_same_v<decltype(M::kCol), DynamicExtent>) or
               (M::kCol == Col)))
-  constexpr Dense(const M& other) {
+  constexpr InlineDense(const M& other) {
     if constexpr (std::is_same_v<decltype(M::kRow), DynamicExtent>) {
       CHECK(other.shape().row == Row);
     }
@@ -43,7 +43,7 @@ class Dense {
   }
 
   // Array initialization
-  // auto m = matrix::Dense{{0., 1.}, {2., 3.}};
+  // auto m = matrix::InlineDense{{0., 1.}, {2., 3.}};
   //
   // Use C-Arrays to get the nice syntax
   //
@@ -53,7 +53,7 @@ class Dense {
   template <int64_t First, int64_t... Sizes>
     requires((sizeof...(Sizes) + 1 == Row) and (First == Col) and
              ((Sizes == Col) and ...))
-  constexpr Dense(const T (&first)[First], const T (&... rows)[Sizes]) {
+  constexpr InlineDense(const T (&first)[First], const T (&... rows)[Sizes]) {
     for (int64_t j = 0; j < First; ++j) {
       (*this)[0, j] = first[j];
     }
@@ -92,7 +92,7 @@ class Dense {
     return data_;
   }
 
-  constexpr auto operator==(const Dense& other) const -> bool {
+  constexpr auto operator==(const InlineDense& other) const -> bool {
     return data_ == other.data_;
   }
 
@@ -104,50 +104,52 @@ class Dense {
   std::array<T, Row * Col> data_ = {};
 };
 
-static_assert(MatrixT<Dense<double, 2, 2>>);
+static_assert(MatrixT<InlineDense<double, 2, 2>>);
 
 // NOLINTBEGIN(*-avoid-c-arrays)
 template <typename T, int64_t First, int64_t... Sizes>
-explicit Dense(const T (&)[First], const T (&... rows)[Sizes])
-    -> Dense<T, sizeof...(Sizes) + 1, First>;
+explicit InlineDense(const T (&)[First], const T (&... rows)[Sizes])
+    -> InlineDense<T, sizeof...(Sizes) + 1, First>;
 
 template <typename T, int64_t Row, int64_t Col>
-class DenseRowMajor : public Dense<T, Row, Col, kRowMajor> {
+class InlineDenseRowMajor : public InlineDense<T, Row, Col, kRowMajor> {
  public:
-  constexpr DenseRowMajor() = default;
+  constexpr InlineDenseRowMajor() = default;
 
-  constexpr DenseRowMajor(std::array<T, Row * Col> data)
-      : Dense<T, Row, Col, kRowMajor>{data} {}
+  constexpr InlineDenseRowMajor(std::array<T, Row * Col> data)
+      : InlineDense<T, Row, Col, kRowMajor>{data} {}
 
   template <int64_t First, int64_t... Sizes>
     requires((sizeof...(Sizes) + 1 == Row) and (First == Col) and
              ((Sizes == Col) and ...))
-  constexpr DenseRowMajor(const T (&first)[First], const T (&... rows)[Sizes])
-      : Dense<T, Row, Col, kRowMajor>{first, rows...} {}
+  constexpr InlineDenseRowMajor(const T (&first)[First],
+                                const T (&... rows)[Sizes])
+      : InlineDense<T, Row, Col, kRowMajor>{first, rows...} {}
 };
 
 template <typename T, int64_t First, int64_t... Sizes>
-explicit DenseRowMajor(const T (&)[First], const T (&... rows)[Sizes])
-    -> DenseRowMajor<T, sizeof...(Sizes) + 1, First>;
+explicit InlineDenseRowMajor(const T (&)[First], const T (&... rows)[Sizes])
+    -> InlineDenseRowMajor<T, sizeof...(Sizes) + 1, First>;
 
 template <typename T, int64_t Row, int64_t Col>
-class DenseColMajor : public Dense<T, Row, Col, kColMajor> {
+class InlineDenseColMajor : public InlineDense<T, Row, Col, kColMajor> {
  public:
-  constexpr DenseColMajor() = default;
+  constexpr InlineDenseColMajor() = default;
 
-  constexpr DenseColMajor(std::array<T, Row * Col> data)
-      : Dense<T, Row, Col, kColMajor>{data} {}
+  constexpr InlineDenseColMajor(std::array<T, Row * Col> data)
+      : InlineDense<T, Row, Col, kColMajor>{data} {}
 
   template <int64_t First, int64_t... Sizes>
     requires((sizeof...(Sizes) + 1 == Row) and (First == Col) and
              ((Sizes == Col) and ...))
-  constexpr DenseColMajor(const T (&first)[First], const T (&... rows)[Sizes])
-      : Dense<T, Row, Col, kColMajor>{first, rows...} {}
+  constexpr InlineDenseColMajor(const T (&first)[First],
+                                const T (&... rows)[Sizes])
+      : InlineDense<T, Row, Col, kColMajor>{first, rows...} {}
 };
 
 template <typename T, int64_t First, int64_t... Sizes>
-explicit DenseColMajor(const T (&)[First], const T (&... rows)[Sizes])
-    -> DenseColMajor<T, sizeof...(Sizes) + 1, First>;
+explicit InlineDenseColMajor(const T (&)[First], const T (&... rows)[Sizes])
+    -> InlineDenseColMajor<T, sizeof...(Sizes) + 1, First>;
 // NOLINTEND(*-avoid-c-arrays)
 
 }  // namespace tempura::matrix

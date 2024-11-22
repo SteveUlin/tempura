@@ -15,9 +15,9 @@ auto main() -> int {
     static_assert(!m[0, 1]);
   };
 
-  "Identity - Compare to Dense"_test = [] {
+  "Identity - Compare to InlineDense"_test = [] {
     constexpr matrix::Identity<4> m{};
-    constexpr matrix::Dense<double, 4, 4> n{
+    constexpr matrix::InlineDense<double, 4, 4> n{
         {1., 0., 0., 0.},
         {0., 1., 0., 0.},
         {0., 0., 1., 0.},

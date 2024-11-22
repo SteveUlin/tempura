@@ -31,9 +31,9 @@ constexpr auto add(const Lhs& lhs, const Rhs& rhs) -> Out {
 template <MatrixT Lhs, MatrixT Rhs>
 constexpr auto operator+(const Lhs& left, const Rhs& right) {
   // In general we cannot assume that left is mutable, so we take the worst
-  // case scenario and copy it into a Dense matrix.
+  // case scenario and copy it into a InlineDense matrix.
   using ScalarT = decltype(left[0, 0] + right[0, 0]);
-  return add<Dense<ScalarT, Lhs::kRow, Lhs::kCol>>(left, right);
+  return add<InlineDense<ScalarT, Lhs::kRow, Lhs::kCol>>(left, right);
 }
 
 template <MatrixT Lhs, MatrixT Rhs>
@@ -62,9 +62,9 @@ constexpr auto subtract(const Lhs& lhs, const Rhs& rhs) -> Out {
 template <MatrixT Lhs, MatrixT Rhs>
 constexpr auto operator-(const Lhs& left, const Rhs& right) {
   // In general we cannot assume that left is mutable, so we take the worst
-  // case scenario and copy it into a Dense matrix.
+  // case scenario and copy it into a InlineDense matrix.
   using ScalarT = decltype(left[0, 0] - right[0, 0]);
-  return subtract<Dense<ScalarT, Lhs::kRow, Lhs::kCol>>(left, right);
+  return subtract<InlineDense<ScalarT, Lhs::kRow, Lhs::kCol>>(left, right);
 }
 
 }  // namespace tempura::matrix
