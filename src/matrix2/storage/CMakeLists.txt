@@ -1,5 +1,5 @@
-add_library(matrix2_dense INTERFACE dense.h)
-add_executable(matrix2_dense_test dense_test.cpp)
+add_library(matrix2_dense INTERFACE inline_dense.h)
+add_executable(matrix2_dense_test inline_dense_test.cpp)
 target_link_libraries(matrix2_dense_test matrix2_dense unit)
 
 add_library(matrix2_identity INTERFACE identity.h)

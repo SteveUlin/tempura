@@ -10,7 +10,7 @@
 
 template <>
 struct std::formatter<std::complex<double>> : std::formatter<std::string> {
-  auto format(std::complex<double> num, std::format_context& ctx) const {
+  constexpr auto format(std::complex<double> num, std::format_context& ctx) const {
     return std::formatter<std::string>::format(
         std::format("{:.2f}e^({:.4f}i)", std::abs(num), std::arg(num)), ctx);
   }

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "matrix2/matrix.h"
-#include "matrix2/storage/dense.h"
+#include "matrix2/storage/inline_dense.h"
 
 namespace tempura::matrix {
 
