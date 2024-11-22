@@ -13,3 +13,8 @@ target_link_libraries(matrix2_multiplication_test matrix2_dense matrix2_multipli
 add_library(matrix2_identity INTERFACE identity.h)
 add_executable(matrix2_identity_test identity_test.cpp)
 target_link_libraries(matrix2_identity_test matrix2_dense matrix2_identity unit)
+
+add_library(matrix2_to_string INTERFACE to_string.h)
+add_executable(matrix2_to_string_test to_string_test.cpp)
+target_link_libraries(matrix2_to_string_test matrix2_dense matrix2_to_string unit)
+
