@@ -36,8 +36,12 @@ class Permutation {
 
   constexpr auto shape() const -> RowCol { return {.row = N, .col = N}; }
 
-  constexpr auto operator[](int64_t i, int64_t j) const -> ValueType {
-    return i == order_[j];
+  constexpr auto operator[](int64_t row, int64_t col) const -> ValueType {
+    if (std::is_constant_evaluated()) {
+      CHECK(0 <= row and row < kRow);
+      CHECK(0 <= col and col < kCol);
+    }
+    return row == order_[col];
   }
 
   constexpr void swap(int64_t i, int64_t j) { std::swap(order_[i], order_[j]); }

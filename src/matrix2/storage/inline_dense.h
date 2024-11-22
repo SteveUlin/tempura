@@ -73,6 +73,10 @@ class InlineDense {
 
   constexpr auto operator[](this auto&& self, int64_t row, int64_t col)
       -> decltype(auto) {
+    if (std::is_constant_evaluated()) {
+      CHECK(0 <= row and row < kRow);
+      CHECK(0 <= col and col < kCol);
+    }
     if constexpr (order == IndexOrder::kRowMajor) {
       return self.data_[(row * Col) + col];
     } else if constexpr (order == IndexOrder::kColMajor) {
@@ -85,6 +89,9 @@ class InlineDense {
   constexpr auto operator[](this auto&& self, int64_t index) -> decltype(auto)
     requires(Row == 1 or Col == 1)
   {
+    if (std::is_constant_evaluated()) {
+      CHECK(0 <= index and index < Row * Col);
+    }
     return self.data_[index];
   }
 

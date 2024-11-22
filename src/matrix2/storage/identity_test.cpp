@@ -32,7 +32,7 @@ auto main() -> int {
   };
 
   "DynamicIdentity Constructor"_test = [] {
-    constexpr matrix::Identity m{1};
+    constexpr matrix::Identity m{4};
     static_assert(m[0, 0]);
     static_assert(m[1, 1]);
     static_assert(m[2, 2]);

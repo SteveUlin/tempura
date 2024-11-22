@@ -28,6 +28,10 @@ class Identity<N> {
   constexpr Identity() = default;
 
   constexpr auto operator[](int64_t row, int64_t col) const -> bool {
+    if (std::is_constant_evaluated()) {
+      CHECK(0 <= row and row < kRow);
+      CHECK(0 <= col and col < kCol);
+    }
     return row == col;
   }
 
@@ -49,6 +53,10 @@ class Identity<kDynamic> {
   constexpr Identity(int64_t n) : n_{n} { CHECK(n >= 0); }
 
   constexpr auto operator[](int64_t row, int64_t col) const -> bool {
+    if (std::is_constant_evaluated()) {
+      CHECK(0 <= row and row < n_);
+      CHECK(0 <= col and col < n_);
+    }
     return row == col;
   }
 
