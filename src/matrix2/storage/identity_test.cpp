@@ -32,7 +32,7 @@ auto main() -> int {
   };
 
   "DynamicIdentity Constructor"_test = [] {
-    constexpr matrix::DynamicIdentity m{1};
+    constexpr matrix::Identity m{1};
     static_assert(m[0, 0]);
     static_assert(m[1, 1]);
     static_assert(m[2, 2]);
@@ -41,13 +41,13 @@ auto main() -> int {
   };
 
   "DynamicIdentity - Shape"_test = [] {
-    constexpr matrix::DynamicIdentity m{4};
+    constexpr matrix::Identity m{4};
     static_assert(m.shape() == matrix::RowCol{.row = 4, .col = 4});
   };
 
   "Compare Identity to DynamicIdentity"_test = [] {
     constexpr matrix::Identity<4> m{};
-    constexpr matrix::DynamicIdentity n{4};
+    constexpr matrix::Identity n{4};
     static_assert(m == n);
     static_assert(n == m);
   };
