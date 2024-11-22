@@ -1,4 +1,4 @@
-#include "matrix2/dense.h"
+#include "matrix2/storage/dense.h"
 
 #include <algorithm>
 

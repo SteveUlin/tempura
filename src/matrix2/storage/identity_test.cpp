@@ -1,6 +1,6 @@
-#include "matrix2/identity.h"
+#include "matrix2/storage/identity.h"
 
-#include "matrix2/dense.h"
+#include "matrix2/storage/dense.h"
 #include "unit.h"
 
 using namespace tempura;

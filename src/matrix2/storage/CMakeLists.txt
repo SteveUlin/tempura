@@ -1,0 +1,11 @@
+add_library(matrix2_dense INTERFACE dense.h)
+add_executable(matrix2_dense_test dense_test.cpp)
+target_link_libraries(matrix2_dense_test matrix2_dense unit)
+
+add_library(matrix2_identity INTERFACE identity.h)
+add_executable(matrix2_identity_test identity_test.cpp)
+target_link_libraries(matrix2_identity_test matrix2_dense matrix2_identity unit)
+
+add_library(matrix2_permutation INTERFACE permutation.h)
+add_executable(matrix2_permutation_test permutation_test.cpp)
+target_link_libraries(matrix2_permutation_test matrix2_dense matrix2_permutation unit)

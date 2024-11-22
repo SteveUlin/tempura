@@ -7,7 +7,6 @@
 #include <print>
 #include <source_location>
 #include <string_view>
-#include <type_traits>
 
 namespace tempura::matrix {
 
