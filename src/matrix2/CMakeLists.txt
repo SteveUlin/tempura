@@ -18,3 +18,6 @@ add_library(matrix2_to_string INTERFACE to_string.h)
 add_executable(matrix2_to_string_test to_string_test.cpp)
 target_link_libraries(matrix2_to_string_test matrix2_dense matrix2_to_string unit)
 
+add_library(matrix2_permutation INTERFACE permutation.h)
+add_executable(matrix2_permutation_test permutation_test.cpp)
+target_link_libraries(matrix2_permutation_test matrix2_dense matrix2_permutation unit)
