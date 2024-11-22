@@ -7,9 +7,9 @@ namespace tempura::matrix {
 
 template <int64_t block_size = 16, MatrixT Lhs, MatrixT Rhs>
 constexpr auto tileMultiply(const Lhs& left, const Rhs& right)
-  requires(Lhs::kExtent.col == Rhs::kExtent.row) {
+  requires(Lhs::kCol == Rhs::kRow) {
   using ScalarT = decltype(left[0, 0] * right[0, 0]);
-  Dense<ScalarT, Lhs::kExtent.row, Rhs::kExtent.col> out;
+  Dense<ScalarT, Lhs::kRow, Rhs::kCol> out;
 
   for (int64_t jblock = 0; jblock < right.shape().col; jblock += block_size) {
     for (int64_t i = 0; i < left.shape().row; ++i) {
@@ -27,8 +27,9 @@ constexpr auto tileMultiply(const Lhs& left, const Rhs& right)
   return out;
 }
 
-constexpr auto operator*(const MatrixT auto& left, const MatrixT auto& right) {
+template <MatrixT Lhs, MatrixT Rhs>
+constexpr auto operator*(const Lhs& left, const Rhs& right) {
   return tileMultiply(left, right);
 }
 
-};
+}  // namespace tempura::matrix

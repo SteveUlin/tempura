@@ -103,7 +103,7 @@ concept HasDynamicExtent =
 // functions that call this check as it will be applied implicitly.
 template <typename Lhs, typename Rhs>
   requires MatchingExtent<Lhs, Rhs>
-void checkSameShape(const Lhs& lhs, const Rhs& rhs) {
+constexpr void checkSameShape(const Lhs& lhs, const Rhs& rhs) {
   if constexpr (HasDynamicExtent<Lhs> or HasDynamicExtent<Rhs>) {
     CHECK(lhs.shape() == rhs.shape());
   }

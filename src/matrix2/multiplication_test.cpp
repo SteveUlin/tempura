@@ -1,4 +1,3 @@
-
 #include "matrix2/multiplication.h"
 
 #include <algorithm>
@@ -21,12 +20,6 @@ auto main() -> int {
     constexpr matrix::Dense<double, 3, 2> n{{6., 7.}, {8., 9.}, {10., 11.}};
     constexpr matrix::Dense<double, 2, 2> o{{28., 31.}, {100., 112.}};
     static_assert(m * n == o);
-  };
-
-  "Non matching sizes"_test = [] {
-    // constexpr matrix::Dense<double, 2, 3> m{{0., 1., 2.}, {3., 4., 5.}};
-    // constexpr matrix::Dense<double, 2, 2> n{{6., 7.}, {8., 9.}};
-    // m * n;
   };
 
   return TestRegistry::result();
