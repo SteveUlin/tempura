@@ -1,0 +1,3 @@
+add_library(matrix2_permuted INTERFACE permuted.h)
+add_executable(matrix2_permuted_test permuted_test.cpp)
+target_link_libraries(matrix2_permuted_test matrix2_dense matrix2_permuted unit)
