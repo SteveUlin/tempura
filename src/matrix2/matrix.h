@@ -21,8 +21,11 @@ constexpr void check(
 }
 #define CHECK(condition) ::tempura::matrix::check(condition, #condition)
 
-struct DynamicExtent {};
-inline static constexpr auto kDynamic = DynamicExtent{};
+// Extent represents the size of a dimension known at compile time.
+using Extent = int64_t;
+// Set to the max value. This simplifies validation as the following is always
+// true for a valid index 0 <= index <= Extent;
+inline static constexpr Extent kDynamic = std::numeric_limits<Extent>::max();
 
 struct RowCol {
   int64_t row;
@@ -75,25 +78,17 @@ template <typename T>
 concept MatrixT = requires(T matrix, int64_t row, int64_t col) {
   { matrix[row, col] } -> std::convertible_to<typename T::ValueType>;
   { matrix.shape() } -> std::same_as<RowCol>;
-  requires std::same_as<decltype(T::kRow), const int64_t> or
-               std::same_as<decltype(T::kRow), const DynamicExtent>;
-  requires std::same_as<decltype(T::kCol), const int64_t> or
-               std::same_as<decltype(T::kCol), const DynamicExtent>;
+  requires std::same_as<decltype(T::kRow), const Extent>;
+  requires std::same_as<decltype(T::kCol), const Extent>;
 };
 
 template <typename T, typename U>
 concept MatchingExtent =
-    (std::same_as<decltype(T::kRow), const DynamicExtent> or
-     std::same_as<decltype(U::kRow), const DynamicExtent> or
-     T::kRow == U::kRow) and
-    (std::same_as<decltype(T::kCol), const DynamicExtent> or
-     std::same_as<decltype(U::kCol), const DynamicExtent> or
-     T::kCol == U::kCol);
+    (T::kRow == U::kRow or T::kRow == kDynamic or U::kRow == kDynamic) and
+    (T::kCol == U::kCol or T::kCol == kDynamic or U::kCol == kDynamic);
 
 template <typename T>
-concept HasDynamicExtent =
-    std::same_as<decltype(T::kRow), const DynamicExtent> or
-    std::same_as<decltype(T::kCol), const DynamicExtent>;
+concept HasDynamicExtent = (T::kRow == kDynamic or T::kCol == kDynamic);
 
 // Checks the shape field if there are dynamic extents
 //

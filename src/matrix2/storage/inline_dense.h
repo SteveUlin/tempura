@@ -8,7 +8,8 @@
 
 namespace tempura::matrix {
 
-template <typename T, int64_t Row, int64_t Col, IndexOrder order = kColMajor>
+template <typename T, Extent Row, Extent Col, IndexOrder order = kColMajor>
+  requires (Row != kDynamic) and (Col != kDynamic)
 class InlineDense {
  public:
   using ValueType = T;
@@ -23,17 +24,11 @@ class InlineDense {
 
   constexpr InlineDense(std::array<T, Row * Col> data) : data_{data} {}
 
-  template <MatrixT M>
-    requires(((std::is_same_v<decltype(M::kRow), DynamicExtent>) or
-              (M::kRow == Row)) and
-             ((std::is_same_v<decltype(M::kCol), DynamicExtent>) or
-              (M::kCol == Col)))
-  constexpr InlineDense(const M& other) {
-    if constexpr (std::is_same_v<decltype(M::kRow), DynamicExtent>) {
-      CHECK(other.shape().row == Row);
-    }
-    if constexpr (std::is_same_v<decltype(M::kCol), DynamicExtent>) {
-      CHECK(other.shape().col == Col);
+  template <MatrixT MatT>
+    requires MatchingExtent<InlineDense, MatT>
+  constexpr InlineDense(const MatT& other) {
+    if (std::is_constant_evaluated()) {
+      checkMatchingShape(*this, other);
     }
     for (int64_t i = 0; i < Row; ++i) {
       for (int64_t j = 0; j < Col; ++j) {
@@ -117,46 +112,6 @@ static_assert(MatrixT<InlineDense<double, 2, 2>>);
 template <typename T, int64_t First, int64_t... Sizes>
 explicit InlineDense(const T (&)[First], const T (&... rows)[Sizes])
     -> InlineDense<T, sizeof...(Sizes) + 1, First>;
-
-template <typename T, int64_t Row, int64_t Col>
-class InlineDenseRowMajor : public InlineDense<T, Row, Col, kRowMajor> {
- public:
-  constexpr InlineDenseRowMajor() = default;
-
-  constexpr InlineDenseRowMajor(std::array<T, Row * Col> data)
-      : InlineDense<T, Row, Col, kRowMajor>{data} {}
-
-  template <int64_t First, int64_t... Sizes>
-    requires((sizeof...(Sizes) + 1 == Row) and (First == Col) and
-             ((Sizes == Col) and ...))
-  constexpr InlineDenseRowMajor(const T (&first)[First],
-                                const T (&... rows)[Sizes])
-      : InlineDense<T, Row, Col, kRowMajor>{first, rows...} {}
-};
-
-template <typename T, int64_t First, int64_t... Sizes>
-explicit InlineDenseRowMajor(const T (&)[First], const T (&... rows)[Sizes])
-    -> InlineDenseRowMajor<T, sizeof...(Sizes) + 1, First>;
-
-template <typename T, int64_t Row, int64_t Col>
-class InlineDenseColMajor : public InlineDense<T, Row, Col, kColMajor> {
- public:
-  constexpr InlineDenseColMajor() = default;
-
-  constexpr InlineDenseColMajor(std::array<T, Row * Col> data)
-      : InlineDense<T, Row, Col, kColMajor>{data} {}
-
-  template <int64_t First, int64_t... Sizes>
-    requires((sizeof...(Sizes) + 1 == Row) and (First == Col) and
-             ((Sizes == Col) and ...))
-  constexpr InlineDenseColMajor(const T (&first)[First],
-                                const T (&... rows)[Sizes])
-      : InlineDense<T, Row, Col, kColMajor>{first, rows...} {}
-};
-
-template <typename T, int64_t First, int64_t... Sizes>
-explicit InlineDenseColMajor(const T (&)[First], const T (&... rows)[Sizes])
-    -> InlineDenseColMajor<T, sizeof...(Sizes) + 1, First>;
 // NOLINTEND(*-avoid-c-arrays)
 
 }  // namespace tempura::matrix

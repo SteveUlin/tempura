@@ -1,4 +1,5 @@
 add_subdirectory(storage)
+add_subdirectory(views)
 
 add_library(matrix2_matrix INTERFACE matrix.h)
 add_executable(matrix2_matrix_test matrix_test.cpp)

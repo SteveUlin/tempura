@@ -8,15 +8,15 @@
 
 namespace tempura::matrix {
 
-template <auto N>
+template <Extent N>
 class Permutation;
 
 template <>
 class Permutation<kDynamic> {
  public:
   using ValueType = bool;
-  static constexpr DynamicExtent kRow = kDynamic;
-  static constexpr DynamicExtent kCol = kDynamic;
+  static constexpr Extent kRow = kDynamic;
+  static constexpr Extent kCol = kDynamic;
 
   constexpr Permutation(int64_t size) : order_(size) {
     // std::ranges::iota(order_, 0);
@@ -70,8 +70,8 @@ class Permutation<kDynamic> {
 };
 static_assert(MatrixT<Permutation<kDynamic>>);
 
-template <auto N>
-  requires(std::is_convertible_v<decltype(N), int64_t> and N > 0)
+template <Extent N>
+  requires(N > 0 and N != kDynamic)
 class Permutation<N> {
  public:
   using ValueType = bool;

@@ -14,16 +14,16 @@ namespace tempura::matrix {
 // ⎢ 0 0 1 0 ⎥
 // ⎣ 0 0 0 1 ⎦
 
-template <auto>
+template <Extent N>
 class Identity;
 
-template <auto N>
-  requires(std::is_convertible_v<decltype(N), int64_t> and N > 0)
+template <Extent N>
+  requires(N > 0 and N != kDynamic)
 class Identity<N> {
  public:
   using ValueType = bool;
-  static constexpr int64_t kRow = N;
-  static constexpr int64_t kCol = N;
+  static constexpr Extent kRow = N;
+  static constexpr Extent kCol = N;
 
   constexpr Identity() = default;
 
@@ -47,8 +47,8 @@ template <>
 class Identity<kDynamic> {
  public:
   using ValueType = bool;
-  static constexpr DynamicExtent kRow = kDynamic;
-  static constexpr DynamicExtent kCol = kDynamic;
+  static constexpr Extent kRow = kDynamic;
+  static constexpr Extent kCol = kDynamic;
 
   constexpr Identity(int64_t n) : n_{n} { CHECK(n >= 0); }
 
@@ -73,6 +73,7 @@ class Identity<kDynamic> {
 static_assert(MatrixT<Identity<kDynamic>>);
 
 template <int64_t N>
+  requires(N != kDynamic)
 constexpr auto operator==(Identity<kDynamic> lhs, Identity<N> /*unused*/)
     -> bool {
   CHECK(lhs.shape().row == N);
@@ -80,6 +81,7 @@ constexpr auto operator==(Identity<kDynamic> lhs, Identity<N> /*unused*/)
 }
 
 template <int64_t N>
+  requires(N != kDynamic)
 constexpr auto operator==(Identity<N> /*unused*/, Identity<kDynamic> rhs)
     -> bool {
   CHECK(rhs.shape().row == N);
