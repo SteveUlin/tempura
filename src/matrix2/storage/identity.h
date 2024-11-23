@@ -17,8 +17,8 @@ namespace tempura::matrix {
 template <auto>
 class Identity;
 
-template <int64_t N>
-  requires(N > 0)
+template <auto N>
+  requires(std::is_convertible_v<decltype(N), int64_t> and N > 0)
 class Identity<N> {
  public:
   using ValueType = bool;
