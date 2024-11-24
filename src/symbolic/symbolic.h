@@ -91,6 +91,8 @@ struct Constant {
 template <auto VALUE>
 inline constexpr bool internal::SymbolicTypeTrait<Constant<VALUE>> = true;
 
+// Compile time helpers for moving numbers into the type system. For example,
+// 123_c is a Constant<123> and 3.14_c is a Constant<3.14>.
 template <char... chars>
 constexpr auto toInt() {
   return [] constexpr {
@@ -199,6 +201,8 @@ inline constexpr bool internal::SymbolicTypeTrait<Symbol<label, id>> = true;
 
 // --- Symbolic Expressions ---
 
+// When pretty printing symbolic expressions, do you want it to look like
+// f(x, y) or x f y?
 enum class DisplayMode {
   kInfix,
   kPrefix,
