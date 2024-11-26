@@ -25,8 +25,6 @@ class Identity<N> {
   static constexpr Extent kRow = N;
   static constexpr Extent kCol = N;
 
-  constexpr Identity() = default;
-
   constexpr auto operator[](int64_t row, int64_t col) const -> bool {
     if (std::is_constant_evaluated()) {
       CHECK(0 <= row and row < kRow);

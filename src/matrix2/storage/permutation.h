@@ -18,12 +18,12 @@ class Permutation<kDynamic> {
   static constexpr Extent kRow = kDynamic;
   static constexpr Extent kCol = kDynamic;
 
-  constexpr Permutation(int64_t size) : order_(size) {
+  constexpr explicit Permutation(int64_t size) : order_(size) {
     // std::ranges::iota(order_, 0);
     std::iota(order_.begin(), order_.end(), 0);
   }
 
-  constexpr Permutation(std::initializer_list<int64_t> perm) {
+  constexpr explicit Permutation(std::initializer_list<int64_t> perm) {
     order_.reserve(perm.size());
     std::ranges::copy(perm, std::back_inserter(order_));
     validate();

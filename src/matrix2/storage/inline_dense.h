@@ -9,7 +9,7 @@
 namespace tempura::matrix {
 
 template <typename T, Extent Row, Extent Col, IndexOrder order = kColMajor>
-  requires (Row != kDynamic) and (Col != kDynamic)
+  requires(Row != kDynamic) and (Col != kDynamic)
 class InlineDense {
  public:
   using ValueType = T;
@@ -17,16 +17,13 @@ class InlineDense {
   static constexpr int64_t kRow = Row;
   static constexpr int64_t kCol = Col;
 
-  // Declare that the default constructor is constexpr
   constexpr InlineDense() = default;
-  constexpr InlineDense(const InlineDense&) = default;
-  constexpr auto operator=(const InlineDense&) -> InlineDense& = default;
 
-  constexpr InlineDense(std::array<T, Row * Col> data) : data_{data} {}
+  constexpr explicit InlineDense(std::array<T, Row * Col> data) : data_{data} {}
 
   template <MatrixT MatT>
     requires MatchingExtent<InlineDense, MatT>
-  constexpr InlineDense(const MatT& other) {
+  constexpr explicit InlineDense(const MatT& other) {
     if (std::is_constant_evaluated()) {
       checkMatchingShape(*this, other);
     }
@@ -48,7 +45,8 @@ class InlineDense {
   template <int64_t First, int64_t... Sizes>
     requires((sizeof...(Sizes) + 1 == Row) and (First == Col) and
              ((Sizes == Col) and ...))
-  constexpr InlineDense(const T (&first)[First], const T (&... rows)[Sizes]) {
+  constexpr explicit InlineDense(const T (&first)[First],
+                                 const T (&... rows)[Sizes]) {
     for (int64_t j = 0; j < First; ++j) {
       (*this)[0, j] = first[j];
     }

@@ -9,3 +9,12 @@ target_link_libraries(matrix2_identity_test matrix2_dense matrix2_identity unit)
 add_library(matrix2_permutation INTERFACE permutation.h)
 add_executable(matrix2_permutation_test permutation_test.cpp)
 target_link_libraries(matrix2_permutation_test matrix2_dense matrix2_permutation unit)
+
+add_library(matrix2_inline_coordinate_list INTERFACE inline_coordinate_list.h)
+add_executable(matrix2_inline_coordinate_list_test inline_coordinate_list_test.cpp)
+target_link_libraries(matrix2_inline_coordinate_list_test matrix2_dense matrix2_inline_coordinate_list unit)
+
+add_library(matrix2_complex INTERFACE complex.h)
+add_executable(matrix2_complex_test complex_test.cpp)
+target_link_libraries(matrix2_complex_test matrix2_dense matrix2_complex unit)
+

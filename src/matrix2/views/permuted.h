@@ -78,6 +78,7 @@ class ColPermuted {
   }
 
   constexpr auto shape() const -> RowCol { return mat_.shape(); }
+
   constexpr auto swap(int64_t i, int64_t j) {
     if (std::is_constant_evaluated()) {
       CHECK(i < mat_.shape().col);
