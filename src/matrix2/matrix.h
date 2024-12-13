@@ -131,4 +131,11 @@ constexpr auto approxEqual(const Lhs& lhs, const Rhs& rhs) -> bool {
   return true;
 }
 
+enum class Pivot : uint8_t {
+  kNone,
+  kRow,
+  kRowImplicit,
+  kFull,
+};
+
 }  // namespace tempura::matrix

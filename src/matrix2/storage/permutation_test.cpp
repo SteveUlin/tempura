@@ -77,4 +77,12 @@ auto main() -> int {
     constexpr matrix::Permutation<4> n{3, 2, 1, 0};
     static_assert(n.data() == std::array<int64_t, 4>{3, 2, 1, 0});
   };
+
+  "Parity"_test = [] {
+    constexpr matrix::Permutation<4> m{};
+    static_assert(!m.parity());
+
+    constexpr matrix::Permutation<4> n{1, 0, 2, 3};
+    static_assert(n.parity());
+  };
 }

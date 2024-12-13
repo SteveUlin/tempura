@@ -50,21 +50,36 @@ class Permutation<kDynamic> {
     return row == order_[col];
   }
 
-  constexpr void swap(int64_t i, int64_t j) { std::swap(order_[i], order_[j]); }
+  constexpr void swap(int64_t i, int64_t j) {
+    parity_ = !parity_;
+    std::swap(order_[i], order_[j]);
+  }
 
   constexpr auto data() const -> const std::vector<int64_t>& { return order_; }
 
+  constexpr auto parity() const -> bool { return parity_; }
+
  private:
   constexpr void validate() {
+    parity_ = false;
     std::vector<bool> visited(order_.size());
-    for (int64_t elemet : order_) {
-      CHECK(0 <= elemet and elemet < static_cast<int64_t>(order_.size()));
-      visited[elemet] = true;
+    for (int64_t element : order_) {
+      CHECK(0 <= element and element < static_cast<int64_t>(order_.size()));
+      if (visited[element]) {
+        continue;
+      }
+      while (!visited[element]) {
+        visited[element] = true;
+        parity_ = !parity_;
+        element = order_[element];
+      }
     }
     for (bool v : visited) {
       CHECK(v);
     }
   }
+
+  bool parity_ = false;
   std::vector<int64_t> order_;
   ;
 };
@@ -107,21 +122,36 @@ class Permutation<N> {
     return row == order_[col];
   }
 
-  constexpr void swap(int64_t i, int64_t j) { std::swap(order_[i], order_[j]); }
+  constexpr void swap(int64_t i, int64_t j) {
+    parity_ = !parity_;
+    std::swap(order_[i], order_[j]);
+  }
 
   constexpr auto data() const -> const std::array<int64_t, N>& {
     return order_;
   }
 
+  constexpr auto parity() const -> bool { return parity_; }
+
  private:
   constexpr void validate() {
+    parity_ = false;
     std::bitset<N> visited;
-    for (int64_t elemet : order_) {
-      CHECK(0 <= elemet and elemet < N);
-      visited[elemet] = true;
+    for (int64_t element : order_) {
+      CHECK(0 <= element and element < static_cast<int64_t>(order_.size()));
+      if (visited[element]) {
+        continue;
+      }
+      parity_ = !parity_;
+      do {
+        visited[element] = true;
+        parity_ = !parity_;
+        element = order_[element];
+      } while (!visited[element]);
     }
     CHECK(visited.all());
   }
+  bool parity_ = false;
   std::array<int64_t, N> order_ = {};
 };
 

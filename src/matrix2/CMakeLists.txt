@@ -1,3 +1,4 @@
+add_subdirectory(algorithms)
 add_subdirectory(storage)
 add_subdirectory(views)
 
