@@ -23,10 +23,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 # set(CMAKE_CUDA_STANDARD 20)
 # set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
+enable_testing()
+
 set(BASEPATH "${CMAKE_SOURCE_DIR}/src")
 INCLUDE_DIRECTORIES("${BASEPATH}")
  
 # set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -arch=sm68)
 
 add_subdirectory(src)
+add_subdirectory(test)
 add_subdirectory(examples)

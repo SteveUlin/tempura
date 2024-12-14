@@ -23,7 +23,6 @@
       } rec {
           name = "Tempura";
 
-
           packages = with pkgs; [
             pkgs.llvmPackages_19.clang
             gcc14

@@ -30,7 +30,7 @@ constexpr auto add(const Lhs& lhs, const Rhs& rhs) -> Out {
 
 template <MatrixT Lhs, MatrixT Rhs>
 constexpr auto operator+(const Lhs& left, const Rhs& right) {
-  // In general we cannot assume that left is mutable, so we take the worst
+  // In general we cannot assume that Lhs is mutable, so we take the worst
   // case scenario and copy it into a InlineDense matrix.
   using ScalarT = decltype(left[0, 0] + right[0, 0]);
   return add<InlineDense<ScalarT, Lhs::kRow, Lhs::kCol>>(left, right);
@@ -61,7 +61,7 @@ constexpr auto subtract(const Lhs& lhs, const Rhs& rhs) -> Out {
 
 template <MatrixT Lhs, MatrixT Rhs>
 constexpr auto operator-(const Lhs& left, const Rhs& right) {
-  // In general we cannot assume that left is mutable, so we take the worst
+  // In general we cannot assume that Lhs is mutable, so we take the worst
   // case scenario and copy it into a InlineDense matrix.
   using ScalarT = decltype(left[0, 0] - right[0, 0]);
   return subtract<InlineDense<ScalarT, Lhs::kRow, Lhs::kCol>>(left, right);

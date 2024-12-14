@@ -14,8 +14,7 @@ namespace tempura::matrix {
 // - Values
 //
 // The SortOrder template parameter, as its name implies, determines the order
-// in which elements are sorted. The behavior of this class changes depending
-// on the SortOrder.
+// in which elements are sorted.
 //
 // When SortOrder is kNone:
 // Elements are stored in the order in which they are added and will always be

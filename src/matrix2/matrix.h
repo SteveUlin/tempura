@@ -138,4 +138,37 @@ enum class Pivot : uint8_t {
   kFull,
 };
 
+template <typename T>
+  requires MatrixT<std::remove_cvref_t<T>>
+class MatrixView {
+ public:
+  using ChildT = std::remove_cvref_t<T>;
+  using ValueType = typename ChildT::ValueType;
+
+  static constexpr auto kRow = ChildT::kRow;
+  static constexpr auto kCol = ChildT::kCol;
+
+  constexpr explicit MatrixView(T& mat) : mat_(mat) {}
+
+  constexpr auto operator[](this auto&& self, int64_t row, int64_t col)
+      -> decltype(auto) {
+    return self.mat_[row, col];
+  }
+
+  constexpr auto shape() const -> RowCol { return mat_.shape(); }
+
+  constexpr auto get() -> T& { return mat_; }
+ private:
+  T& mat_;
+};
+
+template <typename T>
+  requires MatrixT<std::remove_cvref_t<T>>
+MatrixView(T&) -> MatView<T>;
+
+// A convenience function to create a MatrixView from a matrix.
+constexpr matRef(auto& mat) {
+  return MatrixView{mat};
+}
+
 }  // namespace tempura::matrix

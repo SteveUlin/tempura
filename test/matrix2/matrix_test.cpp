@@ -19,5 +19,17 @@ auto main() -> int {
     static_assert(approxEqual(m, n));
   };
 
+  "Matrix Ref"_test = [] {
+    static constexpr matrix::InlineDense m{
+        {0., 1.},
+        {2., 3.},
+    };
+    constexpr matrix::MatrixView ref{m};
+    static_assert(ref[0, 0] == 0.);
+    static_assert(ref[0, 1] == 1.);
+    static_assert(ref[1, 0] == 2.);
+    static_assert(ref[1, 1] == 3.);
+  };
+
   return TestRegistry::result();
 }

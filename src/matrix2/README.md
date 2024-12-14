@@ -1,3 +1,7 @@
+# Matrix2
+
+A C++26 matrix library focused on constexpr evaluations.
+
 ## Design Notes
 
 - Assume that the elements of a matrix are small <= 16 bytes. This allows for

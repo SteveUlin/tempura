@@ -18,7 +18,7 @@ class Test;
 //
 // Unit test binaries should indicate success or failure by returning
 // TestRegistry::result().
-class TestRegistry final {
+class TestRegistry {
  public:
   TestRegistry(const TestRegistry&) = delete;
   TestRegistry(TestRegistry&&) = delete;
@@ -57,7 +57,7 @@ class TestRegistry final {
 
 class Test {
  public:
-  auto operator=(const std::function<void()>& func) -> void {
+  void operator=(const std::function<void()>& func) {
     TestRegistry::setCurrent(*this);
     std::clog << "Running... " << name_ << '\n';
     func();

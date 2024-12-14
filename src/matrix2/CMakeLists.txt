@@ -1,15 +1,2 @@
-add_subdirectory(algorithms)
-add_subdirectory(storage)
-add_subdirectory(views)
-
-add_library(matrix2_matrix INTERFACE matrix.h)
-add_executable(matrix2_matrix_test matrix_test.cpp)
-target_link_libraries(matrix2_matrix_test matrix2_matrix unit)
-
-add_library(matrix2_multiplication INTERFACE multiplication.h)
-add_executable(matrix2_multiplication_test multiplication_test.cpp)
-target_link_libraries(matrix2_multiplication_test matrix2_dense matrix2_multiplication unit)
-
-add_library(matrix2_to_string INTERFACE to_string.h)
-add_executable(matrix2_to_string_test to_string_test.cpp)
-target_link_libraries(matrix2_to_string_test matrix2_dense matrix2_to_string unit)
+add_library(matrix2 INTERFACE)
+target_include_directories(matrix2 INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
