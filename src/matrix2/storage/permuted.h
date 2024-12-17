@@ -10,16 +10,27 @@ namespace tempura::matrix {
 
 // RowPermuted is a wrapper around a matrix that lets you "swap rows" without
 // moving the data in memory.
-template <typename MatT>
+template <typename MatT, typename PermT = Permutation<MatT::kRow>>
 class RowPermuted {
  public:
-  using ValueType = typename std::remove_cvref_t<MatT>::ValueType;
-  static constexpr int64_t kRow = std::remove_cvref_t<MatT>::kRow;
-  static constexpr int64_t kCol = std::remove_cvref_t<MatT>::kCol;
-  constexpr RowPermuted(MatT&& mat) : mat_(std::forward<MatT>(mat)) {}
+  using ValueType = MatT::ValueType;
+  static constexpr int64_t kRow = MatT::kRow;
+  static constexpr int64_t kCol = MatT::kCol;
 
-  constexpr RowPermuted(MatT&& mat, Permutation<kRow> perm)
-      : mat_(std::forward<MatT>(mat)), perm_(std::move(perm)) {}
+  constexpr explicit RowPermuted(const MatT& mat) : mat_{mat}, perm_{} {}
+  constexpr explicit RowPermuted(MatT&& mat) : mat_{std::move(mat)}, perm_{} {}
+
+  constexpr RowPermuted(const MatT& mat, const PermT& perm)
+      : mat_{mat}, perm_{perm} {}
+
+  constexpr RowPermuted(MatT&& mat, const PermT& perm)
+      : mat_{std::move(mat)}, perm_{perm} {}
+
+  constexpr RowPermuted(const MatT& mat, PermT&& perm)
+      : mat_{mat}, perm_{std::move(perm)} {}
+
+  constexpr RowPermuted(MatT&& mat, PermT&& perm)
+      : mat_{std::move(mat)}, perm_{std::move(perm)} {}
 
   constexpr auto operator[](this auto&& self, int64_t i, int64_t j)
       -> decltype(auto) {
@@ -48,8 +59,11 @@ class RowPermuted {
 
  private:
   MatT mat_;
-  Permutation<kRow> perm_ = {};
+  PermT perm_;
 };
+
+template <typename MatT>
+RowPermuted(const MatT&) -> RowPermuted<MatT>;
 
 template <typename MatT>
 RowPermuted(MatT&&) -> RowPermuted<MatT>;

@@ -151,6 +151,7 @@ class Permutation<N> {
     }
     CHECK(visited.all());
   }
+
   bool parity_ = false;
   std::array<int64_t, N> order_ = {};
 };

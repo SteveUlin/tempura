@@ -1,6 +1,5 @@
-#include "matrix2/views/permuted.h"
-
 #include "matrix2/storage/inline_dense.h"
+#include "matrix2/storage/permuted.h"
 #include "matrix2/storage/permutation.h"
 #include "unit.h"
 

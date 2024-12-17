@@ -195,7 +195,7 @@ class MatRef {
 
   constexpr auto get() -> T& { return &mat_; }
 
-  // Auto conversion to T& so you can pass mat refs to functions that take T&
+  // Auto conversion to T& so you can pass MatRefs to functions that take T&
   constexpr operator T&() { return *mat_; }
 
   constexpr auto swap(int64_t i, int64_t j)
