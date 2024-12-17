@@ -24,11 +24,34 @@ auto main() -> int {
         {0., 1.},
         {2., 3.},
     };
-    constexpr matrix::MatrixView ref{m};
+    constexpr matrix::MatRef ref{m};
     static_assert(ref[0, 0] == 0.);
     static_assert(ref[0, 1] == 1.);
     static_assert(ref[1, 0] == 2.);
     static_assert(ref[1, 1] == 3.);
+  };
+
+  "Matrix Ref Assignment"_test = [] {
+    constexpr auto out = [] {
+      matrix::InlineDense m{
+          {0., 1.},
+          {2., 3.},
+      };
+      matrix::MatRef ref{m};
+      m[0, 0] = 1.;
+      return m;
+    }();
+
+    static_assert(out[0, 0] == 1.);
+  };
+
+  "Matrix Ref Shape"_test = [] {
+    static constexpr matrix::InlineDense m{
+        {0., 1.},
+        {2., 3.},
+    };
+    constexpr matrix::MatRef ref{m};
+    static_assert(ref.shape() == matrix::RowCol{.row = 2, .col = 2});
   };
 
   return TestRegistry::result();

@@ -21,11 +21,12 @@ constexpr void check(
 }
 #define CHECK(condition) ::tempura::matrix::check(condition, #condition)
 
-// Extent represents the size of a dimension known at compile time.
+// The size of a dimension known at compile time.
 using Extent = int64_t;
-// Set to the max value. This simplifies validation as the following is always
-// true for a valid index 0 <= index <= Extent;
-inline static constexpr Extent kDynamic = std::numeric_limits<Extent>::max();
+
+// A special value that can be used to indicate that the size of a dimension is
+// not known at compile time.
+inline static constexpr Extent kDynamic = std::numeric_limits<Extent>::min();
 
 struct RowCol {
   int64_t row;
@@ -100,6 +101,9 @@ template <typename Lhs, typename Rhs>
 constexpr void checkSameShape(const Lhs& lhs, const Rhs& rhs) {
   if constexpr (HasDynamicExtent<Lhs> or HasDynamicExtent<Rhs>) {
     CHECK(lhs.shape() == rhs.shape());
+  } else {
+    static_assert(Lhs::kRow == Rhs::kRow and Lhs::kCol == Rhs::kCol,
+                  "Matrix extents must match");
   }
 }
 
@@ -118,7 +122,6 @@ constexpr auto operator==(const Lhs& lhs, const Rhs& rhs) -> bool {
 }
 
 template <auto delta = 0.0001, MatrixT Lhs, MatrixT Rhs>
-  requires MatchingExtent<Lhs, Rhs>
 constexpr auto approxEqual(const Lhs& lhs, const Rhs& rhs) -> bool {
   checkSameShape(lhs, rhs);
   for (int64_t row = 0; row < lhs.shape().row; ++row) {
@@ -138,37 +141,74 @@ enum class Pivot : uint8_t {
   kFull,
 };
 
+// For uniformity, all classes that take in a matrix in the constructor should
+// copy the input matrix. If you want to avoid copying, you can use a MatRef.
+//
+// Example:
+//  auto m = InlineDense{{1., 2.}, {3., 4.}};
+//  auto m_t = Transpose{MatRef{m}};
+//
+// See https://en.cppreference.com/w/cpp/utility/functional/reference_wrapper
+
+namespace internal {
+// It's ok to use a type different than T if you can implicitly convert to T&.
+// This function both:
+//  - Converts input to T
+//  - Only works over lvalues, not rvalues
 template <typename T>
-  requires MatrixT<std::remove_cvref_t<T>>
-class MatrixView {
+constexpr auto FUN(T& t) -> T& {
+  return t;
+}
+template <typename T>
+constexpr void FUN(T&&) = delete;
+
+template <typename T>
+concept HasSwap = requires(T t, int64_t i, int64_t j) {
+  { t.swap(i, j) };
+};
+
+};  // namespace internal
+
+template <typename T>
+class MatRef {
  public:
-  using ChildT = std::remove_cvref_t<T>;
-  using ValueType = typename ChildT::ValueType;
+  using ChildType = T;
+  using ValueType = typename T::ValueType;
 
-  static constexpr auto kRow = ChildT::kRow;
-  static constexpr auto kCol = ChildT::kCol;
+  static constexpr auto kRow = T::kRow;
+  static constexpr auto kCol = T::kCol;
 
-  constexpr explicit MatrixView(T& mat) : mat_(mat) {}
+  template <typename U>
+    requires(std::convertible_to<U, T&> and
+             not std::same_as<std::remove_cvref_t<U>, MatRef>)
+  constexpr MatRef(U&& mat) noexcept(noexcept(internal::FUN<T>(mat)))
+      : mat_{std::addressof(internal::FUN(mat))} {}
+
+  constexpr MatRef(const MatRef&) noexcept = default;
 
   constexpr auto operator[](this auto&& self, int64_t row, int64_t col)
       -> decltype(auto) {
-    return self.mat_[row, col];
+    return (*self.mat_)[row, col];
   }
 
-  constexpr auto shape() const -> RowCol { return mat_.shape(); }
+  constexpr auto shape() const -> RowCol { return mat_->shape(); }
 
-  constexpr auto get() -> T& { return mat_; }
+  constexpr auto get() -> T& { return &mat_; }
+
+  // Auto conversion to T& so you can pass mat refs to functions that take T&
+  constexpr operator T&() { return *mat_; }
+
+  constexpr auto swap(int64_t i, int64_t j)
+    requires internal::HasSwap<T>
+  {
+    mat_->swap(i, j);
+  }
+
  private:
-  T& mat_;
+  T* mat_;
 };
 
 template <typename T>
-  requires MatrixT<std::remove_cvref_t<T>>
-MatrixView(T&) -> MatView<T>;
-
-// A convenience function to create a MatrixView from a matrix.
-constexpr matRef(auto& mat) {
-  return MatrixView{mat};
-}
+MatRef(T&) -> MatRef<T>;
 
 }  // namespace tempura::matrix
