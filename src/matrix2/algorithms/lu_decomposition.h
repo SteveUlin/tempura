@@ -20,8 +20,8 @@ namespace tempura::matrix {
 //
 // We calculate L and U with a form of Gaussian Elimination. Use elementary
 // row operations to zero out the columns under each diagonal element. This
-// forms the matrix U. By keeping track of these elementary row operations, we
-// create the matrix L.
+// forms the matrix U. W  create the matrix L by keeping track of these
+// elementary row operations.
 //
 // As an optimization, LU<> stores L and U in the same matrix.
 //
@@ -40,16 +40,50 @@ class LU {
  public:
   using ChildT = M;
 
-  explicit LU(const M& matrix);
+  explicit LU(const M& matrix) : matrix_{matrix} { init(); }
+
+  explicit LU(M&& matrix) : matrix_{std::move(matrix)} { init(); }
+
+  template <MatrixT B>
+  void solve(B& b) const {
+    CHECK(matrix_.shape().row == b.shape().row);
+    matrix_.permutation().permuteRows(b);
+    for (int64_t i = 1; i < matrix_.shape().row; ++i) {
+      for (int64_t j = 0; j < i; ++j) {
+        for (int64_t k = 0; k < b.shape().col; ++k) {
+          b[i, k] -= matrix_[i, j] * b[j, k];
+        }
+      }
+    }
+    for (int64_t i = matrix_.shape().row - 1; i >= 0; --i) {
+      for (int64_t j = i + 1; j < matrix_.shape().row; ++j) {
+        for (int64_t k = 0; k < b.shape().col; ++k) {
+          b[i, k] -= matrix_[i, j] * b[j, k];
+        }
+      }
+      for (int64_t k = 0; k < b.shape().col; ++k) {
+        b[i, k] = safeDivide(b[i, k], matrix_[i, i]);
+      }
+    }
+  }
+
+  auto matrix() const -> const RowPermuted<M>& { return matrix_; }
 
  private:
   void init();
+
   RowPermuted<M> matrix_;
 };
 
+template <MatrixT M>
+LU(const M&) -> LU<M>;
+
+template <MatrixT M>
+LU(M&&) -> LU<M>;
+
 // LU decomposition with implicit pivoting
 template <MatrixT M>
-LU<M>::init() {
+void LU<M>::init() {
   CHECK(matrix_.shape().row == matrix_.shape().col);
 
   // To be scale invariant when pivoting, we divide each row by its largest

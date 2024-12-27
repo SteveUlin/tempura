@@ -167,6 +167,11 @@ concept HasSwap = requires(T t, int64_t i, int64_t j) {
   { t.swap(i, j) };
 };
 
+template <typename T>
+concept HasData = requires(const T& t) {
+  { t.data() };
+};
+
 };  // namespace internal
 
 template <typename T>
@@ -198,10 +203,16 @@ class MatRef {
   // Auto conversion to T& so you can pass MatRefs to functions that take T&
   constexpr operator T&() { return *mat_; }
 
-  constexpr auto swap(int64_t i, int64_t j)
+  constexpr void swap(int64_t i, int64_t j)
     requires internal::HasSwap<T>
   {
     mat_->swap(i, j);
+  }
+
+  constexpr auto data() const -> decltype(auto)
+    requires internal::HasData<T>
+  {
+    return mat_->data();
   }
 
  private:
