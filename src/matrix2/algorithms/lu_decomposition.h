@@ -36,41 +36,30 @@ constexpr auto safeDivide(auto a, auto b) {
 }
 
 template <MatrixT M>
+  requires(M::kRow == M::kCol or M::kRow == kDynamic or M::kCol == kDynamic)
 class LU {
  public:
   using ChildT = M;
 
-  explicit LU(const M& matrix) : matrix_{matrix} { init(); }
+  constexpr explicit LU(const M& matrix) : matrix_{matrix} { init(); }
 
-  explicit LU(M&& matrix) : matrix_{std::move(matrix)} { init(); }
+  constexpr explicit LU(M&& matrix) : matrix_{std::move(matrix)} { init(); }
 
   template <MatrixT B>
-  void solve(B& b) const {
-    CHECK(matrix_.shape().row == b.shape().row);
-    matrix_.permutation().permuteRows(b);
+  constexpr void solve(B& b) const;
+
+  constexpr auto determinant() const -> typename M::ValueType {
+    auto det = matrix_[0, 0];
     for (int64_t i = 1; i < matrix_.shape().row; ++i) {
-      for (int64_t j = 0; j < i; ++j) {
-        for (int64_t k = 0; k < b.shape().col; ++k) {
-          b[i, k] -= matrix_[i, j] * b[j, k];
-        }
-      }
+      det *= matrix_[i, i];
     }
-    for (int64_t i = matrix_.shape().row - 1; i >= 0; --i) {
-      for (int64_t j = i + 1; j < matrix_.shape().row; ++j) {
-        for (int64_t k = 0; k < b.shape().col; ++k) {
-          b[i, k] -= matrix_[i, j] * b[j, k];
-        }
-      }
-      for (int64_t k = 0; k < b.shape().col; ++k) {
-        b[i, k] = safeDivide(b[i, k], matrix_[i, i]);
-      }
-    }
+    return det;
   }
 
-  auto matrix() const -> const RowPermuted<M>& { return matrix_; }
+  constexpr auto data() const -> const RowPermuted<M>& { return matrix_; }
 
  private:
-  void init();
+  constexpr void init();
 
   RowPermuted<M> matrix_;
 };
@@ -83,7 +72,8 @@ LU(M&&) -> LU<M>;
 
 // LU decomposition with implicit pivoting
 template <MatrixT M>
-void LU<M>::init() {
+  requires(M::kRow == M::kCol or M::kRow == kDynamic or M::kCol == kDynamic)
+constexpr void LU<M>::init() {
   CHECK(matrix_.shape().row == matrix_.shape().col);
 
   // To be scale invariant when pivoting, we divide each row by its largest
@@ -119,6 +109,31 @@ void LU<M>::init() {
       for (int64_t k = i + 1; k < matrix_.shape().col; ++k) {
         matrix_[j, k] -= matrix_[j, i] * matrix_[i, k];
       }
+    }
+  }
+}
+
+template <MatrixT M>
+  requires(M::kRow == M::kCol or M::kRow == kDynamic or M::kCol == kDynamic)
+template <MatrixT B>
+constexpr void LU<M>::solve(B& b) const {
+  CHECK(matrix_.shape().row == b.shape().row);
+  matrix_.permutation().permuteRows(b);
+  for (int64_t i = 1; i < matrix_.shape().row; ++i) {
+    for (int64_t j = 0; j < i; ++j) {
+      for (int64_t k = 0; k < b.shape().col; ++k) {
+        b[i, k] -= matrix_[i, j] * b[j, k];
+      }
+    }
+  }
+  for (int64_t i = matrix_.shape().row - 1; i >= 0; --i) {
+    for (int64_t j = i + 1; j < matrix_.shape().row; ++j) {
+      for (int64_t k = 0; k < b.shape().col; ++k) {
+        b[i, k] -= matrix_[i, j] * b[j, k];
+      }
+    }
+    for (int64_t k = 0; k < b.shape().col; ++k) {
+      b[i, k] = safeDivide(b[i, k], matrix_[i, i]);
     }
   }
 }
