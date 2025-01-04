@@ -180,7 +180,7 @@ class MatRef {
   using ChildType = T;
   using ValueType = typename T::ValueType;
 
-  static constexpr auto kRow = T::kRow;
+ static constexpr auto kRow = T::kRow;
   static constexpr auto kCol = T::kCol;
 
   template <typename U>

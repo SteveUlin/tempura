@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <ranges>
 #include <utility>
 #include <vector>
 
@@ -19,7 +20,15 @@ class Dense {
 
   constexpr Dense() = default;
 
-  constexpr explicit Dense(std::vector<T> data) : data_{data} {}
+  constexpr Dense(const Dense& other) = default;
+  constexpr Dense(Dense&& other) noexcept(
+      std::is_nothrow_move_constructible_v<T>) = default;
+
+  constexpr auto operator=(const Dense& other) -> Dense& = default;
+  constexpr auto operator=(Dense&& other) noexcept(
+      std::is_nothrow_move_assignable_v<T>) -> Dense& = default;
+
+  constexpr explicit Dense(std::vector<T> data) : data_{std::move(data)} {}
 
   template <MatrixT MatT>
     requires MatchingExtent<Dense, MatT>
@@ -46,7 +55,7 @@ class Dense {
     requires((sizeof...(Sizes) + 1 == Row) and (First == Col) and
              ((Sizes == Col) and ...))
   constexpr explicit Dense(const T (&first)[First],
-                                 const T (&... rows)[Sizes]) {
+                           const T (&... rows)[Sizes]) {
     for (int64_t j = 0; j < First; ++j) {
       (*this)[0, j] = first[j];
     }
@@ -88,9 +97,7 @@ class Dense {
     return self.data_[index];
   }
 
-  constexpr auto data() const -> const std::vector<T>& {
-    return data_;
-  }
+  constexpr auto data() const -> const std::vector<T>& { return data_; }
 
   constexpr auto operator==(const Dense& other) const -> bool {
     return data_ == other.data_;
@@ -101,7 +108,7 @@ class Dense {
   constexpr auto end(this auto&& self) { return self.data_.end(); }
 
  private:
-  std::vector<T> data_(k;
+  std::vector<T> data_ = std::vector<T>(Row * Col, T{});
 };
 
 static_assert(MatrixT<Dense<double, 2, 2>>);
