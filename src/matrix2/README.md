@@ -4,15 +4,6 @@ A C++26 matrix library focused on constexpr evaluations.
 
 ## Design Notes
 
-- Assume that the elements of a matrix are small <= 16 bytes. This allows for
-efficient copying of elements instead of returning const refs. However, also
-assume that the elements could be 16 bytes long, so use refs and pointers
-whenever referring to multiple elements.
-
-Why? This assumption helps keep the code simple and efficient. If the elements
-is less <= 16 bytes, it is feasible that the compiler will keep the return
-value inside the registers.
-
 - All classes that take a matrix in their constructor should make a copy or
 move the matrix into the class. 
 
@@ -30,11 +21,9 @@ constexpr.
 
 ## Style and Conventions
 
-- Use the term `Inplace` to indicate the object is stack allocated.
-
-This matches the C++ standard library's naming convention.
-
 - Loosely follow Google's C++ Style Guide.
+
+It's just what I'm used to.
 
 - Use `and` and `or` instead of `&&` and `||`. (Hard habit to break tho)
 
@@ -42,4 +31,9 @@ Why? I like it
 
 ## TODO
 
-- [ ] Rename Inline* to Inplace* to more closely match the C++ standard
+- [ ] Create a header file that include all storage matrices and arithmetic ops.
+- [ ] Banded matrix
+- [ ] Banded LU decomposition
+- [ ] Transpose matrix
+- [ ] Triangular matrix
+

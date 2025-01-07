@@ -1,4 +1,5 @@
 #include "matrix2/matrix.h"
+#include "matrix2/storage/banded.h"
 #include "matrix2/storage/inline_dense.h"
 #include "matrix2/storage/permutation.h"
 #include "matrix2/storage/permuted.h"
@@ -35,9 +36,13 @@ constexpr auto safeDivide(auto a, auto b) {
   return a / b;
 }
 
-template <MatrixT M>
-  requires(M::kRow == M::kCol or M::kRow == kDynamic or M::kCol == kDynamic)
-class LU {
+template <typename M>
+class LU;
+
+template <typename M>
+  requires(MatrixT<M> and
+           (M::kRow == M::kCol or M::kRow == kDynamic or M::kCol == kDynamic))
+class LU<M> {
  public:
   using ChildT = M;
 
@@ -71,8 +76,9 @@ template <MatrixT M>
 LU(M&&) -> LU<M>;
 
 // LU decomposition with implicit pivoting
-template <MatrixT M>
-  requires(M::kRow == M::kCol or M::kRow == kDynamic or M::kCol == kDynamic)
+template <typename M>
+  requires(MatrixT<M> and
+           (M::kRow == M::kCol or M::kRow == kDynamic or M::kCol == kDynamic))
 constexpr void LU<M>::init() {
   CHECK(matrix_.shape().row == matrix_.shape().col);
 
@@ -113,8 +119,9 @@ constexpr void LU<M>::init() {
   }
 }
 
-template <MatrixT M>
-  requires(M::kRow == M::kCol or M::kRow == kDynamic or M::kCol == kDynamic)
+template <typename M>
+  requires(MatrixT<M> and
+           (M::kRow == M::kCol or M::kRow == kDynamic or M::kCol == kDynamic))
 template <MatrixT B>
 constexpr void LU<M>::solve(B& b) const {
   CHECK(matrix_.shape().row == b.shape().row);

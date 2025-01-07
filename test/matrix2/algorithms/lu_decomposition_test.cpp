@@ -29,7 +29,7 @@ auto main() -> int {
         {0., 4., 5.},
         {1., 6., 2.},
     };
-    constexpr matrix::LU lu(C);
+    constexpr matrix::LU lu{C};
     static_assert(lu.determinant() == -33.);
   };
 }
