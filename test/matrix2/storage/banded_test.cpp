@@ -3,7 +3,9 @@
 #include <array>
 #include <vector>
 
+#include "matrix2/storage/block.h"
 #include "matrix2/storage/inline_dense.h"
+#include "matrix2/to_string.h"
 #include "unit.h"
 
 using namespace tempura;
@@ -28,6 +30,17 @@ auto main() -> int {
     };
     static_assert(b == expected);
   };
+
+  static constexpr InlineDense d{
+      {1, 2, 3},
+      {4, 5, 6},
+      {7, 8, 9},
+      {10, 11, 12},
+      {13, 14, 15},
+  };
+
+  constexpr Banded b{d};
+  std::println("{}", matrix::toString(b));
 
   return TestRegistry::result();
 }

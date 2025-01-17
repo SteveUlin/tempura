@@ -16,6 +16,6 @@ indent_size = 2
 max_line_length = 80
 
 [*.{cpp,h,hpp}]
-cpp_standard = c++26
+cpp_standard = c++2c
 trim_trailing_whitespace = true
 

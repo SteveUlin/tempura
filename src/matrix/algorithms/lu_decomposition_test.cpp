@@ -18,5 +18,6 @@ auto main() -> int {
     std::cout << toString(b) << std::endl;
     std::cout << toString(lu.solve(b)) << std::endl;
   };
+
   return 0;
 }

@@ -8,9 +8,9 @@
 
 namespace tempura::matrix {
 
-// RowPermuted is a wrapper around a matrix that lets you "swap rows" without
+// Row Permuted is a wrapper around a matrix that lets you "swap rows" without
 // moving the data in memory.
-template <typename MatT, typename PermT = Permutation<MatT::kRow>>
+template <MatrixT MatT, typename PermT = Permutation<MatT::kRow>>
 class RowPermuted {
  public:
   using ValueType = MatT::ValueType;
