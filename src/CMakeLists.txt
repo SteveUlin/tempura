@@ -16,6 +16,8 @@ target_sources(profiler PUBLIC profiler.h profiler.cpp)
 
 add_library(unit INTERFACE unit.h)
 
+add_library(interpolate INTERFACE interpolate.h)
+
 add_library(function_traits INTERFACE function_traits.h)
 
 # add_library(fifo_queue INTERFACE fifo_queue.h)
