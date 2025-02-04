@@ -5,7 +5,6 @@
 #include <cstdint>
 #include <deque>
 #include <utility>
-#include <vector>
 
 #include "interpolate.h"
 

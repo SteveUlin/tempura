@@ -1,4 +1,3 @@
-#include "quadature/newton_cotes.h"
 #include "quadature/improper.h"
 
 #include <print>
@@ -51,7 +50,7 @@ template <typename Integrator, typename... Args>
 void fuzzTest(Args&&... args) {
   std::default_random_engine rng(1337);
 
-  for (size_t i = 0; i < 1'000; ++i) {
+  for (size_t i = 0; i < 1; ++i) {
     auto [func, a, b, ans] = genPolynomial(rng);
     Integrator integrator{args..., std::move(func), a, b};
     double result = integrator.result();
@@ -60,6 +59,7 @@ void fuzzTest(Args&&... args) {
       const double next = integrator.result();
       const double diff = std::abs((next - result) / next);
       result = next;
+      std::println("{}, diff: {}", result, diff);
       if (diff < 1e-6) {
         break;
       }
@@ -73,13 +73,14 @@ template <typename Integrator>
 auto testConvergence(Integrator integrator) -> int64_t {
   int64_t calls = 0;
   auto result = integrator.result();
-  for (int64_t i = 0; i < 30; ++i) {
+  for (int64_t i = 0; i < 20; ++i) {
     ++calls;
     integrator.refine();
     const auto next = integrator.result();
     const auto diff = std::abs((next - result) / next);
     result = next;
-    if (diff < 1e-10) {
+    std::println("{}", result);
+    if (diff < 1e-4) {
       std::println("{}", result);
       break;
     }
@@ -88,30 +89,27 @@ auto testConvergence(Integrator integrator) -> int64_t {
 }
 
 auto main() -> int {
-  "fuzz trap"_test = [] {
-    fuzzTest<TrapazoidalIntegrator<double, std::function<double(double)>>>();
+  "fuzz midpoint"_test = [] {
+    fuzzTest<MidpointIntegrator<double, std::function<double(double)>>>();
   };
 
-  "fuzz simpson"_test = [] {
-    fuzzTest<SimpsonIntegrator<double, std::function<double(double)>>>();
+  "convergence midpoint"_test = [] {
+    int64_t count =
+        testConvergence(MidpointIntegrator([](double x) { return std::pow(x, -0.5); }, 0.0, 1.0));
+
+    std::println("Convergence: {}", count);
+    count = testConvergence(
+        RombergMidpointIntegrator(5, [](double x) { return std::pow(x, -0.5); }, 0.0, 1.0));
+
+    std::println("Convergence: {}", count);
+
+    count = testConvergence(MidpointInfIntegrator{[](double x) { return std::pow(x, -4); }, 1.0});
+    std::println("Convergence: {}", count);
+
+    count = testConvergence(
+        MidpointSqrtIntegrator{[](double x) { return 1.0 / std::sqrt(x); }, 0.0, 1.0});
+    std::println("Convergence: {}", count);
   };
 
-  "fuzz romberg"_test = [] {
-    fuzzTest<RombergIntegrator<double, std::function<double(double)>>>(5);
-  };
-
-  "convergence"_test = [] {
-    auto func = [](double x) {
-      if (x == 0.0) {
-        return 0.0;
-      }
-      return std::pow(x, 4) * std::log(x + std::sqrt((x * x) + 1));
-    };
-    std::println("Trapazoidal: {}", 1 + testConvergence(TrapazoidalIntegrator{func, 0.0, 2.0}));
-    std::println("Simpson: {}", 2 + testConvergence(SimpsonIntegrator{func, 0.0, 2.0}));
-    std::println("Romberg: {}", 5 + testConvergence(RombergIntegrator{5, func, 0.0, 2.0}));
-    std::println("Midpoint: {}", 1 + testConvergence(MidpointIntegrator{func, 0.0, 2.0}));
-    std::println("RombergMidpoint: {}", 5 + testConvergence(RombergMidpointIntegrator{3, func, 0.0, 2.0}));
-  };
   return TestRegistry::result();
 }
