@@ -48,15 +48,63 @@ auto escapeJson(const std::string& s) -> std::string {
   return output;
 }
 
+namespace internal {
+
 template <class... Ts>
 struct Overloaded : Ts... {
   using Ts::operator()...;
 };
-
 template <class... Ts>
 Overloaded(Ts...) -> Overloaded<Ts...>;
-auto toString(const JsonValue& obj, size_t indentLevel = 0) -> std::string {
-  std::string indent = std::string(indentLevel * 2, ' ');
+
+constexpr auto toString(const JsonValue& obj, size_t indentLevel = 0)
+    -> std::string;
+constexpr auto toString(const JsonArray& obj, size_t indentLevel = 0)
+    -> std::string;
+
+constexpr auto toString(const JsonMap& obj, size_t indentLevel = 0)
+    -> std::string {
+  if (obj.empty()) {
+    return "{}";
+  }
+  const std::string indent = std::string(indentLevel * 2, ' ');
+
+  std::string output = "{\n";
+  bool first = true;
+  for (const auto& [key, value] : obj) {
+    if (!first) {
+      output += ",\n";
+    }
+    first = false;
+    output += std::format("  {}\"{}\" : {}", indent, escapeJson(key),
+                          toString(value, indentLevel + 1));
+  }
+  output += std::format("\n{}}}", indent);
+  return output;
+}
+
+constexpr auto toString(const JsonArray& obj, size_t indentLevel)
+    -> std::string {
+  if (obj.empty()) {
+    return "[]";
+  }
+  const std::string indent = std::string(indentLevel * 2, ' ');
+
+  std::string output = "[\n";
+  bool first = true;
+  for (const auto& element : obj) {
+    if (!first) {
+      output += ",\n";
+    }
+    first = false;
+    output += std::format("  {}{}", indent, toString(element, indentLevel + 1));
+  }
+  output += std::format("\n{}]", indent);
+  return output;
+}
+
+constexpr auto toString(const JsonValue& obj, size_t indentLevel)
+    -> std::string {
   return std::visit(
       Overloaded{
           [](std::monostate) -> std::string { return "null"; },
@@ -67,49 +115,36 @@ auto toString(const JsonValue& obj, size_t indentLevel = 0) -> std::string {
             return std::format("\"{}\"", escapeJson(curr));
           },
           [&](const JsonArray& curr) -> std::string {
-            if (curr.empty()) {
-              return "[]";
-            }
-            std::string output = "[\n";
-            bool first = true;
-            for (const auto& element : curr) {
-              if (!first) {
-                output += ",\n";
-              }
-              first = false;
-              output += std::format("  {}{}", indent,
-                                    toString(element, indentLevel + 1));
-            }
-            output += std::format("\n{}]", indent);
-            return output;
+            return toString(curr, indentLevel);
           },
-
           [&](const JsonMap& curr) -> std::string {
-            if (curr.empty()) {
-              return "{}";
-            }
-            std::string output = "{\n";
-            bool first = true;
-            for (const auto& [key, value] : curr) {
-              if (!first) {
-                output += ",\n";
-              }
-              first = false;
-              output +=
-                  std::format("  {}\"{}\" : {}", indent, escapeJson(key),
-                              toString(value, indentLevel + 1));
-            }
-            output += std::format("\n{}}}", indent);
-            return output;
+            return toString(curr, indentLevel);
           }},
       obj);
 }
+
+}  // namespace internal
 
 }  // namespace tempura
 
 template <>
 struct std::formatter<tempura::JsonValue> : std::formatter<std::string> {
   auto format(const tempura::JsonValue& value, std::format_context& ctx) const {
-    return std::formatter<std::string>::format(tempura::toString(value), ctx);
+    return std::formatter<std::string>::format(tempura::internal::toString(value), ctx);
   }
 };
+
+template <>
+struct std::formatter<tempura::JsonArray> : std::formatter<std::string> {
+  auto format(const tempura::JsonArray& value, std::format_context& ctx) const {
+    return std::formatter<std::string>::format(tempura::internal::toString(value), ctx);
+  }
+};
+
+template <>
+struct std::formatter<tempura::JsonMap> : std::formatter<std::string> {
+  auto format(const tempura::JsonMap& value, std::format_context& ctx) const {
+    return std::formatter<std::string>::format(tempura::internal::toString(value), ctx);
+  }
+};
+

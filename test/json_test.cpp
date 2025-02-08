@@ -10,7 +10,7 @@ auto main() -> int {
       {"key2", 42},
       {"key3", 3.14},
       {"key4", JsonArray{{1, 2, 3}}},
-      {"key5", JsonMap{{{"key5", true}}}},
+      {"key5", JsonMap{{{"key6", true}}}},
   }};
 
   std::println("{}", value);

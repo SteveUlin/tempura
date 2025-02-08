@@ -7,11 +7,9 @@ add_subdirectory(quadature)
 # add_subdirectory(bayes)
 
 add_library(benchmark INTERFACE benchmark.h)
-
 add_library(interpolate INTERFACE interpolate.h)
-
+add_library(json INTERFACE json.h)
 add_library(polynomial INTERFACE polynomial.h)
-
 add_library(unit INTERFACE unit.h)
 
 # ---
@@ -38,7 +36,4 @@ add_library(image INTERFACE image.h)
 add_executable(image_test image_test.cpp)
 target_link_libraries(image_test image unit)
 
-add_library(json INTERFACE json.h)
-add_executable(json_test json_test.cpp)
-target_link_libraries(json_test json unit)
 
