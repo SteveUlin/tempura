@@ -106,6 +106,9 @@ auto main() -> int {
     count = testConvergence(MidpointInfIntegrator{[](double x) { return std::pow(x, -4); }, 1.0});
     std::println("Convergence: {}", count);
 
+    count = testConvergence(ExponentialIntegrator{[](double x) { return std::exp(-x); }, 2.0});
+    std::println("Convergence: {}", count);
+
     count = testConvergence(
         MidpointSqrtIntegrator{[](double x) { return 1.0 / std::sqrt(x); }, 0.0, 1.0});
     std::println("Convergence: {}", count);

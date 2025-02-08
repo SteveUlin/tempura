@@ -80,7 +80,7 @@ auto testConvergence(Integrator integrator) -> int64_t {
     const auto diff = std::abs((next - result) / next);
     result = next;
     if (diff < 1e-10) {
-      std::println("{}", result);
+      std::println("{}", result - 8.1533641198111650205387451810911930652);
       break;
     }
   }
@@ -112,6 +112,8 @@ auto main() -> int {
     std::println("Romberg: {}", 5 + testConvergence(RombergIntegrator{5, func, 0.0, 2.0}));
     std::println("Midpoint: {}", 1 + testConvergence(MidpointIntegrator{func, 0.0, 2.0}));
     std::println("RombergMidpoint: {}", 5 + testConvergence(RombergMidpointIntegrator{3, func, 0.0, 2.0}));
+    std::println("TanhRule: {}", 1 + testConvergence(TanhRuleIntegrator{func, 0.0, 2.0}));
+    std::println("TanhSinhRule: {}", 1 + testConvergence(TanhSinhRuleIntegrator{func, 0.0, 2.0}));
   };
   return TestRegistry::result();
 }
