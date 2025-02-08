@@ -3,6 +3,11 @@ target_link_libraries(interpolate_test unit interpolate)
 add_test(NAME interpolate_test COMMAND interpolate_test)
 set_property(TEST interpolate_test PROPERTY LABELS base)
 
+add_executable(polynomial_test polynomial_test.cpp)
+target_link_libraries(polynomial_test unit polynomial)
+add_test(NAME polynomial_test COMMAND polynomial_test)
+set_property(TEST polynomial_test PROPERTY LABELS base)
+
 file(GLOB_RECURSE MATRIX_TEST_SOURCES "matrix2/*.cpp")
 foreach(TEST_SOURCE ${MATRIX_TEST_SOURCES})
    # Get the base name of the test file
