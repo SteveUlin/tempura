@@ -10,6 +10,7 @@ add_library(benchmark INTERFACE benchmark.h)
 add_library(interpolate INTERFACE interpolate.h)
 add_library(json INTERFACE json.h)
 add_library(polynomial INTERFACE polynomial.h)
+add_library(sequence INTERFACE sequence.h)
 add_library(unit INTERFACE unit.h)
 
 # ---

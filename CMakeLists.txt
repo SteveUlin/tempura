@@ -11,7 +11,7 @@ endif()
 
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
 # set(CMAKE_CXX_FLAGS "-Wall -Wextra -fbracket-depth=1024")
-set(CMAKE_CXX_FLAGS "-Wall -Wextra -std=c++2c")
+set(CMAKE_CXX_FLAGS "-Wall -Wextra -std=c++2c -fconcepts-diagnostics-depth=4")
 set(CMAKE_CXX_FLAGS_RELEASE "-ftree-vectorize -march=native -ffast-math -O3 -funroll-loops")
 # set(CMAKE_CXX_FLAGS_RELEASE "-ftree-vectorize -march=native -O2 -funroll-loops")
 

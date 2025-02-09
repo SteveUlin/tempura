@@ -13,6 +13,11 @@ target_link_libraries(json_test unit json)
 add_test(NAME json_test COMMAND json_test)
 set_property(TEST json_test PROPERTY LABELS base)
 
+add_executable(sequence_test sequence_test.cpp)
+target_link_libraries(sequence_test unit sequence)
+add_test(NAME sequence_test COMMAND sequence_test)
+set_property(TEST sequence_test PROPERTY LABELS base)
+
 file(GLOB_RECURSE MATRIX_TEST_SOURCES "matrix2/*.cpp")
 foreach(TEST_SOURCE ${MATRIX_TEST_SOURCES})
    # Get the base name of the test file

@@ -196,8 +196,7 @@ constexpr auto expectRangeNear(std::ranges::input_range auto&& lhs,
   }
   return true;
 }
-constexpr auto expectRangeEq(std::ranges::input_range auto&& lhs,
-                   std::ranges::input_range auto&& rhs,
+constexpr auto expectRangeEq(auto&& lhs, auto&& rhs,
                    const std::source_location location =
                        std::source_location::current()) -> bool {
   for (auto [l, r, idx] : std::views::zip(lhs, rhs, std::views::iota(0))) {
