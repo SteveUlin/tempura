@@ -8,23 +8,21 @@ namespace tempura {
 // Returns the rolling sum of the input range.
 // 1, 2, 3, 4, 5 ->
 // 1, 3, 6, 10, 15
-//
-// TODO: Make this work as constexpr with std::views::zip
-// Implement Const Iterators?
 template <typename Range, typename BinaryOp>
 class InclusiveScanView
     : public std::ranges::view_interface<InclusiveScanView<Range, BinaryOp>> {
  public:
   struct Sentinel;
+
+  template <typename IteratorT, typename SentinelT>
   class Iterator {
    public:
     // Required for std::ranges::iterator_traits
     using difference_type = std::ptrdiff_t;
-    using value_type = std::decay_t<std::ranges::range_value_t<Range>>;
+    using value_type = std::remove_cvref_t<std::ranges::range_value_t<Range>>;
 
-    constexpr Iterator(std::ranges::iterator_t<Range> current,
-             std::ranges::sentinel_t<Range> end, BinaryOp op)
-        : current_{current}, end_{end}, op_{op} {
+    constexpr Iterator(IteratorT begin, SentinelT end, BinaryOp op)
+        : current_{begin}, end_{end}, op_{op} {
       if (current_ != end) {
         acc_ = *current_;
       }
@@ -55,42 +53,49 @@ class InclusiveScanView
     }
 
    private:
-    std::decay_t<std::ranges::range_value_t<Range>> acc_ = {};
-    std::ranges::iterator_t<Range> current_;
-    std::ranges::sentinel_t<Range> end_;
+    std::remove_cvref_t<std::ranges::range_value_t<Range>> acc_ = {};
+    IteratorT current_;
+    SentinelT end_;
     BinaryOp op_;
   };
 
   struct Sentinel {
-    constexpr auto operator==(const Iterator& itr) const {
+    template <typename IteratorT, typename SentinelT>
+    constexpr auto operator==(const Iterator<IteratorT, SentinelT>& itr) const {
       return itr == *this;
     }
 
-    constexpr auto operator!=(const Iterator& itr) const {
+    template <typename IteratorT, typename SentinelT>
+    constexpr auto operator!=(const Iterator<IteratorT, SentinelT>& itr) const {
       return itr != *this;
     }
   };
 
-  constexpr InclusiveScanView() = default;
-  constexpr InclusiveScanView(InclusiveScanView&) = default;
+  // You can still move the view instead of using the constructor below
   constexpr InclusiveScanView(InclusiveScanView&&) = default;
-  constexpr auto operator=(InclusiveScanView&&) -> InclusiveScanView& = default;
-  constexpr auto operator=(InclusiveScanView&) -> InclusiveScanView& = default;
 
   template <std::ranges::viewable_range Arg>
-  constexpr InclusiveScanView(Arg&& range, BinaryOp op = {})
+  constexpr explicit InclusiveScanView(Arg&& range, BinaryOp op = {})
       : range_(std::forward<Arg>(range)), op_(std::move(op)) {}
 
-  constexpr auto begin() -> Iterator {
+  constexpr auto begin() const {
     return Iterator(std::ranges::begin(range_), std::ranges::end(range_), op_);
   }
 
-  constexpr auto end() -> Sentinel { return {}; }
+  constexpr auto cbegin() const {
+    return Iterator(std::ranges::cbegin(range_), std::ranges::cend(range_), op_);
+  }
+
+  constexpr auto end() const -> Sentinel { return {}; }
+  constexpr auto cend() const -> Sentinel { return {}; }
 
  private:
   Range range_ = std::ranges::empty;
   BinaryOp op_ = {};
 };
+
+template <std::ranges::viewable_range Rng, typename BinaryOp = std::plus<>>
+InclusiveScanView(InclusiveScanView<Rng, BinaryOp>&&) -> InclusiveScanView<Rng, BinaryOp>;
 
 template <std::ranges::viewable_range Rng, typename BinaryOp = std::plus<>>
 InclusiveScanView(Rng&&, BinaryOp = {})

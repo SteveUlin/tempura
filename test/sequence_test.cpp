@@ -10,9 +10,9 @@ using namespace tempura;
 
 auto main() -> int {
   "Ref Data"_test = [] {
-    std::array data{1, 2, 3, 4, 5};
-    const InclusiveScanView view{data};
-    constexpr std::array expected{1, 3, 6, 10, 15};
+    constexpr static std::array data{1, 2, 3, 4, 5};
+    constexpr InclusiveScanView view{data};
+    const std::array expected{1, 3, 6, 10, 15};
     expectRangeEq(expected, view);
   };
 
