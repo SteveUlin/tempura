@@ -21,8 +21,9 @@ class InclusiveScanView
     using difference_type = std::ptrdiff_t;
     using value_type = std::remove_cvref_t<std::ranges::range_value_t<Range>>;
 
-    constexpr Iterator(IteratorT begin, SentinelT end, BinaryOp op)
-        : current_{begin}, end_{end}, op_{op} {
+    constexpr Iterator(IteratorT begin, SentinelT end,
+                       const InclusiveScanView* parent)
+        : current_{begin}, end_{end}, parent_{parent} {
       if (current_ != end) {
         acc_ = *current_;
       }
@@ -33,7 +34,7 @@ class InclusiveScanView
     constexpr auto operator++() -> Iterator& {
       ++current_;
       if (current_ != end_) {
-        acc_ = op_(acc_, *current_);
+        acc_ = parent_->op_(acc_, *current_);
       }
       return *this;
     }
@@ -55,8 +56,8 @@ class InclusiveScanView
    private:
     std::remove_cvref_t<std::ranges::range_value_t<Range>> acc_ = {};
     IteratorT current_;
-    SentinelT end_;
-    BinaryOp op_;
+    [[no_unique_address]] SentinelT end_;
+    const InclusiveScanView* parent_;
   };
 
   struct Sentinel {
@@ -79,11 +80,12 @@ class InclusiveScanView
       : range_(std::forward<Arg>(range)), op_(std::move(op)) {}
 
   constexpr auto begin() const {
-    return Iterator(std::ranges::begin(range_), std::ranges::end(range_), op_);
+    return Iterator(std::ranges::begin(range_), std::ranges::end(range_), this);
   }
 
   constexpr auto cbegin() const {
-    return Iterator(std::ranges::cbegin(range_), std::ranges::cend(range_), op_);
+    return Iterator(std::ranges::cbegin(range_), std::ranges::cend(range_),
+                    this);
   }
 
   constexpr auto end() const -> Sentinel { return {}; }
@@ -95,14 +97,16 @@ class InclusiveScanView
 };
 
 template <std::ranges::viewable_range Rng, typename BinaryOp = std::plus<>>
-InclusiveScanView(InclusiveScanView<Rng, BinaryOp>&&) -> InclusiveScanView<Rng, BinaryOp>;
+InclusiveScanView(InclusiveScanView<Rng, BinaryOp>&&)
+    -> InclusiveScanView<Rng, BinaryOp>;
 
 template <std::ranges::viewable_range Rng, typename BinaryOp = std::plus<>>
 InclusiveScanView(Rng&&, BinaryOp = {})
     -> InclusiveScanView<std::ranges::views::all_t<Rng>, BinaryOp>;
 
 template <typename BinaryOp>
-struct InclusiveScanFn : std::ranges::range_adaptor_closure<InclusiveScanFn<BinaryOp>> {
+struct InclusiveScanFn
+    : std::ranges::range_adaptor_closure<InclusiveScanFn<BinaryOp>> {
   template <std::ranges::input_range Range>
   constexpr auto operator()(Range&& range) const {
     return InclusiveScanView{std::forward<Range>(range), op};
