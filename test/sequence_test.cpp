@@ -12,8 +12,8 @@ auto main() -> int {
   "Ref Data"_test = [] {
     constexpr static std::array data{1, 2, 3, 4, 5};
     constexpr InclusiveScanView view{data};
-    const std::array expected{1, 3, 6, 10, 15};
-    expectRangeEq(expected, view);
+    constexpr static std::array expected{1, 3, 6, 10, 15};
+    static_assert(expectRangeEq(expected, view));
   };
 
   "Temporary View"_test = [] {
