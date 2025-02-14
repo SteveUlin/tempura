@@ -17,16 +17,23 @@ auto main() -> int {
 
   "Temporary View"_test = [] {
     InclusiveScanView view{std::vector<int>{1, 2, 3, 4, 5}};
+    const std::array expected{1, 3, 6, 10, 15};
+    expectRangeEq(expected, view);
   };
 
-  for (auto v : InclusiveScanView{std::vector<int>{1, 2, 3, 4, 5}}) {
-    std::print("{}\n", v);
-  }
+  "Pipe Syntax"_test = [] {
+    const std::array data{1, 2, 3, 4, 5};
+    const std::array expected{1, 3, 6, 10, 15};
+    const auto view = data | inclusiveScan();
+    expectRangeEq(expected, view);
+  };
 
-  auto view = InclusiveScanView{std::vector<int>{1, 2, 3, 4, 5}};
-  for (auto v : view) {
-    std::print("{}\n", v);
-  }
+  "Ref Data Pipe"_test = [] {
+    constexpr static std::array data{1, 2, 3, 4, 5};
+    constexpr auto view = data | inclusiveScan();
+    constexpr static std::array expected{1, 3, 6, 10, 15};
+    static_assert(std::ranges::equal(expected, view));
+  };
 
   return TestRegistry::result();
 }

@@ -116,7 +116,7 @@ struct InclusiveScanFn
 };
 
 template <typename BinaryOp = std::plus<>>
-auto inclusiveScan(BinaryOp op = {}) {
+constexpr auto inclusiveScan(BinaryOp op = {}) {
   return InclusiveScanFn{.op = std::move(op)};
 }
 

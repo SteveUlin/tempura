@@ -35,7 +35,18 @@ foreach(TEST_SOURCE ${QUADATURE_TEST_SOURCES})
   get_filename_component(TEST_NAME ${TEST_SOURCE} NAME_WE)
 
   add_executable(quadature_${TEST_NAME} ${TEST_SOURCE})
-  target_link_libraries(quadature_${TEST_NAME} unit matrix2)
+  target_link_libraries(quadature_${TEST_NAME} unit quadature)
   add_test(NAME quadature_${TEST_NAME} COMMAND quadature_${TEST_NAME})
   set_property(TEST quadature_${TEST_NAME} PROPERTY LABELS quadature)
+endforeach()
+
+file(GLOB_RECURSE SPECIAL_TEST_SOURCES "special/*.cpp")
+foreach(TEST_SOURCE ${SPECIAL_TEST_SOURCES})
+   # Get the base name of the test file
+  get_filename_component(TEST_NAME ${TEST_SOURCE} NAME_WE)
+
+  add_executable(special_${TEST_NAME} ${TEST_SOURCE})
+  target_link_libraries(special_${TEST_NAME} unit special)
+  add_test(NAME special_${TEST_NAME} COMMAND special_${TEST_NAME})
+  set_property(TEST special_${TEST_NAME} PROPERTY LABELS special)
 endforeach()
