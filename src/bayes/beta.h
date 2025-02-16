@@ -28,7 +28,7 @@ class Beta {
     if (x < 0 || x > 1) {
       return -std::numeric_limits<T>::infinity();
     }
-    return (X_.alpha() - 1) * log(x) + (Y_.alpha() - 1) * log(1 - x) -
+    return ((X_.alpha() - 1) * log(x)) + ((Y_.alpha() - 1) * log(1 - x)) -
            log(std::beta(X_.alpha(), Y_.alpha()));
   }
 
@@ -36,7 +36,7 @@ class Beta {
     if (x < 0 || x > 1) {
       return -std::numeric_limits<T>::infinity();
     }
-    return (X_.alpha() - 1) * log(x) + (Y_.alpha() - 1) * log(1 - x);
+    return ((X_.alpha() - 1) * log(x)) + ((Y_.alpha() - 1) * log(1 - x));
   }
 
   auto cdf(T /*unused*/) const { throw std::runtime_error("Not implemented"); }
