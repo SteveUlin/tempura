@@ -1,13 +1,21 @@
 #include "sequence.h"
-#include "unit.h"
 
+#include <algorithm>
 #include <cassert>
 #include <print>
-#include <algorithm>
+#include <ranges>
+
+#include "unit.h"
 
 using namespace tempura;
 
 auto main() -> int {
+  "FnGenerator"_test = [] {
+    FnGenerator gen{[i = 0] mutable -> int { return ++i; }};
+    std::ranges::take_view take{std::move(gen), 5};
+    // auto arr = gen | std::views::take(5) | std::ranges::to<std::vector<int>>();
+    // expectRangeEq(arr, std::vector{2, 2, 2, 2, 2});
+  };
   "Ref Data"_test = [] {
     constexpr static std::array data{1, 2, 3, 4, 5};
     constexpr InclusiveScanView view{data};

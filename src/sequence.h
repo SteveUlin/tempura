@@ -1,9 +1,86 @@
 #pragma once
 
-#include <generator>
+#include <concepts>
+#include <cstddef>
+#include <functional>
 #include <ranges>
+#include <type_traits>
 
 namespace tempura {
+
+// FnGenerator repeatedly calls a function and returning the results as a view.
+//
+// This class differs from std::generator as it uses regular functions instead
+// of coroutines.
+//
+// All FnGenerators are infinite in length, users must implement their own
+// stopping logic.
+template <std::invocable Fn>
+class FnGenerator : std::ranges::view_interface<FnGenerator<Fn>> {
+ public:
+  struct Sentinel;
+
+  // Iterators are move only objects that take ownership of the generator.
+  class Iterator {
+   public:
+    using difference_type = std::ptrdiff_t;
+    using value_type = std::invoke_result_t<Fn>;
+
+    Iterator() = delete;
+    Iterator(const Iterator&) = delete;
+
+    constexpr Iterator(Iterator&&) noexcept = default;
+    constexpr auto operator=(Iterator&& other) noexcept -> Iterator& = default;
+
+    constexpr Iterator(Fn fn) : fn_{std::move(fn)}, value_{std::invoke(fn_)} {}
+
+    constexpr auto operator*() const -> decltype(auto) { return value_; }
+
+    constexpr auto operator++() -> Iterator& {
+      value_ = std::invoke(fn_);
+      return *this;
+    }
+
+    constexpr void operator++(int) { ++*this; }
+
+    constexpr auto operator==(Sentinel /*unused*/) const -> bool {
+      return false;
+    }
+
+    constexpr auto operator!=(Sentinel /*unused*/) const -> bool {
+      return true;
+    }
+
+   private:
+    Fn fn_;
+    std::invoke_result_t<Fn> value_;
+  };
+
+  struct Sentinel {
+    constexpr auto operator==(const Iterator& /*unused*/) const {
+      return false;
+    }
+
+    template <typename IteratorT, typename SentinelT>
+    constexpr auto operator!=(const Iterator& /*unused*/) const {
+      return true;
+    }
+  };
+
+
+  constexpr FnGenerator(Fn fn) : fn_{std::move(fn)} {}
+
+  // Calling .begin() multiple times is undefined behavior;
+  constexpr auto begin() -> Iterator { return Iterator{std::move(fn_)}; }
+
+  constexpr auto end() const -> Sentinel { return {}; }
+
+ private:
+  Fn fn_;
+};
+
+template <std::invocable Fn>
+FnGenerator(Fn) -> FnGenerator<std::remove_cvref_t<Fn>>;
 
 // Returns the rolling sum of the input range.
 // 1, 2, 3, 4, 5 ->
