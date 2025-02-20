@@ -11,11 +11,15 @@ using namespace tempura;
 
 auto main() -> int {
   "FnGenerator"_test = [] {
-    FnGenerator gen{[i = 0] mutable -> int { return ++i; }};
-    std::ranges::take_view take{std::move(gen), 5};
-    // auto arr = gen | std::views::take(5) | std::ranges::to<std::vector<int>>();
-    // expectRangeEq(arr, std::vector{2, 2, 2, 2, 2});
+    constexpr int a =
+        FnGenerator{[i = 0] mutable -> int { return ++i; }} | TakeFirst{};
+    static_assert(a == 1);
+
+    constexpr auto value = std::views::repeat(std::pair{1.0, 4.0}) |
+                           continuants() | Converges{.epsilon = 1e-15};
+    std::println("{}", value);
   };
+
   "Ref Data"_test = [] {
     constexpr static std::array data{1, 2, 3, 4, 5};
     constexpr InclusiveScanView view{data};
