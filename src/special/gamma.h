@@ -69,4 +69,14 @@ constexpr auto beta(const double x, const double y) -> double {
   return std::exp(logGamma(x) + logGamma(y) - logGamma(x + y));
 }
 
+// Incomplete Gamma function
+// P(x, x) = γ(a, x) / Γ(a)
+//         =  1 ⌠∞
+//          ----|  t^(a-1) e^(-t) dt
+//          Γ(a)⌡x
+// P(x, 0) = 0 and P(x, ∞) = 1
+// Incomplete Gamma is kinda like a sigmoid function
+//  - transition centers ~ a - 1
+//  - the transition width is ~ sqrt(a)
+
 }  // namespace tempura::special
