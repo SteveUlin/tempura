@@ -1,8 +1,12 @@
 #pragma once
 
+#include <cassert>
 #include <cmath>
 #include <cstdint>
 #include <vector>
+
+#include "special/gamma.h"
+
 
 namespace tempura::quadature {
 
@@ -51,7 +55,6 @@ constexpr auto gaussLegendre(const T a, const T b, const int64_t N,
   const T xl = 0.5 * (b - a);
 
   // Solutions are symmetric around the midpoint so we only need to find half
-  using std::abs;
   for (int64_t i = 0; i < (N + 1) / 2; ++i) {
     constexpr auto π = std::numbers::pi_v<T>;
     using std::cos;
@@ -72,7 +75,8 @@ constexpr auto gaussLegendre(const T a, const T b, const int64_t N,
       // Newton's method
       const T prev = z;
       z -= p1 / deriv;
-      if (abs(z - prev) > ϵ) {
+      using std::abs;
+      if (abs(z - prev) < ϵ) {
         // Special case weight calculation 2 / (1 - z^2) * (Pₙ'(z))^2
         weights[i] = {.abscissa = xm - (xl * z),
                       .weight = 2.0 * xl / ((1.0 - z * z) * deriv * deriv)};
@@ -91,10 +95,10 @@ constexpr auto gaussLegendre(const T a, const T b, const int64_t N,
 // ⎮ xᵅ e⁻ˣ dx ≈ ∑ w_i f(x_i)
 // ⌡0
 template <typename T = double, int64_t MAX_ITER = 10>
-constexpr auto gaussLegendre(const T α, const int64_t N, const T ϵ = 1e-14) {
+constexpr auto gaussLaguerre(const T α, const int64_t N, const T ϵ = 1.0e-16) {
   std::vector<GaussianWeight<T>> weights(N);
+  T z;
   for (int64_t i = 0; i < N; ++i) {
-    T z;
     if (i == 0) {
       z = (1.0 + α) * (3.0 + 0.92 * α) /
           (1.0 + 2.4 * static_cast<T>(N) + 1.8 * α);
@@ -106,32 +110,36 @@ constexpr auto gaussLegendre(const T α, const int64_t N, const T ϵ = 1e-14) {
            (z - weights[i - 2].abscissa) / (1.0 + 0.3 * α);
     }
 
-    for (int64_t j = 0; j < MAX_ITER; ++j) {
-      T p0 = 0.0;
-      T p1 = 1.0;
+    int64_t j;
+    for (j = 0; j < MAX_ITER; ++j) {
+      T p0 = 1.0;
+      T p1 = 0.0;
       // Recurrence relation:
       // (i + 1) Lᵅⱼ₊₁  = (-z + 2i + α + 1) Lᵅⱼ - (i + α) Lᵅⱼ₋₁
       for (int64_t k = 0; k < N; ++k) {
         std::tie(p0, p1) =
-            std::pair{p1, ((2.0 * static_cast<T>(k) + 1.0 + α - z) * p1 -
-                           (statc_cast<T>(k) + α) * p0) /
-                              (static_cast<T>(k) + 1.0)};
+            std::pair{((2.0 * static_cast<T>(k) + 1.0 + α - z) * p0 -
+                           (static_cast<T>(k) + α) * p1) /
+                              (static_cast<T>(k) + 1.0), p0};
       }
-      T deriv = (N * p1 - (N + α) * p0) / z;
+      const T deriv =
+          (static_cast<T>(N) * p0 - (static_cast<T>(N) + α) * p1) / z;
       const T prev = z;
       // Newton's method
-      z = prev - p1 / deriv;
+      z -= p0 / deriv;
+      using std::abs;
       if (abs(z - prev) < ϵ) {
         using std::exp;
-        using std::lgamma;
-        weights[i] = {
-            .abscissa = z,
-            .weight = -exp(lgamma(α + N) - lgamma(static_cast<T>(N)) - z) /
-                      (deriv * static_cast<T>(N) * p0)};
+        weights[i] = {.abscissa = z,
+                      .weight = -exp(special::logGamma(α + static_cast<T>(N)) -
+                                     special::logGamma(static_cast<T>(N))) /
+                                (deriv * static_cast<T>(N) * p1)};
         break;
       }
     }
+    assert(j < MAX_ITER);
   }
+  return weights;
 }
 
 }  // namespace tempura::quadature
