@@ -43,7 +43,7 @@ constexpr auto factorial(const int64_t n) -> double {
 }
 
 constexpr auto logFactorial(const int64_t n) -> double {
-  static constexpr std::array mem = [] consteval {
+  static constexpr std::array<double, 2000> mem = [] {
     std::array<double, 2000> arr = {};
     for (size_t i = 0; i < arr.size(); ++i) {
       arr[i] = logGamma(static_cast<double>(i + 1));

@@ -1,5 +1,7 @@
 #include "quadature/gaussian.h"
 
+#include <bits/ranges_algo.h>
+
 #include <print>
 #include <random>
 #include <utility>
@@ -8,7 +10,6 @@
 
 using namespace tempura;
 auto main() -> int {
-
   "Gauss Legendre"_test = [] {
     const auto weights = quadature::gaussLegendre(0.0, 2.0, 5);
     double result = 0.0;
@@ -18,7 +19,7 @@ auto main() -> int {
     expectNear(2.0, result);
   };
 
-  "Gauss Legendre -- x²"_test = []  {
+  "Gauss Legendre -- x²"_test = [] {
     const auto weights = quadature::gaussLegendre(0.0, 2.0, 8);
     double result = 0.0;
     for (const auto& [abscissa, weight] : weights) {
@@ -28,13 +29,28 @@ auto main() -> int {
   };
 
   "Gauss Laguerre"_test = [] {
-    const auto weights = quadature::gaussLaguerre<long double>(0.0, 5);
+    const auto weights = quadature::gaussLaguerre<double>(2.0, 5);
     double result = 0.0;
     for (const auto& [abscissa, weight] : weights) {
-      std::println("abscissa: {}, weight: {}", abscissa, weight);
       result += weight;
     }
     expectNear(2.0, result);
+  };
+
+  "Gauss Hermite"_test = [] {
+    const double result = std::ranges::fold_left(
+        quadature::gaussHermite<double>(5) |
+            std::ranges::views::transform(
+                [](const auto& val) { return val.weight; }),
+        0.0, std::plus<>{});
+    expectNear(1.77245, result);
+
+    const double result2 = std::ranges::fold_left(
+        quadature::gaussHermite<double>(5) |
+            std::ranges::views::transform(
+                [](const auto& val) { return val.weight * val.abscissa; }),
+        0.0, std::plus<>{});
+    expectNear(0.0, result2);
   };
 
   return 0;

@@ -24,7 +24,7 @@
           name = "Tempura";
 
           packages = with pkgs; [
-            pkgs.llvmPackages_19.clang
+            pkgs.llvmPackages_20.clang
             gcc14
             gdb
             bazel
