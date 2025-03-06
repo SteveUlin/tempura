@@ -1,6 +1,9 @@
 #include <array>
 #include <cassert>
 #include <cmath>
+#include <limits>
+
+#include "sequence.h"
 
 namespace tempura::special {
 
@@ -70,13 +73,51 @@ constexpr auto beta(const double x, const double y) -> double {
 }
 
 // Incomplete Gamma function
-// P(x, x) = γ(a, x) / Γ(a)
+// P(a, x) = γ(a, x) / Γ(a)
 //         =  1 ⌠∞
-//          ----|  t^(a-1) e^(-t) dt
+//          ----⎮ t^(a-1) e^(-t) dt
 //          Γ(a)⌡x
 // P(x, 0) = 0 and P(x, ∞) = 1
-// Incomplete Gamma is kinda like a sigmoid function
+//
+// The Incomplete Gamma fn is kinda like a sigmoid function:
 //  - transition centers ~ a - 1
 //  - the transition width is ~ sqrt(a)
+
+namespace detail {
+
+// The Incomplete Gamma function as a series expansion:
+// Γ(a, x) = e⁻ˣxᵃ ∑ Γ(a) xⁿ / Γ(a + 1 + n)
+constexpr auto incompleteGammaSeries(const double a, const double x)
+    -> double {
+  double ap = a;
+  double sum = 1 / a;
+  double term = sum;
+  while (true) {
+    ap += 1.0;
+    term *= x / ap;
+    sum += term;
+    constexpr double ϵ = std::numeric_limits<double>::epsilon();
+    if (std::abs(term) < std::abs(sum) * ϵ) {
+      break;
+    }
+  }
+  return std::exp(-x + (a * std::log(x)) - logGamma(a)) * sum;
+}
+
+// The Incomplete Gamma function as a continued fraction
+// Γ(a, x) = e⁻ˣxᵃ / (x + 1 - a - (1 ⋅ (1 - a) / (x + 3 - a - (2 ⋅ (2 - a) / (x + 5 - a - (3 ⋅ (3 - a) / ...))
+constexpr auto incompleteGammaContinuedFaction(const double a, const double x)
+-> double {
+  constexpr double ϵ = std::numeric_limits<double>::epsilon();
+  auto value = FnGenerator{[a, x, n = 0]() -> std::pair<double, double> {
+    if (n == 0) {
+      return {1.0, x + 1.0 - a};
+    }
+    return {- n * (1 - a), x + ((2 * n + 1)) - a};
+  }} | continuants() | Converges{.epsilon = ϵ};
+  return std::exp(-x + (a * std::log(x)) - logGamma(a)) / value;
+}
+
+}  // namespace detail
 
 }  // namespace tempura::special

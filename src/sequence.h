@@ -73,6 +73,12 @@ class FnGenerator : std::ranges::view_interface<FnGenerator<Fn>> {
     }
   };
 
+  constexpr FnGenerator(FnGenerator&& other) noexcept : fn_{std::move(other.fn_)} {}
+  constexpr auto operator=(FnGenerator&& other) noexcept -> FnGenerator& {
+    fn_ = std::move(other.fn_);
+    return *this;
+  }
+
   constexpr FnGenerator(Fn fn) : fn_{std::move(fn)} {}
 
   // Calling .begin() multiple times is undefined behavior;
@@ -138,7 +144,7 @@ class Continuantes : public std::ranges::view_interface<Continuantes<Range>> {
 
     constexpr Iterator(std::ranges::iterator_t<Range> iter,
                        Continuantes* parent)
-        : iter_{iter}, parent_{parent} {
+        : iter_{std::move(iter)}, parent_{parent} {
       if (iter_ != std::ranges::end(parent_->range_)) {
         update();
       }
@@ -189,12 +195,9 @@ class Continuantes : public std::ranges::view_interface<Continuantes<Range>> {
     Continuantes* parent_;
   };
 
-  // You can still move the view instead of using the constructor below
-  constexpr Continuantes(Continuantes&&) = default;
-  constexpr auto operator=(Continuantes&&) -> Continuantes& = default;
 
   template <std::ranges::range R>
-  constexpr Continuantes(R&& range) : range_{std::forward<R&&>(range)} {}
+  Continuantes(R&& range) : range_{std::forward<R&&>(range)} {}
 
   constexpr auto begin() -> Iterator {
     return Iterator{std::ranges::begin(range_), this};
@@ -205,9 +208,6 @@ class Continuantes : public std::ranges::view_interface<Continuantes<Range>> {
  private:
   Range range_;
 };
-
-template <std::ranges::range Range>
-Continuantes(Continuantes<Range>&&) -> Continuantes<Range>;
 
 template <std::ranges::range Range>
 Continuantes(Range&&) -> Continuantes<std::ranges::views::all_t<Range>>;

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <print>
 #include <ranges>
 
@@ -15,9 +16,8 @@ auto main() -> int {
         FnGenerator{[i = 0] mutable -> int { return ++i; }} | TakeFirst{};
     static_assert(a == 1);
 
-    constexpr auto value = std::views::repeat(std::pair{1.0, 4.0}) |
-                           continuants() | Converges{.epsilon = 1e-15};
-    std::println("{}", value);
+    auto value = std::views::repeat(std::pair{1.0, 2.0}) | continuants() | Converges{10e-15};
+    std::println("{} vs {}", 1 + value, std::numbers::sqrt2);
   };
 
   "Ref Data"_test = [] {

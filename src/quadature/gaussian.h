@@ -6,8 +6,6 @@
 #include <print>
 #include <vector>
 
-#include "special/gamma.h"
-
 namespace tempura::quadature {
 
 // Gaussian Quadrature
@@ -132,9 +130,10 @@ constexpr auto gaussLaguerre(const T α, const int64_t N, const T ϵ = 1.0e-14) 
       using std::abs;
       if (abs(z - prev) < ϵ) {
         using std::exp;
+        using std::lgamma;
         weights[i] = {.abscissa = z,
-                      .weight = -exp(special::logGamma(α + static_cast<T>(N)) -
-                                     special::logGamma(static_cast<T>(N))) /
+                      .weight = -exp(lgamma(α + static_cast<T>(N)) -
+                                     lgamma(static_cast<T>(N))) /
                                 (deriv * static_cast<T>(N) * p1)};
         break;
       }
