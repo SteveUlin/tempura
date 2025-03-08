@@ -1,8 +1,10 @@
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cmath>
 #include <limits>
 
+#include "quadature/gaussian.h"
 #include "sequence.h"
 
 namespace tempura::special {
@@ -87,8 +89,9 @@ namespace detail {
 
 // The Incomplete Gamma function as a series expansion:
 // Γ(a, x) = e⁻ˣxᵃ ∑ Γ(a) xⁿ / Γ(a + 1 + n)
-constexpr auto incompleteGammaSeries(const double a, const double x)
-    -> double {
+//
+// Converges quickly for x < (a + 1)
+constexpr auto incompleteGammaSeries(const double a, const double x) -> double {
   double ap = a;
   double sum = 1 / a;
   double term = sum;
@@ -104,20 +107,74 @@ constexpr auto incompleteGammaSeries(const double a, const double x)
   return std::exp(-x + (a * std::log(x)) - logGamma(a)) * sum;
 }
 
+constexpr auto incompleteGammaGaussianQuadature(const double a, const double x)
+    -> double {
+  const double a1 = a - 1.0;
+  const double sqrta1 = std::sqrt(a1);
+  const double lna1 = std::log(a1);
+  const double gln = logGamma(a);
+  double xu;
+  if (x > a1) {
+    // Above the transition midpoint
+    // Integrate from x to a point far to the right
+    xu = std::max(a1 + (11.5 * sqrta1), x + (6.0 * sqrta1));
+  } else {
+    // below the transition point
+    // Integrate from a point far to the left to x
+    xu = std::max(0.0, std::min(a1 - (7.5 * sqrta1), x - (5.0 * sqrta1)));
+  }
+  constexpr static auto weights = [] consteval {
+    constexpr int64_t N = 18;
+    auto weights = quadature::gaussLegendre(0.0, 1.0, N);
+    std::array<quadature::GaussianWeight<>, N> w;
+    std::ranges::copy(weights, w.begin());
+    return w;
+  }();
+  double sum = 0.0;
+  for (const auto& [t, w] : weights) {
+    const double z = x + ((xu - x) * t);
+    sum += w * std::exp(-(z - a1) + (a1 * (std::log(z) - lna1)));
+  }
+  double ans = sum * (xu - x) * std::exp((a1 * (lna1 - 1.0)) - gln);
+  if (x > a1) {
+    return 1.0 - ans;
+  }
+  return -ans;
+}
+
 // The Incomplete Gamma function as a continued fraction
-// Γ(a, x) = e⁻ˣxᵃ / (x + 1 - a - (1 ⋅ (1 - a) / (x + 3 - a - (2 ⋅ (2 - a) / (x + 5 - a - (3 ⋅ (3 - a) / ...))
-constexpr auto incompleteGammaContinuedFaction(const double a, const double x)
--> double {
+// Γ(a, x) = e⁻ˣxᵃ / (x + 1 - a - (1 ⋅ (1 - a) / (x + 3 - a - (2 ⋅ (2 - a) / (x
+// + 5 - a - (3 ⋅ (3 - a) / ...))
+//
+// Converges quickly for x > (a + 1)
+constexpr auto incompleteGammaContinuedFaction(const double a,
+                                                      const double x)
+    -> double {
   constexpr double ϵ = std::numeric_limits<double>::epsilon();
-  auto value = FnGenerator{[a, x, n = 0]() -> std::pair<double, double> {
-    if (n == 0) {
-      return {1.0, x + 1.0 - a};
-    }
-    return {- n * (1 - a), x + ((2 * n + 1)) - a};
-  }} | continuants() | Converges{.epsilon = ϵ};
-  return std::exp(-x + (a * std::log(x)) - logGamma(a)) / value;
+  auto value = FnGenerator{[a, x, n = 0] mutable -> std::pair<double, double> {
+                 if (n == 0) {
+                   ++n;
+                   return {1.0, x + 1.0 - a};
+                 }
+                 std::pair ret{-n * (n - a), x + (2.0 * n + 1.0) - a};
+                 ++n;
+                 return ret;
+               }} |
+               continuants() | Converges{.epsilon = ϵ};
+  return 1.0 - (std::exp(-x + (a * std::log(x)) - logGamma(a)) * value);
 }
 
 }  // namespace detail
+
+constexpr auto incompleteGamma(const double a, const double x) -> double {
+  assert(a > 0.0 && x >= 0.0);
+  if (x == 0.0) return 0.0;
+  // a is too big for the other methods to converge quickly
+  if (a >= 100) return detail::incompleteGammaGaussianQuadature(a, x);
+  // Series expansion converges quickly for x < (a + 1)
+  if (x < (a + 1)) return detail::incompleteGammaSeries(a, x);
+  // Continued fraction converges quickly for x > (a + 1)
+  return detail::incompleteGammaContinuedFaction(a, x);
+}
 
 }  // namespace tempura::special

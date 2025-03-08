@@ -39,4 +39,6 @@ Diagnostics:
       - readability-magic-numbers
       - readability-static-accessed-through-instance
       - readability-function-cognitive-complexity
+      - readability-braces-around-statements
+
 

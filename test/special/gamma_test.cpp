@@ -1,7 +1,8 @@
 #include "special/gamma.h"
 
-#include "unit.h"
+#include <print>
 
+#include "unit.h"
 
 using namespace tempura;
 using namespace tempura::special;
@@ -41,6 +42,16 @@ auto main() -> int {
     expectNear(beta(2.0, 2.0), 0.16666666666666666);
     expectNear(beta(3.0, 3.0), 0.03333333333333333);
     expectNear(beta(2.0, 3.0), 0.08333333333333333);
+  };
+
+  "incompleteGamma Continued Fraction"_test = [] {
+    std::println("{}", detail::incompleteGammaContinuedFaction(100.0, 95.0));
+    std::println("{}", detail::incompleteGammaSeries(100.0, 95.0));
+    std::println("{}", detail::incompleteGammaGaussianQuadature(100.0, 95.0));
+
+    std::println("{}", detail::incompleteGammaContinuedFaction(100.0, 105.0));
+    std::println("{}", detail::incompleteGammaSeries(100.0, 105.0));
+    std::println("{}", detail::incompleteGammaGaussianQuadature(100.0, 105.0));
   };
 
   return 0;
