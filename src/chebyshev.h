@@ -131,6 +131,43 @@ class Chebyshev {
     return (y * curr) - prev + (0.5 * coefficients_[0]);
   }
 
+  // Returns the derivative of the Chebyshev Polynomial as a new Chebyshev
+  // object.
+  auto derivative() const -> Chebyshev<T> {
+    std::vector<T> deriv(n_ - 1);
+    // a'ᵢ₋₁ = 2n * aᵢ + a'ᵢ₊₁
+    // a'ₙ = a'ₙ₋₁ = 0.0
+    deriv[n_ - 2] = 2. * n_ * coefficients_[n_ - 1];
+    deriv[n_ - 3] = 2. * n_ * coefficients_[n_ - 2] + deriv[n_ - 2];
+    for (int64_t j = n_ - 3; j > 0; --j) {
+      deriv[j - 1] = 2. * n_ * coefficients_[j] + deriv[j + 1];
+    }
+    for (T& d : deriv) {
+      d *= 0.5 * (b_ - a_);
+    }
+    return Chebyshev<T>(std::move(deriv), a_, b_);
+  }
+
+  // Returns the integral of the Chebyshev Polynomial as a new Chebyshev
+  // object such that evaluating the object at `a_` will return 0;
+  auto integral() const -> Chebyshev<T> {
+    std::vector<T> integral(n_ + 1);
+    // Aᵢ = (aᵢ₋₁ - aᵢ₊₁) / 2i
+    T con = 0.25 * (b_ - a_);
+    T sum = 0.0;
+    T fac = 1.0;
+    for (int64_t i = 1; i < n_ - 1; ++i) {
+      integral[i + 1] = con * (coefficients_[i - 1] - coefficients_[i + 1]) /
+                        (2. * static_cast<T>(i));
+      sum += fac * integral[i + 1];
+      fac = -fac;
+    }
+    integral[n_ - 1] = con * coefficients_[n_ - 2] / (n_ - 1);
+    sum += fac * integral[n_ - 1];
+    integral[0] = 2. * sum;
+    return Chebyshev<T>(std::move(integral), a_, b_);
+  }
+
   auto coefficients() const -> const std::vector<T>& { return coefficients_; }
 
   auto size() const -> int64_t { return n_; }
