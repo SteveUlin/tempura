@@ -170,7 +170,7 @@ constexpr auto incompleteGamma(const double a, const double x) -> double {
   assert(a > 0.0 && x >= 0.0);
   if (x == 0.0) return 0.0;
   // a is too big for the other methods to converge quickly
-  if (a >= 100) return detail::incompleteGammaGaussianQuadature(a, x);
+  if (a >= 100.) return detail::incompleteGammaGaussianQuadature(a, x);
   // Series expansion converges quickly for x < (a + 1)
   if (x < (a + 1)) return detail::incompleteGammaSeries(a, x);
   // Continued fraction converges quickly for x > (a + 1)

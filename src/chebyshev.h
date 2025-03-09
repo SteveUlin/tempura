@@ -98,7 +98,10 @@ class Chebyshev {
   // Construct with coefficients directly
   constexpr Chebyshev(std::ranges::sized_range auto&& coefficients, double a,
                       double b)
-      : a_{a}, b_{b}, n_{std::ranges::size(coefficients)}, m_{n_} {
+      : a_{a},
+        b_{b},
+        n_{static_cast<int64_t>(std::ranges::size(coefficients))},
+        m_{n_} {
     coefficients_.reserve(n_);
     std::ranges::copy(coefficients, std::back_inserter(coefficients_));
   }
@@ -134,32 +137,32 @@ class Chebyshev {
   // Returns the derivative of the Chebyshev Polynomial as a new Chebyshev
   // object.
   auto derivative() const -> Chebyshev<T> {
-    std::vector<T> deriv(n_ - 1);
-    // a'ᵢ₋₁ = 2n * aᵢ + a'ᵢ₊₁
+    std::vector<T> deriv(n_);
+    // a'ᵢ₋₁ = 2i * aᵢ + a'ᵢ₊₁
     // a'ₙ = a'ₙ₋₁ = 0.0
-    deriv[n_ - 2] = 2. * n_ * coefficients_[n_ - 1];
-    deriv[n_ - 3] = 2. * n_ * coefficients_[n_ - 2] + deriv[n_ - 2];
-    for (int64_t j = n_ - 3; j > 0; --j) {
-      deriv[j - 1] = 2. * n_ * coefficients_[j] + deriv[j + 1];
+    deriv[n_ - 1] = 0.0;
+    deriv[n_ - 2] = 2. * (n_ - 1) * coefficients_[n_ - 1];
+    for (int64_t j = n_ - 2; j > 0; --j) {
+      deriv[j - 1] = 2. * static_cast<T>(j) * coefficients_[j] + deriv[j + 1];
     }
-    for (T& d : deriv) {
-      d *= 0.5 * (b_ - a_);
-    }
+
+    const T con = 2.0 / (b_ - a_);
+    for (T& d : deriv) d *= con;
     return Chebyshev<T>(std::move(deriv), a_, b_);
   }
 
   // Returns the integral of the Chebyshev Polynomial as a new Chebyshev
   // object such that evaluating the object at `a_` will return 0;
   auto integral() const -> Chebyshev<T> {
-    std::vector<T> integral(n_ + 1);
+    std::vector<T> integral(n_);
     // Aᵢ = (aᵢ₋₁ - aᵢ₊₁) / 2i
-    T con = 0.25 * (b_ - a_);
+    const T con = 0.25 * (b_ - a_);
     T sum = 0.0;
     T fac = 1.0;
     for (int64_t i = 1; i < n_ - 1; ++i) {
-      integral[i + 1] = con * (coefficients_[i - 1] - coefficients_[i + 1]) /
-                        (2. * static_cast<T>(i));
-      sum += fac * integral[i + 1];
+      integral[i] = con * (coefficients_[i - 1] - coefficients_[i + 1]) /
+                    static_cast<T>(i);
+      sum += fac * integral[i];
       fac = -fac;
     }
     integral[n_ - 1] = con * coefficients_[n_ - 2] / (n_ - 1);
