@@ -97,6 +97,7 @@ class Benchmark {
       wall_end = std::chrono::high_resolution_clock::now();
       std::atomic_signal_fence(std::memory_order::seq_cst);
 
+
       cpu_times.push_back(
           internal::toDuration(internal::diff(cpu_start, cpu_end)));
       wall_times.push_back(wall_end - wall_start);

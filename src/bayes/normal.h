@@ -9,10 +9,11 @@ namespace tempura::bayes {
 template <typename T = double>
 class Normal {
  public:
-  Normal(T mu, T sigma) : mu_{mu}, sigma_{sigma}, cached_value_{mu_} {}
+  constexpr Normal(T mu, T sigma)
+      : mu_{mu}, sigma_{sigma}, cached_value_{mu_} {}
 
   template <typename Generator>
-  auto sample(Generator& g) -> T {
+  constexpr auto sample(Generator& g) -> T {
     if (has_value_) {
       has_value_ = false;
       return std::exchange(cached_value_, mu_);
@@ -68,8 +69,8 @@ class Normal {
   T mu_;
   T sigma_;
 
-  bool has_value_ = false;
   T cached_value_;
+  bool has_value_ = false;
 };
 
 }  // namespace tempura::bayes
