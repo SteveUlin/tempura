@@ -6,12 +6,13 @@
 
 #include "bayes/exponential.h"
 #include "bayes/normal.h"
+#include "bayes/logistic.h"
 #include "plot.h"
 
 using namespace tempura;
 
 auto main() -> int {
-  bayes::Normal dist{0.0, 1.0};
+  bayes::Logistic dist{1.0, 1.0};
   std::mt19937 gen{std::random_device{}()};
   std::vector<double> samples;
   samples.reserve(10'000);
@@ -23,7 +24,7 @@ auto main() -> int {
         std::print("\033[20F\033[0J");
       }
       std::print("{}", generateTextHistogram(samples, {.bins = 20,
-                                                       .min_x = -5.0,
+                                                       .min_x = 0.0,
                                                        .max_x = 5.0,
                                                        .max_y = 30000,
                                                        .normalize = false}));
