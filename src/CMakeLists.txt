@@ -5,7 +5,7 @@ add_subdirectory(matrix2)
 add_subdirectory(quadature)
 add_subdirectory(special)
 # add_subdirectory(symbolic)
-# add_subdirectory(bayes)
+add_subdirectory(bayes)
 
 add_library(benchmark INTERFACE benchmark.h)
 add_library(chebyshev INTERFACE chebyshev.h)

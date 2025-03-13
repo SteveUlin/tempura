@@ -8,17 +8,18 @@
 #include <numeric>
 #include <string_view>
 #include <vector>
+#include <print>
 
 namespace tempura {
 
 namespace internal {
 
-inline constexpr auto diff(timespec start, timespec end) -> timespec {
+constexpr auto diff(timespec start, timespec end) -> timespec {
   return {.tv_sec = end.tv_sec - start.tv_sec,
           .tv_nsec = end.tv_nsec - start.tv_nsec};
 }
 
-inline constexpr auto toDuration(timespec t) -> std::chrono::nanoseconds {
+constexpr auto toDuration(timespec t) -> std::chrono::nanoseconds {
   return std::chrono::seconds{t.tv_sec} + std::chrono::nanoseconds{t.tv_nsec};
 }
 
@@ -101,7 +102,7 @@ class Benchmark {
       wall_times.push_back(wall_end - wall_start);
 
       total_wall_time += wall_times.back();
-      if (total_wall_time > max_runtime) {
+      if (total_wall_time > max_runtime && i > min_cycles_) {
         break;
       }
     }
@@ -117,15 +118,13 @@ class Benchmark {
 
     std::clog << "Number of iterations: " << i << '\n';
     std::clog << "Average wall time: "
-              << internal::toHumanReadable(std::chrono::nanoseconds{
-                     std::accumulate(wall_times.begin(), wall_times.end(), 0ns)
-                         .count() /
-                     i})
+              << internal::toHumanReadable(avg_wall)
+              << " ± " << internal::toHumanReadable(std_dev_wall)
               << '\n';
 
     std::clog << std::format(
         std::locale(""), "Ops per sec: {:L}\n",
-        (size_t)(op_scaling_factor_ * i * 1e9 / avg_wall.count()));
+        (size_t)(op_scaling_factor_ * 1e9 / avg_wall.count()));
   }
 
  private:
@@ -133,9 +132,10 @@ class Benchmark {
 
   friend constexpr auto operator""_bench(const char*, std::size_t) -> Benchmark;
   std::string_view name_;
-  std::size_t max_cycles_ = 10'000;
+  std::size_t min_cycles_ = 10'000;
+  std::size_t max_cycles_ = 10'000'000;
   std::size_t op_scaling_factor_ = 1;
-  std::chrono::nanoseconds max_runtime = 30s;
+  std::chrono::nanoseconds max_runtime = 10s;
 };
 
 [[nodiscard]] constexpr auto operator""_bench(const char* name,
