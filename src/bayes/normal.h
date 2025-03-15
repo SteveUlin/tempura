@@ -4,10 +4,10 @@
 #include <numbers>
 #include <random>
 #include <utility>
-#include <experimental/simd>
 
 namespace tempura::bayes {
 
+// The Normal Distribution
 // p(x|μ, σ) = 1 / (σ * sqrt(2π)) * exp(-((x - μ)² / (2σ²)))
 template <typename T = double>
 class Normal {

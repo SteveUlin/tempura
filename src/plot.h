@@ -10,6 +10,11 @@
 #include <vector>
 
 // Unicode Plots
+//
+// TODO:
+//  - Make plotting work with empty ranges
+//  - Can I query for the size of the terminal and set the width of the plot
+//    to a value that won't overflow the terminal boundary?
 
 namespace tempura {
 struct RGB {
