@@ -1,4 +1,5 @@
 #include "bayes/random.h"
+#include <experimental/bits/simd.h>
 
 #include <algorithm>
 #include <limits>
@@ -95,36 +96,45 @@ auto main() -> int {
   };
 
   // Benchmarked on 11th Gen Intel(R) Core(TM) i7-11800H
+  // With -O3 -march=native
 
-  // Ops per sec: 96,674,400
-  "mt bench"_bench.ops(1000) = [mt = std::mt19937{123456}] mutable {
+  volatile uint_fast64_t out;
+  // Ops per sec: 472,143,531
+  "mt bench"_bench.ops(1000) = [&out, mt = std::mt19937{123456}] mutable {
     #pragma GCC unroll 1000
     for (int i = 0; i < 1000; ++i) {
-      mt();
+      out = mt();
     }
   };
 
-  // Ops per sec: 115,794,349
-  "rand bench"_bench.ops(1000) = [rand = bayes::Rand{123456}] mutable {
+  "simd bench"_bench.ops(1000) = [&out, rand = bayes::detail::A1_Simd<>{123456}] mutable {
     #pragma GCC unroll 1000
     for (int i = 0; i < 1000; ++i) {
-      rand();
+      out = rand();
     }
   };
 
-  // Ops per sec: 214,822,771
-  "qrand1 bench"_bench.ops(1000) = [qrand1 = bayes::QuickRand1{123456}] mutable {
+  // Ops per sec: 303,306,035
+  "rand bench"_bench.ops(1000) = [&out, rand = bayes::Rand{123456}] mutable {
     #pragma GCC unroll 1000
     for (int i = 0; i < 1000; ++i) {
-      qrand1();
+      out = rand();
     }
   };
 
-  // Ops per sec: 144,529,556
-  "qrand2 bench"_bench.ops(1000) = [qrand2 = bayes::QuickRand2{123456}] mutable {
+  // Ops per sec: 355,871,886
+  "qrand1 bench"_bench.ops(1000) = [&out, qrand1 = bayes::QuickRand1{123456}] mutable {
     #pragma GCC unroll 1000
     for (int i = 0; i < 1000; ++i) {
-      qrand2();
+      out = qrand1();
+    }
+  };
+
+  // Ops per sec: 266,808,964
+  "qrand2 bench"_bench.ops(1000) = [&out, qrand2 = bayes::QuickRand2{123456}] mutable {
+    #pragma GCC unroll 1000
+    for (int i = 0; i < 1000; ++i) {
+      out = qrand2();
     }
   };
 

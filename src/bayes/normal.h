@@ -2,31 +2,39 @@
 
 #include <cmath>
 #include <numbers>
+#include <random>
 #include <utility>
+#include <experimental/simd>
 
 namespace tempura::bayes {
 
+// p(x|μ, σ) = 1 / (σ * sqrt(2π)) * exp(-((x - μ)² / (2σ²)))
 template <typename T = double>
 class Normal {
  public:
   constexpr Normal(T mu, T sigma)
       : mu_{mu}, sigma_{sigma}, cached_value_{mu_} {}
 
-  template <typename Generator>
+  template <std::uniform_random_bit_generator Generator>
   constexpr auto sample(Generator& g) -> T {
     if (has_value_) {
       has_value_ = false;
       return std::exchange(cached_value_, mu_);
     }
+
+    // The standard is still faster than my implementations :(
+    // 70e6 ops/sec vs 44e6 ops/sec
+
     // Generate a random value with the box muller transform
     // https://en.wikipedia.org/wiki/Box%E2%80%93Muller_transform
-    constexpr auto delta = static_cast<T>(Generator::max() - Generator::min());
+    constexpr auto scale =
+        1.0 / static_cast<T>(Generator::max() - Generator::min());
     auto bits = g();
     while (bits == 0) [[unlikely]] {
       bits = g();
     }
-    T u1 = static_cast<T>(bits) / delta;
-    T u2 = static_cast<T>(g()) / delta;
+    T u1 = static_cast<T>(bits) * scale;
+    T u2 = static_cast<T>(g()) * scale;
 
     using std::cos;
     using std::log;
@@ -39,6 +47,30 @@ class Normal {
     has_value_ = true;
 
     return mu_ + (r * sin(theta));
+  }
+
+  // A Fast Normal Random Number Generator
+  // https://dl.acm.org/doi/10.1145/138351.138364
+  template <std::uniform_random_bit_generator Generator>
+  constexpr auto ratioOfUniforms(Generator& g) -> T {
+    constexpr static auto scale_u =
+        1.0 / static_cast<T>(Generator::max() - Generator::min());
+    constexpr static auto scale_v =
+        1.7156 / static_cast<T>(Generator::max() - Generator::min());
+
+    T u;
+    T v;
+    T q;
+    using std::abs;
+    do {
+      v = (static_cast<T>(g()) * scale_v) - 0.5;
+      u = static_cast<T>(g()) * scale_u;
+      const T x = u - 0.449871;
+      const T y = abs(v) + 0.386595;
+      q = x * x + y * (0.19600 * y - 0.25472 * x);
+    } while ((q > 0.27597) && (q > 0.27846 || v * v > -4. * log(u) * u * u));
+
+    return mu_ + sigma_ * v / u;
   }
 
   constexpr auto prob(T x) const {

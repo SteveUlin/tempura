@@ -39,7 +39,9 @@ class Beta {
     return ((X_.alpha() - 1) * log(x)) + ((Y_.alpha() - 1) * log(1 - x));
   }
 
-  constexpr auto cdf(T /*unused*/) const { throw std::runtime_error("Not implemented"); }
+  constexpr auto cdf(T /*unused*/) const {
+    throw std::runtime_error("Not implemented");
+  }
 
  private:
   std::gamma_distribution<T> X_;

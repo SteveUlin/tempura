@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <random>
+#include <experimental/simd>
 
 namespace tempura::bayes {
 
@@ -253,7 +254,55 @@ using F1 = MultiplicativeLinearCongruential<3741260, 4930622455819>;
 using F2 = MultiplicativeLinearCongruential<3397916, 5428838662153>;
 using F3 = MultiplicativeLinearCongruential<2106408, 8757438316547>;
 
+template <uint_fast64_t a1, uint_fast64_t a2, uint_fast64_t a3,
+          ShiftDirection direction>
+struct XorShiftSimd {
+  static constexpr auto min() -> uint_fast64_t { return 1; }
+
+  static constexpr auto max() -> uint_fast64_t {
+    return std::numeric_limits<uint_fast64_t>::max();
+  }
+
+  [[gnu::always_inline]] static constexpr auto step(std::experimental::native_simd<uint64_t>& x) {
+    if constexpr (direction == ShiftDirection::Left) {
+      x ^= x >> a1;
+      x ^= x << a2;
+      x ^= x >> a3;
+    } else {
+      x ^= x << a1;
+      x ^= x >> a2;
+      x ^= x << a3;
+    }
+    return x;
+  }
+
+  constexpr XorShiftSimd(std::experimental::native_simd<uint64_t> seed) : state_{seed} {}
+
+  constexpr auto operator()() -> uint_fast64_t {
+    if (index_ == std::experimental::native_simd<uint64_t>::size()) {
+      state_ = step(state_);
+      index_ = 0;
+    }
+    return state_[index_++];
+  }
+
+ private:
+  int8_t index_ = std::experimental::native_simd<uint64_t>::size();
+  std::experimental::native_simd<uint64_t> state_;
+};
+static_assert(
+    std::uniform_random_bit_generator<XorShiftSimd<0, 0, 0, ShiftDirection::Left>>);
+
+template <ShiftDirection direction = ShiftDirection::Left>
+using A1_Simd = XorShift<21, 35, 4, direction>;
+
 }  // namespace detail
+
+// All of these implementations below are slower than std::mt19937_64
+// when -O3 is enabled. Some are slightly faster than std::mt19937_64
+// without optimizations.
+//
+// TLDR: Use std::mt19937_64
 
 // Personal Interpretation:
 // A*: XorShift
@@ -270,9 +319,6 @@ using F3 = MultiplicativeLinearCongruential<2106408, 8757438316547>;
 //
 // The period of the final output is the LCM of the periods of
 // A3, B1, and C3.
-//
-// This is slightly faster than std::mt19937_64 but has a much shorter period.
-// Prefer mt19937_64.
 struct Rand {
   // The default seed is arbitrary
   constexpr Rand(uint_fast64_t seed = 129348710293)
@@ -295,7 +341,6 @@ struct Rand {
   detail::C3 c3_;
 };
 
-// About 2x faster than std::mt19937_64 but has a much shorter period.
 // Do not use for more than 10¹² calls
 struct QuickRand1 {
   // The default seed is arbitrary
@@ -315,7 +360,6 @@ struct QuickRand1 {
   detail::A1<detail::ShiftDirection::Right> a1_;
 };
 
-// About 1.5x faster than std::mt19937_64 but has a much shorter period.
 // Do not use for more than 10³⁷ calls
 struct QuickRand2 {
   // The default seed is arbitrary

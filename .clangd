@@ -40,5 +40,6 @@ Diagnostics:
       - readability-static-accessed-through-instance
       - readability-function-cognitive-complexity
       - readability-braces-around-statements
+      - readability-math-missing-parentheses
 
 

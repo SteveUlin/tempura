@@ -18,7 +18,7 @@ namespace tempura::bayes {
 //  - The time until a customer arrives at a store
 template <typename T = double>
 class Exponential {
-public:
+ public:
   constexpr Exponential(T β = 1.0) : β_{β} {}
 
   template <std::uniform_random_bit_generator Generator>
@@ -31,12 +31,14 @@ public:
     //   => x(y) = exp(-β y)
     //   => p(y)dy = p(x) * |dx/dy| = β exp(-β y)dy
 
-    constexpr T scale = 1.0 / static_cast<T>(Generator::max());
+    constexpr T scale =
+        1.0 / static_cast<T>(Generator::max() - Generator::min());
     using std::log;
     return -log(static_cast<T>(g()) * scale) / β_;
   }
-private:
+
+ private:
   T β_;
 };
 
-}
+}  // namespace tempura::bayes
