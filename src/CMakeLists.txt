@@ -14,6 +14,7 @@ add_library(json INTERFACE json.h)
 add_library(polynomial INTERFACE polynomial.h)
 add_library(sequence INTERFACE sequence.h)
 add_library(unit INTERFACE unit.h)
+add_library(root_finding INTERFACE root_finding.h)
 
 # ---
 

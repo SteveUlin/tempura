@@ -1,3 +1,4 @@
+
 #pragma once
 
 #include <algorithm>
@@ -67,6 +68,9 @@ namespace tempura {
 template <typename T = double>
 class Chebyshev {
  public:
+  // Constructor that takes a function, interval [a, b], and number of points n.
+  // This constructor evaluates the function at the Chebyshev nodes and computes
+  // the coefficients for the Chebyshev series.
   constexpr Chebyshev(std::regular_invocable<T> auto func, double a, double b,
                       int64_t n = 50)
       : a_{a}, b_{b}, n_{n}, m_{n} {
@@ -83,6 +87,7 @@ class Chebyshev {
       f.push_back(func((bma * y) + bpa));
     }
 
+    // Compute the coefficients for the Chebyshev series.
     coefficients_.reserve(n_);
     const T fac = 2. / n_;
     for (int64_t i = 0; i < n_; ++i) {
@@ -95,7 +100,8 @@ class Chebyshev {
     }
   }
 
-  // Construct with coefficients directly
+  // Constructor that takes precomputed coefficients and interval [a, b].
+  // This constructor is useful when the coefficients are already known.
   constexpr Chebyshev(std::ranges::sized_range auto&& coefficients, double a,
                       double b)
       : a_{a},
@@ -106,6 +112,8 @@ class Chebyshev {
     std::ranges::copy(coefficients, std::back_inserter(coefficients_));
   }
 
+  // Set the threshold for the coefficients. This function reduces the degree
+  // of the polynomial by ignoring coefficients smaller than the threshold.
   auto setThreshold(T threshold) -> int64_t {
     assert(threshold > 0.0);
     using std::abs;
@@ -113,12 +121,16 @@ class Chebyshev {
     return m_;
   }
 
+  // Set the degree of the polynomial to m. This function allows the user to
+  // manually adjust the degree of the polynomial.
   void setDegree(int64_t m) {
     assert(m > 0);
     assert(m <= n_);
     m_ = m;
   }
 
+  // Evaluate the Chebyshev polynomial at a given point x. This function uses
+  // the Clenshaw algorithm to efficiently evaluate the polynomial.
   auto operator()(T x) const -> T {
     using std::cos;
     T y = (2. * x - a_ - b_) / (b_ - a_);
@@ -135,7 +147,8 @@ class Chebyshev {
   }
 
   // Returns the derivative of the Chebyshev Polynomial as a new Chebyshev
-  // object.
+  // object. This function computes the derivative coefficients using the
+  // recurrence relation for derivatives.
   auto derivative() const -> Chebyshev<T> {
     std::vector<T> deriv(n_);
     // a'ᵢ₋₁ = 2i * aᵢ + a'ᵢ₊₁
@@ -152,7 +165,9 @@ class Chebyshev {
   }
 
   // Returns the integral of the Chebyshev Polynomial as a new Chebyshev
-  // object such that evaluating the object at `a_` will return 0;
+  // object such that evaluating the object at `a_` will return 0. This function
+  // computes the integral coefficients using the recurrence relation for
+  // integrals.
   auto integral() const -> Chebyshev<T> {
     std::vector<T> integral(n_);
     // Aᵢ = (aᵢ₋₁ - aᵢ₊₁) / 2i
@@ -171,10 +186,13 @@ class Chebyshev {
     return Chebyshev<T>(std::move(integral), a_, b_);
   }
 
+  // Returns the coefficients of the Chebyshev Polynomial.
   auto coefficients() const -> const std::vector<T>& { return coefficients_; }
 
+  // Returns the number of terms in the Chebyshev series.
   auto size() const -> int64_t { return n_; }
 
+  // Returns the degree of the Chebyshev Polynomial.
   auto degree() const -> int64_t { return m_; }
 
  private:
@@ -190,3 +208,5 @@ class Chebyshev {
 };
 
 }  // namespace tempura
+
+

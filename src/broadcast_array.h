@@ -44,7 +44,7 @@ class BroadcastArray {
   constexpr auto size() const -> size_t { return N; }
 
  private:
-  std::array<T, N> data_;
+  std::array<T, N> data_ = {};
 };
 
 template <size_t I, typename T, size_t N>
@@ -199,7 +199,7 @@ template <typename T, typename U, size_t N>
 constexpr auto operator*(const BroadcastArray<T, N>& left, const U& right) {
   using V = decltype(std::declval<T>() * std::declval<U>());
   BroadcastArray<V, N> result;
-  for (int i = 0; i < N; ++i) {
+  for (size_t i = 0; i < N; ++i) {
     result[i] = left[i] * right;
   }
   return result;

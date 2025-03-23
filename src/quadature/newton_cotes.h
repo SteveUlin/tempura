@@ -18,7 +18,8 @@ namespace tempura::quadature {
 // Trapezoidal Integrator approximates the integral of a function by evaluating
 // the function at a bunch of points, then connecting the points with straight
 // lines.
-template <typename T, std::invocable<T> F, typename U = std::invoke_result_t<F, T>>
+template <typename T, std::invocable<T> F,
+          typename U = std::invoke_result_t<F, T>>
 class TrapazoidalIntegrator {
  public:
   // ThapazoidalIntegrator will always evaluate the function at the endpoints,
@@ -84,7 +85,8 @@ TrapazoidalIntegrator(F, T, T, int64_t) -> TrapazoidalIntegrator<T, F>;
 //
 // See Numerical Recipes, 3rd Edition, Section 4.2
 
-template <typename T, std::invocable<T> F, typename U = std::invoke_result_t<F, T>>
+template <typename T, std::invocable<T> F,
+          typename U = std::invoke_result_t<F, T>>
 class SimpsonIntegrator {
  public:
   // num_points is the initial number of interior evaluation points of the
@@ -124,16 +126,19 @@ SimpsonIntegrator(F, T, T, int64_t) -> SimpsonIntegrator<T, F>;
 // interpolate in terms of h² instead of h.
 //
 // See Numerical Recipes, 3rd Edition, Section 4.2
-template <typename T, std::invocable<T> F, typename U = std::invoke_result_t<F, T>>
+template <typename T, std::invocable<T> F,
+          typename U = std::invoke_result_t<F, T>>
 class RombergIntegrator {
  public:
-  constexpr RombergIntegrator(int64_t levels, F func, T a, T b, int64_t initial_points = 0)
+  constexpr RombergIntegrator(int64_t levels, F func, T a, T b,
+                              int64_t initial_points = 0)
       : levels_{levels}, trapazoidal_{std::move(func), a, b, initial_points} {
     results_.emplace_back(1.0, trapazoidal_.result());
     for (int64_t i = 1; i < levels; ++i) {
       trapazoidal_.refine();
       // The x coordinate corresponds to a normalized h²
-      results_.emplace_back(results_.back().first * 0.25, trapazoidal_.result());
+      results_.emplace_back(results_.back().first * 0.25,
+                            trapazoidal_.result());
     }
   }
 

@@ -1,14 +1,14 @@
+
 #pragma once
 
 #include <atomic>
 #include <chrono>
 #include <cmath>
 #include <functional>
-#include <iostream>
 #include <numeric>
+#include <print>
 #include <string_view>
 #include <vector>
-#include <print>
 
 namespace tempura {
 
@@ -50,8 +50,8 @@ auto toHumanReadable(std::chrono::nanoseconds duration) -> std::string {
   }
   if (duration < 120min) {
     return std::format(
-        "{:.2f} s",
-        std::chrono::duration<double, std::chrono::hours::period>(duration)
+        "{:.2f} min",
+        std::chrono::duration<double, std::chrono::minutes::period>(duration)
             .count());
   }
   return std::format(
@@ -84,7 +84,8 @@ class Benchmark {
     timespec cpu_end;
     std::chrono::time_point<std::chrono::high_resolution_clock> wall_end;
 
-    std::clog << "Running... " << name_ << '\n';
+    std::println("Running... {}", name_);
+
     std::size_t i = 0;
     for (; i < max_cycles_; ++i) {
       std::atomic_signal_fence(std::memory_order::seq_cst);
@@ -97,7 +98,6 @@ class Benchmark {
       wall_end = std::chrono::high_resolution_clock::now();
       std::atomic_signal_fence(std::memory_order::seq_cst);
 
-
       cpu_times.push_back(
           internal::toDuration(internal::diff(cpu_start, cpu_end)));
       wall_times.push_back(wall_end - wall_start);
@@ -109,29 +109,30 @@ class Benchmark {
     }
     auto avg_wall = std::chrono::nanoseconds(
         std::accumulate(wall_times.begin(), wall_times.end(), 0ns).count() / i);
-    auto std_dev_wall = std::chrono::nanoseconds((std::size_t)std::sqrt(
-        std::accumulate(wall_times.begin(), wall_times.end(), 0,
-                        [avg_wall](auto acc, auto val) {
-                          return acc +
-                                 std::pow(val.count() - avg_wall.count(), 2);
-                        }) /
-        i));
+    auto std_dev_wall = std::chrono::nanoseconds(
+        static_cast<std::size_t>(std::sqrt(std::accumulate(
+            wall_times.begin(), wall_times.end(), 0,
+            [avg_wall](auto acc, auto val) {
+              return acc + std::pow(val.count() - avg_wall.count(), 2);
+            }))));
 
-    std::clog << "Number of iterations: " << i << '\n';
-    std::clog << "Average wall time: "
-              << internal::toHumanReadable(avg_wall)
-              << " ± " << internal::toHumanReadable(std_dev_wall)
-              << '\n';
+    std::println("Number of iterations: {}", i);
+    std::println("Average wall time: {} ± {}",
+                 internal::toHumanReadable(avg_wall),
+                 internal::toHumanReadable(std_dev_wall));
 
-    std::clog << std::format(
-        std::locale(""), "Ops per sec: {:L}\n",
-        (size_t)(op_scaling_factor_ * 1e9 / avg_wall.count()));
+    std::println(
+        "Ops per sec: {:L}",
+        static_cast<size_t>(static_cast<double>(op_scaling_factor_) * 1e9 /
+                            static_cast<double>(avg_wall.count())));
   }
 
  private:
   constexpr Benchmark(std::string_view name) : name_(name) {}
 
-  friend constexpr auto operator""_bench(const char*, std::size_t) -> Benchmark;
+  friend constexpr auto operator""_bench(const char* /*unused*/,
+                                         std::size_t /*unused*/) -> Benchmark;
+
   std::string_view name_;
   std::size_t min_cycles_ = 10'000;
   std::size_t max_cycles_ = 10'000'000;

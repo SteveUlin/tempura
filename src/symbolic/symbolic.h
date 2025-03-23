@@ -60,8 +60,8 @@ concept Symbolic = Matcher<T> && internal::SymbolicTypeTrait<T>;
 template <typename... Binders>
 struct Substitution : Binders... {
   template <typename... Ts, typename... Us>
-  constexpr Substitution(internal::TypeValueBinder<Ts, Us>&&... binders)
-      : Binders(std::forward<internal::TypeValueBinder<Ts, Us>>(binders))... {}
+  constexpr Substitution(auto&&... binders)
+      : Binders(std::forward<decltype(binders)>(binders))... {}
 
   using Binders::operator[]...;
 };
@@ -259,6 +259,11 @@ struct SymbolicExpression {
   static constexpr auto operator()(
       const Substitution<internal::TypeValueBinder<Ts, Us>...>& substitution) {
     return op()(Args{}(substitution)...);
+  }
+
+  template <typename... Ts, typename... Us>
+  static constexpr auto operator()(internal::TypeValueBinder<Ts, Us>&... binders) {
+    return SymbolicExpression::operator()(Substitution{binders...});
   }
 };
 
