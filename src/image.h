@@ -1,6 +1,10 @@
 #pragma once
 
+#include <cassert>
 #include <cstdint>
+#include <format>
+#include <iostream>
+#include <limits>
 #include <ranges>
 
 namespace tempura {
@@ -20,7 +24,7 @@ struct PgmOptions {
 
 template <typename R>
   requires std::ranges::range<R> &&
-               std::is_same_v<std::ranges::range_value_t<R>, GreyScalePixel>
+           std::is_same_v<std::ranges::range_value_t<R>, GreyScalePixel>
 auto encodePgm(PgmOptions options, R&& range) -> std::string {
   const size_t num_pixels = options.width * options.height;
   if (std::ranges::size(range) != num_pixels) {

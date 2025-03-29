@@ -13,6 +13,7 @@ add_executable(histogram histogram_main.cpp)
 add_executable(plot plot_main.cpp)
 add_executable(text_size text_size.cpp)
 add_executable(symbols_main symbols.cpp)
+add_executable(image_main image_main.cpp)
 
 # add_executable(single_producer_consumer_queue single_producer_consumer_queue.cpp)
 # target_link_libraries(single_producer_consumer_queue PRIVATE profiler)
