@@ -13,7 +13,7 @@ auto main() -> int {
   auto func2 = [](double x) { return std::pow(x, 2); };
   auto func3 = [](double x) {
     double z = x - std::numbers::pi * 1'000'000;
-    return -1. / std::pow(1 + z * z, 2);
+    return -1. / std::pow(1 + z * z * z * z, 2);
   };
 
   auto brack = bracketMethod(-2.0, -1.0, func3);

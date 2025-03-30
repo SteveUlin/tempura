@@ -32,8 +32,8 @@ Why? I like it
 ## TODO
 
 - [ ] Create a header file that include all storage matrices and arithmetic ops.
-- [ ] Banded matrix
-- [ ] Banded LU decomposition
+- [x] Banded matrix
+- [x] Banded LU decomposition
 - [ ] Transpose matrix
 - [ ] Triangular matrix
 

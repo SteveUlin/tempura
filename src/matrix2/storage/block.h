@@ -29,7 +29,10 @@ class BlockRow {
     return std::apply(
         [&](MatrixT auto&... mats) -> decltype(auto) {
           int64_t offset = 0;
-          std::conditional_t<std::is_const_v<std::remove_reference_t<decltype(self)>>, const ValueType*, ValueType*> result = nullptr;
+          std::conditional_t<
+              std::is_const_v<std::remove_reference_t<decltype(self)>>,
+              const ValueType*, ValueType*>
+              result = nullptr;
           ((j < offset + mats.shape().col
                 ? (result = &mats[i, j - offset], true)
                 : (offset += mats.shape().col, false)) or

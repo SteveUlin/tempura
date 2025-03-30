@@ -51,12 +51,12 @@ constexpr auto goldenSectionSearch(
 
   while (tol.value * (abs(x1) + abs(x2)) < abs(x3 - x0)) {
     if (f1 < f2) {
-      r3 = std::move(r2);
-      r2 = std::move(r1);
+      r3 = r2;
+      r2 = r1;
       r1 = mkRecord(R * x1 + C * x0, func);
     } else {
-      r0 = std::move(r1);
-      r1 = std::move(r2);
+      r0 = r1;
+      r1 = r2;
       r2 = mkRecord(R * x2 + C * x3, func);
     }
   }
