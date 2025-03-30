@@ -3,7 +3,6 @@
 #include <cassert>
 #include <cmath>
 #include <cstdlib>
-#include <functional>
 #include <print>
 #include <type_traits>
 

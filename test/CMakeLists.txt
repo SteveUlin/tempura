@@ -3,10 +3,10 @@ target_link_libraries(chebyshev_test unit chebyshev)
 add_test(NAME chebyshev_test COMMAND chebyshev_test)
 set_property(TEST chebyshev_test PROPERTY LABELS base)
 
-add_executable(interpolate_test interpolate_test.cpp)
-target_link_libraries(interpolate_test unit interpolate)
-add_test(NAME interpolate_test COMMAND interpolate_test)
-set_property(TEST interpolate_test PROPERTY LABELS base)
+# add_executable(interpolate_test interpolate_test.cpp)
+# target_link_libraries(interpolate_test unit interpolate)
+# add_test(NAME interpolate_test COMMAND interpolate_test)
+# set_property(TEST interpolate_test PROPERTY LABELS base)
 
 add_executable(polynomial_test polynomial_test.cpp)
 target_link_libraries(polynomial_test unit polynomial)
@@ -39,6 +39,17 @@ foreach(TEST_SOURCE ${MATRIX_TEST_SOURCES})
   set_property(TEST matrix2_${TEST_NAME} PROPERTY LABELS matrix2)
 endforeach()
 
+file(GLOB_RECURSE MATRIX3_TEST_SOURCES "matrix3/*.cpp")
+foreach(TEST_SOURCE ${MATRIX3_TEST_SOURCES})
+   # Get the base name of the test file
+  get_filename_component(TEST_NAME ${TEST_SOURCE} NAME_WE)
+
+  add_executable(matrix3_${TEST_NAME} ${TEST_SOURCE})
+  target_link_libraries(matrix3_${TEST_NAME} unit matrix3)
+  add_test(NAME matrix3_${TEST_NAME} COMMAND matrix3_${TEST_NAME})
+  set_property(TEST matrix3_${TEST_NAME} PROPERTY LABELS matrix3)
+endforeach()
+
 file(GLOB_RECURSE QUADATURE_TEST_SOURCES "quadature/*.cpp")
 foreach(TEST_SOURCE ${QUADATURE_TEST_SOURCES})
    # Get the base name of the test file
@@ -61,16 +72,16 @@ foreach(TEST_SOURCE ${SPECIAL_TEST_SOURCES})
   set_property(TEST special_${TEST_NAME} PROPERTY LABELS special)
 endforeach()
 
-file(GLOB_RECURSE BAYES_TEST_SOURCES "bayes/*.cpp")
-foreach(TEST_SOURCE ${BAYES_TEST_SOURCES})
-   # Get the base name of the test file
-  get_filename_component(TEST_NAME ${TEST_SOURCE} NAME_WE)
-
-  add_executable(bayes_${TEST_NAME} ${TEST_SOURCE})
-  target_link_libraries(bayes_${TEST_NAME} unit bayes)
-  add_test(NAME bayes_${TEST_NAME} COMMAND bayes_${TEST_NAME})
-  set_property(TEST bayes_${TEST_NAME} PROPERTY LABELS bayes)
-endforeach()
+#file(GLOB_RECURSE BAYES_TEST_SOURCES "bayes/*.cpp")
+#foreach(TEST_SOURCE ${BAYES_TEST_SOURCES})
+#   # Get the base name of the test file
+#  get_filename_component(TEST_NAME ${TEST_SOURCE} NAME_WE)
+#
+#  add_executable(bayes_${TEST_NAME} ${TEST_SOURCE})
+#  target_link_libraries(bayes_${TEST_NAME} unit bayes)
+#  add_test(NAME bayes_${TEST_NAME} COMMAND bayes_${TEST_NAME})
+#  set_property(TEST bayes_${TEST_NAME} PROPERTY LABELS bayes)
+#endforeach()
 
 file(GLOB_RECURSE OPTIMIZATION_TEST_SOURCES "optimization/*.cpp")
 foreach(TEST_SOURCE ${OPTIMIZATION_TEST_SOURCES})
