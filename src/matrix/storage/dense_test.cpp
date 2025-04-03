@@ -69,7 +69,7 @@ auto main() -> int {
   };
 
   "Copy Constructor From Dynamic"_test = [] {
-    matrix::Dense<double, {matrix::kDynamic, matrix::kDynamic}> m{{0., 1.},
+    matrix::Dense<double, {matrix::kDynamic, matrix::kDynamic}> m = {{0., 1.},
                                                                   {2., 3.}};
 
     matrix::Dense<double, {2, 2}> n{m};

@@ -1,8 +1,7 @@
-#include "matrix3/matrix.h"
 #include "matrix3/accessors.h"
 #include "matrix3/extents.h"
 #include "matrix3/layouts.h"
-
+#include "matrix3/matrix.h"
 #include "unit.h"
 
 using namespace tempura;
@@ -79,6 +78,7 @@ auto main() -> int {
     expectEq(mat[0, 0], 0);
     expectEq(mat[0, 1], 1);
     expectEq(mat[1, 2], 2);
+    expectEq(mat.data()[2], 1);
   };
 
   "InlineDense"_test = [] {
@@ -91,6 +91,35 @@ auto main() -> int {
     static_assert(mat[0, 0] == 0);
     static_assert(mat[0, 1] == 1);
     static_assert(mat[1, 2] == 2);
+  };
+
+  "Identity"_test = [] {
+    constexpr Identity<int64_t, 2, 2> mat{};
+    static_assert(mat[0, 0] == 1);
+    static_assert(mat[0, 1] == 0);
+    static_assert(mat[1, 0] == 0);
+    static_assert(mat[1, 1] == 1);
+  };
+
+  "hard code 2d init"_test = [] {
+    constexpr InlineDense mat = {
+        {0, 1},
+        {2, 3},
+    };
+    static_assert(mat[0, 0] == 0);
+    static_assert(mat[0, 1] == 1);
+    static_assert(mat[1, 0] == 2);
+    static_assert(mat[1, 1] == 3);
+  };
+
+  "hard code 2d init"_test = [] {
+    Dense mat{
+        {0, 1},
+        {2, 3},
+    };
+    expectEq(mat[0, 0], 0);
+    expectEq(mat[0, 1], 1);
+    expectEq(mat[1, 1], 3);
   };
 
   return TestRegistry::result();
