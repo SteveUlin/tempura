@@ -12,9 +12,41 @@ namespace tempura::optimization {
 
 // Search for the minimum of a function by extending bisection to three points.
 // Each step selects the next evaluation point such that it maximizes the worst
-// case reduction of the bracket's width.
+// case bracket width reduction.
 //
-// This calculation involves the golden ratio, hence the name.
+// A bracket is defined to be 3 points on a line, with the middle point being
+// lower than the other two.
+//
+// 
+// a      b               c
+//
+// Where should we pick the next evaluation point `x`?
+// 
+// a      b        x      c
+//
+// Here we want to maximize the reduction of the interval's width. After
+// evaluating the functions at `x`, we will be able to reduce the interval
+// to either:
+//   - a, b, x
+//   - b, x, c
+//
+// To minimize the worst case, we want to pick `x` such that the distance
+// [a, b] is equal to the distance [x, c].
+//
+// Now suppose that we could pick where b is. What position of b would
+// lead to the "best" reduction of the interval's width?
+//
+// Here I defined best to be a that is also in the "best" location as a
+// point that would also be in the "best" location on the next iteration. That
+// way I can reuse the function eval.
+//
+// Whenever you have self referential distance reductions, you'll probably
+// find ϕ. Here is no different, the ideal is to have the point b at
+// (2. - ϕ) * [a, c] and x at (1. - ϕ) * [a, c].
+//
+// But unfortunately, we can't guarantee that b will be given to us at this
+// golden ratio point. But we can pick an initial x such that b lines up
+// on the next iteration.
 template <typename T, std::invocable<T> Func>
 constexpr auto goldenSectionSearch(
     const Bracket<Record<T, std::invoke_result_t<Func, T>>>& bracket,
@@ -30,7 +62,6 @@ constexpr auto goldenSectionSearch(
   RecordT r1;
   RecordT r2;
 
-  // make x0 to x1 the smaller segment;
   using std::abs;
   if (abs(bracket.b.input - bracket.a.input) <
       abs(bracket.c.output - bracket.b.output)) {
