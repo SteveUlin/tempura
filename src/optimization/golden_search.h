@@ -3,8 +3,10 @@
 #include <cassert>
 #include <cmath>
 #include <cstdlib>
+#include <limits>
 #include <print>
 #include <type_traits>
+#include <utility>
 
 #include "optimization/util.h"
 
@@ -50,7 +52,8 @@ namespace tempura::optimization {
 template <typename T, std::invocable<T> Func>
 constexpr auto goldenSectionSearch(
     const Bracket<Record<T, std::invoke_result_t<Func, T>>>& bracket,
-    Func&& func, Tolerance<std::invoke_result_t<Func, T>> tol = {})
+    Func&& func, Tolerance<std::invoke_result_t<Func, T>> tol = {},
+    std::size_t maxItr = 10'000)
     -> Bracket<Record<T, std::invoke_result_t<Func, T>>> {
   constexpr T R = std::numbers::phi - 1.;
   constexpr T C = 1. - R;
@@ -79,22 +82,32 @@ constexpr auto goldenSectionSearch(
   auto& [x2, f2] = r2;
   auto& [x3, f3] = r3;
 
-  while (tol.value * (abs(x1) + abs(x2)) < abs(x3 - x0)) {
+  size_t calls = 1;
+  while (calls < maxItr) {
+    std::println("{:.6} {:.6} {:.6}", x0, x1, x2);
     if (f1 < f2) {
+      if (abs(x2 - x0) <
+          tol.value * (abs(x1) + std::numeric_limits<double>::epsilon())) {
+        return {r0, r1, r2};
+      }
       r3 = r2;
       r2 = r1;
       r1 = mkRecord(R * x1 + C * x0, func);
     } else {
+      if (abs(x3 - x1) <
+          tol.value * (abs(x1) + std::numeric_limits<double>::epsilon())) {
+        return {r1, r2, r3};
+      }
       r0 = r1;
       r1 = r2;
       r2 = mkRecord(R * x2 + C * x3, func);
     }
+    ++calls;
   }
 
-  if (f1 < f2) {
-    return {r0, r1, r2};
-  }
-  return {r1, r2, r3};
+  assert((void("Maximum iterations reached"), false));
+
+  std::unreachable();
 }
 
 }  // namespace tempura::optimization
