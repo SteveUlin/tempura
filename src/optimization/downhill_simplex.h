@@ -83,11 +83,9 @@ auto downhillSimplex(auto& simplex, auto&& func) {
     }(std::make_index_sequence<N>());
   }
 
-  auto evaluate = [&](const auto& vec) {
+  auto evaluate = [&](const auto& vec) -> decltype(auto) {
     calls++;
-    return [&]<std::size_t... Is>(std::index_sequence<Is...>) {
-      return func(get<Is>(vec)...);
-    }(std::make_index_sequence<N>());
+    return std::apply(func, vec);
   };
 
   auto values = [&]<std::size_t... Is>(std::index_sequence<Is...>) {

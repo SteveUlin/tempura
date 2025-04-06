@@ -46,7 +46,8 @@ struct Tolerance {
   T value = [] {
     using std::sqrt;
     using std::numeric_limits;
-     return 3 * sqrt(numeric_limits<T>::epsilon());
+     // A bit larger than the best theoretical precision
+     return 4 * sqrt(numeric_limits<T>::epsilon());
   }();
 };
 

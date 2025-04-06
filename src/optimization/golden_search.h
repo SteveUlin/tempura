@@ -84,7 +84,7 @@ constexpr auto goldenSectionSearch(
 
   size_t calls = 1;
   while (calls < maxItr) {
-    std::println("{:.6} {:.6} {:.6}", x0, x1, x2);
+    std::println("{:.6} {:.6} {:.6} {:.6}", x0, x1, x2, x3);
     if (f1 < f2) {
       if (abs(x2 - x0) <
           tol.value * (abs(x1) + std::numeric_limits<double>::epsilon())) {

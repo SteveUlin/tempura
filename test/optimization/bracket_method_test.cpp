@@ -14,12 +14,12 @@ auto main() -> int {
   // auto func = [](double x) { return std::pow(x, 2); };
   // auto func = [](double x) {
   //   double z = x - std::numbers::pi;
-  //   return -1. / std::pow(1 + z * z * z * z, 2);
+  //   return -1. / std::pow(1 + z * z, 2) + cos(x);
   // };
 
   auto brack = bracketMethod(-2.0, 3.0, func);
-  // brack = goldenSectionSearch(brack, func);
-   brack = brentsMethod(brack, func);
+  brack = goldenSectionSearch(brack, func);
+  // brack = brentsMethod(brack, func);
 
   auto [left, middle, right] = brack;
 
