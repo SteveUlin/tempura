@@ -8,6 +8,8 @@ add_subdirectory(matrix3)
 add_subdirectory(optimization)
 add_subdirectory(quadature)
 add_subdirectory(special)
+add_subdirectory(utility)
+add_subdirectory(meta)
 
 add_library(benchmark INTERFACE benchmark.h)
 add_library(chebyshev INTERFACE chebyshev.h)

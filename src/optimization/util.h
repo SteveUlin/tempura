@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <functional>
 
 namespace tempura::optimization {
 
@@ -12,7 +13,7 @@ struct Record {
 };
 
 template <typename T, std::invocable<T> Func>
-[[gnu::always_inline]] constexpr auto mkRecord(const T& input, Func&& func) {
+constexpr auto mkRecord(const T& input, Func&& func) {
   using U = std::invoke_result_t<Func, T>;
   return Record<T, U>{input, func(input)};
 }
@@ -46,8 +47,8 @@ struct Tolerance {
   T value = [] {
     using std::sqrt;
     using std::numeric_limits;
-     // A bit larger than the best theoretical precision
-     return 4 * sqrt(numeric_limits<T>::epsilon());
+    // A bit larger than the best theoretical precision
+    return 4 * sqrt(numeric_limits<T>::epsilon());
   }();
 };
 
