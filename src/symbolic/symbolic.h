@@ -108,14 +108,16 @@ constexpr auto toDouble() {
     double value = 0.;
     double fraction = 1.;
     bool is_fraction = false;
-    ([&] {
-      if constexpr (chars == '.') {
-        is_fraction = true;
-      } else {
-        fraction = is_fraction ? fraction / 10 : fraction;
-        value = value * 10 + (chars - '0');
-      }
-    }(), ...);
+    (
+        [&] {
+          if constexpr (chars == '.') {
+            is_fraction = true;
+          } else {
+            fraction = is_fraction ? fraction / 10 : fraction;
+            value = value * 10 + (chars - '0');
+          }
+        }(),
+        ...);
     return value * fraction;
   }();
 }
@@ -228,14 +230,14 @@ template <Operator Op, Symbolic... Args>
 struct SymbolicExpression {
   constexpr SymbolicExpression() = default;
   constexpr SymbolicExpression(const SymbolicExpression&) = default;
-  constexpr auto operator=(const SymbolicExpression&) -> SymbolicExpression& =
-                                                             default;
+  constexpr auto operator=(const SymbolicExpression&)
+      -> SymbolicExpression& = default;
 
   constexpr static auto op() { return Op{}; }
   constexpr static auto terms() { return TypeList<Args...>{}; }
 
   constexpr static auto operand()
-    requires (sizeof...(Args) == 1)
+    requires(sizeof...(Args) == 1)
   {
     return terms().head();
   }
@@ -262,7 +264,8 @@ struct SymbolicExpression {
   }
 
   template <typename... Ts, typename... Us>
-  static constexpr auto operator()(internal::TypeValueBinder<Ts, Us>&... binders) {
+  static constexpr auto operator()(
+      internal::TypeValueBinder<Ts, Us>&... binders) {
     return SymbolicExpression::operator()(Substitution{binders...});
   }
 };
@@ -277,8 +280,8 @@ inline constexpr bool
 //       could be used in expressions instead.
 
 template <auto LHS, auto RHS>
-constexpr auto operator==(Constant<LHS> /*unused*/,
-                          Constant<RHS> /*unused*/) -> bool {
+constexpr auto operator==(Constant<LHS> /*unused*/, Constant<RHS> /*unused*/)
+    -> bool {
   return LHS == RHS;
 }
 
@@ -302,8 +305,8 @@ template <Operator Op, Matcher... Matchers>
 struct MatcherExpression {
   constexpr MatcherExpression() = default;
   constexpr MatcherExpression(const MatcherExpression&) = default;
-  constexpr auto operator=(const MatcherExpression&) -> MatcherExpression& =
-                                                            default;
+  constexpr auto operator=(const MatcherExpression&)
+      -> MatcherExpression& = default;
 
   constexpr static auto op() { return Op{}; }
   constexpr static auto terms() { return TypeList<Matchers...>{}; }
