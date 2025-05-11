@@ -70,4 +70,4 @@ auto operator<<(std::ostream& os,
                 tempura::symbolic::Symbolic auto expr) -> std::ostream& {
   return os << tempura::symbolic::toString(expr);
 }
-}  // namespace std
+  // namespace std
