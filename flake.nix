@@ -19,13 +19,13 @@
       };
       in {
         devShells.default = pkgs.mkShell.override {
-           stdenv = pkgs.gcc14Stdenv;
+           stdenv = pkgs.gcc15Stdenv;
       } rec {
           name = "Tempura";
 
           packages = with pkgs; [
             pkgs.llvmPackages_20.clang
-            gcc14
+            gcc15
             gdb
             bazel
             cmake

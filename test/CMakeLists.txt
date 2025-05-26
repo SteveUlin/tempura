@@ -72,16 +72,16 @@ foreach(TEST_SOURCE ${SPECIAL_TEST_SOURCES})
   set_property(TEST special_${TEST_NAME} PROPERTY LABELS special)
 endforeach()
 
-#file(GLOB_RECURSE BAYES_TEST_SOURCES "bayes/*.cpp")
-#foreach(TEST_SOURCE ${BAYES_TEST_SOURCES})
-#   # Get the base name of the test file
-#  get_filename_component(TEST_NAME ${TEST_SOURCE} NAME_WE)
-#
-#  add_executable(bayes_${TEST_NAME} ${TEST_SOURCE})
-#  target_link_libraries(bayes_${TEST_NAME} unit bayes)
-#  add_test(NAME bayes_${TEST_NAME} COMMAND bayes_${TEST_NAME})
-#  set_property(TEST bayes_${TEST_NAME} PROPERTY LABELS bayes)
-#endforeach()
+file(GLOB_RECURSE BAYES_TEST_SOURCES "bayes/*.cpp")
+foreach(TEST_SOURCE ${BAYES_TEST_SOURCES})
+   # Get the base name of the test file
+  get_filename_component(TEST_NAME ${TEST_SOURCE} NAME_WE)
+
+  add_executable(bayes_${TEST_NAME} ${TEST_SOURCE})
+  target_link_libraries(bayes_${TEST_NAME} unit bayes)
+  add_test(NAME bayes_${TEST_NAME} COMMAND bayes_${TEST_NAME})
+  set_property(TEST bayes_${TEST_NAME} PROPERTY LABELS bayes)
+endforeach()
 
 file(GLOB_RECURSE OPTIMIZATION_TEST_SOURCES "optimization/*.cpp")
 foreach(TEST_SOURCE ${OPTIMIZATION_TEST_SOURCES})

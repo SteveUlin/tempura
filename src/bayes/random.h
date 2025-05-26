@@ -1,8 +1,8 @@
 #pragma once
 
 #include <cstdint>
-#include <random>
 #include <experimental/simd>
+#include <random>
 
 namespace tempura::bayes {
 
@@ -28,61 +28,87 @@ enum class ShiftDirection : bool { Left, Right };
 // Should not be used by itself as numbers with a low number of on bits
 // tend to produce more number with low numbers of on bits.
 
-template <uint_fast64_t a1, uint_fast64_t a2, uint_fast64_t a3,
-          ShiftDirection direction>
-struct XorShift {
+class XorShift {
+ public:
+  struct Options {
+    uint_fast64_t a1;
+    uint_fast64_t a2;
+    uint_fast64_t a3;
+    ShiftDirection dir;
+  };
+  constexpr XorShift(Options options) : options_{options} {}
+
   static constexpr auto min() -> uint_fast64_t { return 1; }
 
   static constexpr auto max() -> uint_fast64_t {
     return std::numeric_limits<uint_fast64_t>::max();
   }
 
-  [[gnu::always_inline]] static constexpr auto step(uint_fast64_t x) {
-    if constexpr (direction == ShiftDirection::Left) {
-      x ^= x >> a1;
-      x ^= x << a2;
-      x ^= x >> a3;
+  constexpr auto step(uint_fast64_t x) const {
+    if (options_.dir == ShiftDirection::Left) {
+      x ^= x >> options_.a1;
+      x ^= x << options_.a2;
+      x ^= x >> options_.a3;
     } else {
-      x ^= x << a1;
-      x ^= x >> a2;
-      x ^= x << a3;
+      x ^= x << options_.a1;
+      x ^= x >> options_.a2;
+      x ^= x << options_.a3;
     }
     return x;
   }
-
-  constexpr XorShift(uint_fast64_t seed) : state_{seed} {}
 
   constexpr auto operator()() -> uint_fast64_t {
     state_ = step(state_);
     return state_;
   }
 
+  constexpr void seed(uint_fast64_t seed) { state_ = seed; }
+
  private:
-  uint_fast64_t state_;
+  Options options_;
+  uint_fast64_t state_ = 7073242132491550564;
 };
-static_assert(
-    std::uniform_random_bit_generator<XorShift<0, 0, 0, ShiftDirection::Left>>);
+static_assert(std::uniform_random_bit_generator<XorShift>);
 
 // Known good parameters
 
+constexpr XorShift::Options A1 = {
+    .a1 = 21, .a2 = 35, .a3 = 4, .dir = ShiftDirection::Left};
+constexpr XorShift::Options A2 = {
+    .a1 = 20, .a2 = 41, .a3 = 5, .dir = ShiftDirection::Left};
+constexpr XorShift::Options A3 = {
+    .a1 = 17, .a2 = 31, .a3 = 8, .dir = ShiftDirection::Left};
+constexpr XorShift::Options A4 = {
+    .a1 = 11, .a2 = 29, .a3 = 14, .dir = ShiftDirection::Left};
+constexpr XorShift::Options A5 = {
+    .a1 = 14, .a2 = 29, .a3 = 11, .dir = ShiftDirection::Left};
+constexpr XorShift::Options A6 = {
+    .a1 = 30, .a2 = 35, .a3 = 13, .dir = ShiftDirection::Left};
+constexpr XorShift::Options A7 = {
+    .a1 = 21, .a2 = 37, .a3 = 4, .dir = ShiftDirection::Left};
+constexpr XorShift::Options A8 = {
+    .a1 = 21, .a2 = 43, .a3 = 4, .dir = ShiftDirection::Left};
+constexpr XorShift::Options A9 = {
+    .a1 = 23, .a2 = 41, .a3 = 18, .dir = ShiftDirection::Left};
+
 template <ShiftDirection direction = ShiftDirection::Left>
-using A1 = XorShift<21, 35, 4, direction>;
-template <ShiftDirection direction = ShiftDirection::Left>
-using A2 = XorShift<20, 41, 5, direction>;
-template <ShiftDirection direction = ShiftDirection::Left>
-using A3 = XorShift<17, 31, 8, direction>;
-template <ShiftDirection direction = ShiftDirection::Left>
-using A4 = XorShift<11, 29, 14, direction>;
-template <ShiftDirection direction = ShiftDirection::Left>
-using A5 = XorShift<14, 29, 11, direction>;
-template <ShiftDirection direction = ShiftDirection::Left>
-using A6 = XorShift<30, 35, 13, direction>;
-template <ShiftDirection direction = ShiftDirection::Left>
-using A7 = XorShift<21, 37, 4, direction>;
-template <ShiftDirection direction = ShiftDirection::Left>
-using A8 = XorShift<21, 43, 4, direction>;
-template <ShiftDirection direction = ShiftDirection::Left>
-using A9 = XorShift<23, 41, 18, direction>;
+struct XorShiftAvx512 {
+  XorShiftAvx512(__m512i seed) : state_{seed} {}
+
+  auto operator()() {
+    state_ = _mm512_xor_epi64(state_, _mm512_srlv_epi64(state_, a1_));
+    state_ = _mm512_xor_epi64(state_, _mm512_sllv_epi64(state_, a2_));
+    state_ = _mm512_xor_epi64(state_, _mm512_srlv_epi64(state_, a3_));
+    return state_;
+  }
+
+ private:
+  __m512i a1_ = {21, 20, 17, 11, 14, 30, 21, 21};
+  __m512i a2_ = {35, 41, 31, 29, 29, 35, 37, 43};
+  __m512i a3_ = {4, 5, 8, 14, 11, 13, 4, 4};
+
+  __m512i state_;
+};
 
 // Multiply With Carry
 // state: x
@@ -95,9 +121,11 @@ using A9 = XorShift<23, 41, 18, direction>;
 // However the upper bits also contain a high degree of randomness and
 // could be used when combined with other generators.
 
-template <uint_fast64_t a>
 struct MultiplyWithCarry {
-  MultiplyWithCarry(uint_fast64_t seed) : state_{seed} {}
+  struct Options {
+    uint_fast64_t a;
+  };
+  MultiplyWithCarry(Options options) : a_{options.a} {}
 
   static constexpr auto min() -> uint_fast64_t { return 1; }
 
@@ -105,9 +133,8 @@ struct MultiplyWithCarry {
     return std::numeric_limits<uint_fast64_t>::max();
   }
 
-  [[gnu::always_inline]] static constexpr auto step(uint_fast64_t x)
-      -> uint_fast64_t {
-    x = a * (x & 0xFFFFFFFF) + (x >> 32);
+  constexpr auto step(uint_fast64_t x) const -> uint_fast64_t {
+    x = a_ * (x & 0xFFFFFFFF) + (x >> 32);
     return x;
   };
 
@@ -116,21 +143,24 @@ struct MultiplyWithCarry {
     return state_;
   }
 
+  constexpr void seed(uint_fast64_t seed) { state_ = seed; }
+
  private:
-  uint_fast64_t state_;
+  uint_fast64_t a_;
+  uint_fast64_t state_ = 7073242132491550564;
 };
 
 // Known good parameters
 
-using B1 = MultiplyWithCarry<4294957665>;
-using B2 = MultiplyWithCarry<4294963023>;
-using B3 = MultiplyWithCarry<4162943475>;
-using B4 = MultiplyWithCarry<3947008974>;
-using B5 = MultiplyWithCarry<3874257210>;
-using B6 = MultiplyWithCarry<2936881968>;
-using B7 = MultiplyWithCarry<2811536238>;
-using B8 = MultiplyWithCarry<2654432763>;
-using B9 = MultiplyWithCarry<1640531364>;
+constexpr MultiplyWithCarry::Options B1 = {.a = 4294957665};
+constexpr MultiplyWithCarry::Options B2 = {.a = 4294963023};
+constexpr MultiplyWithCarry::Options B3 = {.a = 4162943475};
+constexpr MultiplyWithCarry::Options B4 = {.a = 3947008974};
+constexpr MultiplyWithCarry::Options B5 = {.a = 3874257210};
+constexpr MultiplyWithCarry::Options B6 = {.a = 2936881968};
+constexpr MultiplyWithCarry::Options B7 = {.a = 2811536238};
+constexpr MultiplyWithCarry::Options B8 = {.a = 2654432763};
+constexpr MultiplyWithCarry::Options B9 = {.a = 1640531364};
 
 // Linear Congruential Generator
 //
@@ -142,9 +172,14 @@ using B9 = MultiplyWithCarry<1640531364>;
 // Not a great generator. The high 32 bits are mostly random
 // but the lower 32 bits are not.
 
-template <uint_fast64_t a, uint_fast64_t c>
 struct LinearCongruential {
-  constexpr LinearCongruential(uint_fast64_t seed) : state_{seed} {}
+  struct Options {
+    uint_fast64_t a;
+    uint_fast64_t c;
+  };
+
+  constexpr LinearCongruential(Options options)
+      : a_{options.a}, c_{options.c} {}
 
   static constexpr auto min() -> uint_fast64_t { return 0; }
 
@@ -152,9 +187,8 @@ struct LinearCongruential {
     return std::numeric_limits<uint_fast64_t>::max();
   }
 
-  [[gnu::always_inline]] static constexpr auto step(uint_fast64_t x)
-      -> uint_fast64_t {
-    x = a * x + c;
+  constexpr auto step(uint_fast64_t x) const -> uint_fast64_t {
+    x = a_ * x + c_;
     return x;
   }
 
@@ -163,13 +197,20 @@ struct LinearCongruential {
     return state_;
   }
 
+  constexpr void seed(uint_fast64_t seed) { state_ = seed; }
+
  private:
-  uint_fast64_t state_;
+  uint_fast64_t a_;
+  uint_fast64_t c_;
+  uint_fast64_t state_ = 7073242132491550564;
 };
 
-using C1 = LinearCongruential<3935559000370003845, 2691343689449507681>;
-using C2 = LinearCongruential<3202034522624059733, 4354685564936845319>;
-using C3 = LinearCongruential<2862933555777941757, 7046029254386353087>;
+constexpr LinearCongruential::Options C1 = {.a = 3935559000370003845,
+                                            .c = 2691343689449507681};
+constexpr LinearCongruential::Options C2 = {.a = 3202034522624059733,
+                                            .c = 4354685564936845319};
+constexpr LinearCongruential::Options C3 = {.a = 2862933555777941757,
+                                            .c = 7046029254386353087};
 
 // Multiplicative Linear Congruential Generator
 //
@@ -254,48 +295,6 @@ using F1 = MultiplicativeLinearCongruential<3741260, 4930622455819>;
 using F2 = MultiplicativeLinearCongruential<3397916, 5428838662153>;
 using F3 = MultiplicativeLinearCongruential<2106408, 8757438316547>;
 
-template <uint_fast64_t a1, uint_fast64_t a2, uint_fast64_t a3,
-          ShiftDirection direction>
-struct XorShiftSimd {
-  static constexpr auto min() -> uint_fast64_t { return 1; }
-
-  static constexpr auto max() -> uint_fast64_t {
-    return std::numeric_limits<uint_fast64_t>::max();
-  }
-
-  [[gnu::always_inline]] static constexpr auto step(std::experimental::native_simd<uint64_t>& x) {
-    if constexpr (direction == ShiftDirection::Left) {
-      x ^= x >> a1;
-      x ^= x << a2;
-      x ^= x >> a3;
-    } else {
-      x ^= x << a1;
-      x ^= x >> a2;
-      x ^= x << a3;
-    }
-    return x;
-  }
-
-  constexpr XorShiftSimd(std::experimental::native_simd<uint64_t> seed) : state_{seed} {}
-
-  constexpr auto operator()() -> uint_fast64_t {
-    if (index_ == std::experimental::native_simd<uint64_t>::size()) {
-      state_ = step(state_);
-      index_ = 0;
-    }
-    return state_[index_++];
-  }
-
- private:
-  int8_t index_ = std::experimental::native_simd<uint64_t>::size();
-  std::experimental::native_simd<uint64_t> state_;
-};
-static_assert(
-    std::uniform_random_bit_generator<XorShiftSimd<0, 0, 0, ShiftDirection::Left>>);
-
-template <ShiftDirection direction = ShiftDirection::Left>
-using A1_Simd = XorShift<21, 35, 4, direction>;
-
 }  // namespace detail
 
 // All of these implementations below are slower than std::mt19937_64
@@ -321,8 +320,16 @@ using A1_Simd = XorShift<21, 35, 4, direction>;
 // A3, B1, and C3.
 struct Rand {
   // The default seed is arbitrary
-  constexpr Rand(uint_fast64_t seed = 129348710293)
-      : a3_{seed}, b1_{seed}, c3_{seed} {}
+  constexpr Rand(uint_fast64_t seed = 129348710293) {
+    a3_.seed(seed);
+    b1_.seed(seed);
+    c3_.seed(seed);
+  }
+
+  Rand(const Rand &) = default;
+  Rand(Rand &&) = default;
+  auto operator=(const Rand &) -> Rand & = default;
+  auto operator=(Rand &&) -> Rand & = default;
 
   static constexpr auto min() -> uint_fast64_t { return 0; }
 
@@ -331,54 +338,58 @@ struct Rand {
   }
 
   constexpr auto operator()() -> uint_fast64_t {
-    return (detail::A1<detail::ShiftDirection::Left>::step(c3_()) + a3_()) ^
-           b1_();
+    return (a1_.step(c3_()) + a3_()) ^ b1_();
   }
 
  private:
-  detail::A3<detail::ShiftDirection::Right> a3_;
-  detail::B1 b1_;
-  detail::C3 c3_;
+  detail::XorShift a1_ = [] {
+    auto options = detail::A1;
+    options.dir = detail::ShiftDirection::Left;
+    return detail::XorShift{options};
+  }();
+  detail::XorShift a3_{detail::A3};
+  detail::MultiplyWithCarry b1_{detail::B1};
+  detail::LinearCongruential c3_{detail::C3};
 };
-
-// Do not use for more than 10¹² calls
-struct QuickRand1 {
-  // The default seed is arbitrary
-  constexpr QuickRand1(uint_fast64_t seed = 129348710293) : a1_{seed} {}
-
-  static constexpr auto min() -> uint_fast64_t { return 0; }
-
-  static constexpr auto max() -> uint_fast64_t {
-    return std::numeric_limits<uint_fast64_t>::max();
-  }
-
-  constexpr auto operator()() -> uint_fast64_t {
-    return detail::D1::step(a1_());
-  }
-
- private:
-  detail::A1<detail::ShiftDirection::Right> a1_;
-};
-
-// Do not use for more than 10³⁷ calls
-struct QuickRand2 {
-  // The default seed is arbitrary
-  constexpr QuickRand2(uint_fast64_t seed = 129348710293)
-      : a3_{seed}, b1_{seed} {}
-
-  static constexpr auto min() -> uint_fast64_t { return 0; }
-
-  static constexpr auto max() -> uint_fast64_t {
-    return std::numeric_limits<uint_fast64_t>::max();
-  }
-
-  constexpr auto operator()() -> uint_fast64_t {
-    return detail::A1<detail::ShiftDirection::Left>::step(b1_()) ^ a3_();
-  }
-
- private:
-  detail::A3<detail::ShiftDirection::Right> a3_;
-  detail::B1 b1_;
-};
+//
+// // Do not use for more than 10¹² calls
+// struct QuickRand1 {
+//   // The default seed is arbitrary
+//   constexpr QuickRand1(uint_fast64_t seed = 129348710293) : a1_{seed} {}
+//
+//   static constexpr auto min() -> uint_fast64_t { return 0; }
+//
+//   static constexpr auto max() -> uint_fast64_t {
+//     return std::numeric_limits<uint_fast64_t>::max();
+//   }
+//
+//   constexpr auto operator()() -> uint_fast64_t {
+//     return detail::D1::step(a1_());
+//   }
+//
+//  private:
+//   detail::A1<detail::ShiftDirection::Right> a1_;
+// };
+//
+// // Do not use for more than 10³⁷ calls
+// struct QuickRand2 {
+//   // The default seed is arbitrary
+//   constexpr QuickRand2(uint_fast64_t seed = 129348710293)
+//       : a3_{seed}, b1_{seed} {}
+//
+//   static constexpr auto min() -> uint_fast64_t { return 0; }
+//
+//   static constexpr auto max() -> uint_fast64_t {
+//     return std::numeric_limits<uint_fast64_t>::max();
+//   }
+//
+//   constexpr auto operator()() -> uint_fast64_t {
+//     return detail::A1<detail::ShiftDirection::Left>::step(b1_()) ^ a3_();
+//   }
+//
+//  private:
+//   detail::A3<detail::ShiftDirection::Right> a3_;
+//   detail::B1 b1_;
+// };
 
 }  // namespace tempura::bayes

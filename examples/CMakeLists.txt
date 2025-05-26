@@ -1,3 +1,5 @@
+add_subdirectory(ideoms)
+
 add_executable(hello_world_main hello_world.cpp)
 
 add_executable(hessian_main hessian.cpp)
@@ -14,6 +16,8 @@ add_executable(plot plot_main.cpp)
 add_executable(text_size text_size.cpp)
 add_executable(symbols_main symbols.cpp)
 add_executable(image_main image_main.cpp)
+add_executable(simd_main simd_main.cpp)
+target_link_libraries(simd_main PRIVATE profiler)
 
 # add_executable(single_producer_consumer_queue single_producer_consumer_queue.cpp)
 # target_link_libraries(single_producer_consumer_queue PRIVATE profiler)

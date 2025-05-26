@@ -13,13 +13,14 @@ using namespace std::chrono_literals;
 //
 // Supports Scoped RAII tracking with the TEMPURA_TRACE() macro.
 //
-// This profiler is not highly precise as it allocates new anchor points as needed.
-// However, it is sufficiently accurate for most tasks. Allocating a new anchor
-// may add a few nanoseconds to a trace.
+// This profiler is not highly precise as it allocates new anchor points as
+// needed. However, it is sufficiently accurate for most tasks. Allocating a new
+// anchor may add a few nanoseconds to a trace.
 
 // Concept:
 //
-// The profiler maintains a "current tracing anchor" that accrues "exclusive" time.
+// The profiler maintains a "current tracing anchor" that accrues "exclusive"
+// time.
 //
 // When a new tracing anchor is encountered:
 //   - Store a pointer to the previous anchor
@@ -36,6 +37,9 @@ using namespace std::chrono_literals;
 
 class Profiler {
  public:
+  // Ends profiling and prints statistics.
+  static auto endAndPrintStats() -> void;
+
   Profiler() {
     Anchor& anchor = anchors_.emplace_back(std::source_location::current());
     anchor.hits = 1;
@@ -66,19 +70,18 @@ class Profiler {
     Anchor& anchor_;
     Anchor& parent_anchor_;
 
-    // Cache the previous inclusive time to avoid double counting during recursive calls.
+    // Cache the previous inclusive time to avoid double counting during
+    // recursive calls.
     std::chrono::nanoseconds previous_inclusive_;
     std::chrono::time_point<std::chrono::high_resolution_clock> start_;
   };
 
   // Creates a new anchor point.
-  static auto getNewAnchor(std::source_location location = std::source_location::current()) -> Anchor& {
+  static auto getNewAnchor(std::source_location location =
+                               std::source_location::current()) -> Anchor& {
     Anchor& anchor = instance_.anchors_.emplace_back(location);
     return anchor;
   }
-
-  // Ends profiling and prints statistics.
-  static auto endAndPrintStats() -> void;
 
  private:
   static Profiler& instance_;
@@ -95,5 +98,3 @@ inline Profiler& Profiler::instance_{*(new Profiler{})};
   auto __tracer = ::tempura::Profiler::Tracer(__anchor);
 
 }  // namespace tempura
-
-
