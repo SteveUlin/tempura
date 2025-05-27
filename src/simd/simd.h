@@ -8,49 +8,48 @@ namespace tempura {
 
 // --- Mask Types ---
 
-struct Mask8 {
-  __mmask8 value;
-
-  Mask8(__mmask8 mask) : value(mask) {}
-
-  operator __mmask8() const { return value; }
+class Mask8 {
+public:
+  Mask8(__mmask8 mask) : value_(mask) {}
 
   auto operator&(const Mask8& other) const -> Mask8 {
-    return {_kand_mask8(value, other.value)};
+    return {_kand_mask8(value_, other.value_)};
   }
 
   auto operator|(const Mask8& other) const -> Mask8 {
-    return {_kor_mask8(value, other.value)};
+    return {_kor_mask8(value_, other.value_)};
   }
 
   auto operator^(const Mask8& other) const -> Mask8 {
-    return {_kxor_mask8(value, other.value)};
+    return {_kxor_mask8(value_, other.value_)};
   }
 
   auto operator~() const -> Mask8 {
-    return {_knot_mask8(value)};
+    return {_knot_mask8(value_)};
   }
 
   auto operator==(const Mask8& other) const -> bool {
-    return value == other.value;
+    return value_ == other.value_;
   }
 
   auto all() const -> bool {
-    return value == 0xFF;
+    return value_ == 0xFF;
   }
 
   auto none() const -> bool {
-    return value == 0x00;
+    return value_ == 0x00;
   }
 
   auto any() const -> bool {
-    return value != 0x00;
+    return value_ != 0x00;
   }
+
+private:
+  __mmask8 value_;
 };
 
-struct Mask16 {
-  __mmask16 value;
-
+class Mask16 {
+public:
   Mask16(__mmask16 mask) : value(mask) {}
 
   operator __mmask16() const { return value; }
@@ -86,13 +85,15 @@ struct Mask16 {
   auto any() const -> bool {
     return value != 0x0000;
   }
+
+private:
+  __mmask16 value;
 };
 
 // --- Vec512f: 512 bit vector of 16 single-precision floats ---
 
-struct Vec512f {
-  __m512 value;
-
+class Vec512f {
+public:
   Vec512f() : value(_mm512_setzero_ps()) {}
   explicit Vec512f(__m512 v) : value(v) {}
   explicit Vec512f(float f) : value(_mm512_set1_ps(f)) {}
@@ -103,8 +104,6 @@ struct Vec512f {
   static constexpr auto size() -> std::size_t {
     return 16;  // 512 bits / 32 bits per float
   }
-
-  operator __m512() const { return value; }
 
   void store(float* ptr) const {
     _mm512_storeu_ps(ptr, value);
@@ -166,6 +165,9 @@ struct Vec512f {
   auto operator!=(const Vec512f& other) const -> bool {
     return !(*this == other);
   }
+
+private:
+  __m512 value;
 };
 
 }  // namespace tempura
