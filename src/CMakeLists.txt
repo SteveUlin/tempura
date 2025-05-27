@@ -8,7 +8,7 @@ add_subdirectory(matrix3)
 add_subdirectory(meta)
 add_subdirectory(optimization)
 add_subdirectory(quadature)
-# add_subdirectory(simd)
+add_subdirectory(simd)
 add_subdirectory(special)
 add_subdirectory(utility)
 
