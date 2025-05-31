@@ -4,9 +4,8 @@
 
 // Cyclic Visitor
 //
-// The visitor pattern is a design pattern that lets you separate an algorithm
-// from the objects on which it operates. It allows you to add new operations to
-// existing object structures without modifying those structures.
+// The visitor pattern lets you define new functions to operate over a fixed
+// set of classes.
 
 // The Cyclic Visitor relies on inheritance to implement the visitor pattern.
 // It is cyclic in that the Visitor abstract class needs to know about

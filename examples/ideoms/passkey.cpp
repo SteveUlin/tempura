@@ -57,7 +57,7 @@ class ResourceManager {
 
 class UnrelatedClass {
  public:
-  void tryAccess(Resource& resource) {
+  void tryAccess(Resource&) {
     // This will not compile because UnrelatedClass does not have access to
     // Resource::Passkey.
     // resource.sensitiveOperation(Resource::Passkey{});
@@ -66,7 +66,7 @@ class UnrelatedClass {
   }
 };
 
-int main() {
+auto main() -> int {
   ResourceManager manager;
   manager.manageResource();
 
