@@ -58,4 +58,4 @@ template <typename Func, typename Sampler>
 MonteCarloIntegrator(Func&& func, Sampler&& sampler)
     -> MonteCarloIntegrator<decltype(sampler()), Func, Sampler>;
 
-}  // namespace tempura::quadature
+  // namespace tempura::quadature

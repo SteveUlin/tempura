@@ -1,31 +1,101 @@
 #pragma once
 
-#include <concepts>
+#include <cmath>
 
 namespace tempura {
 
-template <typename Op, typename T>
-concept UnaryOp = requires() {
-  { Op::operator()(std::declval<T>()) } -> std::convertible_to<T>;
+struct PlusFn {
+  static constexpr auto operator()(const auto& a, const auto& b) {
+    return a + b;
+  }
 };
 
-template <typename Op, typename T>
-concept BinaryOp = requires() {
-  {
-    Op::operator()(std::declval<T>(), std::declval<T>())
-  } -> std::convertible_to<T>;
+struct MinusFn {
+  static constexpr auto operator()(const auto& a, const auto& b) {
+    return a - b;
+  }
 };
 
-struct Plus {
-  static auto operator()(const auto& a, const auto& b) { return a + b; }
+struct NegateFn {
+  static constexpr auto operator()(const auto& value) { return -value; }
 };
 
-struct Minus {
-  static auto operator()(const auto& a, const auto& b) { return a - b; }
+struct MultiplyFn {
+  static constexpr auto operator()(const auto& a, const auto& b) {
+    return a * b;
+  }
 };
 
-struct Negate {
-  static auto operator()(const auto& value) { return -value; }
+struct DivideFn {
+  static constexpr auto operator()(const auto& a, const auto& b) {
+    return a / b;
+  }
+};
+
+struct ModuloFn {
+  static constexpr auto operator()(const auto& a, const auto& b) {
+    return a % b;
+  }
+};
+
+struct SqrtFn {
+  static constexpr auto operator()(const auto& value) {
+    return std::sqrt(value);
+  }
+};
+
+struct ExpFn {
+  static constexpr auto operator()(const auto& value) {
+    return std::exp(value);
+  }
+};
+
+struct LogFn {
+  static constexpr auto operator()(const auto& value) {
+    return std::log(value);
+  }
+};
+
+struct Log10Fn {
+  static constexpr auto operator()(const auto& value) {
+    return std::log10(value);
+  }
+};
+
+struct SinFn {
+  static constexpr auto operator()(const auto& value) {
+    return std::sin(value);
+  }
+};
+
+struct CosFn {
+  static constexpr auto operator()(const auto& value) {
+    return std::cos(value);
+  }
+};
+
+struct TanFn {
+  static constexpr auto operator()(const auto& value) {
+    return std::tan(value);
+  }
+};
+
+struct FloorFn {
+  static constexpr auto operator()(const auto& value) {
+    return std::floor(value);
+  }
+};
+
+struct CeilFn {
+  static constexpr auto operator()(const auto& value) {
+    return std::ceil(value);
+  }
+};
+
+struct RoundFn {
+  static constexpr auto operator()(const auto& value) {
+    return std::round(value);
+  }
 };
 
 }  // namespace tempura
