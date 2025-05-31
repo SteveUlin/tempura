@@ -28,24 +28,22 @@ enum class ShiftDirection : bool { Left, Right };
 // Should not be used by itself as numbers with a low number of on bits
 // tend to produce more number with low numbers of on bits.
 
-class XorShift {
+template <typename T>
+struct XorShiftOptions {
+  T a1;
+  T a2;
+  T a3;
+};
+
+template <typename T, ShiftDirection dir>
+class XorShiftImpl {
  public:
-  struct Options {
-    uint_fast64_t a1;
-    uint_fast64_t a2;
-    uint_fast64_t a3;
-    ShiftDirection dir;
-  };
-  constexpr XorShift(Options options) : options_{options} {}
+  using Options = XorShiftOptions<T>;
 
-  static constexpr auto min() -> uint_fast64_t { return 1; }
+  constexpr XorShiftImpl(Options options) : options_{options} {}
 
-  static constexpr auto max() -> uint_fast64_t {
-    return std::numeric_limits<uint_fast64_t>::max();
-  }
-
-  constexpr auto step(uint_fast64_t x) const {
-    if (options_.dir == ShiftDirection::Left) {
+  constexpr auto step(T x) const {
+    if constexpr (dir == ShiftDirection::Left) {
       x ^= x >> options_.a1;
       x ^= x << options_.a2;
       x ^= x >> options_.a3;
@@ -57,160 +55,187 @@ class XorShift {
     return x;
   }
 
-  constexpr auto operator()() -> uint_fast64_t {
+  constexpr auto operator()() -> T {
     state_ = step(state_);
     return state_;
   }
 
-  constexpr void seed(uint_fast64_t seed) { state_ = seed; }
+  constexpr void seed(T seed) { state_ = seed; }
 
  private:
   Options options_;
-  uint_fast64_t state_ = 7073242132491550564;
+  T state_;
 };
-static_assert(std::uniform_random_bit_generator<XorShift>);
+
+template <typename T, ShiftDirection dir>
+class XorShift;
+
+template <typename T, ShiftDirection dir>
+  requires(std::is_integral_v<T>)
+class XorShift<T, dir> : public XorShiftImpl<T, dir> {
+ public:
+  using Options = typename XorShiftImpl<T, dir>::Options;
+
+  constexpr XorShift(Options options) : XorShiftImpl<T, dir>(options) {
+    this->seed(7073242132491550564);  // Arbitrary seed
+  }
+
+  static constexpr auto min() -> T { return 0; }
+
+  static constexpr auto max() -> T { return std::numeric_limits<T>::max(); }
+
+ private:
+  T state_;
+};
+static_assert(std::uniform_random_bit_generator<XorShift<uint_fast64_t, ShiftDirection::Left>>);
+
+// Deduction Guide
+template <typename T>
+XorShift(XorShiftOptions<T>) -> XorShift<T, ShiftDirection::Left>;
+
+//  = 7073242132491550564;
 
 // Known good parameters
 
-constexpr XorShift::Options A1 = {
-    .a1 = 21, .a2 = 35, .a3 = 4, .dir = ShiftDirection::Left};
-constexpr XorShift::Options A2 = {
-    .a1 = 20, .a2 = 41, .a3 = 5, .dir = ShiftDirection::Left};
-constexpr XorShift::Options A3 = {
-    .a1 = 17, .a2 = 31, .a3 = 8, .dir = ShiftDirection::Left};
-constexpr XorShift::Options A4 = {
-    .a1 = 11, .a2 = 29, .a3 = 14, .dir = ShiftDirection::Left};
-constexpr XorShift::Options A5 = {
-    .a1 = 14, .a2 = 29, .a3 = 11, .dir = ShiftDirection::Left};
-constexpr XorShift::Options A6 = {
-    .a1 = 30, .a2 = 35, .a3 = 13, .dir = ShiftDirection::Left};
-constexpr XorShift::Options A7 = {
-    .a1 = 21, .a2 = 37, .a3 = 4, .dir = ShiftDirection::Left};
-constexpr XorShift::Options A8 = {
-    .a1 = 21, .a2 = 43, .a3 = 4, .dir = ShiftDirection::Left};
-constexpr XorShift::Options A9 = {
-    .a1 = 23, .a2 = 41, .a3 = 18, .dir = ShiftDirection::Left};
+constexpr XorShiftOptions<uint_fast64_t> A1 = {
+    .a1 = 21, .a2 = 35, .a3 = 4};
+constexpr XorShiftOptions<uint_fast64_t> A2 = {
+    .a1 = 20, .a2 = 41, .a3 = 5};
+constexpr XorShiftOptions<uint_fast64_t> A3 = {
+    .a1 = 17, .a2 = 31, .a3 = 8};
+constexpr XorShiftOptions<uint_fast64_t> A4 = {
+    .a1 = 11, .a2 = 29, .a3 = 14};
+constexpr XorShiftOptions<uint_fast64_t> A5 = {
+    .a1 = 14, .a2 = 29, .a3 = 11};
+constexpr XorShiftOptions<uint_fast64_t> A6 = {
+    .a1 = 30, .a2 = 35, .a3 = 13};
+constexpr XorShiftOptions<uint_fast64_t> A7 = {
+    .a1 = 21, .a2 = 37, .a3 = 4};
+constexpr XorShiftOptions<uint_fast64_t> A8 = {
+    .a1 = 21, .a2 = 43, .a3 = 4};
+constexpr XorShiftOptions<uint_fast64_t> A9 = {
+    .a1 = 23, .a2 = 41, .a3 = 18};
 
-template <ShiftDirection direction = ShiftDirection::Left>
-struct XorShiftAvx512 {
-  XorShiftAvx512(__m512i seed) : state_{seed} {}
-
-  auto operator()() {
-    state_ = _mm512_xor_epi64(state_, _mm512_srlv_epi64(state_, a1_));
-    state_ = _mm512_xor_epi64(state_, _mm512_sllv_epi64(state_, a2_));
-    state_ = _mm512_xor_epi64(state_, _mm512_srlv_epi64(state_, a3_));
-    return state_;
-  }
-
- private:
-  __m512i a1_ = {21, 20, 17, 11, 14, 30, 21, 21};
-  __m512i a2_ = {35, 41, 31, 29, 29, 35, 37, 43};
-  __m512i a3_ = {4, 5, 8, 14, 11, 13, 4, 4};
-
-  __m512i state_;
-};
-
-// Multiply With Carry
-// state: x
-// intialize: x ≠ 0
-// update:
-//   x ← a (x & [2³² - 1]) + (x >> 32)
-// period: (2³²a - 2) / 2  where a is prime
+// template <ShiftDirection direction = ShiftDirection::Left>
+// struct XorShiftAvx512 {
+//   XorShiftAvx512(__m512i seed) : state_{seed} {}
 //
-// Only the lower 32 bits are considered to be algorithmically random.
-// However the upper bits also contain a high degree of randomness and
-// could be used when combined with other generators.
-
-struct MultiplyWithCarry {
-  struct Options {
-    uint_fast64_t a;
-  };
-  MultiplyWithCarry(Options options) : a_{options.a} {}
-
-  static constexpr auto min() -> uint_fast64_t { return 1; }
-
-  static constexpr auto max() -> uint_fast64_t {
-    return std::numeric_limits<uint_fast64_t>::max();
-  }
-
-  constexpr auto step(uint_fast64_t x) const -> uint_fast64_t {
-    x = a_ * (x & 0xFFFFFFFF) + (x >> 32);
-    return x;
-  };
-
-  constexpr auto operator()() -> uint_fast64_t {
-    state_ = step(state_);
-    return state_;
-  }
-
-  constexpr void seed(uint_fast64_t seed) { state_ = seed; }
-
- private:
-  uint_fast64_t a_;
-  uint_fast64_t state_ = 7073242132491550564;
-};
-
-// Known good parameters
-
-constexpr MultiplyWithCarry::Options B1 = {.a = 4294957665};
-constexpr MultiplyWithCarry::Options B2 = {.a = 4294963023};
-constexpr MultiplyWithCarry::Options B3 = {.a = 4162943475};
-constexpr MultiplyWithCarry::Options B4 = {.a = 3947008974};
-constexpr MultiplyWithCarry::Options B5 = {.a = 3874257210};
-constexpr MultiplyWithCarry::Options B6 = {.a = 2936881968};
-constexpr MultiplyWithCarry::Options B7 = {.a = 2811536238};
-constexpr MultiplyWithCarry::Options B8 = {.a = 2654432763};
-constexpr MultiplyWithCarry::Options B9 = {.a = 1640531364};
-
-// Linear Congruential Generator
+//   auto operator()() {
+//     state_ = _mm512_xor_epi64(state_, _mm512_srlv_epi64(state_, a1_));
+//     state_ = _mm512_xor_epi64(state_, _mm512_sllv_epi64(state_, a2_));
+//     state_ = _mm512_xor_epi64(state_, _mm512_srlv_epi64(state_, a3_));
+//     return state_;
+//   }
 //
-// state: x
-// initialize: any
-// update x = a * x + c mod 2⁶⁴
-// period: 2⁶⁴ if c and m are chosen correctly
+//  private:
+//   __m512i a1_ = {21, 20, 17, 11, 14, 30, 21, 21};
+//   __m512i a2_ = {35, 41, 31, 29, 29, 35, 37, 43};
+//   __m512i a3_ = {4, 5, 8, 14, 11, 13, 4, 4};
 //
-// Not a great generator. The high 32 bits are mostly random
-// but the lower 32 bits are not.
-
-struct LinearCongruential {
-  struct Options {
-    uint_fast64_t a;
-    uint_fast64_t c;
-  };
-
-  constexpr LinearCongruential(Options options)
-      : a_{options.a}, c_{options.c} {}
-
-  static constexpr auto min() -> uint_fast64_t { return 0; }
-
-  static constexpr auto max() -> uint_fast64_t {
-    return std::numeric_limits<uint_fast64_t>::max();
-  }
-
-  constexpr auto step(uint_fast64_t x) const -> uint_fast64_t {
-    x = a_ * x + c_;
-    return x;
-  }
-
-  constexpr auto operator()() -> uint_fast64_t {
-    state_ = step(state_);
-    return state_;
-  }
-
-  constexpr void seed(uint_fast64_t seed) { state_ = seed; }
-
- private:
-  uint_fast64_t a_;
-  uint_fast64_t c_;
-  uint_fast64_t state_ = 7073242132491550564;
-};
-
-constexpr LinearCongruential::Options C1 = {.a = 3935559000370003845,
-                                            .c = 2691343689449507681};
-constexpr LinearCongruential::Options C2 = {.a = 3202034522624059733,
-                                            .c = 4354685564936845319};
-constexpr LinearCongruential::Options C3 = {.a = 2862933555777941757,
-                                            .c = 7046029254386353087};
+//   __m512i state_;
+// };
+//
+// // Multiply With Carry
+// // state: x
+// // intialize: x ≠ 0
+// // update:
+// //   x ← a (x & [2³² - 1]) + (x >> 32)
+// // period: (2³²a - 2) / 2  where a is prime
+// //
+// // Only the lower 32 bits are considered to be algorithmically random.
+// // However the upper bits also contain a high degree of randomness and
+// // could be used when combined with other generators.
+//
+// struct MultiplyWithCarry {
+//   struct Options {
+//     uint_fast64_t a;
+//   };
+//   MultiplyWithCarry(Options options) : a_{options.a} {}
+//
+//   static constexpr auto min() -> uint_fast64_t { return 1; }
+//
+//   static constexpr auto max() -> uint_fast64_t {
+//     return std::numeric_limits<uint_fast64_t>::max();
+//   }
+//
+//   constexpr auto step(uint_fast64_t x) const -> uint_fast64_t {
+//     x = a_ * (x & 0xFFFFFFFF) + (x >> 32);
+//     return x;
+//   };
+//
+//   constexpr auto operator()() -> uint_fast64_t {
+//     state_ = step(state_);
+//     return state_;
+//   }
+//
+//   constexpr void seed(uint_fast64_t seed) { state_ = seed; }
+//
+//  private:
+//   uint_fast64_t a_;
+//   uint_fast64_t state_ = 7073242132491550564;
+// };
+//
+// // Known good parameters
+//
+// constexpr MultiplyWithCarry::Options B1 = {.a = 4294957665};
+// constexpr MultiplyWithCarry::Options B2 = {.a = 4294963023};
+// constexpr MultiplyWithCarry::Options B3 = {.a = 4162943475};
+// constexpr MultiplyWithCarry::Options B4 = {.a = 3947008974};
+// constexpr MultiplyWithCarry::Options B5 = {.a = 3874257210};
+// constexpr MultiplyWithCarry::Options B6 = {.a = 2936881968};
+// constexpr MultiplyWithCarry::Options B7 = {.a = 2811536238};
+// constexpr MultiplyWithCarry::Options B8 = {.a = 2654432763};
+// constexpr MultiplyWithCarry::Options B9 = {.a = 1640531364};
+//
+// // Linear Congruential Generator
+// //
+// // state: x
+// // initialize: any
+// // update x = a * x + c mod 2⁶⁴
+// // period: 2⁶⁴ if c and m are chosen correctly
+// //
+// // Not a great generator. The high 32 bits are mostly random
+// // but the lower 32 bits are not.
+//
+// struct LinearCongruential {
+//   struct Options {
+//     uint_fast64_t a;
+//     uint_fast64_t c;
+//   };
+//
+//   constexpr LinearCongruential(Options options)
+//       : a_{options.a}, c_{options.c} {}
+//
+//   static constexpr auto min() -> uint_fast64_t { return 0; }
+//
+//   static constexpr auto max() -> uint_fast64_t {
+//     return std::numeric_limits<uint_fast64_t>::max();
+//   }
+//
+//   constexpr auto step(uint_fast64_t x) const -> uint_fast64_t {
+//     x = a_ * x + c_;
+//     return x;
+//   }
+//
+//   constexpr auto operator()() -> uint_fast64_t {
+//     state_ = step(state_);
+//     return state_;
+//   }
+//
+//   constexpr void seed(uint_fast64_t seed) { state_ = seed; }
+//
+//  private:
+//   uint_fast64_t a_;
+//   uint_fast64_t c_;
+//   uint_fast64_t state_ = 7073242132491550564;
+// };
+//
+// constexpr LinearCongruential::Options C1 = {.a = 3935559000370003845,
+//                                             .c = 2691343689449507681};
+// constexpr LinearCongruential::Options C2 = {.a = 3202034522624059733,
+//                                             .c = 4354685564936845319};
+// constexpr LinearCongruential::Options C3 = {.a = 2862933555777941757,
+//                                             .c = 7046029254386353087};
 
 // Multiplicative Linear Congruential Generator
 //
@@ -221,175 +246,176 @@ constexpr LinearCongruential::Options C3 = {.a = 2862933555777941757,
 //
 // Top 32 bits are mostly random, bottom 32 bits are not.
 
-template <uint_fast64_t a, uint_fast64_t m = 0>
-struct MultiplicativeLinearCongruential {
-  constexpr MultiplicativeLinearCongruential(uint_fast64_t seed)
-      : state_{seed} {}
-
-  static constexpr auto kMul = a;
-
-  static constexpr auto min() -> uint_fast64_t { return 1; }
-
-  static constexpr auto max() -> uint_fast64_t {
-    return std::numeric_limits<uint_fast64_t>::max();
-  }
-
-  [[gnu::always_inline]] static constexpr auto step(uint_fast64_t x) {
-    if constexpr (m != 0) {
-      x = a * x % m;
-    } else {
-      x = a * x;
-    }
-    return x;
-  }
-
-  constexpr auto operator()() -> uint_fast64_t {
-    state_ = step(state_);
-    return state_;
-  }
-
- private:
-  uint_fast64_t state_;
-};
-
-// Known good parameters
-
-using D1 = MultiplicativeLinearCongruential<2685821657736338717>;
-using D2 = MultiplicativeLinearCongruential<7664345821815920749>;
-using D3 = MultiplicativeLinearCongruential<4768777513237032717>;
-using D4 = MultiplicativeLinearCongruential<1181783497276652981>;
-using D5 = MultiplicativeLinearCongruential<702098784532940405>;
-
-// Known good parameters for m >> 2³² and m prime.
+// template <uint_fast64_t a, uint_fast64_t m = 0>
+// struct MultiplicativeLinearCongruential {
+//   constexpr MultiplicativeLinearCongruential(uint_fast64_t seed)
+//       : state_{seed} {}
 //
-// Only the lower 32 bits are considered to be algorithmically random.
-// But you can get ~43 good bits
-
-using E1 = MultiplicativeLinearCongruential<10014146, 549755813881>;
-using E2 = MultiplicativeLinearCongruential<30508823, 549755813881>;
-using E3 = MultiplicativeLinearCongruential<25708129, 549755813881>;
-
-using E4 = MultiplicativeLinearCongruential<5183781, 2199023255531>;
-using E5 = MultiplicativeLinearCongruential<1070739, 2199023255531>;
-using E6 = MultiplicativeLinearCongruential<6639568, 2199023255531>;
-
-using E7 = MultiplicativeLinearCongruential<1781978, 4398046511093>;
-using E8 = MultiplicativeLinearCongruential<2114307, 4398046511093>;
-using E9 = MultiplicativeLinearCongruential<1542852, 4398046511093>;
-
-using E10 = MultiplicativeLinearCongruential<2096259, 8796093022151>;
-using E11 = MultiplicativeLinearCongruential<2052163, 8796093022151>;
-using E12 = MultiplicativeLinearCongruential<2006881, 8796093022151>;
-
-// Known good parameters for m >> 2³², m prime, and a(m - 1) ≈ 2⁶⁴
+//   static constexpr auto kMul = a;
 //
-// The purpose is to make ax reasonably 64 bit random number with
-// good enough properties in the high bits to be used in a combined
-// generator.
+//   static constexpr auto min() -> uint_fast64_t { return 1; }
 //
-// don't use both a and ax. Pick one or the other. a can be accessed with ::mul
-
-// Known good parameters
-
-using F1 = MultiplicativeLinearCongruential<3741260, 4930622455819>;
-using F2 = MultiplicativeLinearCongruential<3397916, 5428838662153>;
-using F3 = MultiplicativeLinearCongruential<2106408, 8757438316547>;
+//   static constexpr auto max() -> uint_fast64_t {
+//     return std::numeric_limits<uint_fast64_t>::max();
+//   }
+//
+//   [[gnu::always_inline]] static constexpr auto step(uint_fast64_t x) {
+//     if constexpr (m != 0) {
+//       x = a * x % m;
+//     } else {
+//       x = a * x;
+//     }
+//     return x;
+//   }
+//
+//   constexpr auto operator()() -> uint_fast64_t {
+//     state_ = step(state_);
+//     return state_;
+//   }
+//
+//  private:
+//   uint_fast64_t state_;
+// };
+//
+// // Known good parameters
+//
+// using D1 = MultiplicativeLinearCongruential<2685821657736338717>;
+// using D2 = MultiplicativeLinearCongruential<7664345821815920749>;
+// using D3 = MultiplicativeLinearCongruential<4768777513237032717>;
+// using D4 = MultiplicativeLinearCongruential<1181783497276652981>;
+// using D5 = MultiplicativeLinearCongruential<702098784532940405>;
+//
+// // Known good parameters for m >> 2³² and m prime.
+// //
+// // Only the lower 32 bits are considered to be algorithmically random.
+// // But you can get ~43 good bits
+//
+// using E1 = MultiplicativeLinearCongruential<10014146, 549755813881>;
+// using E2 = MultiplicativeLinearCongruential<30508823, 549755813881>;
+// using E3 = MultiplicativeLinearCongruential<25708129, 549755813881>;
+//
+// using E4 = MultiplicativeLinearCongruential<5183781, 2199023255531>;
+// using E5 = MultiplicativeLinearCongruential<1070739, 2199023255531>;
+// using E6 = MultiplicativeLinearCongruential<6639568, 2199023255531>;
+//
+// using E7 = MultiplicativeLinearCongruential<1781978, 4398046511093>;
+// using E8 = MultiplicativeLinearCongruential<2114307, 4398046511093>;
+// using E9 = MultiplicativeLinearCongruential<1542852, 4398046511093>;
+//
+// using E10 = MultiplicativeLinearCongruential<2096259, 8796093022151>;
+// using E11 = MultiplicativeLinearCongruential<2052163, 8796093022151>;
+// using E12 = MultiplicativeLinearCongruential<2006881, 8796093022151>;
+//
+// // Known good parameters for m >> 2³², m prime, and a(m - 1) ≈ 2⁶⁴
+// //
+// // The purpose is to make ax reasonably 64 bit random number with
+// // good enough properties in the high bits to be used in a combined
+// // generator.
+// //
+// // don't use both a and ax. Pick one or the other. a can be accessed with ::mul
+//
+// // Known good parameters
+//
+// using F1 = MultiplicativeLinearCongruential<3741260, 4930622455819>;
+// using F2 = MultiplicativeLinearCongruential<3397916, 5428838662153>;
+// using F3 = MultiplicativeLinearCongruential<2106408, 8757438316547>;
+//
+// }  // namespace detail
+//
+// // All of these implementations below are slower than std::mt19937_64
+// // when -O3 is enabled. Some are slightly faster than std::mt19937_64
+// // without optimizations.
+// //
+// // TLDR: Use std::mt19937_64
+//
+// // Personal Interpretation:
+// // A*: XorShift
+// //   Very Fast but the state can get stuck in low entropy modes. To
+// //   fix this we instead use the output of LinearCongruential as the
+// //   state. We then take this output and add another XorShift to
+// //   extend the period.
+// //
+// // B*: MultiplyWithCarry
+// //   As LinearCongruential has bad randomness in the low bits,
+// //   (and we can't trust XorShift to fix the lower bits), we can xor
+// //   the output with MultiplyWithCarry to add some randomness to the
+// //   low bits.
+// //
+// // The period of the final output is the LCM of the periods of
+// // A3, B1, and C3.
+// struct Rand {
+//   // The default seed is arbitrary
+//   constexpr Rand(uint_fast64_t seed = 129348710293) {
+//     a3_.seed(seed);
+//     b1_.seed(seed);
+//     c3_.seed(seed);
+//   }
+//
+//   Rand(const Rand &) = default;
+//   Rand(Rand &&) = default;
+//   auto operator=(const Rand &) -> Rand & = default;
+//   auto operator=(Rand &&) -> Rand & = default;
+//
+//   static constexpr auto min() -> uint_fast64_t { return 0; }
+//
+//   static constexpr auto max() -> uint_fast64_t {
+//     return std::numeric_limits<uint_fast64_t>::max();
+//   }
+//
+//   constexpr auto operator()() -> uint_fast64_t {
+//     return (a1_.step(c3_()) + a3_()) ^ b1_();
+//   }
+//
+//  private:
+//   detail::XorShift<uint_fast64_t> a1_ = [] {
+//     auto options = detail::A1;
+//     options.dir = detail::ShiftDirection::Left;
+//     return detail::XorShift<uint_fast64_t>{options};
+//   }();
+//   detail::XorShift<uint_fast64_t> a3_{detail::A3};
+//   detail::MultiplyWithCarry b1_{detail::B1};
+//   detail::LinearCongruential c3_{detail::C3};
+// };
+// //
+// // // Do not use for more than 10¹² calls
+// // struct QuickRand1 {
+// //   // The default seed is arbitrary
+// //   constexpr QuickRand1(uint_fast64_t seed = 129348710293) : a1_{seed} {}
+// //
+// //   static constexpr auto min() -> uint_fast64_t { return 0; }
+// //
+// //   static constexpr auto max() -> uint_fast64_t {
+// //     return std::numeric_limits<uint_fast64_t>::max();
+// //   }
+// //
+// //   constexpr auto operator()() -> uint_fast64_t {
+// //     return detail::D1::step(a1_());
+// //   }
+// //
+// //  private:
+// //   detail::A1<detail::ShiftDirection::Right> a1_;
+// // };
+// //
+// // // Do not use for more than 10³⁷ calls
+// // struct QuickRand2 {
+// //   // The default seed is arbitrary
+// //   constexpr QuickRand2(uint_fast64_t seed = 129348710293)
+// //       : a3_{seed}, b1_{seed} {}
+// //
+// //   static constexpr auto min() -> uint_fast64_t { return 0; }
+// //
+// //   static constexpr auto max() -> uint_fast64_t {
+// //     return std::numeric_limits<uint_fast64_t>::max();
+// //   }
+// //
+// //   constexpr auto operator()() -> uint_fast64_t {
+// //     return detail::A1<detail::ShiftDirection::Left>::step(b1_()) ^ a3_();
+// //   }
+// //
+// //  private:
+// //   detail::A3<detail::ShiftDirection::Right> a3_;
+// //   detail::B1 b1_;
+// // };
 
 }  // namespace detail
-
-// All of these implementations below are slower than std::mt19937_64
-// when -O3 is enabled. Some are slightly faster than std::mt19937_64
-// without optimizations.
-//
-// TLDR: Use std::mt19937_64
-
-// Personal Interpretation:
-// A*: XorShift
-//   Very Fast but the state can get stuck in low entropy modes. To
-//   fix this we instead use the output of LinearCongruential as the
-//   state. We then take this output and add another XorShift to
-//   extend the period.
-//
-// B*: MultiplyWithCarry
-//   As LinearCongruential has bad randomness in the low bits,
-//   (and we can't trust XorShift to fix the lower bits), we can xor
-//   the output with MultiplyWithCarry to add some randomness to the
-//   low bits.
-//
-// The period of the final output is the LCM of the periods of
-// A3, B1, and C3.
-struct Rand {
-  // The default seed is arbitrary
-  constexpr Rand(uint_fast64_t seed = 129348710293) {
-    a3_.seed(seed);
-    b1_.seed(seed);
-    c3_.seed(seed);
-  }
-
-  Rand(const Rand &) = default;
-  Rand(Rand &&) = default;
-  auto operator=(const Rand &) -> Rand & = default;
-  auto operator=(Rand &&) -> Rand & = default;
-
-  static constexpr auto min() -> uint_fast64_t { return 0; }
-
-  static constexpr auto max() -> uint_fast64_t {
-    return std::numeric_limits<uint_fast64_t>::max();
-  }
-
-  constexpr auto operator()() -> uint_fast64_t {
-    return (a1_.step(c3_()) + a3_()) ^ b1_();
-  }
-
- private:
-  detail::XorShift a1_ = [] {
-    auto options = detail::A1;
-    options.dir = detail::ShiftDirection::Left;
-    return detail::XorShift{options};
-  }();
-  detail::XorShift a3_{detail::A3};
-  detail::MultiplyWithCarry b1_{detail::B1};
-  detail::LinearCongruential c3_{detail::C3};
-};
-//
-// // Do not use for more than 10¹² calls
-// struct QuickRand1 {
-//   // The default seed is arbitrary
-//   constexpr QuickRand1(uint_fast64_t seed = 129348710293) : a1_{seed} {}
-//
-//   static constexpr auto min() -> uint_fast64_t { return 0; }
-//
-//   static constexpr auto max() -> uint_fast64_t {
-//     return std::numeric_limits<uint_fast64_t>::max();
-//   }
-//
-//   constexpr auto operator()() -> uint_fast64_t {
-//     return detail::D1::step(a1_());
-//   }
-//
-//  private:
-//   detail::A1<detail::ShiftDirection::Right> a1_;
-// };
-//
-// // Do not use for more than 10³⁷ calls
-// struct QuickRand2 {
-//   // The default seed is arbitrary
-//   constexpr QuickRand2(uint_fast64_t seed = 129348710293)
-//       : a3_{seed}, b1_{seed} {}
-//
-//   static constexpr auto min() -> uint_fast64_t { return 0; }
-//
-//   static constexpr auto max() -> uint_fast64_t {
-//     return std::numeric_limits<uint_fast64_t>::max();
-//   }
-//
-//   constexpr auto operator()() -> uint_fast64_t {
-//     return detail::A1<detail::ShiftDirection::Left>::step(b1_()) ^ a3_();
-//   }
-//
-//  private:
-//   detail::A3<detail::ShiftDirection::Right> a3_;
-//   detail::B1 b1_;
-// };
-
 }  // namespace tempura::bayes
