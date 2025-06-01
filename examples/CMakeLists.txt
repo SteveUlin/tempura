@@ -1,4 +1,4 @@
-add_subdirectory(ideoms)
+add_subdirectory(idioms)
 
 add_executable(hello_world_main hello_world.cpp)
 
