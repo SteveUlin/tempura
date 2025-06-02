@@ -5,5 +5,7 @@ add_executable(cyclic_visitor cyclic_visitor.cpp)
 add_executable(observer observer.cpp)
 add_executable(passkey passkey.cpp)
 add_executable(strategy strategy.cpp)
+add_executable(type_erasure type_erasure.cpp)
+add_executable(sbo_type_erasure sbo_type_erasure.cpp)
 add_executable(visitor visitor.cpp)
 
