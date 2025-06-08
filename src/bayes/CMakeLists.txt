@@ -10,5 +10,9 @@ add_library(bernoulli INTERFACE bernoulli.h)
 add_executable(bernoulli_test bernoulli_test.cpp)
 target_link_libraries(bernoulli_test bernoulli unit)
 
-add_library(bayes INTERFACE)
-target_include_directories(bayes INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+add_library(random INTERFACE random.h)
+
+add_library(random_simd INTERFACE random_simd.h)
+
+add_executable(random_simd_test random_simd_test.cpp)
+target_link_libraries(random_simd_test random_simd unit)

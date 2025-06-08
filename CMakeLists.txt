@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.28)
 project(tempura LANGUAGES CXX)
 
+find_package(glfw3 REQUIRED)
+find_package(OpenGL REQUIRED)
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Get clangd to find stdlib
 # https://discourse.nixos.org/t/get-clangd-to-find-standard-headers-in-nix-shell/11268/10

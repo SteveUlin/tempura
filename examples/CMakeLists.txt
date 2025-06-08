@@ -19,6 +19,9 @@ add_executable(image_main image_main.cpp)
 add_executable(simd_main simd_main.cpp)
 target_link_libraries(simd_main PRIVATE profiler)
 
+add_executable(glfw_main glfw_main.cpp)
+target_link_libraries(glfw_main PRIVATE glfw OpenGL::GL)
+
 # add_executable(single_producer_consumer_queue single_producer_consumer_queue.cpp)
 # target_link_libraries(single_producer_consumer_queue PRIVATE profiler)
 

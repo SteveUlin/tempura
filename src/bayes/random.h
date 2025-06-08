@@ -1,12 +1,36 @@
 #pragma once
 
 #include <cstdint>
-#include <experimental/simd>
 #include <random>
 
-namespace tempura::bayes {
+namespace tempura {
 
-namespace detail {
+template <typename StateT, typename AlgoT>
+class RNG {
+public:
+  constexpr RNG(StateT state, const AlgoT& algo)
+      : state_(state), algo_(algo) {}
+
+  constexpr RNG(const AlgoT& algo)
+      : state_(StateT{}), algo_(algo) {}
+
+  constexpr void seed(StateT state) {
+    state_ = state;
+  }
+
+  constexpr auto operator()() -> StateT {
+    state_ = algo_(state_);
+    return state_;
+  }
+
+  constexpr auto state() const -> StateT {
+    return state_;
+  }
+
+  private:
+  StateT state_;
+  AlgoT algo_;
+};
 
 enum class ShiftDirection : bool { Left, Right };
 
@@ -36,13 +60,13 @@ struct XorShiftOptions {
 };
 
 template <typename T, ShiftDirection dir>
-class XorShiftImpl {
+class XorShiftFn {
  public:
   using Options = XorShiftOptions<T>;
 
-  constexpr XorShiftImpl(Options options) : options_{options} {}
+  constexpr XorShiftFn(Options options) : options_{options} {}
 
-  constexpr auto step(T x) const {
+  constexpr auto operator()(T x) const {
     if constexpr (dir == ShiftDirection::Left) {
       x ^= x >> options_.a1;
       x ^= x << options_.a2;
@@ -55,126 +79,55 @@ class XorShiftImpl {
     return x;
   }
 
-  constexpr auto operator()() -> T {
-    state_ = step(state_);
-    return state_;
-  }
-
-  constexpr void seed(T seed) { state_ = seed; }
-
  private:
   Options options_;
-  T state_;
 };
-
-template <typename T, ShiftDirection dir>
-class XorShift;
-
-template <typename T, ShiftDirection dir>
-  requires(std::is_integral_v<T>)
-class XorShift<T, dir> : public XorShiftImpl<T, dir> {
- public:
-  using Options = typename XorShiftImpl<T, dir>::Options;
-
-  constexpr XorShift(Options options) : XorShiftImpl<T, dir>(options) {
-    this->seed(7073242132491550564);  // Arbitrary seed
-  }
-
-  static constexpr auto min() -> T { return 0; }
-
-  static constexpr auto max() -> T { return std::numeric_limits<T>::max(); }
-
- private:
-  T state_;
-};
-static_assert(std::uniform_random_bit_generator<XorShift<uint_fast64_t, ShiftDirection::Left>>);
-
-// Deduction Guide
-template <typename T>
-XorShift(XorShiftOptions<T>) -> XorShift<T, ShiftDirection::Left>;
-
-//  = 7073242132491550564;
 
 // Known good parameters
 
-constexpr XorShiftOptions<uint_fast64_t> A1 = {
-    .a1 = 21, .a2 = 35, .a3 = 4};
-constexpr XorShiftOptions<uint_fast64_t> A2 = {
-    .a1 = 20, .a2 = 41, .a3 = 5};
-constexpr XorShiftOptions<uint_fast64_t> A3 = {
-    .a1 = 17, .a2 = 31, .a3 = 8};
-constexpr XorShiftOptions<uint_fast64_t> A4 = {
-    .a1 = 11, .a2 = 29, .a3 = 14};
-constexpr XorShiftOptions<uint_fast64_t> A5 = {
-    .a1 = 14, .a2 = 29, .a3 = 11};
-constexpr XorShiftOptions<uint_fast64_t> A6 = {
-    .a1 = 30, .a2 = 35, .a3 = 13};
-constexpr XorShiftOptions<uint_fast64_t> A7 = {
-    .a1 = 21, .a2 = 37, .a3 = 4};
-constexpr XorShiftOptions<uint_fast64_t> A8 = {
-    .a1 = 21, .a2 = 43, .a3 = 4};
-constexpr XorShiftOptions<uint_fast64_t> A9 = {
-    .a1 = 23, .a2 = 41, .a3 = 18};
+// constexpr XorShiftOptions<uint_fast64_t> A1 = {
+//     .a1 = 21, .a2 = 35, .a3 = 4};
+// constexpr XorShiftOptions<uint_fast64_t> A2 = {
+//     .a1 = 20, .a2 = 41, .a3 = 5};
+// constexpr XorShiftOptions<uint_fast64_t> A3 = {
+//     .a1 = 17, .a2 = 31, .a3 = 8};
+// constexpr XorShiftOptions<uint_fast64_t> A4 = {
+//     .a1 = 11, .a2 = 29, .a3 = 14};
+// constexpr XorShiftOptions<uint_fast64_t> A5 = {
+//     .a1 = 14, .a2 = 29, .a3 = 11};
+// constexpr XorShiftOptions<uint_fast64_t> A6 = {
+//     .a1 = 30, .a2 = 35, .a3 = 13};
+// constexpr XorShiftOptions<uint_fast64_t> A7 = {
+//     .a1 = 21, .a2 = 37, .a3 = 4};
+// constexpr XorShiftOptions<uint_fast64_t> A8 = {
+//     .a1 = 21, .a2 = 43, .a3 = 4};
+// constexpr XorShiftOptions<uint_fast64_t> A9 = {
+//     .a1 = 23, .a2 = 41, .a3 = 18};
 
-// template <ShiftDirection direction = ShiftDirection::Left>
-// struct XorShiftAvx512 {
-//   XorShiftAvx512(__m512i seed) : state_{seed} {}
+// Multiply With Carry
+// state: x
+// intialize: x ≠ 0
+// update:
+//   x ← a (x & [2³² - 1]) + (x >> 32)
+// period: (2³²a - 2) / 2  where a is prime
 //
-//   auto operator()() {
-//     state_ = _mm512_xor_epi64(state_, _mm512_srlv_epi64(state_, a1_));
-//     state_ = _mm512_xor_epi64(state_, _mm512_sllv_epi64(state_, a2_));
-//     state_ = _mm512_xor_epi64(state_, _mm512_srlv_epi64(state_, a3_));
-//     return state_;
-//   }
-//
-//  private:
-//   __m512i a1_ = {21, 20, 17, 11, 14, 30, 21, 21};
-//   __m512i a2_ = {35, 41, 31, 29, 29, 35, 37, 43};
-//   __m512i a3_ = {4, 5, 8, 14, 11, 13, 4, 4};
-//
-//   __m512i state_;
-// };
-//
-// // Multiply With Carry
-// // state: x
-// // intialize: x ≠ 0
-// // update:
-// //   x ← a (x & [2³² - 1]) + (x >> 32)
-// // period: (2³²a - 2) / 2  where a is prime
-// //
-// // Only the lower 32 bits are considered to be algorithmically random.
-// // However the upper bits also contain a high degree of randomness and
-// // could be used when combined with other generators.
-//
-// struct MultiplyWithCarry {
-//   struct Options {
-//     uint_fast64_t a;
-//   };
-//   MultiplyWithCarry(Options options) : a_{options.a} {}
-//
-//   static constexpr auto min() -> uint_fast64_t { return 1; }
-//
-//   static constexpr auto max() -> uint_fast64_t {
-//     return std::numeric_limits<uint_fast64_t>::max();
-//   }
-//
-//   constexpr auto step(uint_fast64_t x) const -> uint_fast64_t {
-//     x = a_ * (x & 0xFFFFFFFF) + (x >> 32);
-//     return x;
-//   };
-//
-//   constexpr auto operator()() -> uint_fast64_t {
-//     state_ = step(state_);
-//     return state_;
-//   }
-//
-//   constexpr void seed(uint_fast64_t seed) { state_ = seed; }
-//
-//  private:
-//   uint_fast64_t a_;
-//   uint_fast64_t state_ = 7073242132491550564;
-// };
-//
+// Only the lower 32 bits are considered to be algorithmically random.
+// However the upper bits also contain a high degree of randomness and
+// could be used when combined with other generators.
+
+template <typename T>
+struct MultiplyWithCarryFn {
+  MultiplyWithCarryFn(T a) : a_{a} {}
+
+  constexpr auto operator()(T x) const -> T {
+    x = a_ * (x & 0xFFFFFFFF) + (x >> 32);
+    return x;
+  };
+
+ private:
+  T a_;
+};
+
 // // Known good parameters
 //
 // constexpr MultiplyWithCarry::Options B1 = {.a = 4294957665};
@@ -187,49 +140,38 @@ constexpr XorShiftOptions<uint_fast64_t> A9 = {
 // constexpr MultiplyWithCarry::Options B8 = {.a = 2654432763};
 // constexpr MultiplyWithCarry::Options B9 = {.a = 1640531364};
 //
-// // Linear Congruential Generator
-// //
-// // state: x
-// // initialize: any
-// // update x = a * x + c mod 2⁶⁴
-// // period: 2⁶⁴ if c and m are chosen correctly
-// //
-// // Not a great generator. The high 32 bits are mostly random
-// // but the lower 32 bits are not.
+// Linear Congruential Generator
 //
-// struct LinearCongruential {
-//   struct Options {
-//     uint_fast64_t a;
-//     uint_fast64_t c;
-//   };
+// state: x
+// initialize: any
+// update x = a * x + c mod 2⁶⁴
+// period: 2⁶⁴ if c and m are chosen correctly
 //
-//   constexpr LinearCongruential(Options options)
-//       : a_{options.a}, c_{options.c} {}
-//
-//   static constexpr auto min() -> uint_fast64_t { return 0; }
-//
-//   static constexpr auto max() -> uint_fast64_t {
-//     return std::numeric_limits<uint_fast64_t>::max();
-//   }
-//
-//   constexpr auto step(uint_fast64_t x) const -> uint_fast64_t {
-//     x = a_ * x + c_;
-//     return x;
-//   }
-//
-//   constexpr auto operator()() -> uint_fast64_t {
-//     state_ = step(state_);
-//     return state_;
-//   }
-//
-//   constexpr void seed(uint_fast64_t seed) { state_ = seed; }
-//
-//  private:
-//   uint_fast64_t a_;
-//   uint_fast64_t c_;
-//   uint_fast64_t state_ = 7073242132491550564;
-// };
-//
+// Not a great generator. The high 32 bits are mostly random
+// but the lower 32 bits are not.
+
+template <typename T>
+struct LinearCongruentialOptions {
+  T a;
+  T c;
+};
+
+template <typename T>
+struct LinearCongruentialFn {
+  constexpr LinearCongruentialFn(LinearCongruentialOptions<T> options)
+      : a_{options.a}, c_{options.c} {}
+
+  constexpr auto operator()(T x) const -> T {
+    x = a_ * x + c_;
+    return x;
+  }
+
+ private:
+  T a_;
+  T c_;
+};
+
+
 // constexpr LinearCongruential::Options C1 = {.a = 3935559000370003845,
 //                                             .c = 2691343689449507681};
 // constexpr LinearCongruential::Options C2 = {.a = 3202034522624059733,
@@ -312,7 +254,8 @@ constexpr XorShiftOptions<uint_fast64_t> A9 = {
 // // good enough properties in the high bits to be used in a combined
 // // generator.
 // //
-// // don't use both a and ax. Pick one or the other. a can be accessed with ::mul
+// // don't use both a and ax. Pick one or the other. a can be accessed with
+// ::mul
 //
 // // Known good parameters
 //
@@ -417,5 +360,4 @@ constexpr XorShiftOptions<uint_fast64_t> A9 = {
 // //   detail::B1 b1_;
 // // };
 
-}  // namespace detail
-}  // namespace tempura::bayes
+}  // namespace tempura

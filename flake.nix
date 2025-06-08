@@ -33,6 +33,9 @@
             cudaPackages_12_1.cudatoolkit
             cudaPackages_12_1.cuda_cudart
             linuxPackages.nvidia_x11
+            glfw
+            glm
+            libGL
           ];
           
           env = {
