@@ -19,7 +19,7 @@ auto makeXorShiftRightSimd() -> XorShiftFn<Vec512i64, ShiftDirection::Right> {
   XorShiftOptions<Vec512i64> options = {
       .a1 = Vec512i64{{20, 17, 11, 14, 30, 21, 21, 21}},
       .a2 = Vec512i64{{41, 31, 29, 29, 35, 37, 43, 35}},
-      .a3 = Vec512i64{{ 5,  8, 14, 11, 13,  4,  4,  4}},
+      .a3 = Vec512i64{{5, 8, 14, 11, 13, 4, 4, 4}},
   };
 
   return XorShiftFn<Vec512i64, ShiftDirection::Right>{options};
@@ -44,25 +44,31 @@ auto makeLinearCongruentialSimd() -> LinearCongruentialFn<Vec512i64> {
   LinearCongruentialOptions<Vec512i64> options = {
       .a = Vec512i64{0xd1342543de82ef95},
       .c = Vec512i64{{
-      1ULL<<60 | 1,
-      2ULL<<60 | 1,
-      3ULL<<60 | 1,
-      4ULL<<60 | 1,
-      5ULL<<60 | 1,
-      6ULL<<60 | 1,
-      7ULL<<60 | 1,
-      8ULL<<60 | 1,
-    }},
+          1ULL << 60 | 1,
+          2ULL << 60 | 1,
+          3ULL << 60 | 1,
+          4ULL << 60 | 1,
+          5ULL << 60 | 1,
+          6ULL << 60 | 1,
+          7ULL << 60 | 1,
+          8ULL << 60 | 1,
+      }},
   };
 
   return LinearCongruentialFn<Vec512i64>{options};
 }
 
 auto makeSimdRand() {
-    const Vec512i64 seed{{7073242132491550564, 1179269353366884230,
-                          3941578509859010014, 4437109666059500420,
-                          4035966242879597485, 3373052566401125716,
-                          1556011196226971778, 1235654174036890696}};
+  const Vec512i64 seed{{
+      7073242132491550564,
+      1179269353366884230,
+      3941578509859010014,
+      4437109666059500420,
+      4035966242879597485,
+      3373052566401125716,
+      1556011196226971778,
+      1235654174036890696,
+  }};
   auto left_shift = makeXorShiftSimd();
   auto mwc_rng = RNG{seed, makeMultiplyWithCarrySimd()};
   auto lc_rng = RNG{seed, makeLinearCongruentialSimd()};

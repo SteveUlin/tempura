@@ -1,274 +1,159 @@
 #include <immintrin.h>
 
 #include <array>
+#include <cmath>
 #include <cstdint>
+#include <print>
 #include <stdexcept>
 
-// My personal implementation of avx512 simd data types
+#include "chebyshev.h"
 
 namespace tempura {
 
-// --- Mask Types ---
+// tempura math ops
 
-class Mask8 {
- public:
-  Mask8(__mmask8 mask) : value_(mask) {}
+template <typename T>
+auto fma(T a, T b, T c) -> T {
+  using std::fma;
+  return fma(a, b, c);
+}
 
-  auto operator&(const Mask8& other) const -> Mask8 {
-    return {_kand_mask8(value_, other.value_)};
-  }
+template <typename T>
+auto sin(T x) -> T {
+  using std::sin;
+  return sin(x);
+}
 
-  auto operator|(const Mask8& other) const -> Mask8 {
-    return {_kor_mask8(value_, other.value_)};
-  }
-
-  auto operator^(const Mask8& other) const -> Mask8 {
-    return {_kxor_mask8(value_, other.value_)};
-  }
-
-  auto operator~() const -> Mask8 { return {_knot_mask8(value_)}; }
-
-  auto operator==(const Mask8& other) const -> bool {
-    return value_ == other.value_;
-  }
-
-  auto all() const -> bool { return value_ == 0xFF; }
-
-  auto none() const -> bool { return value_ == 0x00; }
-
-  auto any() const -> bool { return value_ != 0x00; }
-
- private:
-  __mmask8 value_;
-};
-
-class Mask16 {
- public:
-  Mask16(__mmask16 mask) : value_(mask) {}
-
-  operator __mmask16() const { return value_; }
-
-  auto operator&(const Mask16& other) const -> Mask16 {
-    return {_kand_mask16(value_, other.value_)};
-  }
-
-  auto operator|(const Mask16& other) const -> Mask16 {
-    return {_kor_mask16(value_, other.value_)};
-  }
-
-  auto operator^(const Mask16& other) const -> Mask16 {
-    return {_kxor_mask16(value_, other.value_)};
-  }
-
-  auto operator~() const -> Mask16 { return {_knot_mask16(value_)}; }
-
-  auto operator==(const Mask16& other) const -> bool {
-    return value_ == other.value_;
-  }
-
-  auto all() const -> bool { return value_ == 0xFFFF; }
-
-  auto none() const -> bool { return value_ == 0x0000; }
-
-  auto any() const -> bool { return value_ != 0x0000; }
-
- private:
-  __mmask16 value_;
-};
-
-// --- Vec512f: 512 bit vector of 16 single-precision floats ---
-
-class Vec512f {
- public:
-  Vec512f() : value_(_mm512_setzero_ps()) {}
-  explicit Vec512f(__m512 v) : value_(v) {}
-  explicit Vec512f(float f) : value_(_mm512_set1_ps(f)) {}
-  explicit Vec512f(const float* ptr) : value_(_mm512_loadu_ps(ptr)) {}
-  explicit Vec512f(const std::array<float, 16>& arr)
-      : value_(_mm512_loadu_ps(arr.data())) {}
-
-  static constexpr auto size() -> std::size_t {
-    return 16;  // 512 bits / 32 bits per float
-  }
-
-  void store(float* ptr) const { _mm512_storeu_ps(ptr, value_); }
-
-  auto storeArray() const -> std::array<float, 16> {
-    std::array<float, 16> arr;
-    _mm512_storeu_ps(arr.data(), value_);
-    return arr;
-  }
-
-  auto operator[](std::size_t index) const -> float {
-    if (index >= 16) {
-      throw std::out_of_range("Index out of range for Vec512f");
+// Factorial of numbers larger than 170 overflow in double precision.
+// Factorials up to 22! are exact in double precision.
+//
+// Precondition:
+//   - n must be in the range [0, 170]
+constexpr auto factorial(const int64_t n) -> double {
+  static constexpr std::array mem = [] consteval {
+    std::array<double, 171> arr = {};
+    arr[0] = 1.;
+    for (size_t i = 1; i < arr.size(); ++i) {
+      arr[i] = static_cast<double>(i) * arr[i - 1];
     }
-    return reinterpret_cast<const float*>(&value_)[index];
-  }
-
-  auto operator+(const Vec512f& other) const -> Vec512f {
-    return Vec512f{_mm512_add_ps(value_, other.value_)};
-  }
-
-  auto operator+=(const Vec512f& other) -> Vec512f& {
-    value_ = _mm512_add_ps(value_, other.value_);
-    return *this;
-  }
-
-  auto operator-(const Vec512f& other) const -> Vec512f {
-    return Vec512f{_mm512_sub_ps(value_, other.value_)};
-  }
-
-  auto operator-=(const Vec512f& other) -> Vec512f& {
-    value_ = _mm512_sub_ps(value_, other.value_);
-    return *this;
-  }
-
-  auto operator*(const Vec512f& other) const -> Vec512f {
-    return Vec512f{_mm512_mul_ps(value_, other.value_)};
-  }
-
-  auto operator*=(const Vec512f& other) -> Vec512f& {
-    value_ = _mm512_mul_ps(value_, other.value_);
-    return *this;
-  }
-
-  auto operator/(const Vec512f& other) const -> Vec512f {
-    return Vec512f{_mm512_div_ps(value_, other.value_)};
-  }
-
-  auto operator/=(const Vec512f& other) -> Vec512f& {
-    value_ = _mm512_div_ps(value_, other.value_);
-    return *this;
-  }
-
-  auto operator-() const -> Vec512f {
-    return Vec512f{_mm512_sub_ps(_mm512_setzero_ps(), value_)};
-  }
-
-  auto operator==(const Vec512f& other) const -> bool {
-    return _mm512_cmp_ps_mask(value_, other.value_, _CMP_EQ_OQ) == 0xFFFF;
-  }
-
-  auto operator!=(const Vec512f& other) const -> bool {
-    return !(*this == other);
-  }
-
- private:
-  __m512 value_;
-};
-
-class Vec512i64 {
- public:
-  Vec512i64() : value_(_mm512_setzero_si512()) {}
-  explicit Vec512i64(__m512i v) : value_(v) {}
-  explicit Vec512i64(uint64_t i) : value_(_mm512_set1_epi64(i)) {}
-  explicit Vec512i64(const uint64_t* ptr) : value_(_mm512_loadu_si512(ptr)) {}
-  explicit Vec512i64(const std::array<uint64_t, 8>& arr)
-      : value_(_mm512_loadu_si512(arr.data())) {}
-
-  static constexpr auto size() -> std::size_t {
-    return 8;  // 512 bits / 64 bits per int64_t
-  }
-
-  void store(uint64_t* ptr) const { _mm512_storeu_si512(ptr, value_); }
-
-  auto storeArray() const -> std::array<uint64_t, 8> {
-    std::array<uint64_t, 8> arr;
-    _mm512_storeu_si512(arr.data(), value_);
     return arr;
+  }();
+  return mem[n];
+}
+
+// A 512-bit vector of 8 64-bit doubles.
+//
+// This class overloads the arithmetic operators to allow for SIMD operations
+// on the vector. It uses AVX-512 intrinsics to perform the operations.
+class Vec8d {
+ public:
+  Vec8d() = default;
+
+  explicit Vec8d(__m512d data) : data_(data) {}
+
+  // Set all elements to the same value
+  explicit Vec8d(double val) : data_(_mm512_set1_pd(val)) {}
+
+  // Precondition:
+  //   - data cannot be null
+  //   - data must point to an array of at least 8 doubles
+  //   - data must be aligned to 64 bytes
+  explicit Vec8d(const double* data) { data_ = _mm512_loadu_pd(data); }
+
+  Vec8d(double v0, double v1, double v2, double v3, double v4, double v5,
+        double v6, double v7)
+      : data_(_mm512_set_pd(v7, v6, v5, v4, v3, v2, v1, v0)) {}
+
+  // Precondition:
+  //   - data cannot be null
+  //   - data must point to an array of at least 8 doubles
+  //   - data must be aligned to 64 bytes
+  void store(double* data) const { _mm512_storeu_pd(data, data_); }
+
+  // Precondition:
+  //   - index must be in the range [0, 7]
+  auto operator[](std::size_t index) const -> double {
+    return reinterpret_cast<const double*>(&data_)[index];
   }
 
-  auto operator[](std::size_t index) const -> uint64_t {
-    if (index >= 8) {
-      throw std::out_of_range("Index out of range for Vec512i64");
-    }
-    return reinterpret_cast<const uint64_t*>(&value_)[index];
+  auto operator==(const Vec8d other) const -> bool {
+    // Compare all elements for equality
+    __mmask8 mask = _mm512_cmp_pd_mask(data_, other.data_, _CMP_EQ_OQ);
+    return mask == 0xFF;  // All bits set means all elements are equal
   }
 
-  auto operator+(const Vec512i64 other) const -> Vec512i64 {
-    return Vec512i64{_mm512_add_epi64(value_, other.value_)};
+  auto operator!=(const Vec8d other) const -> bool { return !(*this == other); }
+
+  auto operator+(const Vec8d other) const -> Vec8d {
+    return Vec8d{_mm512_add_pd(data_, other.data_)};
   }
 
-  auto operator+=(const Vec512i64 other) -> Vec512i64& {
-    value_ = _mm512_add_epi64(value_, other.value_);
+  auto operator+=(const Vec8d other) -> Vec8d& {
+    data_ = _mm512_add_pd(data_, other.data_);
     return *this;
   }
 
-  auto operator-(const Vec512i64 other) const -> Vec512i64 {
-    return Vec512i64{_mm512_sub_epi64(value_, other.value_)};
+  auto operator-(const Vec8d other) const -> Vec8d {
+    return Vec8d{_mm512_sub_pd(data_, other.data_)};
   }
 
-  auto operator-=(const Vec512i64 other) -> Vec512i64& {
-    value_ = _mm512_sub_epi64(value_, other.value_);
+  auto operator-=(const Vec8d other) -> Vec8d& {
+    data_ = _mm512_sub_pd(data_, other.data_);
     return *this;
   }
 
-  auto operator*(const Vec512i64 other) const -> Vec512i64 {
-    return Vec512i64{_mm512_mullo_epi64(value_, other.value_)};
+  auto operator*(const Vec8d other) const -> Vec8d {
+    return Vec8d{_mm512_mul_pd(data_, other.data_)};
   }
 
-  auto operator*=(const Vec512i64 other) -> Vec512i64& {
-    value_ = _mm512_mullo_epi64(value_, other.value_);
+  auto operator*=(const Vec8d other) -> Vec8d& {
+    data_ = _mm512_mul_pd(data_, other.data_);
     return *this;
   }
 
-  auto operator&(const Vec512i64 other) const -> Vec512i64 {
-    return Vec512i64{_mm512_and_epi64(value_, other.value_)};
+  auto operator/(const Vec8d other) const -> Vec8d {
+    return Vec8d{_mm512_div_pd(data_, other.data_)};
   }
 
-  auto operator&=(const Vec512i64 other) -> Vec512i64& {
-    value_ = _mm512_and_epi64(value_, other.value_);
-    return *this;
-  }
-
-  auto operator&(const long long other) const -> Vec512i64 {
-    return Vec512i64{_mm512_and_epi64(value_, _mm512_set1_epi64(other))};
-  }
-
-  auto operator&=(const long long other) -> Vec512i64& {
-    value_ = _mm512_and_epi64(value_, _mm512_set1_epi64(other));
-    return *this;
-  }
-
-  auto operator^(const Vec512i64 other) const -> Vec512i64 {
-    return Vec512i64{_mm512_xor_epi64(value_, other.value_)};
-  }
-
-  auto operator^=(const Vec512i64 other) -> Vec512i64& {
-    value_ = _mm512_xor_epi64(value_, other.value_);
-    return *this;
-  }
-
-  auto operator>>(const Vec512i64 other) const -> Vec512i64 {
-    return Vec512i64{_mm512_srlv_epi64(value_, other.value_)};
-  }
-
-  auto operator>>=(const Vec512i64 other) -> Vec512i64& {
-    value_ = _mm512_srlv_epi64(value_, other.value_);
-    return *this;
-  }
-
-  auto operator>>(const long long other) const -> Vec512i64 {
-    return Vec512i64{_mm512_srlv_epi64(value_, _mm512_set1_epi64(other))};
-  }
-
-  auto operator>>=(const long long other) -> Vec512i64& {
-    value_ = _mm512_srlv_epi64(value_, _mm512_set1_epi64(other));
-    return *this;
-  }
-
-  auto operator<<(const Vec512i64 other) const -> Vec512i64 {
-    return Vec512i64{_mm512_sllv_epi64(value_, other.value_)};
-  }
-
-  auto operator<<=(const Vec512i64 other) -> Vec512i64& {
-    value_ = _mm512_sllv_epi64(value_, other.value_);
+  auto operator/=(const Vec8d other) -> Vec8d& {
+    data_ = _mm512_div_pd(data_, other.data_);
     return *this;
   }
 
  private:
-  __m512i value_;
+  friend auto fma(Vec8d a, Vec8d b, Vec8d c) -> Vec8d {
+    return Vec8d{_mm512_fmadd_pd(a.data_, b.data_, c.data_)};
+  }
+
+  friend auto round(Vec8d v) -> Vec8d {
+    return Vec8d{_mm512_roundscale_pd(v.data_, _MM_FROUND_TO_NEAREST_INT)};
+  }
+
+  __m512d data_;
 };
+
+template <typename T>
+auto sinImpl(T x) -> T {
+  constexpr double π = std::numbers::pi;
+  // Reduce the range to [-π, π]
+  T q = x * T{1.0 / (2.0 * π)};
+  q = round(q);
+  const T x_reduced = fma(q, T{-2.0 * π}, x);
+  return x_reduced;
+  const T x2 = x_reduced * x_reduced;
+
+  Chebyshev chebyshev([](double x) {
+    return std::sin(x) / (x * (x - π) * (x + π));
+  }, -π, π, 8);
+  auto coeff = chebyshev.toPolynomial();
+
+  auto poly = T{coeff[7]};
+  for (std::size_t i = 6; i > 0; i -= 1) {
+    poly = fma(poly, x2, T{coeff[i]});
+  }
+  poly = fma(poly, x_reduced, T{coeff[0]});
+  poly *= x_reduced * (x_reduced - T{π}) * (x_reduced + T{π});
+  return poly;
+}
 
 }  // namespace tempura

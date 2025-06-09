@@ -13,7 +13,14 @@ add_subdirectory(special)
 add_subdirectory(utility)
 
 add_library(benchmark INTERFACE benchmark.h)
+
 add_library(chebyshev INTERFACE chebyshev.h)
+
+add_executable(chebyshev_test chebyshev_test.cpp)
+target_link_libraries(chebyshev_test unit chebyshev)
+add_test(NAME chebyshev_test COMMAND chebyshev_test)
+set_property(TEST chebyshev_test PROPERTY LABELS base)
+
 add_library(interpolate INTERFACE interpolate.h)
 add_library(json INTERFACE json.h)
 add_library(polynomial INTERFACE polynomial.h)

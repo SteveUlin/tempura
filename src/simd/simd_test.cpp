@@ -1,4 +1,5 @@
 #include "simd/simd.h"
+
 #include <cassert>
 
 #include "unit.h"
@@ -7,290 +8,138 @@ using namespace tempura;
 
 auto main() -> int {
 
-  // --- Mask8 Tests ---
+  "Vec8d initialization"_test = [] {
+    Vec8d v1{1.0};
+    Vec8d v2{2.0};
+    Vec8d v3{3.0};
 
-  "Mask8 And"_test = [] {
-    Mask8 mask1(0b11001100);
-    Mask8 mask2(0b10101010);
-    Mask8 result = mask1 & mask2;
-
-    expectEq(result, Mask8(0b10001000));
+    assert(v1[0] == 1.0);
+    assert(v2[0] == 2.0);
+    assert(v3[0] == 3.0);
   };
 
-  "Mask8 Or"_test = [] {
-    Mask8 mask1(0b11001100);
-    Mask8 mask2(0b10101010);
-    Mask8 result = mask1 | mask2;
+  "Vec8d addition"_test = [] {
+    Vec8d v1{1.0};
+    Vec8d v2{2.0};
+    Vec8d v3 = v1 + v2;
 
-    expectEq(result, Mask8(0b11101110));
+    assert(v3[0] == 3.0);
+    assert(v3[1] == 3.0);
+    assert(v3[2] == 3.0);
+    assert(v3[3] == 3.0);
+    assert(v3[4] == 3.0);
+    assert(v3[5] == 3.0);
+    assert(v3[6] == 3.0);
+    assert(v3[7] == 3.0);
   };
 
-  "Mask8 Xor"_test = [] {
-    Mask8 mask1(0b11001100);
-    Mask8 mask2(0b10101010);
-    Mask8 result = mask1 ^ mask2;
+  "Vec8d subtraction"_test = [] {
+    Vec8d v1{3.0};
+    Vec8d v2{2.0};
+    Vec8d v3 = v1 - v2;
 
-    expectEq(result, Mask8(0b01100110));
+    assert(v3[0] == 1.0);
+    assert(v3[1] == 1.0);
+    assert(v3[2] == 1.0);
+    assert(v3[3] == 1.0);
+    assert(v3[4] == 1.0);
+    assert(v3[5] == 1.0);
+    assert(v3[6] == 1.0);
+    assert(v3[7] == 1.0);
   };
 
-  "Mask8 Not"_test = [] {
-    Mask8 mask(0b11001100);
-    Mask8 result = ~mask;
+  "Vec8d multiplication"_test = [] {
+    Vec8d v1{2.0};
+    Vec8d v2{3.0};
+    Vec8d v3 = v1 * v2;
 
-    expectEq(result, Mask8(0b00110011));
+    assert(v3[0] == 6.0);
+    assert(v3[1] == 6.0);
+    assert(v3[2] == 6.0);
+    assert(v3[3] == 6.0);
+    assert(v3[4] == 6.0);
+    assert(v3[5] == 6.0);
+    assert(v3[6] == 6.0);
+    assert(v3[7] == 6.0);
   };
 
-  "Mask8 Equality"_test = [] {
-    Mask8 mask1(0b11001100);
-    Mask8 mask2(0b11001100);
-    Mask8 mask3(0b10101010);
+  "Vec8d division"_test = [] {
+    Vec8d v1{6.0};
+    Vec8d v2{3.0};
+    Vec8d v3 = v1 / v2;
 
-    expectEq(mask1, mask2);
-    expectNeq(mask1, mask3);
+    assert(v3[0] == 2.0);
+    assert(v3[1] == 2.0);
+    assert(v3[2] == 2.0);
+    assert(v3[3] == 2.0);
+    assert(v3[4] == 2.0);
+    assert(v3[5] == 2.0);
+    assert(v3[6] == 2.0);
+    assert(v3[7] == 2.0);
   };
 
-  "Mask8 All"_test = [] {
-    Mask8 mask(0xFF);
-    expectTrue(mask.all());
+  "Vec8d equality"_test = [] {
+    Vec8d v1{1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0};
+    Vec8d v2{1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0};
+    Vec8d v3{1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 9.0};
 
-    Mask8 mask2(0x00);
-    expectTrue(!mask2.all());
+    assert(v1 == v2);
+    assert(v1 != v3);
+    assert(v2 != v3);
   };
 
-  "Mask8 None"_test = [] {
-    Mask8 mask(0x00);
-    expectTrue(mask.none());
+  "Vec8d round"_test = [] {
+    Vec8d v1{0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5};
+    Vec8d rounded = round(v1);
 
-    Mask8 mask2(0xFF);
-    expectTrue(!mask2.none());
+    expectNear(0.0, rounded[0]);
+    expectNear(0.0, rounded[1]);
+    expectNear(1.0, rounded[2]);
+    expectNear(2.0, rounded[3]);
+    expectNear(2.0, rounded[4]);
+    expectNear(2.0, rounded[5]);
+    expectNear(3.0, rounded[6]);
+    expectNear(4.0, rounded[7]);
   };
 
-  "Mask8 Any"_test = [] {
-    Mask8 mask(0x01);
-    expectTrue(mask.any());
+  "Vec8d fma"_test = [] {
+    Vec8d a{1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0};
+    Vec8d b{2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0};
+    Vec8d c{10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0};
+    Vec8d result = fma(a, b, c);
 
-    Mask8 mask2(0x00);
-    expectTrue(!mask2.any());
+    assert(result[0] == 12.0);
+    assert(result[1] == 26.0);
+    assert(result[2] == 42.0);
+    assert(result[3] == 60.0);
+    assert(result[4] == 80.0);
+    assert(result[5] == 102.0);
+    assert(result[6] == 126.0);
+    assert(result[7] == 152.0);
   };
 
-  // --- Mask16 Tests ---
+  "Vec8d sin"_test = [] {
+    Vec8d v1{0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5};
+    Vec8d sin_values = sinImpl(v1);
 
-  "Mask16 And"_test = [] {
-    Mask16 mask1(0b1100110011001100);
-    Mask16 mask2(0b1010101010101010);
-    Mask16 result = mask1 & mask2;
-
-    expectEq(result, Mask16(0b1000100010001000));
+    expectNear(0.0,     sin_values[0]);
+    expectNear(sin(0.5), sin_values[1]);
+    expectNear(sin(1.0), sin_values[2]);
+    expectNear(sin(1.5), sin_values[3]);
+    expectNear(sin(2.0), sin_values[4]);
+    expectNear(sin(2.5), sin_values[5]);
+    expectNear(sin(3.0), sin_values[6]);
+    expectNear(sin(3.5), sin_values[7]);
   };
 
-  "Mask16 Or"_test = [] {
-    Mask16 mask1(0b1100110011001100);
-    Mask16 mask2(0b1010101010101010);
-    Mask16 result = mask1 | mask2;
-
-    expectEq(result, Mask16(0b1110111011101110));
+  constexpr auto mkVec = [] {
+    return std::vector<int>{1, 2, 3};
   };
-
-  "Mask16 Xor"_test = [] {
-    Mask16 mask1(0b1100110011001100);
-    Mask16 mask2(0b1010101010101010);
-    Mask16 result = mask1 ^ mask2;
-
-    expectEq(result, Mask16(0b0110011001100110));
-  };
-
-  "Mask16 Not"_test = [] {
-    Mask16 mask(0b1100110011001100);
-    Mask16 result = ~mask;
-
-    expectEq(result, Mask16(0b0011001100110011));
-  };
-
-  "Mask16 Equality"_test = [] {
-    Mask16 mask1(0b1100110011001100);
-    Mask16 mask2(0b1100110011001100);
-    Mask16 mask3(0b1010101010101010);
-
-    expectEq(mask1, mask2);
-    expectNeq(mask1, mask3);
-  };
-
-  "Mask16 All"_test = [] {
-    Mask16 mask(0xFFFF);
-    expectTrue(mask.all());
-
-    Mask16 mask2(0x0000);
-    expectTrue(!mask2.all());
-  };
-
-  "Mask16 None"_test = [] {
-    Mask16 mask(0x0000);
-    expectTrue(mask.none());
-
-    Mask16 mask2(0xFFFF);
-    expectTrue(!mask2.none());
-  };
-
-  "Mask16 Any"_test = [] {
-    Mask16 mask(0x0001);
-    expectTrue(mask.any());
-
-    Mask16 mask2(0x0000);
-    expectTrue(!mask2.any());
-  };
-
-  // --- Vec512f Tests ---
-
-  "Vec512f Initialization"_test = [] {
-    Vec512f vec1(1.0F);
-    Vec512f vec2(2.0F);
-    Vec512f vec3(vec1 + vec2);
-
-    expectEq(vec3[0], 3.0F);
-    expectEq(vec3[15], 3.0F);
-  };
-
-  "Vec512f Load/Store"_test = [] {
-    std::array<float, 16> data = {1.0F, 2.0F, 3.0F, 4.0F,
-                                  5.0F, 6.0F, 7.0F, 8.0F,
-                                  9.0F, 10.0F, 11.0F, 12.0F,
-                                  13.0F, 14.0F, 15.0F, 16.0F};
-
-    auto vec = Vec512f(data);
-    auto stored_data = vec.storeArray();
-
-    for (size_t i = 0; i < data.size(); ++i) {
-      expectEq(stored_data[i], data[i]);
-    }
-  };
-
-  "Vec512f Addition"_test = [] {
-    Vec512f vec1(1.0F);
-    Vec512f vec2(2.0F);
-    Vec512f result = vec1 + vec2;
-
-    for (size_t i = 0; i < Vec512f::size(); ++i) {
-      expectEq(result[i], 3.0F);
-    }
-  };
-
-  "Vec512f Subtraction"_test = [] {
-    Vec512f vec1(3.0F);
-    Vec512f vec2(1.0F);
-    Vec512f result = vec1 - vec2;
-
-    for (size_t i = 0; i < Vec512f::size(); ++i) {
-      expectEq(result[i], 2.0F);
-    }
-  };
-
-  "Vec512f Multiplication"_test = [] {
-    Vec512f vec1(2.0F);
-    Vec512f vec2(3.0F);
-    Vec512f result = vec1 * vec2;
-
-    for (size_t i = 0; i < Vec512f::size(); ++i) {
-      expectEq(result[i], 6.0F);
-    }
-  };
-
-  "Vec512f Division"_test = [] {
-    Vec512f vec1(6.0F);
-    Vec512f vec2(2.0F);
-    Vec512f result = vec1 / vec2;
-
-    for (size_t i = 0; i < Vec512f::size(); ++i) {
-      expectEq(result[i], 3.0F);
-    }
-  };
-
-  "Vec512f Negation"_test = [] {
-    Vec512f vec(1.0F);
-    Vec512f negated = -vec;
-
-    for (size_t i = 0; i < Vec512f::size(); ++i) {
-      expectEq(negated[i], -1.0F);
-    }
-  };
-
-  "Vec512f Equality"_test = [] {
-    Vec512f vec1(1.0F);
-    Vec512f vec2(1.0F);
-    Vec512f vec3(2.0F);
-
-    expectTrue(vec1 == vec2);
-    expectTrue(vec1 != vec3);
-  };
-
-  "Vec512i64 Initialization"_test = [] {
-    Vec512i64 vec1(1);
-    Vec512i64 vec2(2);
-    Vec512i64 vec3(vec1 + vec2);
-
-    expectEq(vec3[0], 3);
-    expectEq(vec3[7], 3);
-  };
-
-  "Vec512i64 Load/Store"_test = [] {
-    std::array<int64_t, 8> data = {1, 2, 3, 4, 5, 6, 7, 8};
-
-    auto vec = Vec512i64(data);
-    auto stored_data = vec.storeArray();
-
-    for (size_t i = 0; i < data.size(); ++i) {
-      expectEq(stored_data[i], data[i]);
-    }
-  };
-
-  "Vec512i64 Addition"_test = [] {
-    Vec512i64 vec1(1);
-    Vec512i64 vec2(2);
-    Vec512i64 result = vec1 + vec2;
-
-    for (size_t i = 0; i < Vec512i64::size(); ++i) {
-      expectEq(result[i], 3);
-    }
-  };
-
-  "Vec512i64 Subtraction"_test = [] {
-    Vec512i64 vec1(3);
-    Vec512i64 vec2(1);
-    Vec512i64 result = vec1 - vec2;
-
-    for (size_t i = 0; i < Vec512i64::size(); ++i) {
-      expectEq(result[i], 2);
-    }
-  };
-
-  "Vec512i64 Multiplication"_test = [] {
-    Vec512i64 vec1(2);
-    Vec512i64 vec2(3);
-    Vec512i64 result = vec1 * vec2;
-
-    for (size_t i = 0; i < Vec512i64::size(); ++i) {
-      expectEq(result[i], 6);
-    }
-  };
-
-  "Vec512i64 Right Shift"_test = [] {
-    Vec512i64 vec1(8);
-    Vec512i64 vec2(1);
-    Vec512i64 result = vec1 >> vec2;
-
-    for (size_t i = 0; i < Vec512i64::size(); ++i) {
-      expectEq(result[i], 4);
-    }
-  };
-
-  "Vec512i64 Left Shift"_test = [] {
-    Vec512i64 vec1(2);
-    Vec512i64 vec2(1);
-    Vec512i64 result = vec1 << vec2;
-
-    for (size_t i = 0; i < Vec512i64::size(); ++i) {
-      expectEq(result[i], 4);
-    }
-  };
+  constexpr auto arr = [&] {
+    auto arr = std::array<int, mkVec().size()>{};
+    std::ranges::copy(mkVec(), arr.begin());
+    return arr;
+  }();
 
   return 0;
 }

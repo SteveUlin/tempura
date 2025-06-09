@@ -92,5 +92,4 @@ auto main() -> int {
       out_simd = rand();
     }
   };
-
 }

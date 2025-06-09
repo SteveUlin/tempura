@@ -1,8 +1,3 @@
-add_executable(chebyshev_test chebyshev_test.cpp)
-target_link_libraries(chebyshev_test unit chebyshev)
-add_test(NAME chebyshev_test COMMAND chebyshev_test)
-set_property(TEST chebyshev_test PROPERTY LABELS base)
-
 # add_executable(interpolate_test interpolate_test.cpp)
 # target_link_libraries(interpolate_test unit interpolate)
 # add_test(NAME interpolate_test COMMAND interpolate_test)

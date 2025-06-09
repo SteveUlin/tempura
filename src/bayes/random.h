@@ -1,8 +1,5 @@
 #pragma once
 
-#include <cstdint>
-#include <random>
-
 namespace tempura {
 
 template <typename StateT, typename AlgoT>
