@@ -16,7 +16,7 @@ endif()
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
 
 set(CMAKE_CXX_FLAGS "-Wall -Wextra -g -std=c++2c -Wno-unknown-pragmas -mavx512f -mavx512dq")
-set(CMAKE_CXX_FLAGS_RELEASE "-ftree-vectorize -march=native -ffast-math -O3 -funroll-loops -mavx512f")
+set(CMAKE_CXX_FLAGS_RELEASE "-ftree-vectorize -march=native -ffast-math -funsafe-math-optimizations -fno-math-errno -O3 -funroll-loops -mavx512f")
 
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 

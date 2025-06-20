@@ -83,9 +83,9 @@ class Chebyshev {
         m_{n_},
         coefficients_{std::move(coefficients)} {}
 
-  auto a() const -> const T& { return a_; }
+  constexpr auto a() const -> const T& { return a_; }
 
-  auto b() const -> const T& { return b_; }
+  constexpr auto b() const -> const T& { return b_; }
 
   // Set the threshold for the coefficients.
   //
@@ -252,8 +252,11 @@ auto eval(const Chebyshev<T>& chebyshev, const T& x) -> T {
 
 // Converts a Chebyshev object (a polynomial w.r.t. Chebyshev Polynomials) to
 // a polynomial p(x) = ∑ dₖ xᵏ = ∑ cₖ Tₖ(y) + cₒ / 2
+//
+// From Numerical Recipes in C++ (3rd Edition)
 template <typename T>
-auto toPoly(const Chebyshev<T>& chebyshev) -> std::vector<T> {
+
+constexpr auto toPolynomial(const Chebyshev<T> chebyshev) -> std::vector<T> {
   const auto& coeffs = chebyshev.coefficients();
   const std::int64_t m = chebyshev.degree();
 
@@ -273,7 +276,7 @@ auto toPoly(const Chebyshev<T>& chebyshev) -> std::vector<T> {
     dd[0] = sv;
   }
 
-  for (std::int64_t j = m-1; j > 0; --j) d[j] = d[j - 1] - dd[j];
+  for (std::int64_t j = m - 1; j > 0; --j) d[j] = d[j - 1] - dd[j];
 
   d[0] = -dd[0] + .5 * coeffs[0];
 

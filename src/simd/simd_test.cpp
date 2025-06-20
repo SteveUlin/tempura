@@ -123,23 +123,14 @@ auto main() -> int {
     Vec8d sin_values = sinImpl(v1);
 
     expectNear(0.0,     sin_values[0]);
-    expectNear(sin(0.5), sin_values[1]);
-    expectNear(sin(1.0), sin_values[2]);
-    expectNear(sin(1.5), sin_values[3]);
-    expectNear(sin(2.0), sin_values[4]);
-    expectNear(sin(2.5), sin_values[5]);
-    expectNear(sin(3.0), sin_values[6]);
-    expectNear(sin(3.5), sin_values[7]);
+    expectNear(std::sin(0.5), sin_values[1]);
+    expectNear(std::sin(1.0), sin_values[2]);
+    expectNear(std::sin(1.5), sin_values[3]);
+    expectNear(std::sin(2.0), sin_values[4]);
+    expectNear(std::sin(2.5), sin_values[5]);
+    expectNear(std::sin(3.0), sin_values[6]);
+    expectNear(std::sin(3.5), sin_values[7]);
   };
-
-  constexpr auto mkVec = [] {
-    return std::vector<int>{1, 2, 3};
-  };
-  constexpr auto arr = [&] {
-    auto arr = std::array<int, mkVec().size()>{};
-    std::ranges::copy(mkVec(), arr.begin());
-    return arr;
-  }();
 
   return 0;
 }
