@@ -3,6 +3,7 @@ project(tempura LANGUAGES CXX)
 
 find_package(glfw3 REQUIRED)
 find_package(OpenGL REQUIRED)
+find_package(Vulkan REQUIRED)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Get clangd to find stdlib

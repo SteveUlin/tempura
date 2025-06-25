@@ -21,6 +21,8 @@ target_link_libraries(simd_main PRIVATE profiler)
 
 add_executable(glfw_main glfw_main.cpp)
 target_link_libraries(glfw_main PRIVATE glfw OpenGL::GL)
+add_executable(hello_triangle_main hello_triangle.cpp)
+target_link_libraries(hello_triangle_main PRIVATE glfw Vulkan::Vulkan)
 
 # add_executable(single_producer_consumer_queue single_producer_consumer_queue.cpp)
 # target_link_libraries(single_producer_consumer_queue PRIVATE profiler)

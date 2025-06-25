@@ -36,6 +36,9 @@
             glfw
             glm
             libGL
+            vulkan-headers
+            vulkan-loader
+            vulkan-validation-layers
           ];
           
           env = {
