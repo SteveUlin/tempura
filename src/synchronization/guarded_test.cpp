@@ -9,12 +9,12 @@ using namespace tempura;
 auto main() -> int {
   "Constructor"_test = [] {
     Guarded<int> guarded{5};
-    expectEq(5, guarded.get());
+    expectEq(5, *guarded.acquire());
   };
 
   "Emplace args"_test = [] {
     Guarded<std::vector<int>> guarded{1, 2, 3, 4, 5};
-    expectEq(5UL, guarded.get().size());
+    expectEq(5UL, guarded.acquire()->size());
   };
 
   "Handle Dereference"_test = [] {
@@ -29,11 +29,6 @@ auto main() -> int {
     expectEq(5, *handle);
   };
 
-  "Arrow Operator"_test = [] {
-    Guarded<std::vector<int>> guarded{1, 2, 3, 4, 5};
-    expectEq(5UL, guarded.get().size());
-  };
-
   "RAII Locks"_test = [] {
     Guarded<int> guarded{0};
     {
@@ -44,17 +39,19 @@ auto main() -> int {
   };
 
   "withLock Locks"_test = [] {
-    Guarded<int> guarded{0};
-    guarded.withLock([&guarded](int&) {
+    Guarded<int> guarded{5};
+    guarded.withLock([&guarded](int& value) {
       expectEq(guarded.try_lock(), false);
+      expectEq(value, 5);
     });
     expectEq(guarded.try_lock(), true);
   };
 
   "const withLock Locks"_test = [] {
-    const Guarded<int> guarded{0};
-    guarded.withLock([&guarded](const int&) {
+    const Guarded<int> guarded{5};
+    guarded.withLock([&guarded](const int& value) {
       expectEq(guarded.try_lock(), false);
+      expectEq(value, 5);
     });
     expectEq(guarded.try_lock(), true);
   };

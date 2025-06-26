@@ -1,0 +1,7 @@
+add_library(guarded INTERFACE guarded.h)
+add_executable(guarded_test guarded_test.cpp)
+target_link_libraries(guarded_test guarded unit)
+
+add_library(hierarchical_mutex INTERFACE hierarchical_mutex.h)
+add_executable(hierarchical_mutex_test hierarchical_mutex_test.cpp)
+target_link_libraries(hierarchical_mutex_test hierarchical_mutex unit)

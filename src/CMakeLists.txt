@@ -11,6 +11,7 @@ add_subdirectory(optimization)
 add_subdirectory(quadature)
 add_subdirectory(simd)
 add_subdirectory(special)
+add_subdirectory(synchronization)
 add_subdirectory(utility)
 
 add_library(benchmark INTERFACE benchmark.h)
@@ -44,10 +45,6 @@ add_library(function_traits INTERFACE function_traits.h)
 # add_library(fifo_queue INTERFACE fifo_queue.h)
 # add_executable(fifo_queue_test fifo_queue_test.cpp)
 # target_link_libraries(fifo_queue_test fifo_queue unit benchmark profiler)
-
-add_library(guarded INTERFACE guarded.h)
-add_executable(guarded_test guarded_test.cpp)
-target_link_libraries(guarded_test guarded unit)
 
 add_library(image INTERFACE image.h)
 add_executable(image_test image_test.cpp)

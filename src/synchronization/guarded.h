@@ -1,6 +1,7 @@
 #pragma once
 
 #include <mutex>
+#include <cassert>
 #include <tuple>
 
 // Guarded
@@ -77,9 +78,6 @@ class Guarded {
   auto lock() const -> void { mutex_.lock(); }
   auto unlock() const -> void { mutex_.unlock(); }
   [[nodiscard]] auto try_lock() const -> bool { return mutex_.try_lock(); }
-
-  auto get() -> T& { return value_; }
-  auto get() const -> const T& { return value_; }
 
   template <typename... Args>
   [[nodiscard]] auto acquire(Args... args) -> GuardedHandle<T, Mutex> {
