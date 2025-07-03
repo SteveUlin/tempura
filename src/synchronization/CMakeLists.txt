@@ -5,3 +5,20 @@ target_link_libraries(guarded_test guarded unit)
 add_library(hierarchical_mutex INTERFACE hierarchical_mutex.h)
 add_executable(hierarchical_mutex_test hierarchical_mutex_test.cpp)
 target_link_libraries(hierarchical_mutex_test hierarchical_mutex unit)
+
+add_library(fifo_queue INTERFACE fifo_queue.h)
+add_executable(fifo_queue_test fifo_queue_test.cpp)
+target_link_libraries(fifo_queue_test fifo_queue unit benchmark profiler)
+
+add_library(threadsafe_queue INTERFACE threadsafe_queue.h)
+add_executable(threadsafe_queue_test threadsafe_queue_test.cpp)
+target_link_libraries(threadsafe_queue_test threadsafe_queue unit)
+
+add_library(threadsafe_stack INTERFACE threadsafe_stack.h)
+add_executable(threadsafe_stack_test threadsafe_stack_test.cpp)
+target_link_libraries(threadsafe_stack_test threadsafe_stack unit)
+
+add_library(threadpool SHARED)
+target_sources(threadpool PUBLIC threadpool.h threadpool.cpp)
+add_executable(threadpool_test threadpool_test.cpp)
+target_link_libraries(threadpool_test threadpool unit profiler)

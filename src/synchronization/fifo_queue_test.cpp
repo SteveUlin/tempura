@@ -36,9 +36,9 @@ auto main() -> int {
 
     expectTrue(queue.push(1));
     expectEq(1, *queue.pop());
-    expectTrue{queue.push(2)};
-    expectEq{2, *queue.pop()};
-    expectTrue{queue.push(3)};
+    expectTrue(queue.push(2));
+    expectEq(2, *queue.pop());
+    expectTrue(queue.push(3));
     expectEq(3, *queue.pop());
   };
 

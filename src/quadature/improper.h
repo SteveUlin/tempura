@@ -194,7 +194,7 @@ class MidpointSqrtIntegrator {
 // the ends of the interval. But we gotta do some math to figure out what those
 // weights are.
 //
-// But what if the value of all of those endpoint was nearly zero? Then we
+// But what if the values near the endpoint was basically zero? Then we
 // don't have to calculate the endweights at all. We can just use the middle
 // of the interval to get a good estimate on the integral.
 //
