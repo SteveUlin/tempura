@@ -168,7 +168,7 @@ auto main() -> int {
     auto expr = pow(x, 2_c);  // f(x) = x²
     auto d = diff(expr, x);    // f'(x) = 2x
     auto simplified = simplify(d);
-    
+
     // At x=5, f'(5) = 2*5 = 10
     constexpr auto result = evaluate(simplified, BinderPack{x = 5});
     static_assert(result == 10);
@@ -179,7 +179,7 @@ auto main() -> int {
     auto expr = sin(x);
     auto d = diff(expr, x);  // cos(x) * 1
     auto simplified = simplify(d);  // Should simplify to cos(x)
-    
+
     // cos(π) ≈ -1
     auto result = evaluate(simplified, BinderPack{x = M_PI});
     expectNear<0.0001>(result, -1.0);
