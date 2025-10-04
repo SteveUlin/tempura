@@ -25,16 +25,16 @@ add_executable(symbolic2_operators_test test/operators_test.cpp)
 target_link_libraries(symbolic2_operators_test PRIVATE symbolic2_core unit)
 add_test(NAME symbolic2_operators_test COMMAND symbolic2_operators_test)
 
-# Derivative support (to be added)
-# add_library(symbolic2_derivative INTERFACE)
-# target_sources(symbolic2_derivative INTERFACE
-#     ${CMAKE_CURRENT_SOURCE_DIR}/derivative.h
-# )
-# target_link_libraries(symbolic2_derivative INTERFACE symbolic2_core)
+# Derivative support
+add_library(symbolic2_derivative INTERFACE)
+target_sources(symbolic2_derivative INTERFACE
+    ${CMAKE_CURRENT_SOURCE_DIR}/derivative.h
+)
+target_link_libraries(symbolic2_derivative INTERFACE symbolic2_core)
 
-# add_executable(symbolic2_derivative_test test/derivative_test.cpp)
-# target_link_libraries(symbolic2_derivative_test PRIVATE symbolic2_derivative unit)
-# add_test(NAME symbolic2_derivative_test COMMAND symbolic2_derivative_test)
+add_executable(symbolic2_derivative_test test/derivative_test.cpp)
+target_link_libraries(symbolic2_derivative_test PRIVATE symbolic2_derivative unit)
+add_test(NAME symbolic2_derivative_test COMMAND symbolic2_derivative_test)
 
 # ToString support (to be added)
 # add_library(symbolic2_to_string INTERFACE)
