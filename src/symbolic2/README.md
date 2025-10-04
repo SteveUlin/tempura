@@ -103,11 +103,24 @@ See the `examples/` directory for comprehensive examples:
 
 - ✅ Core symbolic system
 - ✅ Pattern matching
-- ✅ Simplification rules
+- ✅ Simplification rules (basic)
 - ✅ Evaluation system
-- 🚧 Derivative support (in progress)
-- 🚧 Enhanced toString (in progress)
+- 🚧 Advanced simplification (in progress)
+- 🚧 Derivative support (planned)
+- 🚧 Enhanced toString (planned)
 - 📋 Full operator coverage (planned)
+
+## Known Limitations
+
+**Template Instantiation Depth**: Complex expressions with deep simplification may exceed compiler template instantiation limits (~900 levels). This affects:
+
+- Repeated distribution: `(x+1)*(x+1)*(x+1)...`
+- Transcendental functions with constants: `log(1)`, `exp(log(x))`, `sin(π)`
+- Long expression chains with many simplification steps
+
+**Workaround**: Simplify expressions incrementally or increase template depth: `-ftemplate-depth=2000`
+
+**Note**: This is a known limitation of compile-time metaprogramming. Future improvements will add depth limiting and better simplification strategies.
 
 ## Deprecation Timeline
 

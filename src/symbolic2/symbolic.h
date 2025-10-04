@@ -318,6 +318,11 @@ constexpr auto operator-(LHS, RHS) {
   return Expression<SubOp, LHS, RHS>{};
 }
 
+template <Symbolic Arg>
+constexpr auto operator-(Arg) {
+  return Expression<NegOp, Arg>{};
+}
+
 template <Symbolic LHS, Symbolic RHS>
 constexpr auto operator*(LHS, RHS) {
   return Expression<MulOp, LHS, RHS>{};
@@ -733,7 +738,7 @@ constexpr auto powerIdentities(S expr) {
     constexpr auto x = left(left(expr));
     constexpr auto a = right(left(expr));
     constexpr auto b = right(expr);
-    return simplifySymbol(pow(x, simplifySymbol(a * b)));
+    return pow(x, a * b);  // Don't recurse - let outer loop handle it
   }
 
   // default
@@ -758,14 +763,15 @@ constexpr auto additionIdentities(S expr) {
   // x + x = x * 2
   else if constexpr (match(left(expr), right(expr))) {
     constexpr auto x = left(expr);
-    return simplifySymbol(x * 2_c);
+    return x * 2_c;  // Don't recurse - let outer loop handle it
   }
 
   // Canonical Form
   else if constexpr (symbolicLessThan(right(expr), left(expr))) {
-    return simplifySymbol(right(expr) + left(expr));
+    return right(expr) + left(expr);  // Don't recurse - let outer loop handle it
   }
 
+  // Associativity - defer recursive simplification to outer loop
   // If b < c
   // (a + c) + b = (a + b) + c
   else if constexpr (match(expr, (AnyArg{} + AnyArg{}) + AnyArg{}) &&
@@ -773,58 +779,34 @@ constexpr auto additionIdentities(S expr) {
     constexpr auto a = left(left(expr));
     constexpr auto c = right(left(expr));
     constexpr auto b = right(expr);
-    return simplifySymbol(simplifySymbol(a + b) + c);
+    return (a + b) + c; // Don't recurse - let outer loop handle it
   }
 
   // Factoring
 
-  // Note only factor if you get a simpler expression
   // x * a + x = x * (a + 1);
   else if constexpr (match(expr, AnyArg{} * AnyArg{} + AnyArg{}) &&
                      match(left(left(expr)), right(expr))) {
     constexpr auto x = left(left(expr));
     constexpr auto a = right(left(expr));
-    constexpr auto coeff = a + 1_c;
-    constexpr auto simplified_coeff = simplifySymbol(coeff);
-    if constexpr (match(coeff, simplified_coeff)) {
-      // The coefficient is unchanged, so we can return the original
-      return expr;
-    } else {
-      return simplifySymbol(x * simplified_coeff);
-    }
+    return x * (a + 1_c);  // Don't recurse - let outer loop handle it
   }
 
-  // Note only factor if you get a simpler expression
   // x * a + x * b = x * (a + b);
   else if constexpr (match(expr, AnyArg{} * AnyArg{} + AnyArg{} * AnyArg{}) &&
                      match(left(left(expr)), left(right(expr)))) {
     constexpr auto x = left(left(expr));
     constexpr auto a = right(left(expr));
     constexpr auto b = right(right(expr));
-    constexpr auto coeff = a + b;
-    constexpr auto simplified_coeff = simplifySymbol(coeff);
-    if constexpr (match(coeff, simplified_coeff)) {
-      // The coefficient is unchanged, so we can return the original
-      return expr;
-    } else {
-      return simplifySymbol(x * simplified_coeff);
-    }
+    return x * (a + b);  // Don't recurse - let outer loop handle it
   }
 
-  // Reduce the right-hand side if you end up with a shorter result
-  // (a + b) + c = a + (b + c)
+  // Associativity: (a + b) + c = a + (b + c) if it helps
   else if constexpr (match(expr, (AnyArg{} + AnyArg{}) + AnyArg{})) {
+    constexpr auto a = left(left(expr));
     constexpr auto b = right(left(expr));
     constexpr auto c = right(expr);
-    constexpr auto rhs = b + c;
-    constexpr auto simplified_rhs = simplifySymbol(rhs);
-    if constexpr (match(rhs, simplified_rhs)) {
-      // The right-hand side is unchanged, so we return the original
-      return expr;
-    } else {
-      constexpr auto a = left(left(expr));
-      return simplifySymbol(a + simplified_rhs);
-    }
+    return a + (b + c);  // Don't recurse - let outer loop handle it
   }
 
   // default
@@ -837,14 +819,28 @@ template <Symbolic S>
   requires(match(S{}, AnyArg{} * AnyArg{}))
 constexpr auto multiplicationIdentities(S expr) {
   // 0 * x = 0
+  if constexpr (match(expr, 0_c * AnyArg{})) {
+    return 0_c;
+  }
+  // x * 0 = 0
+  else if constexpr (match(expr, AnyArg{} * 0_c)) {
+    return 0_c;
+  }
+  // 1 * x = x
+  else if constexpr (match(expr, 1_c * AnyArg{})) {
+    return right(expr);
+  }
+  // x * 1 = x
+  else if constexpr (match(expr, AnyArg{} * 1_c)) {
+    return left(expr);
+  }
 
   // x * xᵃ = xᵃ⁺¹
   else if constexpr (match(expr, AnyArg{} * pow(AnyArg{}, AnyArg{})) and
                      match(left(expr), left(right(expr)))) {
     constexpr auto x = left(expr);
     constexpr auto a = right(right(expr));
-    constexpr auto power = simplifySymbol(a + 1_c);
-    return simplifySymbol(pow(x, power));
+    return pow(x, a + 1_c);  // Don't recurse - let outer loop handle it
   }
 
   // xᵃ * x = xᵃ⁺¹
@@ -852,8 +848,7 @@ constexpr auto multiplicationIdentities(S expr) {
                      match(left(left(expr)), right(expr))) {
     constexpr auto x = left(left(expr));
     constexpr auto a = right(left(expr));
-    constexpr auto power = simplifySymbol(a + 1_c);
-    return simplifySymbol(pow(x, power));
+    return pow(x, a + 1_c);  // Don't recurse - let outer loop handle it
   }
 
   // xᵃ * xᵇ = xᵃ⁺ᵇ
@@ -863,8 +858,7 @@ constexpr auto multiplicationIdentities(S expr) {
     constexpr auto x = left(left(expr));
     constexpr auto a = right(left(expr));
     constexpr auto b = right(right(expr));
-    constexpr auto power = simplifySymbol(a + b);
-    return simplifySymbol(pow(x, power));
+    return pow(x, a + b);  // Don't recurse - let outer loop handle it
   }
 
   // Distributive Property
@@ -873,9 +867,7 @@ constexpr auto multiplicationIdentities(S expr) {
     constexpr auto a = left(left(expr));
     constexpr auto b = right(left(expr));
     constexpr auto c = right(expr);
-    constexpr auto lhs = simplifySymbol(a * c);
-    constexpr auto rhs = simplifySymbol(b * c);
-    return simplifySymbol(lhs + rhs);
+    return (a * c) + (b * c);  // Don't recurse - let outer loop handle it
   }
 
   // a * (b + c) = a * b + a * c
@@ -883,9 +875,7 @@ constexpr auto multiplicationIdentities(S expr) {
     constexpr auto a = left(expr);
     constexpr auto b = left(right(expr));
     constexpr auto c = right(right(expr));
-    constexpr auto lhs = simplifySymbol(a * b);
-    constexpr auto rhs = simplifySymbol(a * c);
-    return simplifySymbol(lhs + rhs);
+    return (a * b) + (a * c);  // Don't recurse - let outer loop handle it
   }
 
   // Canonical Form
@@ -894,43 +884,32 @@ constexpr auto multiplicationIdentities(S expr) {
   else if constexpr (symbolicLessThan(right(expr), left(expr))) {
     constexpr auto a = left(expr);
     constexpr auto b = right(expr);
-    return simplifySymbol(b * a);
+    return b * a;  // Don't recurse - let outer loop handle it
   }
 
-  // a * (b * c) = (a * b) * c
+  // Associativity: a * (b * c) = (a * b) * c
   else if constexpr (match(expr, AnyArg{} * (AnyArg{} * AnyArg{}))) {
     constexpr auto a = left(expr);
     constexpr auto b = left(right(expr));
     constexpr auto c = right(right(expr));
-    constexpr auto lhs = simplifySymbol(a * b);
-    return simplifySymbol(lhs * c);
+    return (a * b) * c;  // Don't recurse - let outer loop handle it
   }
 
-  // if b < c
-  // (a * c) * b = (a * b) * c
+  // Associativity: if b < c then (a * c) * b = (a * b) * c
   else if constexpr (match(expr, (AnyArg{} * AnyArg{}) * AnyArg{}) and
                      symbolicLessThan(right(expr), right(left(expr)))) {
     constexpr auto a = left(left(expr));
     constexpr auto c = right(left(expr));
     constexpr auto b = right(expr);
-    constexpr auto lhs = simplifySymbol(a * b);
-    return simplifySymbol(lhs * c);
+    return (a * b) * c;  // Don't recurse - let outer loop handle it
   }
 
-  // Reduce the right-hand side if you end up with a shorter result
-  // (a * b) * c = a * (b * c)
+  // Associativity: (a * b) * c = a * (b * c) if it helps
   else if constexpr (match(expr, (AnyArg{} * AnyArg{}) * AnyArg{})) {
+    constexpr auto a = left(left(expr));
     constexpr auto b = right(left(expr));
     constexpr auto c = right(expr);
-    constexpr auto rhs = b * c;
-    constexpr auto simplified_rhs = simplifySymbol(rhs);
-    if constexpr (match(rhs, simplified_rhs)) {
-      // The right-hand side is unchanged, so we return the original
-      return expr;
-    } else {
-      constexpr auto a = left(left(expr));
-      return simplifySymbol(a * simplified_rhs);
-    }
+    return a * (b * c);  // Don't recurse - let outer loop handle it
   }
 
   // default
@@ -960,16 +939,12 @@ template <Symbolic S>
 constexpr auto expIdentities(S expr) {
   // exp(log(x)) == x
   if constexpr (match(expr, exp(log(AnyArg{})))) {
-    return right(operand(expr));
+    return operand(operand(expr));  // operand(exp(...)) = log(...), operand(log(...)) = x
   }
 
-  // e^(log(x)) == x
-  else if constexpr (match(expr, log(pow(e, AnyArg{})))) {
-    return right(operand(expr));
-  }
-
+  // exp(x) = e^x (convert to power form)
   else {
-    return simplifySymbol(pow(e, operand(expr)));
+    return pow(e, operand(expr));  // Don't recurse - let outer loop handle it
   }
 }
 
@@ -1073,47 +1048,107 @@ constexpr auto tanIdentities(S expr) {
   }
 }
 
-// Simplify a single term
+// Forward declaration for depth-limited simplification
+template <Symbolic S, SizeT depth>
+constexpr auto simplifySymbolWithDepth(S sym);
+
+// Simplify a single term (no depth limit for backward compatibility)
 template <Symbolic S>
 constexpr auto simplifySymbol(S sym) {
-  if constexpr (requires { evalConstantExpr(sym); }) {
+  return simplifySymbolWithDepth<S, 0>(sym);
+}
+
+// Simplify a single term with depth tracking
+template <Symbolic S, SizeT depth>
+constexpr auto simplifySymbolWithDepth(S sym) {
+  // Stop if we've gone too deep
+  if constexpr (depth >= 20) {
+    return S{};
+  }
+
+  else if constexpr (requires { evalConstantExpr(sym); }) {
     return evalConstantExpr(sym);
   }
 
   else if constexpr (requires { powerIdentities(sym); }) {
-    return powerIdentities(sym);
+    constexpr auto result = powerIdentities(sym);
+    if constexpr (match(result, sym)) {
+      return result;
+    } else {
+      return simplifySymbolWithDepth<decltype(result), depth + 1>(result);
+    }
   }
 
   else if constexpr (requires { additionIdentities(sym); }) {
-    return additionIdentities(sym);
+    constexpr auto result = additionIdentities(sym);
+    if constexpr (match(result, sym)) {
+      return result;
+    } else {
+      return simplifySymbolWithDepth<decltype(result), depth + 1>(result);
+    }
   }
 
   else if constexpr (requires { subtractionIdentities(sym); }) {
-    return subtractionIdentities(sym);
+    constexpr auto result = subtractionIdentities(sym);
+    if constexpr (match(result, sym)) {
+      return result;
+    } else {
+      return simplifySymbolWithDepth<decltype(result), depth + 1>(result);
+    }
   }
 
   else if constexpr (requires { multiplicationIdentities(sym); }) {
-    return multiplicationIdentities(sym);
+    constexpr auto result = multiplicationIdentities(sym);
+    if constexpr (match(result, sym)) {
+      return result;
+    } else {
+      return simplifySymbolWithDepth<decltype(result), depth + 1>(result);
+    }
   }
 
   else if constexpr (requires { divisionIdentities(sym); }) {
-    return divisionIdentities(sym);
+    constexpr auto result = divisionIdentities(sym);
+    if constexpr (match(result, sym)) {
+      return result;
+    } else {
+      return simplifySymbolWithDepth<decltype(result), depth + 1>(result);
+    }
   }
 
   else if constexpr (requires { expIdentities(sym); }) {
-    return expIdentities(sym);
+    constexpr auto result = expIdentities(sym);
+    if constexpr (match(result, sym)) {
+      return result;
+    } else {
+      return simplifySymbolWithDepth<decltype(result), depth + 1>(result);
+    }
   }
 
   else if constexpr (requires { logIdentities(sym); }) {
-    return logIdentities(sym);
+    constexpr auto result = logIdentities(sym);
+    if constexpr (match(result, sym)) {
+      return result;
+    } else {
+      return simplifySymbolWithDepth<decltype(result), depth + 1>(result);
+    }
   }
 
   else if constexpr (requires { sinIdentities(sym); }) {
-    return sinIdentities(sym);
+    constexpr auto result = sinIdentities(sym);
+    if constexpr (match(result, sym)) {
+      return result;
+    } else {
+      return simplifySymbolWithDepth<decltype(result), depth + 1>(result);
+    }
   }
 
   else if constexpr (requires { cosIdentities(sym); }) {
-    return cosIdentities(sym);
+    constexpr auto result = cosIdentities(sym);
+    if constexpr (match(result, sym)) {
+      return result;
+    } else {
+      return simplifySymbolWithDepth<decltype(result), depth + 1>(result);
+    }
   }
 
   else {

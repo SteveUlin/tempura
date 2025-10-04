@@ -2,6 +2,7 @@
 # add_subdirectory(cuda)
 # add_subdirectory(matrix)
 add_subdirectory(symbolic)
+add_subdirectory(symbolic2)
 add_subdirectory(bayes)
 add_subdirectory(matrix2)
 add_subdirectory(matrix3)

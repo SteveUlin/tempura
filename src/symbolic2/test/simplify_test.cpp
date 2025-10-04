@@ -92,7 +92,7 @@ auto main() -> int {
 
     // After simplification, subtraction should be converted
     // The exact form may vary, but it should be equivalent
-    auto result = evaluate(s, BinderPack{x = 10, y = 3});
+    constexpr auto result = evaluate(s, BinderPack{x = 10, y = 3});
     static_assert(result == 7);
   };
 
@@ -105,13 +105,11 @@ auto main() -> int {
     auto s = simplify(expr);
 
     // Verify by evaluation
-    auto result = evaluate(s, BinderPack{x = 10.0, y = 2.0});
+    constexpr auto result = evaluate(s, BinderPack{x = 10.0, y = 2.0});
     static_assert(result == 5.0);
   };
 
   "Logarithm identities"_test = [] {
-    Symbol x;
-
     // log(1) = 0
     auto expr1 = log(1_c);
     auto s1 = simplify(expr1);

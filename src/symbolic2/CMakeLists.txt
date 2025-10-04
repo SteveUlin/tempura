@@ -9,12 +9,7 @@ target_include_directories(symbolic2_core INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
 target_link_libraries(symbolic2_core INTERFACE
-    meta_containers
-    meta_function_objects
-    meta_tags
-    meta_tuple
-    meta_type_id
-    meta_utility
+    meta
 )
 
 # Core tests
@@ -25,6 +20,10 @@ add_test(NAME symbolic2_test COMMAND symbolic2_test)
 add_executable(symbolic2_simplify_test test/simplify_test.cpp)
 target_link_libraries(symbolic2_simplify_test PRIVATE symbolic2_core unit)
 add_test(NAME symbolic2_simplify_test COMMAND symbolic2_simplify_test)
+
+add_executable(symbolic2_operators_test test/operators_test.cpp)
+target_link_libraries(symbolic2_operators_test PRIVATE symbolic2_core unit)
+add_test(NAME symbolic2_operators_test COMMAND symbolic2_operators_test)
 
 # Derivative support (to be added)
 # add_library(symbolic2_derivative INTERFACE)

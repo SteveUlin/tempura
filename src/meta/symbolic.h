@@ -837,6 +837,21 @@ template <Symbolic S>
   requires(match(S{}, AnyArg{} * AnyArg{}))
 constexpr auto multiplicationIdentities(S expr) {
   // 0 * x = 0
+  if constexpr (match(expr, 0_c * AnyArg{})) {
+    return 0_c;
+  }
+  // x * 0 = 0
+  else if constexpr (match(expr, AnyArg{} * 0_c)) {
+    return 0_c;
+  }
+  // 1 * x = x
+  else if constexpr (match(expr, 1_c * AnyArg{})) {
+    return right(expr);
+  }
+  // x * 1 = x
+  else if constexpr (match(expr, AnyArg{} * 1_c)) {
+    return left(expr);
+  }
 
   // x * xᵃ = xᵃ⁺¹
   else if constexpr (match(expr, AnyArg{} * pow(AnyArg{}, AnyArg{})) and

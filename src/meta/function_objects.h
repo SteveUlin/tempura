@@ -88,6 +88,12 @@ struct SubOp {
 
   constexpr auto operator()(auto a, auto b) const { return a - b; }
 };
+struct NegOp {
+  static constexpr StaticString kSymbol = "-";
+  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
+
+  constexpr auto operator()(auto a) const { return -a; }
+};
 struct MulOp {
   static constexpr StaticString kSymbol = "*";
   static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
