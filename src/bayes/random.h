@@ -117,7 +117,7 @@ struct MultiplyWithCarryFn {
   MultiplyWithCarryFn(T a) : a_{a} {}
 
   constexpr auto operator()(T x) const -> T {
-    x = a_ * (x & 0xFFFFFFFF) + (x >> 32);
+    x = a_ * (x & T{0xFFFFFFFF}) + (x >> T{32});
     return x;
   };
 

@@ -1,19 +1,17 @@
 #pragma once
 
 #include <iostream>
+
 #include "symbolic/matchers.h"
 #include "symbolic/operators.h"
 #include "symbolic/symbolic.h"
-#include "type_list.h"
 #include "symbolic/to_string.h"
+#include "type_list.h"
 
 namespace tempura::symbolic {
 
-// flatten scans down the tree of expressions for terms matching the given
-// operator, and flattens them into a single TypeList.
-//
-// The resulting TypeList will be reflect an in order traversal of the
-// original expression tree.
+// Flatten nested expressions of the same operator into a single TypeList.
+// Returns an in-order traversal of the expression tree.
 template <Operator Op, Symbolic... Terms>
 consteval auto flatten(Op op, TypeList<Terms...> terms) {
   if constexpr (sizeof...(Terms) == 0) {
@@ -25,8 +23,7 @@ consteval auto flatten(Op op, TypeList<Terms...> terms) {
   }
 }
 
-// mapFlatten does the same things as flatten but calls the associated
-// functor on each base term.
+// Flatten and apply a functor to each base term.
 template <template <typename> typename Fn, Operator Op, Symbolic... Terms>
 consteval auto mapFlatten(Op op, TypeList<Terms...> terms) {
   if constexpr (sizeof...(Terms) == 0) {
@@ -43,13 +40,13 @@ consteval auto mapFlatten(Op op, TypeList<Terms...> terms) {
   }
 }
 
-// map calls the provided functor on each element of the TypeList
+// Apply a functor to each element of a TypeList.
 template <template <typename> typename Fn, Symbolic... Terms>
 consteval auto map(TypeList<Terms...> /*unused*/) {
   return TypeList{Fn<Terms>::value...};
 }
 
-// sort sorts the provided TypeList using the provided comparator.
+// Sort a TypeList using quicksort with the provided comparator.
 template <template <typename, typename> typename Cmp, Symbolic... Terms>
 consteval auto sort(TypeList<Terms...> terms) {
   if constexpr (sizeof...(Terms) <= 1) {

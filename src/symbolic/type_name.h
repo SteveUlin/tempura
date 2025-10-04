@@ -2,23 +2,29 @@
 
 #include <string_view>
 
-// Returns the type name of T
-// https://stackoverflow.com/questions/64794649/is-there-a-way-to-consistently-sort-type-template-parameters
+namespace tempura::symbolic {
+
+// Extract the type name of T at compile time using compiler intrinsics.
+// Reference: https://stackoverflow.com/questions/64794649
 template <typename T>
-constexpr auto typeName() noexcept {
-  std::string_view name = "Error: unsupported compiler", prefix, suffix;
+constexpr auto typeName() noexcept -> std::string_view {
+  std::string_view name;
 #ifdef __clang__
   name = __PRETTY_FUNCTION__;
-  prefix = "auto typeName() [T = ";
-  suffix = "]";
+  constexpr std::string_view prefix =
+      "auto tempura::symbolic::typeName() [T = ";
+  constexpr std::string_view suffix = "]";
 #elif defined(__GNUC__)
   name = __PRETTY_FUNCTION__;
-  prefix = "constexpr auto typeName() [with T = ";
-  suffix = "]";
+  constexpr std::string_view prefix =
+      "constexpr std::string_view tempura::symbolic::typeName() [with T = ";
+  constexpr std::string_view suffix =
+      "; std::string_view = std::basic_string_view<char>]";
 #elif defined(_MSC_VER)
   name = __FUNCSIG__;
-  prefix = "auto __cdecl typeName<";
-  suffix = ">(void) noexcept";
+  constexpr std::string_view prefix =
+      "auto __cdecl tempura::symbolic::typeName<";
+  constexpr std::string_view suffix = ">(void) noexcept";
 #else
   static_assert(false, "Unsupported compiler!");
 #endif
@@ -27,7 +33,10 @@ constexpr auto typeName() noexcept {
   return name;
 }
 
+// Overload to deduce type from value.
 template <typename T>
 constexpr auto typeName(T /*unused*/) -> std::string_view {
   return typeName<T>();
 }
+
+}  // namespace tempura::symbolic

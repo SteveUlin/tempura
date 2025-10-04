@@ -65,9 +65,10 @@ auto toString(SymbolicExpression<Op, Args...> /*unused*/) -> std::string {
 
 }  // namespace tempura::symbolic
 
+// Stream output operator for symbolic expressions.
 namespace std {
-auto operator<<(std::ostream& os,
-                tempura::symbolic::Symbolic auto expr) -> std::ostream& {
+auto operator<<(std::ostream& os, tempura::symbolic::Symbolic auto expr)
+    -> std::ostream& {
   return os << tempura::symbolic::toString(expr);
 }
-  // namespace std
+}  // namespace std

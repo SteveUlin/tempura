@@ -7,7 +7,6 @@
 using namespace tempura;
 
 auto main() -> int {
-
   "Vec8d initialization"_test = [] {
     Vec8d v1{1.0};
     Vec8d v2{2.0};
@@ -118,18 +117,105 @@ auto main() -> int {
     assert(result[7] == 152.0);
   };
 
-  "Vec8d sin"_test = [] {
-    Vec8d v1{0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5};
-    Vec8d sin_values = sinImpl(v1);
+  "Vec8i64 initialization"_test = [] {
+    Vec8i64 v1{1, 2, 3, 4, 5, 6, 7, 8};
 
-    expectNear(0.0,     sin_values[0]);
-    expectNear(std::sin(0.5), sin_values[1]);
-    expectNear(std::sin(1.0), sin_values[2]);
-    expectNear(std::sin(1.5), sin_values[3]);
-    expectNear(std::sin(2.0), sin_values[4]);
-    expectNear(std::sin(2.5), sin_values[5]);
-    expectNear(std::sin(3.0), sin_values[6]);
-    expectNear(std::sin(3.5), sin_values[7]);
+    assert(v1[0] == 1);
+    assert(v1[1] == 2);
+    assert(v1[2] == 3);
+    assert(v1[3] == 4);
+    assert(v1[4] == 5);
+    assert(v1[5] == 6);
+    assert(v1[6] == 7);
+    assert(v1[7] == 8);
+  };
+
+  "Vec8i64 addition"_test = [] {
+    Vec8i64 v1{1, 2, 3, 4, 5, 6, 7, 8};
+    Vec8i64 v2{8, 7, 6, 5, 4, 3, 2, 1};
+    Vec8i64 v3 = v1 + v2;
+
+    assert(v3[0] == 9);
+    assert(v3[1] == 9);
+    assert(v3[2] == 9);
+    assert(v3[3] == 9);
+    assert(v3[4] == 9);
+    assert(v3[5] == 9);
+    assert(v3[6] == 9);
+    assert(v3[7] == 9);
+  };
+
+  "Vec8i64 subtraction"_test = [] {
+    Vec8i64 v1{10, 20, 30, 40, 50, 60, 70, 80};
+    Vec8i64 v2{1, 2, 3, 4, 5, 6, 7, 8};
+    Vec8i64 v3 = v1 - v2;
+
+    assert(v3[0] == 9);
+    assert(v3[1] == 18);
+    assert(v3[2] == 27);
+    assert(v3[3] == 36);
+    assert(v3[4] == 45);
+    assert(v3[5] == 54);
+    assert(v3[6] == 63);
+    assert(v3[7] == 72);
+  };
+
+  "Vec8i64 multiplication"_test = [] {
+    Vec8i64 v1{1, 2, 3, 4, 5, 6, 7, 8};
+    Vec8i64 v2{2, 3, 4, 5, 6, 7, 8, 9};
+    Vec8i64 v3 = v1 * v2;
+
+    assert(v3[0] == 2);
+    assert(v3[1] == 6);
+    assert(v3[2] == 12);
+    assert(v3[3] == 20);
+    assert(v3[4] == 30);
+    assert(v3[5] == 42);
+    assert(v3[6] == 56);
+    assert(v3[7] == 72);
+  };
+
+  "Vec8i64 xor"_test = [] {
+    Vec8i64 v1{1, 2, 3, 4, 5, 6, 7, 8};
+    Vec8i64 v2{8, 7, 6, 5, 4, 3, 2, 1};
+    Vec8i64 v3 = v1 ^ v2;
+
+    assert(v3[0] == 9);
+    assert(v3[1] == 5);
+    assert(v3[2] == 5);
+    assert(v3[3] == 1);
+    assert(v3[4] == 1);
+    assert(v3[5] == 5);
+    assert(v3[6] == 5);
+    assert(v3[7] == 9);
+  };
+
+  "Vec8i64 right shift"_test = [] {
+    Vec8i64 v1{8, 16, 32, 64, 128, 256, 512, 1024};
+    Vec8i64 v2 = v1 >> Vec8i64{2};
+
+    assert(v2[0] == 2);
+    assert(v2[1] == 4);
+    assert(v2[2] == 8);
+    assert(v2[3] == 16);
+    assert(v2[4] == 32);
+    assert(v2[5] == 64);
+    assert(v2[6] == 128);
+    assert(v2[7] == 256);
+  };
+
+  "Vec8i64 left shift"_test = [] {
+    Vec8i64 v1{1, 2, 3, 4, 5, 6, 7, 8};
+    Vec8i64 v2 = v1 << Vec8i64{2};
+
+    assert(v2[0] == 4);
+    assert(v2[1] == 8);
+    assert(v2[2] == 12);
+    assert(v2[3] == 16);
+    assert(v2[4] == 20);
+    assert(v2[5] == 24);
+    assert(v2[6] == 28);
+    assert(v2[7] == 32);
   };
 
   return 0;

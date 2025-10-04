@@ -13,34 +13,12 @@
 
 namespace tempura {
 
-// tempura math ops
-
-
-// Factorial of numbers larger than 170 overflow in double precision.
-// Factorials up to 22! are exact in double precision.
-//
-// Precondition:
-//   - n must be in the range [0, 170]
-constexpr auto factorial(const int64_t n) -> double {
-  static constexpr std::array mem = [] consteval {
-    std::array<double, 171> arr = {};
-    arr[0] = 1.;
-    for (size_t i = 1; i < arr.size(); ++i) {
-      arr[i] = static_cast<double>(i) * arr[i - 1];
-    }
-    return arr;
-  }();
-  return mem[n];
-}
-
 // A 512-bit vector of 8 64-bit doubles.
 //
 // This class overloads the arithmetic operators to allow for SIMD operations
 // on the vector. It uses AVX-512 intrinsics to perform the operations.
 class Vec8d {
  public:
-  Vec8d() = default;
-
   explicit Vec8d(__m512d data) : data_(data) {}
 
   // Set all elements to the same value
@@ -124,39 +102,113 @@ class Vec8d {
   __m512d data_;
 };
 
-template <typename T>
-auto sinImpl(T x) -> T {
-  constexpr double π = std::numbers::pi;
-  // Reduce the range to [-π, π]
-  T q = x * T{1.0 / (2.0 * π)};
-  q = round(q);
-  const T x_reduced = fma(q, T{-2.0 * π}, x);
-  const T x2 = x_reduced * x_reduced;
+class Vec8i64 {
+ public:
+  Vec8i64() = default;
 
-  constexpr auto coeff = vectorToArray([] {
-    // Chebyshev coefficients for sin(x) with the nearby zeros factored out
-    Chebyshev chebyshev(
-        [](double x) { return std::sin(x) / (x * (x - π) * (x + π)); }, -π, π,
-        11);
-    chebyshev.setThreshold(1e-10);
-    // The approximation in terms of x instead of Chebyshev polynomials
-    auto vec = toPolynomial(chebyshev);
+  explicit Vec8i64(__m512i data) : data_(data) {}
 
-    // Every second coefficient is really small, so we can drop them without
-    // much loss of precision.
-    std::vector<double> reduced;
-    for (std::size_t i = 0; i < vec.size(); i += 2) {
-      reduced.push_back(vec[i]);
-    }
-    return reduced;
-  });
 
-  auto poly = T{coeff[coeff.size() - 1]};
-  for (std::int64_t i = coeff.size() - 2; i >= 0; i -= 1) {
-    poly = fma(poly, x2, T{coeff[i]});
+  explicit Vec8i64(uint64_t val)
+      : data_(_mm512_set1_epi64(static_cast<int64_t>(val))) {}
+
+  // Precondition:
+  //   - data cannot be null
+  //   - data must point to an array of at least 8 int64_t
+  //   - data must be aligned to 64 bytes
+  explicit Vec8i64(const int64_t* data) { data_ = _mm512_loadu_si512(data); }
+
+  Vec8i64(int64_t v0, int64_t v1, int64_t v2, int64_t v3, int64_t v4,
+           int64_t v5, int64_t v6, int64_t v7)
+      : data_(_mm512_set_epi64(v7, v6, v5, v4, v3, v2, v1, v0)) {}
+
+  constexpr static auto size() -> std::size_t {
+    return 8;  // Number of elements in the vector
   }
-  poly *= x_reduced * (x_reduced - T{π}) * (x_reduced + T{π});
-  return poly;
-}
 
-}  // namespace tempura
+  // Precondition:
+  //   - index must be in the range [0, 7]
+  auto operator[](std::size_t index) const -> int64_t {
+    std::array<int64_t, 8> arr;
+    _mm512_storeu_si512(arr.data(), data_);
+    return arr[index];
+  }
+
+  auto operator==(const Vec8i64 other) const -> bool {
+    // Compare all elements for equality
+    __mmask8 mask = _mm512_cmpeq_epi64_mask(data_, other.data_);
+    return mask == 0xFF;  // All bits set means all elements are equal
+  }
+
+  auto operator!=(const Vec8i64 other) const -> bool {
+    return !(*this == other);
+  }
+
+  auto operator+(const Vec8i64 other) const -> Vec8i64 {
+    return Vec8i64{_mm512_add_epi64(data_, other.data_)};
+  }
+
+  auto operator+=(const Vec8i64 other) -> Vec8i64& {
+    data_ = _mm512_add_epi64(data_, other.data_);
+    return *this;
+  }
+
+  auto operator-(const Vec8i64 other) const -> Vec8i64 {
+    return Vec8i64{_mm512_sub_epi64(data_, other.data_)};
+  }
+
+  auto operator-=(const Vec8i64 other) -> Vec8i64& {
+    data_ = _mm512_sub_epi64(data_, other.data_);
+    return *this;
+  }
+
+  auto operator*(const Vec8i64 other) const -> Vec8i64 {
+    return Vec8i64{_mm512_mullo_epi64(data_, other.data_)};
+  }
+
+  auto operator*=(const Vec8i64 other) -> Vec8i64& {
+    data_ = _mm512_mullo_epi64(data_, other.data_);
+    return *this;
+  }
+
+  auto operator&(const Vec8i64 other) const -> Vec8i64 {
+    return Vec8i64{_mm512_and_si512(data_, other.data_)};
+  }
+
+  auto operator&=(const Vec8i64 other) -> Vec8i64& {
+    data_ = _mm512_and_si512(data_, other.data_);
+    return *this;
+  }
+
+  auto operator^(const Vec8i64 other) const -> Vec8i64 {
+    return Vec8i64{_mm512_xor_si512(data_, other.data_)};
+  }
+
+  auto operator^=(const Vec8i64 other) -> Vec8i64& {
+    data_ = _mm512_xor_si512(data_, other.data_);
+    return *this;
+  }
+
+  auto operator>>(const Vec8i64 other) const -> Vec8i64 {
+    return Vec8i64{_mm512_srlv_epi64(data_, other.data_)};
+  }
+
+  auto operator>>=(const Vec8i64 other) -> Vec8i64& {
+    data_ = _mm512_srlv_epi64(data_, other.data_);
+    return *this;
+  }
+
+  auto operator<<(const Vec8i64 other) const -> Vec8i64 {
+    return Vec8i64{_mm512_sllv_epi64(data_, other.data_)};
+  }
+
+  auto operator<<=(const Vec8i64 other) -> Vec8i64& {
+    data_ = _mm512_sllv_epi64(data_, other.data_);
+    return *this;
+  }
+
+ private:
+  __m512i data_;
+};
+
+} // namespace tempura

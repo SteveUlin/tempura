@@ -5,9 +5,11 @@
 
 namespace tempura::symbolic {
 
+// Compile-time list of types supporting head/tail operations.
 template <typename... Args>
 struct TypeList;
 
+// Base case: empty type list.
 template <>
 struct TypeList<> {
   consteval TypeList() = default;
@@ -16,6 +18,7 @@ struct TypeList<> {
   static constexpr size_t size = 0;
 };
 
+// Recursive case: non-empty type list with head and tail.
 template <typename First, typename... Rest>
 struct TypeList<First, Rest...> {
   consteval TypeList() = default;
@@ -25,12 +28,15 @@ struct TypeList<First, Rest...> {
   using TailType = TypeList<Rest...>;
   static constexpr bool empty = false;
   static constexpr size_t size = 1 + sizeof...(Rest);
+
   static constexpr auto head() -> HeadType { return {}; }
   static constexpr auto tail() -> TailType { return {}; }
 };
+
 template <typename... Args>
 TypeList(Args...) -> TypeList<Args...>;
 
+// Implementation helper for concatenating two TypeLists.
 template <typename Lhs, typename Rhs>
 struct ConcatImpl;
 
@@ -42,10 +48,12 @@ struct ConcatImpl<TypeList<Lhs...>, TypeList<Rhs...>> {
 template <typename Lhs, typename Rhs>
 using Concat = ConcatImpl<Lhs, Rhs>::Type;
 
+// Concatenate one or more TypeLists.
 template <typename... Lhs>
 consteval auto concat(TypeList<Lhs...> /*unused*/) {
   return TypeList<Lhs...>{};
 }
+
 template <typename... Lhs, typename... Rhs>
 consteval auto concat(TypeList<Lhs...> /*unused*/,
                       TypeList<Rhs...> /*unused*/) {
@@ -57,6 +65,7 @@ consteval auto concat(First /*unused*/, Second /*unused*/, Args... /*unused*/) {
   return concat(concat(First{}, Second{}), Args{}...);
 }
 
+// Type-based equality for TypeLists.
 template <typename... Lhs, typename... Rhs>
 consteval auto operator==(TypeList<Lhs...> /*unused*/,
                           TypeList<Rhs...> /*unused*/) -> bool {

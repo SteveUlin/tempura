@@ -4,6 +4,7 @@
 
 namespace tempura::symbolic {
 
+// Addition operator.
 class Plus {
  public:
   static inline constexpr std::string_view kSymbol = "+"sv;
@@ -23,6 +24,7 @@ constexpr auto operator+(Matcher auto lhs, Matcher auto rhs) {
   return MatcherExpression<Plus, decltype(lhs), decltype(rhs)>{};
 }
 
+// Subtraction operator.
 class Minus {
  public:
   inline static constexpr std::string_view kSymbol = "-"sv;
@@ -42,6 +44,7 @@ constexpr auto operator-(Matcher auto lhs, Matcher auto rhs) {
   return MatcherExpression<Minus, decltype(lhs), decltype(rhs)>{};
 }
 
+// Unary negation operator.
 struct Negate {
   inline static constexpr std::string_view kSymbol = "-"sv;
   inline static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
@@ -58,6 +61,7 @@ constexpr auto operator-(Matcher auto x) {
   return MatcherExpression<Negate, decltype(x)>{};
 }
 
+// Multiplication operator.
 class Multiplies {
  public:
   inline static constexpr std::string_view kSymbol = "*"sv;
@@ -77,6 +81,7 @@ constexpr auto operator*(Matcher auto lhs, Matcher auto rhs) {
   return MatcherExpression<Multiplies, decltype(lhs), decltype(rhs)>{};
 }
 
+// Division operator.
 class Divides {
  public:
   inline static constexpr std::string_view kSymbol = "/"sv;
@@ -96,6 +101,7 @@ constexpr auto operator/(Matcher auto lhs, Matcher auto rhs) {
   return MatcherExpression<Divides, decltype(lhs), decltype(rhs)>{};
 }
 
+// Exponentiation operator.
 class Power {
  public:
   inline static constexpr std::string_view kSymbol = "^"sv;
@@ -116,6 +122,7 @@ constexpr auto pow(Matcher auto lhs, Matcher auto rhs) {
   return MatcherExpression<Power, decltype(lhs), decltype(rhs)>{};
 }
 
+// Square root function.
 struct Sqrt {
   inline static constexpr std::string_view kSymbol = "sqrt"sv;
   inline static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
@@ -134,6 +141,7 @@ constexpr auto sqrt(Matcher auto x) {
   return MatcherExpression<Sqrt, decltype(x)>{};
 }
 
+// Exponential function.
 struct Exp {
   inline static constexpr std::string_view kSymbol = "exp"sv;
   inline static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
@@ -152,6 +160,7 @@ constexpr auto exp(Matcher auto x) {
   return MatcherExpression<Exp, decltype(x)>{};
 }
 
+// Natural logarithm function.
 struct Log {
   inline static constexpr std::string_view kSymbol = "log"sv;
   inline static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
@@ -170,6 +179,7 @@ constexpr auto log(Matcher auto x) {
   return MatcherExpression<Log, decltype(x)>{};
 }
 
+// Sine function.
 struct Sin {
   inline static constexpr std::string_view kSymbol = "sin"sv;
   inline static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
@@ -189,6 +199,7 @@ constexpr auto sin(Matcher auto x) {
   return MatcherExpression<Sin, decltype(x)>{};
 }
 
+// Cosine function.
 struct Cos {
   inline static constexpr std::string_view kSymbol = "cos"sv;
   inline static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
@@ -208,6 +219,7 @@ constexpr auto cos(Matcher auto x) {
   return MatcherExpression<Cos, decltype(x)>{};
 }
 
+// Tangent function.
 struct Tan {
   inline static constexpr std::string_view kSymbol = "tan"sv;
   inline static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
@@ -227,6 +239,7 @@ constexpr auto tan(Matcher auto x) {
   return MatcherExpression<Tan, decltype(x)>{};
 }
 
+// Euler's number e.
 struct E {
   inline static constexpr std::string_view kSymbol = "e"sv;
   inline static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
@@ -237,6 +250,7 @@ static_assert(Operator<E>);
 
 constexpr auto e = SymbolicExpression<E>{};
 
+// Pi constant.
 struct Pi {
   inline static constexpr std::string_view kSymbol = "π"sv;
   inline static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
