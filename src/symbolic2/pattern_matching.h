@@ -73,6 +73,43 @@ inline constexpr PatternVar p_;
 inline constexpr PatternVar q_;
 
 // =============================================================================
+// HELPER: with_vars - Automatic pattern variable extraction
+// =============================================================================
+
+// Helper to reduce boilerplate in RecursiveRewrite lambdas by automatically
+// extracting pattern variables from the context.
+//
+// Instead of writing:
+//   [](auto ctx, auto diff_fn, auto var) {
+//     constexpr auto f = get(ctx, f_);
+//     constexpr auto g = get(ctx, g_);
+//     return diff_fn(f, var) + diff_fn(g, var);
+//   }
+//
+// You can write:
+//   with_vars<f_, g_>([](auto f, auto g, auto diff_fn, auto var) {
+//     return diff_fn(f, var) + diff_fn(g, var);
+//   })
+//
+// The pattern variables are extracted in the order specified in the template
+// arguments, then passed to your lambda along with diff_fn and var.
+
+template <typename Lambda, auto... PatternVars>
+struct WithVarsHelper {
+  Lambda lambda;
+
+  constexpr auto operator()(auto ctx, auto diff_fn, auto var) const {
+    // Extract each pattern variable from the context in order
+    return lambda(get(ctx, PatternVars)..., diff_fn, var);
+  }
+};
+
+template <auto... PatternVars>
+constexpr auto with_vars(auto lambda) {
+  return WithVarsHelper<decltype(lambda), PatternVars...>{lambda};
+}
+
+// =============================================================================
 // WILDCARD PATTERNS - Match categories of expressions
 // =============================================================================
 

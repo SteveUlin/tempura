@@ -20,8 +20,9 @@ namespace tempura {
 
 // A rewrite rule that supports recursive transformations
 // The Replacement can be either:
-//   1. A symbolic expression (like regular Rewrite)
-//   2. A lambda that takes (context, recursive_fn) and returns an expression
+//   1. A symbolic expression (possibly using diff_fn_() and var_)
+//   2. A lambda that takes (context, recursive_fn, var) and returns an
+//   expression
 template <typename Pattern, typename Replacement,
           typename Predicate = NoPredicate>
 struct RecursiveRewrite {
@@ -60,14 +61,14 @@ struct RecursiveRewrite {
         if constexpr (!Predicate{}(bindings_ctx)) {
           return expr;  // Predicate failed
         } else {
-          // Check if Replacement is callable (lambda) or symbolic expression
+          // Check if Replacement is callable (explicit lambda)
           if constexpr (requires {
                           Replacement{}(bindings_ctx, recursive_fn, args...);
                         }) {
-            // Lambda replacement: call it with context and recursive function
+            // Explicit lambda replacement
             return Replacement{}(bindings_ctx, recursive_fn, args...);
           } else {
-            // Symbolic expression replacement: just substitute
+            // Simple symbolic expression replacement: just substitute
             return substitute(Replacement{}, bindings_ctx);
           }
         }

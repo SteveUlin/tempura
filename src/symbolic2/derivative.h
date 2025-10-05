@@ -2,14 +2,14 @@
 
 #include "symbolic2/constants.h"
 #include "symbolic2/operators.h"
-#include "symbolic2/recursive_rewrite.h"
+#include "symbolic2/symbolic_diff_notation.h"
 
 namespace tempura {
 
 // Compute the derivative of a symbolic expression with respect to a variable.
 //
-// Implements standard calculus differentiation rules using the RecursiveRewrite
-// system for clean, declarative rule definitions:
+// Implements standard calculus differentiation rules using pure symbolic
+// notation - no lambda wrappers required!
 //
 // - Constant rule: d/dx(c) = 0
 // - Power rule: d/dx(x^n) = n*x^(n-1)
@@ -23,111 +23,74 @@ namespace tempura {
 //   auto expr = x * x + 2_c * x + 1_c;
 //   auto derivative = diff(expr, x);  // Returns: 2*x + 2
 //
-// Each rule is defined as a RecursiveRewrite with:
-//   1. A pattern (e.g., x_ + y_)
-//   2. A lambda that receives (context, diff_fn, var) and returns the result
+// Each rule is defined using pure symbolic expressions:
+//   1. A pattern (e.g., f_ + g_)
+//   2. A symbolic expression using diff_(expr, var_) for recursion
 //
-// This makes rules easy to write and understand without template
-// metaprogramming!
+// This creates rules that look exactly like mathematical notation!
 //
 template <Symbolic Expr, Symbolic Var>
 constexpr auto diff(Expr expr, Var var);
 
 // =============================================================================
-// DIFFERENTIATION RULES USING RECURSIVE REWRITE SYSTEM
+// DIFFERENTIATION RULES USING PURE SYMBOLIC NOTATION
 // =============================================================================
 //
 // Each rule is defined as:
-//   constexpr auto RuleName = RecursiveRewrite{
+//   constexpr auto RuleName = SymbolicRecursiveRewrite{
 //     pattern,
-//     [](auto ctx, auto diff_fn, auto var) { return transformation; }
+//     symbolic_expression
 //   };
 //
-// The lambda receives:
-//   - ctx: Binding context with matched pattern variables
-//   - diff_fn: Recursive differentiation function to call on subexpressions
-//   - var: The variable we're differentiating with respect to
+// The symbolic expression can use:
+//   - Pattern variables directly (f_, g_, n_, etc.)
+//   - diff_(expr, var_) for recursive differentiation
+//   - var_ as a placeholder for the differentiation variable
 //
-// This approach is much easier to read and write than template specializations!
-//
-// ALL rules (including base cases) are now in the pattern matching system!
+// This creates clean, mathematical notation without any lambda boilerplate!
 
-// =============================================================================
 // =============================================================================
 // ARITHMETIC RULES
 // =============================================================================
 
 // Sum rule: d/dx(f + g) = df/dx + dg/dx
 constexpr auto DiffSum =
-    RecursiveRewrite{f_ + g_, [](auto ctx, auto diff_fn, auto var) {
-                       constexpr auto f = get(ctx, f_);
-                       constexpr auto g = get(ctx, g_);
-                       return diff_fn(f, var) + diff_fn(g, var);
-                     }};
+    SymbolicRecursiveRewrite{f_ + g_, diff_(f_, var_) + diff_(g_, var_)};
 
 // Difference rule: d/dx(f - g) = df/dx - dg/dx
 constexpr auto DiffDifference =
-    RecursiveRewrite{f_ - g_, [](auto ctx, auto diff_fn, auto var) {
-                       constexpr auto f = get(ctx, f_);
-                       constexpr auto g = get(ctx, g_);
-                       return diff_fn(f, var) - diff_fn(g, var);
-                     }};
+    SymbolicRecursiveRewrite{f_ - g_, diff_(f_, var_) - diff_(g_, var_)};
 
 // Negation rule: d/dx(-f) = -df/dx
-constexpr auto DiffNegation =
-    RecursiveRewrite{-f_, [](auto ctx, auto diff_fn, auto var) {
-                       constexpr auto f = get(ctx, f_);
-                       return -diff_fn(f, var);
-                     }};
+constexpr auto DiffNegation = SymbolicRecursiveRewrite{-f_, -diff_(f_, var_)};
 
 // Product rule: d/dx(f * g) = df/dx * g + f * dg/dx
-constexpr auto DiffProduct =
-    RecursiveRewrite{f_ * g_, [](auto ctx, auto diff_fn, auto var) {
-                       constexpr auto f = get(ctx, f_);
-                       constexpr auto g = get(ctx, g_);
-                       return diff_fn(f, var) * g + f * diff_fn(g, var);
-                     }};
+constexpr auto DiffProduct = SymbolicRecursiveRewrite{
+    f_ * g_, diff_(f_, var_) * g_ + f_* diff_(g_, var_)};
 
 // Quotient rule: d/dx(f / g) = (df/dx * g - f * dg/dx) / g²
-constexpr auto DiffQuotient = RecursiveRewrite{
-    f_ / g_, [](auto ctx, auto diff_fn, auto var) {
-      constexpr auto f = get(ctx, f_);
-      constexpr auto g = get(ctx, g_);
-      return (diff_fn(f, var) * g - f * diff_fn(g, var)) / pow(g, 2_c);
-    }};
+constexpr auto DiffQuotient = SymbolicRecursiveRewrite{
+    f_ / g_, (diff_(f_, var_) * g_ - f_ * diff_(g_, var_)) / pow(g_, 2_c)};
 
 // =============================================================================
 // POWER AND EXPONENTIAL RULES
 // =============================================================================
 
 // Power rule: d/dx(f^n) = n * f^(n-1) * df/dx (with chain rule)
-constexpr auto DiffPower =
-    RecursiveRewrite{pow(f_, n_), [](auto ctx, auto diff_fn, auto var) {
-                       constexpr auto f = get(ctx, f_);
-                       constexpr auto n = get(ctx, n_);
-                       return n * pow(f, n - 1_c) * diff_fn(f, var);
-                     }};
+constexpr auto DiffPower = SymbolicRecursiveRewrite{
+    pow(f_, n_), n_* pow(f_, n_ - 1_c) * diff_(f_, var_)};
 
 // Square root: d/dx(√f) = 1/(2√f) * df/dx (with chain rule)
-constexpr auto DiffSqrt =
-    RecursiveRewrite{sqrt(f_), [](auto ctx, auto diff_fn, auto var) {
-                       constexpr auto f = get(ctx, f_);
-                       return (1_c / (2_c * sqrt(f))) * diff_fn(f, var);
-                     }};
+constexpr auto DiffSqrt = SymbolicRecursiveRewrite{
+    sqrt(f_), (1_c / (2_c * sqrt(f_))) * diff_(f_, var_)};
 
 // Exponential: d/dx(e^f) = e^f * df/dx (with chain rule)
 constexpr auto DiffExp =
-    RecursiveRewrite{exp(f_), [](auto ctx, auto diff_fn, auto var) {
-                       constexpr auto f = get(ctx, f_);
-                       return exp(f) * diff_fn(f, var);
-                     }};
+    SymbolicRecursiveRewrite{exp(f_), exp(f_) * diff_(f_, var_)};
 
 // Logarithm: d/dx(log(f)) = 1/f * df/dx (with chain rule)
 constexpr auto DiffLog =
-    RecursiveRewrite{log(f_), [](auto ctx, auto diff_fn, auto var) {
-                       constexpr auto f = get(ctx, f_);
-                       return (1_c / f) * diff_fn(f, var);
-                     }};
+    SymbolicRecursiveRewrite{log(f_), (1_c / f_) * diff_(f_, var_)};
 
 // =============================================================================
 // TRIGONOMETRIC RULES
@@ -135,57 +98,38 @@ constexpr auto DiffLog =
 
 // Sine: d/dx(sin(f)) = cos(f) * df/dx (with chain rule)
 constexpr auto DiffSin =
-    RecursiveRewrite{sin(f_), [](auto ctx, auto diff_fn, auto var) {
-                       constexpr auto f = get(ctx, f_);
-                       return cos(f) * diff_fn(f, var);
-                     }};
+    SymbolicRecursiveRewrite{sin(f_), cos(f_) * diff_(f_, var_)};
 
 // Cosine: d/dx(cos(f)) = -sin(f) * df/dx (with chain rule)
 constexpr auto DiffCos =
-    RecursiveRewrite{cos(f_), [](auto ctx, auto diff_fn, auto var) {
-                       constexpr auto f = get(ctx, f_);
-                       return -sin(f) * diff_fn(f, var);
-                     }};
+    SymbolicRecursiveRewrite{cos(f_), -sin(f_) * diff_(f_, var_)};
 
 // Tangent: d/dx(tan(f)) = sec²(f) * df/dx = 1/cos²(f) * df/dx (with chain rule)
-constexpr auto DiffTan =
-    RecursiveRewrite{tan(f_), [](auto ctx, auto diff_fn, auto var) {
-                       constexpr auto f = get(ctx, f_);
-                       return (1_c / pow(cos(f), 2_c)) * diff_fn(f, var);
-                     }};
+constexpr auto DiffTan = SymbolicRecursiveRewrite{
+    tan(f_), (1_c / pow(cos(f_), 2_c)) * diff_(f_, var_)};
 
 // =============================================================================
 // INVERSE TRIGONOMETRIC RULES
 // =============================================================================
 
 // Arc sine: d/dx(asin(f)) = 1/√(1-f²) * df/dx (with chain rule)
-constexpr auto DiffAsin =
-    RecursiveRewrite{asin(f_), [](auto ctx, auto diff_fn, auto var) {
-                       constexpr auto f = get(ctx, f_);
-                       return (1_c / sqrt(1_c - pow(f, 2_c))) * diff_fn(f, var);
-                     }};
+constexpr auto DiffAsin = SymbolicRecursiveRewrite{
+    asin(f_), (1_c / sqrt(1_c - pow(f_, 2_c))) * diff_(f_, var_)};
 
 // Arc cosine: d/dx(acos(f)) = -1/√(1-f²) * df/dx (with chain rule)
-constexpr auto DiffAcos = RecursiveRewrite{
-    acos(f_), [](auto ctx, auto diff_fn, auto var) {
-      constexpr auto f = get(ctx, f_);
-      return (-1_c / sqrt(1_c - pow(f, 2_c))) * diff_fn(f, var);
-    }};
+constexpr auto DiffAcos = SymbolicRecursiveRewrite{
+    acos(f_), (-1_c / sqrt(1_c - pow(f_, 2_c))) * diff_(f_, var_)};
 
 // Arc tangent: d/dx(atan(f)) = 1/(1+f²) * df/dx (with chain rule)
-constexpr auto DiffAtan =
-    RecursiveRewrite{atan(f_), [](auto ctx, auto diff_fn, auto var) {
-                       constexpr auto f = get(ctx, f_);
-                       return (1_c / (1_c + pow(f, 2_c))) * diff_fn(f, var);
-                     }};
+constexpr auto DiffAtan = SymbolicRecursiveRewrite{
+    atan(f_), (1_c / (1_c + pow(f_, 2_c))) * diff_(f_, var_)};
 
 // =============================================================================
 // BASE CASE RULES
 // =============================================================================
 
 // Constant rule: d/dx(c) = 0 for any constant
-constexpr auto DiffConstant =
-    RecursiveRewrite{𝐜, [](auto, auto, auto) { return 0_c; }};
+constexpr auto DiffConstant = SymbolicRecursiveRewrite{𝐜, 0_c};
 
 // =============================================================================
 // REWRITE SYSTEM
