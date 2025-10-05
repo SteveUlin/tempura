@@ -1,5 +1,8 @@
 #include "symbolic2/derivative.h"
 
+#include "symbolic2/binding.h"
+#include "symbolic2/evaluate.h"
+#include "symbolic2/simplify.h"
 #include "unit.h"
 
 using namespace tempura;
@@ -140,8 +143,7 @@ auto main() -> int {
     auto expr = exp(pow(x, 2_c));
     auto d = diff(expr, x);
     // d/dx(e^(x²)) = e^(x²) * 2x
-    static_assert(
-        match(d, exp(pow(x, 2_c)) * (2_c * pow(x, 2_c - 1_c) * 1_c)));
+    static_assert(match(d, exp(pow(x, 2_c)) * (2_c * pow(x, 2_c - 1_c) * 1_c)));
   };
 
   "Complex: x² + 2x + 1"_test = [] {
@@ -166,7 +168,7 @@ auto main() -> int {
   "Evaluation of derivative"_test = [] {
     Symbol x;
     auto expr = pow(x, 2_c);  // f(x) = x²
-    auto d = diff(expr, x);    // f'(x) = 2x
+    auto d = diff(expr, x);   // f'(x) = 2x
     auto simplified = simplify(d);
 
     // At x=5, f'(5) = 2*5 = 10
@@ -177,7 +179,7 @@ auto main() -> int {
   "Evaluation: derivative of sin(x) at π"_test = [] {
     Symbol x;
     auto expr = sin(x);
-    auto d = diff(expr, x);  // cos(x) * 1
+    auto d = diff(expr, x);         // cos(x) * 1
     auto simplified = simplify(d);  // Should simplify to cos(x)
 
     // cos(π) ≈ -1

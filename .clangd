@@ -13,21 +13,19 @@ CompileFlags:
     - -Xcompiler*
 
 ---
-
 If:
   PathMatch: [.*\.h .*\.cpp]
 Diagnostics:
   UnusedIncludes: Strict
   MissingIncludes: Strict
 ---
-
 CompileFlags:
   CompilationDatabase: build/
   Add:
     - -std=c++2c
 Diagnostics:
   ClangTidy:
-    Add: 
+    Add:
       - modernize-*
       - readability-*
       - performance-*
@@ -42,5 +40,4 @@ Diagnostics:
       - readability-braces-around-statements
       - readability-math-missing-parentheses
       - readability-named-parameter
-
-
+      - modernize-use-designated-initializers

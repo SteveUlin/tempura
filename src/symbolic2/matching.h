@@ -26,7 +26,7 @@ constexpr auto matchImpl(Rank4, S, S) -> bool {
   return true;
 }
 
-// Rank3: Wildcard matching
+// Rank3: Wildcard matching (symmetric - order doesn't matter)
 template <Symbolic S>
 constexpr auto matchImpl(Rank3, S, AnyArg) -> bool {
   return true;
@@ -35,6 +35,7 @@ template <Symbolic S>
 constexpr auto matchImpl(Rank3, AnyArg, S) -> bool {
   return true;
 }
+
 template <typename Op, Symbolic... Args>
 constexpr auto matchImpl(Rank3, Expression<Op, Args...>, AnyExpr) -> bool {
   return true;
@@ -43,6 +44,7 @@ template <typename Op, Symbolic... Args>
 constexpr auto matchImpl(Rank3, AnyExpr, Expression<Op, Args...>) -> bool {
   return true;
 }
+
 template <auto value>
 constexpr auto matchImpl(Rank3, Constant<value>, AnyConstant) -> bool {
   return true;
@@ -51,6 +53,7 @@ template <auto value>
 constexpr auto matchImpl(Rank3, AnyConstant, Constant<value>) -> bool {
   return true;
 }
+
 template <typename Unique>
 constexpr auto matchImpl(Rank3, Symbol<Unique>, AnySymbol) -> bool {
   return true;

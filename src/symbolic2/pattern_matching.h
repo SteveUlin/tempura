@@ -2,9 +2,7 @@
 
 #include "core.h"
 #include "matching.h"
-#include "accessors.h"
 #include "meta/tags.h"
-#include <tuple>
 
 // Advanced pattern matching with variable binding for symbolic expressions
 //
@@ -124,7 +122,13 @@ struct BindingContext {
     return lookupImpl<VarId, Entries...>();
   }
 
-private:
+  // Check if a variable is already bound
+  template <TypeId VarId>
+  static constexpr bool isBound() {
+    return isBoundImpl<VarId, Entries...>();
+  }
+
+ private:
   template <TypeId VarId, typename Entry, typename... Rest>
   static constexpr auto lookupImpl() {
     if constexpr (Entry::var_id == VarId) {
@@ -132,7 +136,8 @@ private:
     } else if constexpr (sizeof...(Rest) > 0) {
       return lookupImpl<VarId, Rest...>();
     } else {
-      // Not found - return the PatternVar itself (shouldn't happen if bindings are correct)
+      // Not found - return the PatternVar itself (shouldn't happen if bindings
+      // are correct)
       return PatternVar<TypeOf<VarId>>{};
     }
   }
@@ -142,12 +147,28 @@ private:
     // Empty context - return PatternVar
     return PatternVar<TypeOf<VarId>>{};
   }
+
+  template <TypeId VarId, typename Entry, typename... Rest>
+  static constexpr bool isBoundImpl() {
+    if constexpr (Entry::var_id == VarId) {
+      return true;
+    } else if constexpr (sizeof...(Rest) > 0) {
+      return isBoundImpl<VarId, Rest...>();
+    } else {
+      return false;
+    }
+  }
+
+  template <TypeId VarId>
+  static constexpr bool isBoundImpl() {
+    return false;
+  }
 };
 
 // Empty context for initial state
 using EmptyContext = BindingContext<>;
 
-} // namespace detail
+}  // namespace detail
 
 // Helper function to get binding value for a pattern variable from context
 // Usage: get(ctx, x_) returns the expression bound to x_
@@ -166,7 +187,8 @@ namespace detail {
 
 // Substitute a pattern variable - lookup in context
 template <typename Unique, typename... Entries>
-constexpr auto substitute_impl(PatternVar<Unique> var, BindingContext<Entries...> ctx) {
+constexpr auto substitute_impl([[maybe_unused]] PatternVar<Unique> var,
+                               BindingContext<Entries...> ctx) {
   return ctx.template lookup<PatternVar<Unique>::id>();
 }
 
@@ -199,7 +221,7 @@ constexpr auto substitute_impl(AnyExpr, Context) {
   return AnyExpr{};
 }
 
-} // namespace detail
+}  // namespace detail
 
 // Public substitution API with context
 template <Symbolic Expr, typename Context>
@@ -210,28 +232,31 @@ constexpr auto substitute(Expr expr, Context ctx) {
 // Helper to build a binding context from PatternVar/value pairs
 // Usage: makeBindings(x_, val1, y_, val2, ...)
 namespace detail {
-  template <typename... Pairs>
-  constexpr auto makeBindingsImpl() {
-    return EmptyContext{};
-  }
+template <typename... Pairs>
+constexpr auto makeBindingsImpl() {
+  return EmptyContext{};
+}
 
-  template <typename VarUnique, Symbolic BoundExpr, typename... Rest>
-  constexpr auto makeBindingsImpl(PatternVar<VarUnique> var, BoundExpr expr, Rest... rest) {
-    auto ctx = BindingContext<BindingEntry<PatternVar<VarUnique>::id, BoundExpr>>{};
-    if constexpr (sizeof...(Rest) > 0) {
-      // Merge with remaining bindings
-      return mergeContexts(ctx, makeBindingsImpl(rest...));
-    } else {
-      return ctx;
-    }
-  }
-
-  // Merge two contexts
-  template <typename... Entries1, typename... Entries2>
-  constexpr auto mergeContexts(BindingContext<Entries1...>, BindingContext<Entries2...>) {
-    return BindingContext<Entries1..., Entries2...>{};
+template <typename VarUnique, Symbolic BoundExpr, typename... Rest>
+constexpr auto makeBindingsImpl([[maybe_unused]] PatternVar<VarUnique> var,
+                                [[maybe_unused]] BoundExpr expr, Rest... rest) {
+  auto ctx =
+      BindingContext<BindingEntry<PatternVar<VarUnique>::id, BoundExpr>>{};
+  if constexpr (sizeof...(Rest) > 0) {
+    // Merge with remaining bindings
+    return mergeContexts(ctx, makeBindingsImpl(rest...));
+  } else {
+    return ctx;
   }
 }
+
+// Merge two contexts
+template <typename... Entries1, typename... Entries2>
+constexpr auto mergeContexts(BindingContext<Entries1...>,
+                             BindingContext<Entries2...>) {
+  return BindingContext<Entries1..., Entries2...>{};
+}
+}  // namespace detail
 
 template <typename... Pairs>
 constexpr auto makeBindings(Pairs... pairs) {
@@ -241,7 +266,7 @@ constexpr auto makeBindings(Pairs... pairs) {
 // Convenience overload for simple substitution with explicit var/value pairs
 // Usage: substitute(expr, x_, val1, y_, val2)
 template <Symbolic Expr, typename... Pairs>
-  requires (sizeof...(Pairs) % 2 == 0)
+  requires(sizeof...(Pairs) % 2 == 0)
 constexpr auto substitute(Expr expr, Pairs... pairs) {
   auto ctx = makeBindings(pairs...);
   return detail::substitute_impl(expr, ctx);
@@ -257,13 +282,45 @@ namespace detail {
 // BINDING EXTRACTION - Recursively walk pattern and expression
 // =============================================================================
 
+// Marker type to indicate binding failure (when repeated PatternVar matches
+// different expressions)
+struct BindingFailure {};
+
+// Check if a type is BindingFailure
+template <typename T>
+constexpr bool isBindingFailure() {
+  return std::is_same_v<T, BindingFailure>;
+}
+
 // Walk pattern and expression together, collecting bindings in a context
-// Returns a BindingContext with all matched PatternVars bound to their expressions
+// Returns a BindingContext with all matched PatternVars bound to their
+// expressions Returns BindingFailure if a PatternVar appears multiple times
+// with different bindings
 
 // PatternVar: bind it to the expression in the context
+// If already bound, check that the new binding matches the existing one
 template <typename Unique, Symbolic S, typename... Entries>
-constexpr auto extractBindingsImpl(PatternVar<Unique> var, S expr, BindingContext<Entries...>) {
-  return BindingContext<Entries..., BindingEntry<PatternVar<Unique>::id, S>>{};
+constexpr auto extractBindingsImpl([[maybe_unused]] PatternVar<Unique> var,
+                                   S expr, BindingContext<Entries...> ctx) {
+  constexpr TypeId varId = PatternVar<Unique>::id;
+
+  // Check if this variable is already bound
+  if constexpr (ctx.template isBound<varId>()) {
+    // Get the existing binding
+    auto existingBinding = ctx.template lookup<varId>();
+
+    // Check if the new expression matches the existing binding
+    if constexpr (match(existingBinding, expr)) {
+      // Same binding, just return the existing context
+      return ctx;
+    } else {
+      // Different binding for the same variable - pattern match fails!
+      return BindingFailure{};
+    }
+  } else {
+    // First time binding this variable
+    return BindingContext<Entries..., BindingEntry<varId, S>>{};
+  }
 }
 
 // Constant: no new bindings
@@ -278,31 +335,37 @@ constexpr auto extractBindingsImpl(Symbol<U>, S, Context ctx) {
   return ctx;
 }
 
-// Helper to get the Nth argument from an expression (forward declaration needed)
+// Helper to get Nth type from parameter pack (compile-time only, no std::)
 template <std::size_t N, typename First, typename... Rest>
-constexpr auto getNthArgImpl(First first, Rest... rest) {
-  if constexpr (N == 0) {
-    return first;
-  } else {
-    return getNthArgImpl<N - 1>(rest...);
-  }
-}
+struct GetNthType {
+  using type = typename GetNthType<N - 1, Rest...>::type;
+};
 
+template <typename First, typename... Rest>
+struct GetNthType<0, First, Rest...> {
+  using type = First;
+};
+
+}  // namespace detail
+
+// Helper to get the Nth argument from an expression (compile-time only)
 template <std::size_t N, typename Op, Symbolic... Args>
 constexpr auto getNthArg(Expression<Op, Args...>) {
-  return []<std::size_t... Is>(std::index_sequence<Is...>) {
-    return getNthArgImpl<N>(Args{}...);
-  }(std::index_sequence_for<Args...>{});
+  return typename detail::GetNthType<N, Args...>::type{};
 }
 
+namespace detail {
+
 // Forward declarations for mutual recursion
-template <std::size_t Idx, typename Op, Symbolic... PatternArgs, typename ExprOp, Symbolic... ExprArgs, typename Context>
+template <std::size_t Idx, typename Op, Symbolic... PatternArgs,
+          typename ExprOp, Symbolic... ExprArgs, typename Context>
 constexpr auto extractBindingsThreaded(Expression<Op, PatternArgs...>,
                                        Expression<ExprOp, ExprArgs...> expr,
                                        Context ctx);
 
 // Helper to thread context through argument pairs
-template <std::size_t Idx, typename Op, Symbolic... PatternArgs, typename ExprOp, Symbolic... ExprArgs, typename Context>
+template <std::size_t Idx, typename Op, Symbolic... PatternArgs,
+          typename ExprOp, Symbolic... ExprArgs, typename Context>
 constexpr auto extractBindingsThreaded(Expression<Op, PatternArgs...>,
                                        Expression<ExprOp, ExprArgs...> expr,
                                        Context ctx) {
@@ -310,27 +373,31 @@ constexpr auto extractBindingsThreaded(Expression<Op, PatternArgs...>,
     return ctx;  // Done with all arguments
   } else {
     // Extract bindings for argument Idx and thread to next
-    auto new_ctx = extractBindingsImpl(
-      getNthArg<Idx>(Expression<Op, PatternArgs...>{}),
-      getNthArg<Idx>(expr),
-      ctx
-    );
-    return extractBindingsThreaded<Idx + 1>(
-      Expression<Op, PatternArgs...>{},
-      expr,
-      new_ctx
-    );
+    auto new_ctx =
+        extractBindingsImpl(getNthArg<Idx>(Expression<Op, PatternArgs...>{}),
+                            getNthArg<Idx>(expr), ctx);
+
+    // Check if binding failed
+    if constexpr (isBindingFailure<decltype(new_ctx)>()) {
+      return BindingFailure{};
+    } else {
+      return extractBindingsThreaded<Idx + 1>(Expression<Op, PatternArgs...>{},
+                                              expr, new_ctx);
+    }
   }
 }
 
 // Expression: recursively collect bindings from all arguments
-template <typename Op, Symbolic... PatternArgs, typename ExprOp, Symbolic... ExprArgs, typename Context>
+template <typename Op, Symbolic... PatternArgs, typename ExprOp,
+          Symbolic... ExprArgs, typename Context>
 constexpr auto extractBindingsImpl(Expression<Op, PatternArgs...>,
                                    Expression<ExprOp, ExprArgs...> expr,
                                    Context ctx) {
-  if constexpr (std::is_same_v<Op, ExprOp> && sizeof...(PatternArgs) == sizeof...(ExprArgs)) {
+  if constexpr (std::is_same_v<Op, ExprOp> &&
+                sizeof...(PatternArgs) == sizeof...(ExprArgs)) {
     // Thread the context through each argument pair
-    return extractBindingsThreaded<0>(Expression<Op, PatternArgs...>{}, expr, ctx);
+    return extractBindingsThreaded<0>(Expression<Op, PatternArgs...>{}, expr,
+                                      ctx);
   } else {
     return ctx;  // No match, return unchanged context
   }
@@ -342,7 +409,7 @@ constexpr auto extractBindings(Pattern pattern, Expr expr) {
   return extractBindingsImpl(pattern, expr, EmptyContext{});
 }
 
-} // namespace detail// =============================================================================
+}  // namespace detail
 // REWRITE RULES - Pattern-based transformations with substitution
 // =============================================================================
 
@@ -354,17 +421,22 @@ constexpr auto extractBindings(Pattern pattern, Expr expr) {
 //   Matches pow(anything, 0) and replaces with 1
 //
 // Example with predicate: Rewrite{x_ + y_, y_ + x_, [](auto ctx) {
-//   return symbolicLessThan(ctx.template lookup<y_.id>(), ctx.template lookup<x_.id>());
+//   return symbolicLessThan(ctx.template lookup<y_.id>(), ctx.template
+//   lookup<x_.id>());
 // }}
-//   Matches x + y and replaces with y + x only if y < x (for canonical ordering)
+//   Matches x + y and replaces with y + x only if y < x (for canonical
+//   ordering)
 
 // Helper type to represent "no predicate" (always true)
 struct NoPredicate {
   template <typename Context>
-  static constexpr bool operator()(Context) { return true; }
+  static constexpr bool operator()(Context) {
+    return true;
+  }
 };
 
-template <typename Pattern, typename Replacement, typename Predicate = NoPredicate>
+template <typename Pattern, typename Replacement,
+          typename Predicate = NoPredicate>
 struct Rewrite {
   Pattern pattern;
   Replacement replacement;
@@ -378,7 +450,14 @@ struct Rewrite {
     } else {
       // Extract bindings and check predicate
       auto bindings_ctx = detail::extractBindings(Pattern{}, expr);
-      return Predicate{}(bindings_ctx);
+
+      // Check if binding extraction failed (repeated PatternVar with different
+      // values)
+      if constexpr (detail::isBindingFailure<decltype(bindings_ctx)>()) {
+        return false;
+      } else {
+        return Predicate{}(bindings_ctx);
+      }
     }
   }
 
@@ -392,12 +471,17 @@ struct Rewrite {
       // Extract bindings from the pattern match into a context
       auto bindings_ctx = detail::extractBindings(Pattern{}, expr);
 
-      // Check predicate
-      if constexpr (!Predicate{}(bindings_ctx)) {
-        return expr;  // Predicate failed, return unchanged
+      // Check if binding extraction failed
+      if constexpr (detail::isBindingFailure<decltype(bindings_ctx)>()) {
+        return expr;  // Binding failed, return unchanged
       } else {
-        // Apply the bindings to the replacement expression
-        return substitute(Replacement{}, bindings_ctx);
+        // Check predicate
+        if constexpr (!Predicate{}(bindings_ctx)) {
+          return expr;  // Predicate failed, return unchanged
+        } else {
+          // Apply the bindings to the replacement expression
+          return substitute(Replacement{}, bindings_ctx);
+        }
       }
     }
   }
@@ -414,24 +498,6 @@ Rewrite(P, R, Pred) -> Rewrite<P, R, Pred>;
 // REWRITE SYSTEM - Apply multiple rewrite rules
 // =============================================================================
 
-namespace detail {
-
-// Helper to get Nth type from parameter pack
-template <std::size_t N, typename... Ts>
-struct get_nth_type;
-
-template <typename T, typename... Ts>
-struct get_nth_type<0, T, Ts...> {
-  using type = T;
-};
-
-template <std::size_t N, typename T, typename... Ts>
-struct get_nth_type<N, T, Ts...> {
-  using type = typename get_nth_type<N - 1, Ts...>::type;
-};
-
-} // namespace detail
-
 // Apply a sequence of rewrite rules
 // Tries each rule in order, returns first match or original expression
 template <typename... Rules>
@@ -445,7 +511,7 @@ struct RewriteSystem {
     if constexpr (Index >= sizeof...(Rules)) {
       return expr;  // No rules matched
     } else {
-      using CurrentRule = typename detail::get_nth_type<Index, Rules...>::type;
+      using CurrentRule = typename detail::GetNthType<Index, Rules...>::type;
 
       if constexpr (CurrentRule::matches(expr)) {
         return CurrentRule::apply(expr);
@@ -501,4 +567,4 @@ constexpr auto result = PowerRules.apply(pow(b, 0_c));
 
 */
 
-} // namespace tempura
+}  // namespace tempura

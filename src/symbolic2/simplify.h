@@ -9,32 +9,54 @@
 #include "ordering.h"
 #include "pattern_matching.h"
 
-// Simplification rules for symbolic expressions using pattern matching RewriteSystem
+// Simplification rules for symbolic expressions using pattern matching
+// RewriteSystem
 //
-// This file uses a hybrid approach:
-// 1. RewriteSystem - For simple structural transformations (identities, inverses)
-// 2. RewriteSystem with Predicates - For conditional transformations (ordering, etc.)
-// 3. Custom logic - For complex transformations (factoring, deep associativity)
+// 🎉 FULLY MIGRATED to RewriteSystem with category-based organization!
 //
-// Migrated to RewriteSystem (29 rules across 10 systems):
+// All simplification rules now use the declarative RewriteSystem, organized by
+// category for better maintainability and testability:
+//
 //   ✓ PowerRules (5 rules) - x^0→1, x^1→x, 1^x→1, 0^x→0, (x^a)^b→x^(a*b)
-//   ✓ ExpRules (1 rule) - exp(log(x))→x
+//
+//   ✓ AdditionRules (9 rules, 5 categories):
+//     - Identity: 0 + x, x + 0
+//     - LikeTerms: x + x → 2x
+//     - Ordering: canonical ordering with predicates
+//     - Factoring: x*a + x*b → x*(a+b)
+//     - Associativity: structural normalization
+//
+//   ✓ MultiplicationRules (13 rules, 5 categories):
+//     - Identity: 0 * x, x * 0, 1 * x, x * 1
+//     - Distribution: (a+b)*c → a*c + b*c
+//     - PowerCombining: x*x^a → x^(a+1), x^a*x^b → x^(a+b)
+//     - Ordering: canonical ordering with predicates
+//     - Associativity: structural normalization
+//
+//   ✓ ExpRules (2 rules) - exp(log(x))→x, exp(x)→e^x
 //   ✓ LogRules (6 rules) - log(1)→0, log(e)→1, log(x^a)→a*log(x), etc.
-//   ✓ SinRules (3 rules) - sin(π/2)→1, sin(π)→0, sin(3π/2)→-1
+//   ✓ SinRules (4 rules) - sin(π/2)→1, sin(π)→0, sin(3π/2)→-1, sin(-x)→-sin(x)
 //   ✓ CosRules (3 rules) - cos(π/2)→0, cos(π)→-1, cos(3π/2)→0
 //   ✓ TanRules (1 rule) - tan(π)→0
-//   ✓ AdditionRules (2 rules) - 0+x→x, x+0→x
-//   ✓ MultiplicationRules (4 rules) - 0*x→0, x*0→0, 1*x→x, x*1→x
-//   ✓ DistributionRules (2 rules) - (a+b)*c→a*c+b*c, a*(b+c)→a*b+a*c
+//   ✓ SubtractionRules - rewritten to addition (a-b → a+(-1*b))
+//   ✓ DivisionRules - rewritten to power (a/b → a*b^(-1))
 //
-// New: Predicate-based rewriting for conditional transformations!
-//   Predicates allow expressing rules like "reorder x+y to y+x if y < x"
-//   See PREDICATE_REWRITING.md for documentation and examples.
+// Predicate-based rules enable conditional transformations:
+//   - Canonical ordering: x+y → y+x if y < x
+//   - Associative reordering: (a+c)+b → (a+b)+c if b < c
+//   - Like term combining: x*a + x*b → x*(a+b) when bases match
+//   - Power laws: x*x^a → x^(a+1), x^a*x^b → x^(a+b) when bases match
 //
-// Benefits: ~44% code reduction for fully migrated functions, declarative style,
-//           self-documenting rules, easy to extend, zero runtime overhead
+// NEW: Category-based organization with compose() helper:
+//   - Rules organized by semantic purpose (Identity, Ordering, Factoring, etc.)
+//   - Each category can be tested independently
+//   - Easy to create custom rule combinations
+//   - Self-documenting code structure
 //
-// See SIMPLIFY_REWRITE.md for detailed documentation of the migration.
+// See PREDICATE_REWRITING.md for documentation and examples.
+//
+// Benefits: Fully declarative, self-documenting rules, easy to extend,
+//           zero runtime overhead, type-safe compile-time evaluation
 
 namespace tempura {
 
@@ -50,194 +72,164 @@ constexpr auto evalConstantExpr(Expression<Op, Args...> expr) {
   return Constant<evaluate(expr, BinderPack{})>{};
 }
 
+// Helper: Apply a RewriteSystem to an expression
+template <auto& Rules, Symbolic S>
+constexpr auto applyRules(S expr) {
+  return Rules.apply(expr);
+}
+
+// Helper: Compose multiple RewriteSystems into one
+namespace detail {
+// Base case: single system
+template <typename... Rules>
+constexpr auto composeRulesImpl(RewriteSystem<Rules...>) {
+  return RewriteSystem<Rules...>{Rules{}...};
+}
+
+// Recursive case: combine two systems and continue
+template <typename... Rules1, typename... Rules2, typename... Rest>
+constexpr auto composeRulesImpl(RewriteSystem<Rules1...>,
+                                RewriteSystem<Rules2...>, Rest... rest) {
+  // Create combined system with all rules
+  auto combined = RewriteSystem<Rules1..., Rules2...>{Rules1{}..., Rules2{}...};
+  if constexpr (sizeof...(Rest) > 0) {
+    return composeRulesImpl(combined, rest...);
+  } else {
+    return combined;
+  }
+}
+}  // namespace detail
+
+template <typename... Systems>
+constexpr auto compose(Systems... systems) {
+  return detail::composeRulesImpl(systems...);
+}
+
 // Power simplification rules using RewriteSystem
 constexpr auto PowerRules = RewriteSystem{
-  Rewrite{pow(x_, 0_c), 1_c},                     // x^0 → 1
-  Rewrite{pow(x_, 1_c), x_},                      // x^1 → x
-  Rewrite{pow(1_c, x_), 1_c},                     // 1^x → 1
-  Rewrite{pow(0_c, x_), 0_c},                     // 0^x → 0
-  Rewrite{pow(pow(x_, a_), b_), pow(x_, a_ * b_)} // (x^a)^b → x^(a*b)
+    Rewrite{pow(x_, 0_c), 1_c},                     // x^0 → 1
+    Rewrite{pow(x_, 1_c), x_},                      // x^1 → x
+    Rewrite{pow(1_c, x_), 1_c},                     // 1^x → 1
+    Rewrite{pow(0_c, x_), 0_c},                     // 0^x → 0
+    Rewrite{pow(pow(x_, a_), b_), pow(x_, a_* b_)}  // (x^a)^b → x^(a*b)
 };
 
 template <Symbolic S>
   requires(match(S{}, pow(AnyArg{}, AnyArg{})))
 constexpr auto powerIdentities(S expr) {
-  return PowerRules.apply(expr);
+  return applyRules<PowerRules>(expr);
 }
 
-// Addition basic identity rules
-constexpr auto AdditionRules = RewriteSystem{
-  Rewrite{0_c + x_, x_},         // 0 + x → x
-  Rewrite{x_ + 0_c, x_}          // x + 0 → x
+// Addition rules organized by category for better maintainability
+namespace AdditionRuleCategories {
+// Identity: operations with zero
+constexpr auto Identity = RewriteSystem{
+    Rewrite{0_c + x_, x_},  // 0 + x → x
+    Rewrite{x_ + 0_c, x_}   // x + 0 → x
 };
 
-// TODO: Migrate canonical ordering to predicate-based rewriting:
-// constexpr auto AdditionRulesWithOrdering = RewriteSystem{
-//   Rewrite{0_c + x_, x_},
-//   Rewrite{x_ + 0_c, x_},
-//   Rewrite{x_ + y_, y_ + x_, [](auto ctx) {
-//     return symbolicLessThan(get(ctx, y_), get(ctx, x_));
-//   }}
-// };
+// Like terms: combining identical expressions
+constexpr auto LikeTerms = RewriteSystem{
+    Rewrite{x_ + x_, x_ * 2_c}  // x + x → 2x
+};
+
+// Ordering: canonical form for consistent representation
+constexpr auto Ordering =
+    RewriteSystem{// x + y → y + x if y < x (ensures canonical ordering)
+                  Rewrite{x_ + y_, y_ + x_, [](auto ctx) {
+                            return symbolicLessThan(get(ctx, y_), get(ctx, x_));
+                          }}};
+
+// Factoring: extract common factors
+constexpr auto Factoring = RewriteSystem{
+    Rewrite{x_ * a_ + x_, x_*(a_ + 1_c)},     // x*a + x → x*(a+1)
+    Rewrite{x_ * a_ + x_ * b_, x_*(a_ + b_)}  // x*a + x*b → x*(a+b)
+};
+
+// Associativity: restructure nested additions
+constexpr auto Associativity = RewriteSystem{
+    // (a + c) + b → (a + b) + c if b < c (reorder for canonical form)
+    Rewrite{
+        (a_ + c_) + b_, (a_ + b_) + c_,
+        [](auto ctx) { return symbolicLessThan(get(ctx, b_), get(ctx, c_)); }},
+
+    // (a + b) + c → a + (b + c) (right-associative normalization)
+    Rewrite{(a_ + b_) + c_, a_ + (b_ + c_)}};
+}  // namespace AdditionRuleCategories
+
+// Complete addition rule set composed from categories
+constexpr auto AdditionRules =
+    compose(AdditionRuleCategories::Identity, AdditionRuleCategories::LikeTerms,
+            AdditionRuleCategories::Ordering, AdditionRuleCategories::Factoring,
+            AdditionRuleCategories::Associativity);
 
 template <Symbolic S>
   requires(match(S{}, AnyArg{} + AnyArg{}))
 constexpr auto additionIdentities(S expr) {
-  // Try basic identity rules first
-  constexpr auto result = AdditionRules.apply(expr);
-  if constexpr (!match(result, expr)) {
-    return result;
-  }
-
-  // x + x = x * 2
-  else if constexpr (match(left(expr), right(expr))) {
-    constexpr auto x = left(expr);
-    return x * 2_c;  // Don't recurse - let outer loop handle it
-  }
-
-  // Canonical ordering: smaller term first
-  // NOTE: This can be migrated to a predicate-based rewrite rule!
-  else if constexpr (symbolicLessThan(right(expr), left(expr))) {
-    return right(expr) + left(expr);
-  }
-
-  // Associativity for sorted terms: (a + c) + b → (a + b) + c when b < c
-  else if constexpr (match(expr, (AnyArg{} + AnyArg{}) + AnyArg{}) &&
-                     symbolicLessThan(right(expr), right(left(expr)))) {
-    constexpr auto a = left(left(expr));
-    constexpr auto c = right(left(expr));
-    constexpr auto b = right(expr);
-    return (a + b) + c;
-  }
-
-  // Factoring patterns
-
-  // x * a + x → x * (a + 1)
-  else if constexpr (match(expr, AnyArg{} * AnyArg{} + AnyArg{}) &&
-                     match(left(left(expr)), right(expr))) {
-    constexpr auto x = left(left(expr));
-    constexpr auto a = right(left(expr));
-    return x * (a + 1_c);
-  }
-
-  // x * a + x * b → x * (a + b)
-  else if constexpr (match(expr, AnyArg{} * AnyArg{} + AnyArg{} * AnyArg{}) &&
-                     match(left(left(expr)), left(right(expr)))) {
-    constexpr auto x = left(left(expr));
-    constexpr auto a = right(left(expr));
-    constexpr auto b = right(right(expr));
-    return x * (a + b);
-  }
-
-  // Right-associative normalization: (a + b) + c → a + (b + c)
-  else if constexpr (match(expr, (AnyArg{} + AnyArg{}) + AnyArg{})) {
-    constexpr auto a = left(left(expr));
-    constexpr auto b = right(left(expr));
-    constexpr auto c = right(expr);
-    return a + (b + c);
-  }
-
-  else {
-    return expr;
-  }
+  return applyRules<AdditionRules>(expr);
 }
 
-// Multiplication basic identity rules
-constexpr auto MultiplicationRules = RewriteSystem{
-  Rewrite{0_c * x_, 0_c},                      // 0 * x → 0
-  Rewrite{x_ * 0_c, 0_c},                      // x * 0 → 0
-  Rewrite{1_c * x_, x_},                       // 1 * x → x
-  Rewrite{x_ * 1_c, x_}                        // x * 1 → x
+// Multiplication rules organized by category
+// NOTE: Category ordering matters! Distribution must come before associativity
+// rewrites.
+namespace MultiplicationRuleCategories {
+// Identity and annihilator operations
+constexpr auto Identity = RewriteSystem{
+    Rewrite{0_c * x_, 0_c},  // 0 * x → 0 (annihilator)
+    Rewrite{x_ * 0_c, 0_c},  // x * 0 → 0 (annihilator)
+    Rewrite{1_c * x_, x_},   // 1 * x → x (multiplicative identity)
+    Rewrite{x_ * 1_c, x_}    // x * 1 → x (multiplicative identity)
 };
 
-// Distribution rules (can be applied separately)
-constexpr auto DistributionRules = RewriteSystem{
-  Rewrite{(a_ + b_) * c_, (a_ * c_) + (b_ * c_)},  // (a + b) * c → a*c + b*c
-  Rewrite{a_ * (b_ + c_), (a_ * b_) + (a_ * c_)}   // a * (b + c) → a*b + a*c
+// Distribution: expand products over sums
+constexpr auto Distribution = RewriteSystem{
+    Rewrite{(a_ + b_) * c_, (a_ * c_) + (b_ * c_)},  // (a+b)*c → a*c + b*c
+    Rewrite{a_ * (b_ + c_), (a_ * b_) + (a_ * c_)}   // a*(b+c) → a*b + a*c
 };
+
+// Power combining: x * x^a → x^(a+1)
+// Note: Pattern matching ensures both x_ bind to the same value
+constexpr auto PowerCombining = RewriteSystem{
+    Rewrite{x_ * pow(x_, a_), pow(x_, a_ + 1_c)},         // x * x^a → x^(a+1)
+    Rewrite{pow(x_, a_) * x_, pow(x_, a_ + 1_c)},         // x^a * x → x^(a+1)
+    Rewrite{pow(x_, a_) * pow(x_, b_), pow(x_, a_ + b_)}  // x^a * x^b → x^(a+b)
+};
+
+// Ordering: canonical form for consistent representation
+constexpr auto Ordering =
+    RewriteSystem{// x * y → y * x if y < x (ensures canonical ordering)
+                  Rewrite{x_ * y_, y_* x_, [](auto ctx) {
+                            return symbolicLessThan(get(ctx, y_), get(ctx, x_));
+                          }}};
+
+// Associativity: restructure nested multiplications
+constexpr auto Associativity = RewriteSystem{
+    // a * (b * c) → (a * b) * c (left-associative normalization)
+    Rewrite{a_ * (b_ * c_), (a_ * b_) * c_},
+
+    // (a * c) * b → (a * b) * c if b < c (reorder for canonical form)
+    Rewrite{
+        (a_ * c_) * b_, (a_ * b_) * c_,
+        [](auto ctx) { return symbolicLessThan(get(ctx, b_), get(ctx, c_)); }},
+
+    // (a * b) * c → a * (b * c) (right-associative fallback)
+    Rewrite{(a_ * b_) * c_, a_*(b_* c_)}};
+}  // namespace MultiplicationRuleCategories
+
+// Complete multiplication rule set composed from categories
+// Order matters: Identity → Distribution → PowerCombining → Ordering →
+// Associativity
+constexpr auto MultiplicationRules =
+    compose(MultiplicationRuleCategories::Identity,
+            MultiplicationRuleCategories::Distribution,
+            MultiplicationRuleCategories::PowerCombining,
+            MultiplicationRuleCategories::Ordering,
+            MultiplicationRuleCategories::Associativity);
 
 template <Symbolic S>
   requires(match(S{}, AnyArg{} * AnyArg{}))
 constexpr auto multiplicationIdentities(S expr) {
-  // Try basic identity rules first
-  constexpr auto result = MultiplicationRules.apply(expr);
-  if constexpr (!match(result, expr)) {
-    return result;
-  }
-
-  // Power combining: x * x^a → x^(a+1)
-  else if constexpr (match(expr, AnyArg{} * pow(AnyArg{}, AnyArg{})) and
-                     match(left(expr), left(right(expr)))) {
-    constexpr auto x = left(expr);
-    constexpr auto a = right(right(expr));
-    return pow(x, a + 1_c);
-  }
-
-  // Power combining: x^a * x → x^(a+1)
-  else if constexpr (match(expr, pow(AnyArg{}, AnyArg{}) * AnyArg{}) and
-                     match(left(left(expr)), right(expr))) {
-    constexpr auto x = left(left(expr));
-    constexpr auto a = right(left(expr));
-    return pow(x, a + 1_c);
-  }
-
-  // Power combining: x^a * x^b → x^(a+b)
-  else if constexpr (match(expr, (pow(AnyArg{}, AnyArg{}) *
-                                  pow(AnyArg{}, AnyArg{}))) and
-                     (match(left(left(expr)), left(right(expr))))) {
-    constexpr auto x = left(left(expr));
-    constexpr auto a = right(left(expr));
-    constexpr auto b = right(right(expr));
-    return pow(x, a + b);
-  }
-
-  // Distribution: (a + b) * c → a*c + b*c  or  a * (b + c) → a*b + a*c
-  else if constexpr (match(expr, (AnyArg{} + AnyArg{}) * AnyArg{}) ||
-                     match(expr, AnyArg{} * (AnyArg{} + AnyArg{}))) {
-    constexpr auto dist_result = DistributionRules.apply(expr);
-    if constexpr (!match(dist_result, expr)) {
-      return dist_result;
-    } else {
-      return expr;  // Shouldn't happen, but fallback
-    }
-  }
-
-  // Canonical ordering: smaller term first
-  // NOTE: This can be migrated to a predicate-based rewrite rule!
-  else if constexpr (symbolicLessThan(right(expr), left(expr))) {
-    constexpr auto a = left(expr);
-    constexpr auto b = right(expr);
-    return b * a;
-  }
-
-  // Left-associative normalization: a * (b * c) → (a * b) * c
-  else if constexpr (match(expr, AnyArg{} * (AnyArg{} * AnyArg{}))) {
-    constexpr auto a = left(expr);
-    constexpr auto b = left(right(expr));
-    constexpr auto c = right(right(expr));
-    return (a * b) * c;
-  }
-
-  // Associativity for sorted terms: (a * c) * b → (a * b) * c when b < c
-  else if constexpr (match(expr, (AnyArg{} * AnyArg{}) * AnyArg{}) and
-                     symbolicLessThan(right(expr), right(left(expr)))) {
-    constexpr auto a = left(left(expr));
-    constexpr auto c = right(left(expr));
-    constexpr auto b = right(expr);
-    return (a * b) * c;
-  }
-
-  // Right-associative fallback: (a * b) * c → a * (b * c)
-  else if constexpr (match(expr, (AnyArg{} * AnyArg{}) * AnyArg{})) {
-    constexpr auto a = left(left(expr));
-    constexpr auto b = right(left(expr));
-    constexpr auto c = right(expr);
-    return a * (b * c);
-  }
-
-  else {
-    return expr;
-  }
+  return applyRules<MultiplicationRules>(expr);
 }
 
 // Subtraction rewritten as addition: a - b → a + (-1 * b)
@@ -260,85 +252,86 @@ constexpr auto divisionIdentities(S expr) {
 
 // Exponential simplification rules
 constexpr auto ExpRules = RewriteSystem{
-  Rewrite{exp(log(x_)), x_}  // exp(log(x)) → x
+    Rewrite{exp(log(x_)), x_},    // exp(log(x)) → x
+    Rewrite{exp(x_), pow(e, x_)}  // exp(x) → e^x (normalize to power form)
 };
 
 template <Symbolic S>
   requires(match(S{}, exp(AnyArg{})))
 constexpr auto expIdentities(S expr) {
-  // Try rewrite rules first
-  constexpr auto result = ExpRules.apply(expr);
-  if constexpr (!match(result, expr)) {
-    return result;
-  }
-  // Otherwise normalize exp to power form: exp(x) → e^x
-  else {
-    return pow(e, operand(expr));
-  }
+  return applyRules<ExpRules>(expr);
 }
 
-// Logarithm simplification rules
-constexpr auto LogRules = RewriteSystem{
-  Rewrite{log(1_c), 0_c},                      // log(1) → 0
-  Rewrite{log(e), 1_c},                        // log(e) → 1
-  Rewrite{log(pow(x_, a_)), a_ * log(x_)},     // log(x^a) → a*log(x)
-  Rewrite{log(x_ * y_), log(x_) + log(y_)},    // log(a*b) → log(a)+log(b)
-  Rewrite{log(x_ / y_), log(x_) - log(y_)},    // log(a/b) → log(a)-log(b)
-  Rewrite{log(exp(x_)), x_}                    // log(exp(x)) → x
+// Logarithm rule categories
+namespace LogRuleCategories {
+// Identity: logarithm of special constants
+constexpr auto Identity = RewriteSystem{
+    Rewrite{log(1_c), 0_c},  // log(1) → 0
+    Rewrite{log(e), 1_c}     // log(e) → 1
 };
+
+// Inverse: logarithm cancels with exponential
+constexpr auto Inverse = RewriteSystem{
+    Rewrite{log(exp(x_)), x_}  // log(exp(x)) → x
+};
+
+// Expansion: logarithm of products, quotients, and powers
+constexpr auto Expansion = RewriteSystem{
+    Rewrite{log(pow(x_, a_)), a_* log(x_)},    // log(x^a) → a*log(x)
+    Rewrite{log(x_ * y_), log(x_) + log(y_)},  // log(a*b) → log(a)+log(b)
+    Rewrite{log(x_ / y_), log(x_) - log(y_)}   // log(a/b) → log(a)-log(b)
+};
+}  // namespace LogRuleCategories
+
+// Complete logarithm rule set composed from categories
+// Order: Identity → Inverse → Expansion
+constexpr auto LogRules =
+    compose(LogRuleCategories::Identity, LogRuleCategories::Inverse,
+            LogRuleCategories::Expansion);
 
 template <Symbolic S>
   requires(match(S{}, log(AnyArg{})))
 constexpr auto logIdentities(S expr) {
-  return LogRules.apply(expr);
+  return applyRules<LogRules>(expr);
 }
 
 // Sine simplification rules
 constexpr auto SinRules = RewriteSystem{
-  Rewrite{sin(π * 0.5_c), 1_c},                // sin(π/2) → 1
-  Rewrite{sin(π), 0_c},                        // sin(π) → 0
-  Rewrite{sin(π * 1.5_c), Constant<-1>{}}      // sin(3π/2) → -1
+    Rewrite{sin(π * 0.5_c), 1_c},             // sin(π/2) → 1
+    Rewrite{sin(π), 0_c},                     // sin(π) → 0
+    Rewrite{sin(π * 1.5_c), Constant<-1>{}},  // sin(3π/2) → -1
+    Rewrite{sin(x_ * Constant<-1>{}),
+            Constant<-1>{} * sin(x_)}  // sin(-x) → -sin(x) (odd function)
 };
 
 template <Symbolic S>
   requires(match(S{}, sin(AnyArg{})))
 constexpr auto sinIdentities(S expr) {
-  constexpr auto result = SinRules.apply(expr);
-  if constexpr (!match(result, expr)) {
-    return result;
-  }
-  // Odd function: sin(-x) → -sin(x)
-  else if constexpr (match(expr, sin(AnyArg{} * Constant<-1>{}))) {
-    constexpr auto x = left(operand(expr));
-    return Constant<-1>{} * sin(x);
-  }
-  else {
-    return expr;
-  }
+  return applyRules<SinRules>(expr);
 }
 
 // Cosine simplification rules
 constexpr auto CosRules = RewriteSystem{
-  Rewrite{cos(π * 0.5_c), 0_c},                // cos(π/2) → 0
-  Rewrite{cos(π), Constant<-1>{}},             // cos(π) → -1
-  Rewrite{cos(π * 1.5_c), 0_c}                 // cos(3π/2) → 0
+    Rewrite{cos(π * 0.5_c), 0_c},     // cos(π/2) → 0
+    Rewrite{cos(π), Constant<-1>{}},  // cos(π) → -1
+    Rewrite{cos(π * 1.5_c), 0_c}      // cos(3π/2) → 0
 };
 
 template <Symbolic S>
   requires(match(S{}, cos(AnyArg{})))
 constexpr auto cosIdentities(S expr) {
-  return CosRules.apply(expr);
+  return applyRules<CosRules>(expr);
 }
 
 // Tangent simplification rules
 constexpr auto TanRules = RewriteSystem{
-  Rewrite{tan(π), 0_c}                         // tan(π) → 0
+    Rewrite{tan(π), 0_c}  // tan(π) → 0
 };
 
 template <Symbolic S>
   requires(match(S{}, tan(AnyArg{})))
 constexpr auto tanIdentities(S expr) {
-  return TanRules.apply(expr);
+  return applyRules<TanRules>(expr);
 }
 
 template <Symbolic S, SizeT depth>
@@ -350,100 +343,46 @@ constexpr auto simplifySymbol(S sym) {
   return simplifySymbolWithDepth<S, 0>(sym);
 }
 
+// Helper: Try applying a simplification rule and recurse if it changed
+template <Symbolic S, SizeT depth, auto SimplifyFunc>
+constexpr auto trySimplify(S sym) {
+  constexpr auto result = SimplifyFunc(sym);
+  if constexpr (match(result, sym)) {
+    return result;  // No change, return as-is
+  } else {
+    return simplifySymbolWithDepth<decltype(result), depth + 1>(
+        result);  // Recurse
+  }
+}
+
 // Depth-limited simplification prevents infinite recursion
+// Uses a sequence of simplification strategies
 template <Symbolic S, SizeT depth>
 constexpr auto simplifySymbolWithDepth(S sym) {
   if constexpr (depth >= 20) {
-    return S{};
-  }
-
-  else if constexpr (requires { evalConstantExpr(sym); }) {
-    return evalConstantExpr(sym);
-  }
-
-  else if constexpr (requires { powerIdentities(sym); }) {
-    constexpr auto result = powerIdentities(sym);
-    if constexpr (match(result, sym)) {
-      return result;
-    } else {
-      return simplifySymbolWithDepth<decltype(result), depth + 1>(result);
-    }
-  }
-
-  else if constexpr (requires { additionIdentities(sym); }) {
-    constexpr auto result = additionIdentities(sym);
-    if constexpr (match(result, sym)) {
-      return result;
-    } else {
-      return simplifySymbolWithDepth<decltype(result), depth + 1>(result);
-    }
-  }
-
-  else if constexpr (requires { subtractionIdentities(sym); }) {
-    constexpr auto result = subtractionIdentities(sym);
-    if constexpr (match(result, sym)) {
-      return result;
-    } else {
-      return simplifySymbolWithDepth<decltype(result), depth + 1>(result);
-    }
-  }
-
-  else if constexpr (requires { multiplicationIdentities(sym); }) {
-    constexpr auto result = multiplicationIdentities(sym);
-    if constexpr (match(result, sym)) {
-      return result;
-    } else {
-      return simplifySymbolWithDepth<decltype(result), depth + 1>(result);
-    }
-  }
-
-  else if constexpr (requires { divisionIdentities(sym); }) {
-    constexpr auto result = divisionIdentities(sym);
-    if constexpr (match(result, sym)) {
-      return result;
-    } else {
-      return simplifySymbolWithDepth<decltype(result), depth + 1>(result);
-    }
-  }
-
-  else if constexpr (requires { expIdentities(sym); }) {
-    constexpr auto result = expIdentities(sym);
-    if constexpr (match(result, sym)) {
-      return result;
-    } else {
-      return simplifySymbolWithDepth<decltype(result), depth + 1>(result);
-    }
-  }
-
-  else if constexpr (requires { logIdentities(sym); }) {
-    constexpr auto result = logIdentities(sym);
-    if constexpr (match(result, sym)) {
-      return result;
-    } else {
-      return simplifySymbolWithDepth<decltype(result), depth + 1>(result);
-    }
-  }
-
-  else if constexpr (requires { sinIdentities(sym); }) {
-    constexpr auto result = sinIdentities(sym);
-    if constexpr (match(result, sym)) {
-      return result;
-    } else {
-      return simplifySymbolWithDepth<decltype(result), depth + 1>(result);
-    }
-  }
-
-  else if constexpr (requires { cosIdentities(sym); }) {
-    constexpr auto result = cosIdentities(sym);
-    if constexpr (match(result, sym)) {
-      return result;
-    } else {
-      return simplifySymbolWithDepth<decltype(result), depth + 1>(result);
-    }
-  }
-
-  else {
-    return S{};
+    return S{};  // Max depth reached
+  } else if constexpr (requires { evalConstantExpr(sym); }) {
+    return evalConstantExpr(sym);  // Constant folding
+  } else if constexpr (requires { powerIdentities(sym); }) {
+    return trySimplify<S, depth, powerIdentities<S>>(sym);
+  } else if constexpr (requires { additionIdentities(sym); }) {
+    return trySimplify<S, depth, additionIdentities<S>>(sym);
+  } else if constexpr (requires { subtractionIdentities(sym); }) {
+    return trySimplify<S, depth, subtractionIdentities<S>>(sym);
+  } else if constexpr (requires { multiplicationIdentities(sym); }) {
+    return trySimplify<S, depth, multiplicationIdentities<S>>(sym);
+  } else if constexpr (requires { divisionIdentities(sym); }) {
+    return trySimplify<S, depth, divisionIdentities<S>>(sym);
+  } else if constexpr (requires { expIdentities(sym); }) {
+    return trySimplify<S, depth, expIdentities<S>>(sym);
+  } else if constexpr (requires { logIdentities(sym); }) {
+    return trySimplify<S, depth, logIdentities<S>>(sym);
+  } else if constexpr (requires { sinIdentities(sym); }) {
+    return trySimplify<S, depth, sinIdentities<S>>(sym);
+  } else if constexpr (requires { cosIdentities(sym); }) {
+    return trySimplify<S, depth, cosIdentities<S>>(sym);
+  } else {
+    return S{};  // No applicable rules
   }
 }
 

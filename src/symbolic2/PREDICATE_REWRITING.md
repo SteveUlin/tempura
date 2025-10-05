@@ -76,7 +76,7 @@ constexpr auto AdditionRules = RewriteSystem{
   // Identity rules (no predicates)
   Rewrite{0_c + x_, x_},
   Rewrite{x_ + 0_c, x_},
-  
+
   // Ordering rule (with predicate)
   Rewrite{x_ + y_, y_ + x_, [](auto ctx) {
     return symbolicLessThan(get(ctx, y_), get(ctx, x_));
@@ -162,7 +162,7 @@ struct Rewrite {
   Pattern pattern;
   Replacement replacement;
   [[no_unique_address]] Predicate predicate = {};
-  
+
   // ... implementation
 };
 ```
@@ -206,12 +206,12 @@ template <Symbolic S>
   requires(match(S{}, AnyArg{} + AnyArg{}))
 constexpr auto additionIdentities(S expr) {
   // ... identity rules ...
-  
+
   // Canonical ordering: smaller term first
   else if constexpr (symbolicLessThan(right(expr), left(expr))) {
     return right(expr) + left(expr);
   }
-  
+
   else {
     return expr;
   }

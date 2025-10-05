@@ -39,6 +39,10 @@ add_executable(symbolic2_pattern_matching_predicate_test test/pattern_matching_p
 target_link_libraries(symbolic2_pattern_matching_predicate_test PRIVATE symbolic2_core)
 add_test(NAME symbolic2_pattern_matching_predicate_test COMMAND symbolic2_pattern_matching_predicate_test)
 
+add_executable(symbolic2_pattern_matching_repeated_vars_test test/pattern_matching_repeated_vars_test.cpp)
+target_link_libraries(symbolic2_pattern_matching_repeated_vars_test PRIVATE symbolic2_core)
+add_test(NAME symbolic2_pattern_matching_repeated_vars_test COMMAND symbolic2_pattern_matching_repeated_vars_test)
+
 # Derivative support
 add_library(symbolic2_derivative INTERFACE)
 target_sources(symbolic2_derivative INTERFACE
@@ -76,3 +80,5 @@ target_link_libraries(pattern_demo PRIVATE symbolic2_core)
 # Note: Uncomment as features are added
 # add_executable(symbolic2_advanced_example examples/advanced_simplify.cpp)
 # target_link_libraries(symbolic2_advanced_example PRIVATE symbolic2_core)
+add_executable(symbolic2_recursive_rewrite_test test/recursive_rewrite_test.cpp)
+target_link_libraries(symbolic2_recursive_rewrite_test PRIVATE unit)
