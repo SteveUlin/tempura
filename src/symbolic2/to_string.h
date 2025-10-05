@@ -34,14 +34,14 @@ auto toString(Constant<N>) {
 }
 
 template <double Orig, double VALUE>
-auto toStringFaction(Constant<VALUE>) {
+auto toStringFraction(Constant<VALUE>) {
   if constexpr (VALUE / Orig < 0.000001) {
     return StaticString("");
   } else {
     constexpr auto val = VALUE * 10;
-    constexpr auto diget = floor(val);
-    return StaticString(static_cast<char>('0' + diget)) +
-           toStringFaction<Orig>(Constant<val - diget>{});
+    constexpr auto digit = floor(val);
+    return StaticString(static_cast<char>('0' + digit)) +
+           toStringFraction<Orig>(Constant<val - digit>{});
   }
 }
 
@@ -50,10 +50,10 @@ auto toString(Constant<VALUE>) {
   if constexpr (VALUE == 0.0) {
     return StaticString("0.");
   } else if constexpr (VALUE < 0.0) {
-    return StaticString("-") + toStringFaction(Constant<-VALUE>{});
+    return StaticString("-") + toStringFraction(Constant<-VALUE>{});
   } else {
     return toString(Constant<static_cast<int>(VALUE)>{}) + StaticString(".") +
-           toStringFaction<VALUE>(Constant<VALUE - static_cast<int>(VALUE)>{});
+           toStringFraction<VALUE>(Constant<VALUE - static_cast<int>(VALUE)>{});
   }
 }
 

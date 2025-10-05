@@ -6,13 +6,12 @@
 
 namespace tempura {
 
-// --- Constant - Helper Literals ---
+// --- Constant Literals ---
 //
-// Convert 1_c to Constant<1> and 3.14_c to Constant<3.14>
+// User-defined literal suffix for compile-time constants
+// Usage: 42_c → Constant<42>, 3.14_c → Constant<3.14>
 //
-// Note that prefixes such as + and - in +10_c and -4_c are not parsed
-// as part of the number. Instead C++ treats these as unary operators and
-// must be handled separately.
+// Note: Signs are unary operators, not part of the literal (-4_c is -(4_c))
 
 template <char... chars>
   requires(sizeof...(chars) > 0)
@@ -30,7 +29,7 @@ constexpr auto toInt() {
   }();
 }
 
-// Assume that there is exactly one decimal point in the number
+// Parse floating-point literal with exactly one decimal point
 template <char... chars>
 constexpr auto toDouble() {
   double value = 0.;

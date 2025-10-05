@@ -15,30 +15,27 @@ concept Symbolic = DerivedFrom<T, SymbolicTag>;
 
 // --- Symbol ---
 
-// Symbol is a unique symbolic variable.
+// Unique symbolic variable using stateless lambda for type identity
 //
-// The lambda in the template ensures that each call to Symbol{}, will produce
-// a different unique type.
+// Each Symbol{} creates a distinct type via the default lambda parameter,
+// enabling compile-time symbolic computation without runtime overhead.
 template <typename unique = decltype([] {})>
 struct Symbol : SymbolicTag {
-  // kMeta acts as a compile-time counter for types. Symbols with lower ids
-  // (defined first) will have higher precedence in comparisons.
+  // Type ID determines ordering - earlier symbols have lower IDs
   static constexpr auto id = kMeta<Symbol<unique>>;
 
   constexpr Symbol() {
-    // In order to preserve symbol order, force type id generation for all
-    // Symbols
+    // Force type ID generation to preserve declaration order
     (void)id;
   };
 
-  // Create a type value binder with the assignment operator
-  // auto binder x = 5;
-  //   -> binder[x] == 5;
+  // Enable binding: (x = 5) creates TypeValueBinder for evaluation
   constexpr auto operator=(auto value) const;
 };
 
 // --- Constant ---
 
+// Compile-time numeric constant embedded in the type system
 template <auto val>
 struct Constant : SymbolicTag {
   static constexpr auto value = val;
@@ -46,18 +43,19 @@ struct Constant : SymbolicTag {
 
 // --- Expression ---
 
+// Symbolic expression tree: operator + arguments encoded in type
 template <typename Op, Symbolic... Args>
 struct Expression : SymbolicTag {
   constexpr Expression() = default;
   constexpr Expression(Op, Args...) {}
 };
 
-// --- Wildcard Matchers ---
+// --- Pattern Matching Wildcards ---
 
-struct AnyArg : SymbolicTag {};
-struct AnyExpr : SymbolicTag {};
-struct AnyConstant : SymbolicTag {};
-struct AnySymbol : SymbolicTag {};
-struct Never : SymbolicTag {};
+struct AnyArg : SymbolicTag {};       // Matches any symbolic expression
+struct AnyExpr : SymbolicTag {};      // Matches any Expression<Op, Args...>
+struct AnyConstant : SymbolicTag {};  // Matches any Constant<value>
+struct AnySymbol : SymbolicTag {};    // Matches any Symbol<unique>
+struct Never : SymbolicTag {};        // Never matches (accessor return type)
 
 }  // namespace tempura

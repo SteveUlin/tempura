@@ -13,10 +13,11 @@
 
 namespace tempura {
 
-// --- Symbolic Less Than ---
+// --- Symbolic Ordering ---
 
 enum class PartialOrdering : char { kLess, kEqual, kGreater };
 
+// Operator precedence hierarchy for canonical ordering
 template <typename LhsOp, typename RhsOp>
 constexpr auto opCompare(LhsOp, RhsOp) {
   constexpr static MinimalArray kOpOrder{
@@ -88,16 +89,9 @@ constexpr auto opCompare(LhsOp, RhsOp) {
 }
 static_assert(opCompare(AddOp{}, LogOp{}) == PartialOrdering::kLess);
 
-// A total ordering of symbols
-//
-// Values are sorted by what is "most likely to be simplified"
-// 1. Expressions
-// 2. Symbols
-// 3. Constants
-//
-// The goal is the LHS of an expr be used at the first comparison
-// point when comparing two like expressions. So the base x in x^3 or y
-// in y*3.
+// Total ordering for canonical form: Expressions < Symbols < Constants
+// This ordering groups like terms together and prioritizes base expressions
+// (e.g., x in x^3 or y in y*3) for pattern matching
 constexpr auto symbolicCompare(Symbolic auto lhs, Symbolic auto rhs)
     -> PartialOrdering {
   // --- Category Comparison ---
@@ -110,8 +104,8 @@ constexpr auto symbolicCompare(Symbolic auto lhs, Symbolic auto rhs)
   constexpr bool lhs_is_never = isSame<decltype(lhs), Never>;
   constexpr bool rhs_is_never = isSame<decltype(rhs), Never>;
 
-  // Edge Case: Everything is less than Never
-  if constexpr (lhs_is_never && lhs_is_never) {
+  // Never is always greater than everything (used for missing accessors)
+  if constexpr (lhs_is_never && rhs_is_never) {
     return PartialOrdering::kEqual;
   } else if constexpr (lhs_is_never) {
     return PartialOrdering::kGreater;
@@ -119,49 +113,28 @@ constexpr auto symbolicCompare(Symbolic auto lhs, Symbolic auto rhs)
     return PartialOrdering::kLess;
   }
 
-  // Comparison Normalization
-  // a => a + 0
-  else if constexpr (match(lhs, AnyExpr{} + AnyExpr{}) &&
-                     !match(rhs, AnyExpr{} + AnyExpr{})) {
-    return symbolicCompare(lhs, rhs + 0_c);
-  } else if constexpr (!match(lhs, AnyExpr{} + AnyExpr{}) &&
-                       match(rhs, AnyExpr{} + AnyExpr{})) {
-    return symbolicCompare(lhs + 0_c, rhs);
-  }
-  // a => a * 1
-  else if constexpr (match(lhs, AnyExpr{} * AnyExpr{}) &&
-                     !match(rhs, AnyExpr{} * AnyExpr{})) {
-    return symbolicCompare(lhs, rhs * 1_c);
-  } else if constexpr (!match(lhs, AnyExpr{} * AnyExpr{}) &&
-                       match(rhs, AnyExpr{} * AnyExpr{})) {
-    return symbolicCompare(lhs * 1_c, rhs);
-  }
-  // a => a ^ 1
-  else if constexpr (match(lhs, pow(AnyArg{}, AnyArg{})) &&
-                     !match(rhs, pow(AnyArg{}, AnyArg{}))) {
-    return symbolicCompare(lhs, pow(rhs, 1_c));
-  } else if constexpr (!match(lhs, pow(AnyArg{}, AnyArg{})) &&
-                       match(rhs, pow(AnyArg{}, AnyArg{}))) {
-    return symbolicCompare(pow(lhs, 1_c), rhs);
-  }
+  // FIX: Removed problematic normalization that created infinite recursion
+  // The original code tried to normalize non-expressions to expression form
+  // by adding 0_c or multiplying by 1_c, but this created new expression types
+  // that needed comparison again, leading to infinite template recursion.
+  //
+  // Instead, we rely on the category ordering below to handle mixed comparisons.
+  // Expressions are always less than Symbols and Constants by category.
 
-  // First Expressions
+  // Category ordering: Expressions < Symbols < Constants
   else if constexpr (lhs_is_expr && !rhs_is_expr) {
     return PartialOrdering::kLess;
   } else if constexpr (!lhs_is_expr && rhs_is_expr) {
     return PartialOrdering::kGreater;
   }
 
-  // Then Symbols
   else if constexpr (lhs_is_symbol && !rhs_is_symbol) {
     return PartialOrdering::kLess;
   } else if constexpr (!lhs_is_symbol && rhs_is_symbol) {
     return PartialOrdering::kGreater;
   }
 
-  // -- Within Category Comparison --
-  //
-  // Expressions: If operators are different, then compare them.
+  // Within-category comparison
   else if constexpr (lhs_is_expr && rhs_is_expr) {
     constexpr auto get_arg_count =
         []<typename Op, typename... Args>(Expression<Op, Args...>) {
@@ -192,7 +165,7 @@ constexpr auto symbolicCompare(Symbolic auto lhs, Symbolic auto rhs)
     }
   }
 
-  // Constants: Compare values
+  // Constants compared by numeric value
   else if constexpr (lhs_is_constant && rhs_is_constant) {
     if (lhs.value < rhs.value) {
       return PartialOrdering::kLess;
@@ -203,6 +176,7 @@ constexpr auto symbolicCompare(Symbolic auto lhs, Symbolic auto rhs)
     return PartialOrdering::kEqual;
   }
 
+  // Symbols compared by declaration order (type ID)
   else if constexpr (lhs_is_symbol && rhs_is_symbol) {
     if (kMeta<decltype(lhs)> < kMeta<decltype(rhs)>) {
       return PartialOrdering::kLess;
@@ -214,9 +188,7 @@ constexpr auto symbolicCompare(Symbolic auto lhs, Symbolic auto rhs)
   }
 
   else {
-    static_assert(false,
-                  "Invalid comparison between Symbolic types. Please check the "
-                  "implementation.");
+    static_assert(false, "Unhandled symbolic comparison case");
   }
 }
 

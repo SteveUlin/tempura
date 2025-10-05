@@ -6,17 +6,15 @@
 
 namespace tempura {
 
-// --- Type-Value Binding (Evaluation and Substitution) ---
+// --- Type-Value Binding ---
 
-// Binds a specific compile-time type (Symbol) to a runtime or compile-time
-// value.
+// Associates a Symbol type with a value for evaluation
+// Enables type-safe heterogeneous symbol-to-value mappings
 template <typename TypeKey, typename ValueType>
 class TypeValueBinder {
  public:
   constexpr TypeValueBinder(TypeKey /*key*/, ValueType value) : value_(value) {}
 
-  // Retrieve the held value if you supply the TypeKey.
-  // BinderPack Overloads this function for different TypeKeys.
   constexpr auto operator[](TypeKey /*key*/) const -> ValueType {
     return value_;
   }
@@ -25,18 +23,18 @@ class TypeValueBinder {
   ValueType value_;
 };
 
-// A collection of TypeKey-Value pairs enabling lookup with
-// `binder_pack[TypeKey{}]`.
+// Heterogeneous compile-time map from Symbol types to values
+// Usage: BinderPack{x = 1, y = 2.5, z = "text"}
 template <typename... Binders>
 struct BinderPack : Binders... {
   constexpr BinderPack(Binders... binders) : Binders(binders)... {}
-  using Binders::operator[]...;
+  using Binders::operator[]...;  // Expose all lookup operators
 };
 template <typename... Ts, typename... Us>
 BinderPack(TypeValueBinder<Ts, Us>...)
     -> BinderPack<TypeValueBinder<Ts, Us>...>;
 
-// Implementation of Symbol::operator= that was forward declared in core.h
+// Symbol::operator= implementation - creates binder from symbol and value
 template <typename unique>
 constexpr auto Symbol<unique>::operator=(auto value) const {
   return TypeValueBinder{Symbol{}, value};
