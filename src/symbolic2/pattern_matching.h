@@ -65,10 +65,31 @@ inline constexpr PatternVar z_;
 inline constexpr PatternVar a_;
 inline constexpr PatternVar b_;
 inline constexpr PatternVar c_;
+inline constexpr PatternVar f_;  // For functions in derivative rules
+inline constexpr PatternVar g_;  // For functions in derivative rules
 inline constexpr PatternVar n_;
 inline constexpr PatternVar m_;
 inline constexpr PatternVar p_;
 inline constexpr PatternVar q_;
+
+// =============================================================================
+// WILDCARD PATTERNS - Match categories of expressions
+// =============================================================================
+
+// Predefined wildcard patterns for matching categories
+// Using Unicode symbols for visual clarity and mathematical style
+
+// Match any expression - the universal wildcard
+inline constexpr AnyArg 𝐚𝐧𝐲{};
+
+// Match any compound expression (not constants/symbols)
+inline constexpr AnyExpr 𝐞𝐱𝐩𝐫{};
+
+// Match any constant (numeric literals like 1, 2.5, etc.)
+inline constexpr AnyConstant 𝐜{};
+
+// Match any symbol (x, y, z, etc.)
+inline constexpr AnySymbol 𝐬{};
 
 // =============================================================================
 // PATTERN MATCHING - Integrate with existing match() system
@@ -332,6 +353,27 @@ constexpr auto extractBindingsImpl(Constant<V>, S, Context ctx) {
 // Symbol: no new bindings
 template <typename U, Symbolic S, typename Context>
 constexpr auto extractBindingsImpl(Symbol<U>, S, Context ctx) {
+  return ctx;
+}
+
+// Wildcards: no new bindings (they match but don't capture)
+template <Symbolic S, typename Context>
+constexpr auto extractBindingsImpl(AnyArg, S, Context ctx) {
+  return ctx;
+}
+
+template <Symbolic S, typename Context>
+constexpr auto extractBindingsImpl(AnyExpr, S, Context ctx) {
+  return ctx;
+}
+
+template <Symbolic S, typename Context>
+constexpr auto extractBindingsImpl(AnyConstant, S, Context ctx) {
+  return ctx;
+}
+
+template <Symbolic S, typename Context>
+constexpr auto extractBindingsImpl(AnySymbol, S, Context ctx) {
   return ctx;
 }
 

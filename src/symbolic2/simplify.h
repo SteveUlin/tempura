@@ -67,7 +67,7 @@ constexpr auto simplifySymbol(S sym);
 
 // Constant folding: evaluate expressions with only constant arguments
 template <typename Op, Symbolic... Args>
-  requires((match(Args{}, AnyConstant{}) && ...) && sizeof...(Args) > 0)
+  requires((match(Args{}, 𝐜) && ...) && sizeof...(Args) > 0)
 constexpr auto evalConstantExpr(Expression<Op, Args...> expr) {
   return Constant<evaluate(expr, BinderPack{})>{};
 }
@@ -115,7 +115,7 @@ constexpr auto PowerRules = RewriteSystem{
 };
 
 template <Symbolic S>
-  requires(match(S{}, pow(AnyArg{}, AnyArg{})))
+  requires(match(S{}, pow(𝐚𝐧𝐲, 𝐚𝐧𝐲)))
 constexpr auto powerIdentities(S expr) {
   return applyRules<PowerRules>(expr);
 }
@@ -164,7 +164,7 @@ constexpr auto AdditionRules =
             AdditionRuleCategories::Associativity);
 
 template <Symbolic S>
-  requires(match(S{}, AnyArg{} + AnyArg{}))
+  requires(match(S{}, 𝐚𝐧𝐲 + 𝐚𝐧𝐲))
 constexpr auto additionIdentities(S expr) {
   return applyRules<AdditionRules>(expr);
 }
@@ -227,14 +227,14 @@ constexpr auto MultiplicationRules =
             MultiplicationRuleCategories::Associativity);
 
 template <Symbolic S>
-  requires(match(S{}, AnyArg{} * AnyArg{}))
+  requires(match(S{}, 𝐚𝐧𝐲* 𝐚𝐧𝐲))
 constexpr auto multiplicationIdentities(S expr) {
   return applyRules<MultiplicationRules>(expr);
 }
 
 // Subtraction rewritten as addition: a - b → a + (-1 * b)
 template <Symbolic S>
-  requires(match(S{}, AnyArg{} - AnyArg{}))
+  requires(match(S{}, 𝐚𝐧𝐲 - 𝐚𝐧𝐲))
 constexpr auto subtractionIdentities(S expr) {
   constexpr auto a = left(expr);
   constexpr auto b = right(expr);
@@ -243,7 +243,7 @@ constexpr auto subtractionIdentities(S expr) {
 
 // Division rewritten as power: a / b → a * b^(-1)
 template <Symbolic S>
-  requires(match(S{}, AnyArg{} / AnyArg{}))
+  requires(match(S{}, 𝐚𝐧𝐲 / 𝐚𝐧𝐲))
 constexpr auto divisionIdentities(S expr) {
   constexpr auto a = left(expr);
   constexpr auto b = right(expr);
@@ -257,7 +257,7 @@ constexpr auto ExpRules = RewriteSystem{
 };
 
 template <Symbolic S>
-  requires(match(S{}, exp(AnyArg{})))
+  requires(match(S{}, exp(𝐚𝐧𝐲)))
 constexpr auto expIdentities(S expr) {
   return applyRules<ExpRules>(expr);
 }
@@ -290,7 +290,7 @@ constexpr auto LogRules =
             LogRuleCategories::Expansion);
 
 template <Symbolic S>
-  requires(match(S{}, log(AnyArg{})))
+  requires(match(S{}, log(𝐚𝐧𝐲)))
 constexpr auto logIdentities(S expr) {
   return applyRules<LogRules>(expr);
 }
@@ -305,7 +305,7 @@ constexpr auto SinRules = RewriteSystem{
 };
 
 template <Symbolic S>
-  requires(match(S{}, sin(AnyArg{})))
+  requires(match(S{}, sin(𝐚𝐧𝐲)))
 constexpr auto sinIdentities(S expr) {
   return applyRules<SinRules>(expr);
 }
@@ -318,7 +318,7 @@ constexpr auto CosRules = RewriteSystem{
 };
 
 template <Symbolic S>
-  requires(match(S{}, cos(AnyArg{})))
+  requires(match(S{}, cos(𝐚𝐧𝐲)))
 constexpr auto cosIdentities(S expr) {
   return applyRules<CosRules>(expr);
 }
@@ -329,7 +329,7 @@ constexpr auto TanRules = RewriteSystem{
 };
 
 template <Symbolic S>
-  requires(match(S{}, tan(AnyArg{})))
+  requires(match(S{}, tan(𝐚𝐧𝐲)))
 constexpr auto tanIdentities(S expr) {
   return applyRules<TanRules>(expr);
 }
