@@ -34,10 +34,10 @@ add_executable(symbolic2_pattern_matching_test test/pattern_matching_test.cpp)
 target_link_libraries(symbolic2_pattern_matching_test PRIVATE symbolic2_core)
 add_test(NAME symbolic2_pattern_matching_test COMMAND symbolic2_pattern_matching_test)
 
-# Simplify v2 test (using pattern matching)
-add_executable(symbolic2_simplify_v2_test test/simplify_v2_test.cpp)
-target_link_libraries(symbolic2_simplify_v2_test PRIVATE symbolic2_core)
-add_test(NAME symbolic2_simplify_v2_test COMMAND symbolic2_simplify_v2_test)
+# Pattern matching predicate test
+add_executable(symbolic2_pattern_matching_predicate_test test/pattern_matching_predicate_test.cpp)
+target_link_libraries(symbolic2_pattern_matching_predicate_test PRIVATE symbolic2_core)
+add_test(NAME symbolic2_pattern_matching_predicate_test COMMAND symbolic2_pattern_matching_predicate_test)
 
 # Derivative support
 add_library(symbolic2_derivative INTERFACE)

@@ -149,6 +149,13 @@ using EmptyContext = BindingContext<>;
 
 } // namespace detail
 
+// Helper function to get binding value for a pattern variable from context
+// Usage: get(ctx, x_) returns the expression bound to x_
+template <typename Unique, typename... Entries>
+constexpr auto get(detail::BindingContext<Entries...> ctx, PatternVar<Unique>) {
+  return ctx.template lookup<PatternVar<Unique>::id>();
+}
+
 // Substitute pattern variables with bound values using a context
 // Usage: substitute(expr, context)
 //
@@ -339,43 +346,69 @@ constexpr auto extractBindings(Pattern pattern, Expr expr) {
 // REWRITE RULES - Pattern-based transformations with substitution
 // =============================================================================
 
-// A rewrite rule: pattern → replacement
+// A rewrite rule: pattern → replacement (with optional predicate)
 // When applied, pattern variables in the replacement are substituted
 // with the matched values from the expression
 //
 // Example: Rewrite{pow(x_, 0_c), 1_c}
 //   Matches pow(anything, 0) and replaces with 1
+//
+// Example with predicate: Rewrite{x_ + y_, y_ + x_, [](auto ctx) {
+//   return symbolicLessThan(ctx.template lookup<y_.id>(), ctx.template lookup<x_.id>());
+// }}
+//   Matches x + y and replaces with y + x only if y < x (for canonical ordering)
 
-template <typename Pattern, typename Replacement>
+// Helper type to represent "no predicate" (always true)
+struct NoPredicate {
+  template <typename Context>
+  static constexpr bool operator()(Context) { return true; }
+};
+
+template <typename Pattern, typename Replacement, typename Predicate = NoPredicate>
 struct Rewrite {
   Pattern pattern;
   Replacement replacement;
+  [[no_unique_address]] Predicate predicate = {};
 
-  // Check if pattern matches expression
+  // Check if pattern matches expression and predicate holds
   template <Symbolic S>
   static constexpr bool matches(S expr) {
-    return match(Pattern{}, expr);
+    if constexpr (!match(Pattern{}, expr)) {
+      return false;
+    } else {
+      // Extract bindings and check predicate
+      auto bindings_ctx = detail::extractBindings(Pattern{}, expr);
+      return Predicate{}(bindings_ctx);
+    }
   }
 
   // Apply the rewrite rule with substitution
   // This is compile-time pattern matching and substitution
   template <Symbolic S>
   static constexpr auto apply([[maybe_unused]] S expr) {
-    if constexpr (!matches(expr)) {
+    if constexpr (!match(Pattern{}, expr)) {
       return expr;  // Pattern doesn't match, return unchanged
     } else {
       // Extract bindings from the pattern match into a context
       auto bindings_ctx = detail::extractBindings(Pattern{}, expr);
 
-      // Apply the bindings to the replacement expression
-      return substitute(Replacement{}, bindings_ctx);
+      // Check predicate
+      if constexpr (!Predicate{}(bindings_ctx)) {
+        return expr;  // Predicate failed, return unchanged
+      } else {
+        // Apply the bindings to the replacement expression
+        return substitute(Replacement{}, bindings_ctx);
+      }
     }
   }
 };
 
-// Deduction guide for clean syntax
+// Deduction guides for clean syntax
 template <typename P, typename R>
-Rewrite(P, R) -> Rewrite<P, R>;
+Rewrite(P, R) -> Rewrite<P, R, NoPredicate>;
+
+template <typename P, typename R, typename Pred>
+Rewrite(P, R, Pred) -> Rewrite<P, R, Pred>;
 
 // =============================================================================
 // REWRITE SYSTEM - Apply multiple rewrite rules
@@ -447,6 +480,16 @@ constexpr Rewrite PowerZero{pow(x_, 0_c), 1_c};
 constexpr auto expr2 = pow(a, 0_c);
 constexpr auto simplified = PowerZero.apply(expr2);
 // simplified is: 1_c
+
+// Rewrite rules with predicates for conditional transformations:
+constexpr auto CanonicalAdd = Rewrite{
+  x_ + y_, 
+  y_ + x_,
+  [](auto ctx) { 
+    return symbolicLessThan(get(ctx, y_), get(ctx, x_)); 
+  }
+};
+// Matches x + y and replaces with y + x only if y < x (canonical ordering)
 
 // Rewrite systems (constructor + CTAD - completely decltype-free!):
 constexpr auto PowerRules = RewriteSystem{
