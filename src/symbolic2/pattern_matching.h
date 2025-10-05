@@ -483,10 +483,10 @@ constexpr auto simplified = PowerZero.apply(expr2);
 
 // Rewrite rules with predicates for conditional transformations:
 constexpr auto CanonicalAdd = Rewrite{
-  x_ + y_, 
+  x_ + y_,
   y_ + x_,
-  [](auto ctx) { 
-    return symbolicLessThan(get(ctx, y_), get(ctx, x_)); 
+  [](auto ctx) {
+    return symbolicLessThan(get(ctx, y_), get(ctx, x_));
   }
 };
 // Matches x + y and replaces with y + x only if y < x (canonical ordering)
