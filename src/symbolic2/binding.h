@@ -2,14 +2,11 @@
 
 #include "core.h"
 
-// Type-Value binding for evaluation and substitution
+// Heterogeneous symbol-to-value bindings for compile-time evaluation
 
 namespace tempura {
 
-// --- Type-Value Binding ---
-
-// Associates a Symbol type with a value for evaluation
-// Enables type-safe heterogeneous symbol-to-value mappings
+// Maps a unique Symbol type to a runtime value
 template <typename TypeKey, typename ValueType>
 class TypeValueBinder {
  public:
@@ -23,18 +20,17 @@ class TypeValueBinder {
   ValueType value_;
 };
 
-// Heterogeneous compile-time map from Symbol types to values
-// Usage: BinderPack{x = 1, y = 2.5, z = "text"}
+// Multiple bindings using parameter pack inheritance for type-based dispatch
+// Usage: BinderPack{x = 1, y = 2.5}
 template <typename... Binders>
 struct BinderPack : Binders... {
   constexpr BinderPack(Binders... binders) : Binders(binders)... {}
-  using Binders::operator[]...;  // Expose all lookup operators
+  using Binders::operator[]...;
 };
 template <typename... Ts, typename... Us>
 BinderPack(TypeValueBinder<Ts, Us>...)
     -> BinderPack<TypeValueBinder<Ts, Us>...>;
 
-// Symbol::operator= implementation - creates binder from symbol and value
 template <typename unique>
 constexpr auto Symbol<unique>::operator=(auto value) const {
   return TypeValueBinder{Symbol{}, value};

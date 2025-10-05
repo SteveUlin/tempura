@@ -4,25 +4,13 @@
 
 namespace tempura {
 
-// =============================================================================
-// RECURSIVE REWRITE - Support for recursive transformations
-// =============================================================================
+// Rewrite rules with recursive function calls (for differentiation, etc.)
 //
-// The standard Rewrite system works great for simple pattern → replacement
-// transformations, but differentiation requires recursive calls:
-//
-//   d/dx(f + g) = d/dx(f) + d/dx(g)
-//                 ^^^^^^^^   ^^^^^^^^
-//                 Recursive calls to diff()
-//
-// This file provides RecursiveRewrite which allows replacement expressions
-// to be lambdas that can call back to the recursive function.
+// Standard rewrites: pow(x_, 0_c) → 1_c
+// Recursive rewrites: f_ + g_ → diff_(f_) + diff_(g_)  [requires recursive
+// call]
 
-// A rewrite rule that supports recursive transformations
-// The Replacement can be either:
-//   1. A symbolic expression (possibly using diff_fn_() and var_)
-//   2. A lambda that takes (context, recursive_fn, var) and returns an
-//   expression
+// Rewrite rule supporting recursive calls in replacement expression
 template <typename Pattern, typename Replacement,
           typename Predicate = NoPredicate>
 struct RecursiveRewrite {
@@ -30,7 +18,6 @@ struct RecursiveRewrite {
   Replacement replacement;
   [[no_unique_address]] Predicate predicate = {};
 
-  // Check if pattern matches expression and predicate holds
   template <Symbolic S>
   static constexpr bool matches(S expr) {
     if constexpr (!match(Pattern{}, expr)) {
@@ -45,30 +32,25 @@ struct RecursiveRewrite {
     }
   }
 
-  // Apply with a recursive function
-  // RecursiveFn should be a callable like: auto fn(expr, ...args)
   template <Symbolic S, typename RecursiveFn, typename... Args>
   static constexpr auto apply([[maybe_unused]] S expr, RecursiveFn recursive_fn,
                               [[maybe_unused]] Args... args) {
     if constexpr (!match(Pattern{}, expr)) {
-      return expr;  // Pattern doesn't match
+      return expr;
     } else {
       auto bindings_ctx = detail::extractBindings(Pattern{}, expr);
 
       if constexpr (detail::isBindingFailure<decltype(bindings_ctx)>()) {
-        return expr;  // Binding failed
+        return expr;
       } else {
         if constexpr (!Predicate{}(bindings_ctx)) {
-          return expr;  // Predicate failed
+          return expr;
         } else {
-          // Check if Replacement is callable (explicit lambda)
           if constexpr (requires {
                           Replacement{}(bindings_ctx, recursive_fn, args...);
                         }) {
-            // Explicit lambda replacement
             return Replacement{}(bindings_ctx, recursive_fn, args...);
           } else {
-            // Simple symbolic expression replacement: just substitute
             return substitute(Replacement{}, bindings_ctx);
           }
         }
@@ -84,11 +66,7 @@ RecursiveRewrite(P, R) -> RecursiveRewrite<P, R, NoPredicate>;
 template <typename P, typename R, typename Pred>
 RecursiveRewrite(P, R, Pred) -> RecursiveRewrite<P, R, Pred>;
 
-// =============================================================================
-// RECURSIVE REWRITE SYSTEM
-// =============================================================================
-
-// Apply a sequence of recursive rewrite rules
+// Sequential application of recursive rewrite rules (first match wins)
 template <typename... Rules>
 struct RecursiveRewriteSystem {
   constexpr RecursiveRewriteSystem(Rules...) {}
@@ -97,7 +75,7 @@ struct RecursiveRewriteSystem {
             typename... Args>
   static constexpr auto apply(S expr, RecursiveFn recursive_fn, Args... args) {
     if constexpr (Index >= sizeof...(Rules)) {
-      return expr;  // No rules matched
+      return expr;
     } else {
       using CurrentRule = typename detail::GetNthType<Index, Rules...>::type;
 

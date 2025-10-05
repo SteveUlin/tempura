@@ -2,16 +2,11 @@
 
 #include "core.h"
 
-// Constant literals and helpers
+// User-defined literal suffix for numeric constants
+// Usage: 42_c → Constant<42>, 3.14_c → Constant<3.14>
+// Note: -4_c is parsed as -(4_c) since negation is a unary operator
 
 namespace tempura {
-
-// --- Constant Literals ---
-//
-// User-defined literal suffix for compile-time constants
-// Usage: 42_c → Constant<42>, 3.14_c → Constant<3.14>
-//
-// Note: Signs are unary operators, not part of the literal (-4_c is -(4_c))
 
 template <char... chars>
   requires(sizeof...(chars) > 0)
@@ -29,7 +24,6 @@ constexpr auto toInt() {
   }();
 }
 
-// Parse floating-point literal with exactly one decimal point
 template <char... chars>
 constexpr auto toDouble() {
   double value = 0.;

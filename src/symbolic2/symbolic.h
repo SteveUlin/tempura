@@ -1,26 +1,18 @@
 #pragma once
 
-// Tempura Symbolic 2.0 - A header-only C++26 library for compile-time symbolic
-// mathematics and expression manipulation.
+// Tempura Symbolic 2.0 - Compile-time symbolic mathematics for C++26
 //
-// This header provides a refactored, modular structure for easier maintenance:
+// Design philosophy:
+// - Zero runtime overhead: all computation in type system
+// - Declarative rewrite rules using pattern matching
+// - Unique type identity via stateless lambdas
+// - Heterogeneous bindings for evaluation
 //
-// - core.h: Core types (Symbol, Constant, Expression, Symbolic concept)
-// - binding.h: Type-value binding for evaluation (Binder, BinderPack)
-// - constants.h: Constant literals (_c suffix)
-// - accessors.h: Expression accessor functions (left, right, operand, getOp)
-// - matching.h: Pattern matching for symbolic expressions
-// - evaluate.h: Expression evaluation
-// - operators.h: Operator overloads (+, -, *, /, sin, cos, etc.)
-// - ordering.h: Symbolic expression comparison and ordering
-// - simplify.h: Simplification rules and algorithms
-// - to_string.h: String conversion utilities
-//
-// Example usage:
-//   Symbol x;
-//   Symbol y;
-//   auto expr = x + y;
-//   println("x + y = ", evaluate(expr, BinderPack{x = 1, y = 2}));
+// Example:
+//   Symbol x, y;
+//   auto f = x*x + 2_c*x + 1_c;
+//   auto df_dx = simplify(diff(f, x));  // 2·x + 2
+//   auto val = evaluate(f, BinderPack{x = 3});  // 16
 
 #include "symbolic2/accessors.h"
 #include "symbolic2/binding.h"

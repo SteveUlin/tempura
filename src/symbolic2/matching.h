@@ -3,13 +3,11 @@
 #include "core.h"
 #include "meta/tags.h"
 
-// Pattern matching for symbolic expressions
+// Pattern matching using ranked overload resolution for type-level dispatch
 
 namespace tempura {
 
-// --- Matching Logic ---
-
-// Rank5: Highest priority - Never is always a mismatch.
+// Rank5: Never sentinel always fails to match
 constexpr auto matchImpl(Rank5, Never, Never) -> bool { return false; }
 template <Symbolic S>
 constexpr auto matchImpl(Rank5, Never, S) -> bool {
@@ -20,13 +18,13 @@ constexpr auto matchImpl(Rank5, S, Never) -> bool {
   return false;
 }
 
-// Rank4: Exact Type Match
+// Rank4: Exact type identity
 template <Symbolic S>
 constexpr auto matchImpl(Rank4, S, S) -> bool {
   return true;
 }
 
-// Rank3: Wildcard matching (symmetric - order doesn't matter)
+// Rank3: Wildcard matching (order-independent)
 template <Symbolic S>
 constexpr auto matchImpl(Rank3, S, AnyArg) -> bool {
   return true;
@@ -63,14 +61,14 @@ constexpr auto matchImpl(Rank3, AnySymbol, Symbol<Unique>) -> bool {
   return true;
 }
 
-// Rank2: Constant values are compared for equality (e.g., 1.0 == 1)
+// Rank2: Constants match by value equality
 template <auto value_lhs, auto value_rhs>
 constexpr auto matchImpl(Rank2, Constant<value_lhs>, Constant<value_rhs>)
     -> bool {
   return value_lhs == value_rhs;
 }
 
-// Rank1: Expression matching - recursively matches operator and arguments
+// Rank1: Structural recursion for compound expressions
 template <typename Op, Symbolic... LHSArgs, Symbolic... RHSArgs>
 constexpr auto matchImpl(Rank1, Expression<Op, LHSArgs...>,
                          Expression<Op, RHSArgs...>) -> bool {
@@ -83,12 +81,11 @@ constexpr auto matchImpl(Rank1, Expression<Op, LHSArgs...>,
   }
 }
 
-// Rank0: Default catch-all for non-matching cases
+// Rank0: Fallback for non-matching types
 constexpr auto matchImpl(Rank0, Symbolic auto, Symbolic auto) -> bool {
   return false;
 }
 
-// Compile-time pattern matching using ranked overload resolution
 template <Symbolic LHS, Symbolic RHS>
 constexpr auto match(LHS lhs, RHS rhs) -> bool {
   return matchImpl(Rank5{}, lhs, rhs);

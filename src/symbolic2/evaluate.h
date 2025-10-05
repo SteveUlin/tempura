@@ -3,20 +3,16 @@
 #include "binding.h"
 #include "core.h"
 
-// Expression evaluation
+// Compile-time expression evaluation with symbol bindings
 
 namespace tempura {
 
-// --- Compile-Time Expression Evaluation ---
-
-// Constant evaluates to its embedded value
 template <auto V, Symbolic... Tags, typename... Ts>
 constexpr auto evaluate(Constant<V>,
                         const BinderPack<TypeValueBinder<Tags, Ts>...>&) {
   return V;
 }
 
-// Symbol lookup via type-based dispatch in BinderPack
 template <typename SymbolTag, typename... Tags, typename... Ts>
 constexpr auto evaluate(
     Symbol<SymbolTag>,
@@ -24,7 +20,7 @@ constexpr auto evaluate(
   return binders[Symbol<SymbolTag>{}];
 }
 
-// Recursive evaluation: apply operator to evaluated arguments
+// Recursively evaluate subexpressions then apply operator
 template <typename Op, Symbolic... Args, typename... Tags, typename... Ts>
 constexpr auto evaluate(
     Expression<Op, Args...>,

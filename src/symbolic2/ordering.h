@@ -9,15 +9,13 @@
 #include "meta/utility.h"
 #include "operators.h"
 
-// Symbolic expression ordering and comparison
+// Total ordering for symbolic expressions (enables canonical forms)
 
 namespace tempura {
 
-// --- Symbolic Ordering ---
-
 enum class PartialOrdering : char { kLess, kEqual, kGreater };
 
-// Operator precedence hierarchy for canonical ordering
+// Operator precedence for consistent ordering (lower index = higher precedence)
 template <typename LhsOp, typename RhsOp>
 constexpr auto opCompare(LhsOp, RhsOp) {
   constexpr static MinimalArray kOpOrder{
@@ -89,12 +87,9 @@ constexpr auto opCompare(LhsOp, RhsOp) {
 }
 static_assert(opCompare(AddOp{}, LogOp{}) == PartialOrdering::kLess);
 
-// Total ordering for canonical form: Expressions < Symbols < Constants
-// This ordering groups like terms together and prioritizes base expressions
-// (e.g., x in x^3 or y in y*3) for pattern matching
+// Expressions < Symbols < Constants (groups like terms for pattern matching)
 constexpr auto symbolicCompare(Symbolic auto lhs, Symbolic auto rhs)
     -> PartialOrdering {
-  // --- Category Comparison ---
   constexpr bool lhs_is_expr = match(lhs, AnyExpr{});
   constexpr bool rhs_is_expr = match(rhs, AnyExpr{});
   constexpr bool lhs_is_constant = match(lhs, AnyConstant{});
@@ -118,8 +113,9 @@ constexpr auto symbolicCompare(Symbolic auto lhs, Symbolic auto rhs)
   // by adding 0_c or multiplying by 1_c, but this created new expression types
   // that needed comparison again, leading to infinite template recursion.
   //
-  // Instead, we rely on the category ordering below to handle mixed comparisons.
-  // Expressions are always less than Symbols and Constants by category.
+  // Instead, we rely on the category ordering below to handle mixed
+  // comparisons. Expressions are always less than Symbols and Constants by
+  // category.
 
   // Category ordering: Expressions < Symbols < Constants
   else if constexpr (lhs_is_expr && !rhs_is_expr) {

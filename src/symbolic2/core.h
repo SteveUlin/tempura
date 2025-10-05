@@ -6,56 +6,40 @@
 
 namespace tempura {
 
-// --- Core Symbolic Concept & Tag ---
-
 struct SymbolicTag {};
 
 template <typename T>
 concept Symbolic = DerivedFrom<T, SymbolicTag>;
 
-// --- Symbol ---
-
-// Unique symbolic variable using stateless lambda for type identity
-//
-// Each Symbol{} creates a distinct type via the default lambda parameter,
-// enabling compile-time symbolic computation without runtime overhead.
+// Symbolic variable with unique type identity via stateless lambda
+// Each Symbol{} declaration generates a distinct type for compile-time tracking
 template <typename unique = decltype([] {})>
 struct Symbol : SymbolicTag {
-  // Type ID determines ordering - earlier symbols have lower IDs
   static constexpr auto id = kMeta<Symbol<unique>>;
 
-  constexpr Symbol() {
-    // Force type ID generation to preserve declaration order
-    (void)id;
-  };
+  constexpr Symbol() { (void)id; }  // Force ID generation for stable ordering
 
-  // Enable binding: (x = 5) creates TypeValueBinder for evaluation
-  constexpr auto operator=(auto value) const;
+  constexpr auto operator=(auto value) const;  // Enable x = 5 binding syntax
 };
 
-// --- Constant ---
-
-// Compile-time numeric constant embedded in the type system
+// Numeric constant embedded in type system for compile-time computation
 template <auto val>
 struct Constant : SymbolicTag {
   static constexpr auto value = val;
 };
 
-// --- Expression ---
-
-// Symbolic expression tree: operator + arguments encoded in type
+// Expression node: operation + arguments encoded entirely in type system
 template <typename Op, Symbolic... Args>
 struct Expression : SymbolicTag {
   constexpr Expression() = default;
   constexpr Expression(Op, Args...) {}
 };
 
-// --- Pattern Matching Wildcards ---
-
-struct AnyArg : SymbolicTag {};       // Matches any symbolic expression
-struct AnyExpr : SymbolicTag {};      // Matches any Expression<Op, Args...>
-struct AnyConstant : SymbolicTag {};  // Matches any Constant<value>
-struct AnySymbol : SymbolicTag {};    // Matches any Symbol<unique>
-struct Never : SymbolicTag {};        // Never matches (accessor return type)
+// Pattern matching wildcards
+struct AnyArg : SymbolicTag {};       // Universal wildcard
+struct AnyExpr : SymbolicTag {};      // Compound expressions only
+struct AnyConstant : SymbolicTag {};  // Numeric constants only
+struct AnySymbol : SymbolicTag {};    // Symbols only
+struct Never : SymbolicTag {};        // Non-matching sentinel type
 
 }  // namespace tempura

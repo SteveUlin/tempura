@@ -5,47 +5,21 @@
 
 namespace tempura {
 
-// =============================================================================
-// SYMBOLIC DIFFERENTIATION NOTATION
-// =============================================================================
+// Pure symbolic notation for recursive differentiation rules
 //
-// This enables writing derivative rules as pure symbolic expressions:
-//
-//   RecursiveRewrite{acos(f_), (-1_c / sqrt(1_c - pow(f_, 2_c))) * diff_(f_,
-//   var_)}
-//
-// Instead of lambda-based:
-//
-//   RecursiveRewrite{acos(f_), with_vars<f_>([](auto f, auto diff_fn, auto var)
-//   {
-//     return (-1_c / sqrt(1_c - pow(f, 2_c))) * diff_fn(f, var);
-//   })}
-//
-// Implementation Strategy:
-// 1. diff_ is a special operator that creates DiffCall expressions
-// 2. var_ is a placeholder that gets substituted during evaluation
-// 3. RecursiveRewrite detects DiffCall nodes and evaluates them with diff_fn
-// 4. Two-phase execution: substitute pattern vars, then evaluate diff calls
+// Enables: diff_(f_, var_) instead of lambda boilerplate
+// Implementation: DiffCall expressions are evaluated after pattern substitution
 
-// =============================================================================
-// META-SYMBOLS: Special symbolic constructs for differentiation notation
-// =============================================================================
-
-// Marker type for the differentiation operator
 struct DiffOperator {};
 
-// Placeholder for the differentiation variable
-// This is similar to a pattern variable, but represents the "var" parameter
-// passed to RecursiveRewrite::apply
+// Placeholder for differentiation variable in rules
 struct VarPlaceholder : SymbolicTag {
   static constexpr auto id = kMeta<VarPlaceholder>;
 };
 
-// Global instance for use in derivative rules
 inline constexpr VarPlaceholder var_;
 
-// DiffCall represents a deferred call to the recursive diff function
-// During evaluation, this will be replaced with diff_fn(expr, var)
+// Deferred differentiation call (evaluated after pattern substitution)
 template <Symbolic Expr, Symbolic Var>
 struct DiffCall : SymbolicTag {
   using expr_type = Expr;

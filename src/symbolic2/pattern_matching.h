@@ -4,95 +4,50 @@
 #include "matching.h"
 #include "meta/tags.h"
 
-// Advanced pattern matching with variable binding for symbolic expressions
+// Pattern-based expression rewriting with variable capture and substitution.
 //
-// Extends the basic matching system with pattern variables that can capture
-// and bind subexpressions. Supports:
-// - Pattern variables (x_, y_, n_, etc.) for capturing subexpressions
-// - Value-level matching (not just type-level)
-// - Substitution (replacing variables in expressions with bindings)
-// - Rewrite rules: Pattern → Replacement
-// - Rewrite systems: Multiple rules applied sequentially
+// Enables declarative transformation rules:
+//   Rewrite{pow(x_, 0_c), 1_c}        // x⁰ → 1
+//   Rewrite{x_ + y_, y_ + x_, pred}   // Conditional: a+b → b+a if predicate
+//   holds
 //
-// Current Implementation Status:
-// ✓ PatternVar<ID> creation and predefined variables (x_, y_, z_, etc.)
-// ✓ Integration with existing match() system via ranked overloads (Rank3)
-// ✓ Pattern variables match any expression
-// ✓ Substitution for simple cases (substitute(x_, binding))
-// ✓ Substitution in expressions (substitute(x_ + y_, binding1, binding2))
-// ✓ Rewrite rules with constant replacements (pow(x_, 0) → 1)
-// ✓ RewriteSystem for sequential rule application
-//
-// Limitations & Future Work:
-// ⚠ Rewrite::apply returns Replacement{} without extracting bindings
-//   - Works for constant replacements like 1_c
-//   - Doesn't work for replacements with PatternVars like x_
-//   - Need: extractBindings(pattern, expr) → tuple of matched values
-// ⚠ No support for repeated variables (x_ * x_ matching only when both same)
-// ⚠ No commutative matching (a + b should match b + a)
-// ⚠ No associative matching or flattening
-// ⚠ No pattern guards or conditions
-//
-// Example:
-//   using PowerZero = Rewrite<decltype(pow(x_, 0_c)), decltype(1_c)>;
-//   constexpr auto expr = pow(a, 0_c);
-//   constexpr auto result = PowerZero::apply(expr);  // Returns 1_c
+// Design notes:
+// - Pattern variables bind consistently: x_*x_ only matches expressions where
+//   both subexpressions are identical (enforced during binding extraction)
+// - Predicates use compile-time binding context for zero runtime overhead
+// - RewriteSystem applies first matching rule (order matters!)
 
 namespace tempura {
 
-// =============================================================================
-// PATTERN VARIABLES - Capture subexpressions during matching
-// =============================================================================
-
-// A pattern variable that matches any subexpression
-// Uses the lambda trick to generate unique IDs automatically
+// Pattern variable: captures and binds subexpressions during matching
+// Uses lambda trick for unique type identity (same as Symbol)
 template <typename unique = decltype([] {})>
 struct PatternVar : SymbolicTag {
-  // Use TypeId for ordering - each PatternVar{} gets a unique ID
   static constexpr auto id = kMeta<PatternVar<unique>>;
-
-  constexpr PatternVar() {
-    // Force type ID generation to preserve declaration order
-    (void)id;
-  }
+  constexpr PatternVar() { (void)id; }
 };
 
-// Pre-defined pattern variables for convenient use
-// Each gets a unique type via the lambda trick
+// Predefined pattern variables for rewrite rules
 inline constexpr PatternVar x_;
 inline constexpr PatternVar y_;
 inline constexpr PatternVar z_;
 inline constexpr PatternVar a_;
 inline constexpr PatternVar b_;
 inline constexpr PatternVar c_;
-inline constexpr PatternVar f_;  // For functions in derivative rules
-inline constexpr PatternVar g_;  // For functions in derivative rules
+inline constexpr PatternVar f_;
+inline constexpr PatternVar g_;
 inline constexpr PatternVar n_;
 inline constexpr PatternVar m_;
 inline constexpr PatternVar p_;
 inline constexpr PatternVar q_;
 
-// =============================================================================
-// HELPER: with_vars - Automatic pattern variable extraction
-// =============================================================================
-
-// Helper to reduce boilerplate in RecursiveRewrite lambdas by automatically
-// extracting pattern variables from the context.
+// Reduces boilerplate in recursive rewrite lambdas by auto-extracting pattern
+// variables
 //
-// Instead of writing:
-//   [](auto ctx, auto diff_fn, auto var) {
-//     constexpr auto f = get(ctx, f_);
-//     constexpr auto g = get(ctx, g_);
-//     return diff_fn(f, var) + diff_fn(g, var);
-//   }
-//
-// You can write:
-//   with_vars<f_, g_>([](auto f, auto g, auto diff_fn, auto var) {
-//     return diff_fn(f, var) + diff_fn(g, var);
-//   })
-//
-// The pattern variables are extracted in the order specified in the template
-// arguments, then passed to your lambda along with diff_fn and var.
+// with_vars<f_, g_>([](auto f, auto g, auto diff_fn, auto var) { ... })
+// instead of:
+// [](auto ctx, auto diff_fn, auto var) { auto f = get(ctx, f_); auto g =
+// get(ctx, g_); ... }
 
 template <typename Lambda, auto... PatternVars>
 struct WithVarsHelper {
@@ -109,78 +64,46 @@ constexpr auto with_vars(auto lambda) {
   return WithVarsHelper<decltype(lambda), PatternVars...>{lambda};
 }
 
-// =============================================================================
-// WILDCARD PATTERNS - Match categories of expressions
-// =============================================================================
+// Wildcard patterns with Unicode for readability
+inline constexpr AnyArg 𝐚𝐧𝐲{};     // Universal wildcard
+inline constexpr AnyExpr 𝐞𝐱𝐩𝐫{};   // Compound expressions only
+inline constexpr AnyConstant 𝐜{};  // Numeric constants only
+inline constexpr AnySymbol 𝐬{};    // Symbols only
 
-// Predefined wildcard patterns for matching categories
-// Using Unicode symbols for visual clarity and mathematical style
-
-// Match any expression - the universal wildcard
-inline constexpr AnyArg 𝐚𝐧𝐲{};
-
-// Match any compound expression (not constants/symbols)
-inline constexpr AnyExpr 𝐞𝐱𝐩𝐫{};
-
-// Match any constant (numeric literals like 1, 2.5, etc.)
-inline constexpr AnyConstant 𝐜{};
-
-// Match any symbol (x, y, z, etc.)
-inline constexpr AnySymbol 𝐬{};
-
-// =============================================================================
-// PATTERN MATCHING - Integrate with existing match() system
-// =============================================================================
-
-// Pattern variables match anything (like AnyArg but with an ID)
-// We extend the existing matching system to handle PatternVar
-
-// Add PatternVar matching to the ranked overload system
+// Integrate pattern variables into ranked match system
 template <typename Unique, Symbolic S>
 constexpr auto matchImpl(Rank3, PatternVar<Unique>, S) -> bool {
-  return true;  // Pattern variables match anything
+  return true;
 }
 
 template <typename Unique, Symbolic S>
 constexpr auto matchImpl(Rank3, S, PatternVar<Unique>) -> bool {
-  return true;  // Pattern variables match anything (symmetric)
+  return true;
 }
-
-// =============================================================================
-// SUBSTITUTION - Replace pattern variables in expressions
-// =============================================================================
 
 namespace detail {
 
-// =============================================================================
-// COMPILE-TIME BINDING CONTEXT
-// =============================================================================
-
-// A binding entry: maps a PatternVar TypeId to a bound expression
+// Compile-time heterogeneous map: PatternVar ID → bound expression
 template <TypeId VarId, typename BoundExpr>
 struct BindingEntry {
   static constexpr TypeId var_id = VarId;
   using bound_expr = BoundExpr;
 };
 
-// A compile-time binding context (heterogeneous map from TypeId to expressions)
 template <typename... Entries>
 struct BindingContext {
   static constexpr std::size_t size = sizeof...(Entries);
 
-  // Add a new binding to the context
   template <TypeId VarId, typename BoundExpr>
   constexpr auto bind(PatternVar<decltype([] {})>, BoundExpr) const {
     return BindingContext<Entries..., BindingEntry<VarId, BoundExpr>>{};
   }
 
-  // Lookup a binding by TypeId
   template <TypeId VarId>
   static constexpr auto lookup() {
     return lookupImpl<VarId, Entries...>();
   }
 
-  // Check if a variable is already bound
   template <TypeId VarId>
   static constexpr bool isBound() {
     return isBoundImpl<VarId, Entries...>();
