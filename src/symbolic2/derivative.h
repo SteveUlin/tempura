@@ -74,6 +74,16 @@ constexpr auto DiffAcos = SymbolicRecursiveRewrite{
 constexpr auto DiffAtan = SymbolicRecursiveRewrite{
     atan(f_), (1_c / (1_c + pow(f_, 2_c))) * diff_(f_, var_)};
 
+// Hyperbolic function rules
+constexpr auto DiffSinh =
+    SymbolicRecursiveRewrite{sinh(f_), cosh(f_) * diff_(f_, var_)};
+
+constexpr auto DiffCosh =
+    SymbolicRecursiveRewrite{cosh(f_), sinh(f_) * diff_(f_, var_)};
+
+constexpr auto DiffTanh = SymbolicRecursiveRewrite{
+    tanh(f_), (1_c / pow(cosh(f_), 2_c)) * diff_(f_, var_)};
+
 // Base case: constants differentiate to zero
 constexpr auto DiffConstant = SymbolicRecursiveRewrite{𝐜, 0_c};
 
@@ -82,7 +92,8 @@ constexpr auto DiffRules = RecursiveRewriteSystem{
     DiffConstant, DiffSum,      DiffDifference, DiffNegation,
     DiffProduct,  DiffQuotient, DiffPower,      DiffSqrt,
     DiffExp,      DiffLog,      DiffSin,        DiffCos,
-    DiffTan,      DiffAsin,     DiffAcos,       DiffAtan};
+    DiffTan,      DiffAsin,     DiffAcos,       DiffAtan,
+    DiffSinh,     DiffCosh,     DiffTanh};
 
 // =============================================================================
 // MAIN DIFF FUNCTION

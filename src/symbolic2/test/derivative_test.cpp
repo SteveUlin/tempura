@@ -187,5 +187,48 @@ auto main() -> int {
     expectNear<0.0001>(result, -1.0);
   };
 
+  "Derivative of sinh(x)"_test = [] {
+    Symbol x;
+    auto expr = sinh(x);
+    auto d = diff(expr, x);
+    // d/dx(sinh(x)) = cosh(x)*1
+    static_assert(match(d, cosh(x) * 1_c));
+  };
+
+  "Derivative of cosh(x)"_test = [] {
+    Symbol x;
+    auto expr = cosh(x);
+    auto d = diff(expr, x);
+    // d/dx(cosh(x)) = sinh(x)*1
+    static_assert(match(d, sinh(x) * 1_c));
+  };
+
+  "Derivative of tanh(x)"_test = [] {
+    Symbol x;
+    auto expr = tanh(x);
+    auto d = diff(expr, x);
+    // d/dx(tanh(x)) = 1/cosh²(x)
+    static_assert(match(d, (1_c / pow(cosh(x), 2_c)) * 1_c));
+  };
+
+  "Chain rule: sinh(x^2)"_test = [] {
+    Symbol x;
+    auto expr = sinh(pow(x, 2_c));
+    auto d = diff(expr, x);
+    // d/dx(sinh(x²)) = cosh(x²) * 2x
+    static_assert(match(d, cosh(pow(x, 2_c)) * (2_c * pow(x, 2_c - 1_c) * 1_c)));
+  };
+
+  "Evaluation: derivative of sinh(x) at 1"_test = [] {
+    Symbol x;
+    auto expr = sinh(x);
+    auto d = diff(expr, x);         // cosh(x) * 1
+    auto simplified = simplify(d);  // Should simplify to cosh(x)
+
+    // cosh(1) ≈ 1.543
+    auto result = evaluate(simplified, BinderPack{x = 1.0});
+    expectNear<0.001>(result, std::cosh(1.0));
+  };
+
   return 0;
 }

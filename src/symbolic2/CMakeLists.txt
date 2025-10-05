@@ -77,6 +77,10 @@ target_link_libraries(aesthetic_demo PRIVATE symbolic2_core)
 add_executable(pattern_demo examples/pattern_demo.cpp)
 target_link_libraries(pattern_demo PRIVATE symbolic2_core)
 
+# Hyperbolic functions demo
+add_executable(hyperbolic_demo examples/hyperbolic_demo.cpp)
+target_link_libraries(hyperbolic_demo PRIVATE symbolic2_derivative unit)
+
 # Note: Uncomment as features are added
 # add_executable(symbolic2_advanced_example examples/advanced_simplify.cpp)
 # target_link_libraries(symbolic2_advanced_example PRIVATE symbolic2_core)

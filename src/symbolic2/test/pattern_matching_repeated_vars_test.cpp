@@ -9,9 +9,9 @@ using namespace tempura;
 int main() {
   std::cout << "=== Repeated Pattern Variables Test ===" << std::endl << std::endl;
 
-  inline constexpr Symbol a;
-  inline constexpr Symbol b;
-  inline constexpr Symbol c;
+  constexpr Symbol a;
+  constexpr Symbol b;
+  constexpr Symbol c;
 
   // Test 1: x_ + x_ should match a + a but not a + b
   std::cout << "Testing x_ + x_ pattern..." << std::endl;

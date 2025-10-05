@@ -207,11 +207,21 @@ constexpr auto applyLogRules(S expr) {
   return applyRules<LogRules>(expr);
 }
 
-constexpr auto SinRules = RewriteSystem{
-    Rewrite{sin(π * 0.5_c), 1_c}, Rewrite{sin(π), 0_c},
-    Rewrite{sin(π * 1.5_c), Constant<-1>{}},
-    Rewrite{sin(x_ * Constant<-1>{}), Constant<-1>{} * sin(x_)}  // Odd function
-};
+// Trigonometric simplification rules
+namespace SinRuleCategories {
+constexpr auto Identity = RewriteSystem{Rewrite{sin(0_c), 0_c}};
+
+constexpr auto SpecialAngles =
+    RewriteSystem{Rewrite{sin(π * 0.5_c), 1_c}, Rewrite{sin(π), 0_c},
+                  Rewrite{sin(π * 1.5_c), Constant<-1>{}}};
+
+constexpr auto Symmetry =
+    RewriteSystem{Rewrite{sin(-x_), -sin(x_)}};  // Odd function
+}  // namespace SinRuleCategories
+
+constexpr auto SinRules =
+    compose(SinRuleCategories::Identity, SinRuleCategories::SpecialAngles,
+            SinRuleCategories::Symmetry);
 
 template <Symbolic S>
   requires(match(S{}, sin(𝐚𝐧𝐲)))
@@ -219,9 +229,20 @@ constexpr auto applySinRules(S expr) {
   return applyRules<SinRules>(expr);
 }
 
-constexpr auto CosRules =
+namespace CosRuleCategories {
+constexpr auto Identity = RewriteSystem{Rewrite{cos(0_c), 1_c}};
+
+constexpr auto SpecialAngles =
     RewriteSystem{Rewrite{cos(π * 0.5_c), 0_c}, Rewrite{cos(π), Constant<-1>{}},
                   Rewrite{cos(π * 1.5_c), 0_c}};
+
+constexpr auto Symmetry =
+    RewriteSystem{Rewrite{cos(-x_), cos(x_)}};  // Even function
+}  // namespace CosRuleCategories
+
+constexpr auto CosRules =
+    compose(CosRuleCategories::Identity, CosRuleCategories::SpecialAngles,
+            CosRuleCategories::Symmetry);
 
 template <Symbolic S>
   requires(match(S{}, cos(𝐚𝐧𝐲)))
@@ -229,12 +250,78 @@ constexpr auto applyCosRules(S expr) {
   return applyRules<CosRules>(expr);
 }
 
-constexpr auto TanRules = RewriteSystem{Rewrite{tan(π), 0_c}};
+namespace TanRuleCategories {
+constexpr auto Identity = RewriteSystem{Rewrite{tan(0_c), 0_c}};
+
+constexpr auto SpecialAngles = RewriteSystem{Rewrite{tan(π), 0_c}};
+
+constexpr auto Symmetry =
+    RewriteSystem{Rewrite{tan(-x_), -tan(x_)}};  // Odd function
+}  // namespace TanRuleCategories
+
+constexpr auto TanRules =
+    compose(TanRuleCategories::Identity, TanRuleCategories::SpecialAngles,
+            TanRuleCategories::Symmetry);
 
 template <Symbolic S>
   requires(match(S{}, tan(𝐚𝐧𝐲)))
-constexpr auto tanIdentities(S expr) {
+constexpr auto applyTanRules(S expr) {
   return applyRules<TanRules>(expr);
+}
+
+// Hyperbolic function simplification rules
+namespace SinhRuleCategories {
+constexpr auto Identity = RewriteSystem{Rewrite{sinh(0_c), 0_c}};
+
+constexpr auto Symmetry =
+    RewriteSystem{Rewrite{sinh(-x_), -sinh(x_)}};  // Odd function
+
+constexpr auto Inverse = RewriteSystem{Rewrite{sinh(log(x_)), (x_ - pow(x_, Constant<-1>{})) / 2_c}};
+}  // namespace SinhRuleCategories
+
+constexpr auto SinhRules =
+    compose(SinhRuleCategories::Identity, SinhRuleCategories::Symmetry,
+            SinhRuleCategories::Inverse);
+
+template <Symbolic S>
+  requires(match(S{}, sinh(𝐚𝐧𝐲)))
+constexpr auto applySinhRules(S expr) {
+  return applyRules<SinhRules>(expr);
+}
+
+namespace CoshRuleCategories {
+constexpr auto Identity = RewriteSystem{Rewrite{cosh(0_c), 1_c}};
+
+constexpr auto Symmetry =
+    RewriteSystem{Rewrite{cosh(-x_), cosh(x_)}};  // Even function
+
+constexpr auto Inverse = RewriteSystem{Rewrite{cosh(log(x_)), (x_ + pow(x_, Constant<-1>{})) / 2_c}};
+}  // namespace CoshRuleCategories
+
+constexpr auto CoshRules =
+    compose(CoshRuleCategories::Identity, CoshRuleCategories::Symmetry,
+            CoshRuleCategories::Inverse);
+
+template <Symbolic S>
+  requires(match(S{}, cosh(𝐚𝐧𝐲)))
+constexpr auto applyCoshRules(S expr) {
+  return applyRules<CoshRules>(expr);
+}
+
+namespace TanhRuleCategories {
+constexpr auto Identity = RewriteSystem{Rewrite{tanh(0_c), 0_c}};
+
+constexpr auto Symmetry =
+    RewriteSystem{Rewrite{tanh(-x_), -tanh(x_)}};  // Odd function
+}  // namespace TanhRuleCategories
+
+constexpr auto TanhRules =
+    compose(TanhRuleCategories::Identity, TanhRuleCategories::Symmetry);
+
+template <Symbolic S>
+  requires(match(S{}, tanh(𝐚𝐧𝐲)))
+constexpr auto applyTanhRules(S expr) {
+  return applyRules<TanhRules>(expr);
 }
 
 template <Symbolic S, SizeT depth>
@@ -283,6 +370,14 @@ constexpr auto simplifySymbolWithDepth(S sym) {
     return trySimplify<S, depth, applySinRules<S>>(sym);
   } else if constexpr (requires { applyCosRules(sym); }) {
     return trySimplify<S, depth, applyCosRules<S>>(sym);
+  } else if constexpr (requires { applyTanRules(sym); }) {
+    return trySimplify<S, depth, applyTanRules<S>>(sym);
+  } else if constexpr (requires { applySinhRules(sym); }) {
+    return trySimplify<S, depth, applySinhRules<S>>(sym);
+  } else if constexpr (requires { applyCoshRules(sym); }) {
+    return trySimplify<S, depth, applyCoshRules<S>>(sym);
+  } else if constexpr (requires { applyTanhRules(sym); }) {
+    return trySimplify<S, depth, applyTanhRules<S>>(sym);
   } else {
     return S{};
   }

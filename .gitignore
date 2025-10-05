@@ -3,6 +3,18 @@ debug/
 release/
 .direnv/
 
+# Profiling and temporary files
+perf.data
+perf.data.*
+flamegraph.html
+*.backup
+*.bak
+*~
+
+# Build artifacts and symlinks
+external
+result
+
 # Prerequisites
 *.d
 
