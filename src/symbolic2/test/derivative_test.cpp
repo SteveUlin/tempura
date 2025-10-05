@@ -216,7 +216,8 @@ auto main() -> int {
     auto expr = sinh(pow(x, 2_c));
     auto d = diff(expr, x);
     // d/dx(sinh(x²)) = cosh(x²) * 2x
-    static_assert(match(d, cosh(pow(x, 2_c)) * (2_c * pow(x, 2_c - 1_c) * 1_c)));
+    static_assert(
+        match(d, cosh(pow(x, 2_c)) * (2_c * pow(x, 2_c - 1_c) * 1_c)));
   };
 
   "Evaluation: derivative of sinh(x) at 1"_test = [] {

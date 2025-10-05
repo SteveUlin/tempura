@@ -89,11 +89,10 @@ constexpr auto DiffConstant = SymbolicRecursiveRewrite{𝐜, 0_c};
 
 // Complete differentiation rule system
 constexpr auto DiffRules = RecursiveRewriteSystem{
-    DiffConstant, DiffSum,      DiffDifference, DiffNegation,
-    DiffProduct,  DiffQuotient, DiffPower,      DiffSqrt,
-    DiffExp,      DiffLog,      DiffSin,        DiffCos,
-    DiffTan,      DiffAsin,     DiffAcos,       DiffAtan,
-    DiffSinh,     DiffCosh,     DiffTanh};
+    DiffConstant, DiffSum,   DiffDifference, DiffNegation, DiffProduct,
+    DiffQuotient, DiffPower, DiffSqrt,       DiffExp,      DiffLog,
+    DiffSin,      DiffCos,   DiffTan,        DiffAsin,     DiffAcos,
+    DiffAtan,     DiffSinh,  DiffCosh,       DiffTanh};
 
 // =============================================================================
 // MAIN DIFF FUNCTION

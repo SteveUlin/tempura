@@ -6,13 +6,13 @@
 // - Chain rule with hyperbolic functions
 // - Evaluation of symbolic hyperbolic expressions
 
+#include <cmath>
+#include <iostream>
+
 #include "symbolic2/derivative.h"
 #include "symbolic2/evaluate.h"
 #include "symbolic2/simplify.h"
 #include "unit.h"
-
-#include <cmath>
-#include <iostream>
 
 using namespace tempura;
 
@@ -114,8 +114,8 @@ auto main() -> int {
     auto df_result = evaluate(df, BinderPack{x = x_val});
 
     std::cout << "  At x = " << x_val << ":\n";
-    std::cout << "    sinh(x) = " << f_result << " (expected: "
-              << std::sinh(x_val) << ")\n";
+    std::cout << "    sinh(x) = " << f_result
+              << " (expected: " << std::sinh(x_val) << ")\n";
     std::cout << "    d/dx[sinh(x)] = cosh(x) = " << df_result
               << " (expected: " << std::cosh(x_val) << ")\n";
 
@@ -132,7 +132,8 @@ auto main() -> int {
     auto f = sinh(x) * cosh(x);
     auto df = simplify(diff(f, x));
     std::cout << "  f(x) = sinh(x)·cosh(x)\n";
-    std::cout << "  f'(x) = cosh(x)·cosh(x) + sinh(x)·sinh(x) = cosh²(x) + sinh²(x)\n";
+    std::cout << "  f'(x) = cosh(x)·cosh(x) + sinh(x)·sinh(x) = cosh²(x) + "
+                 "sinh²(x)\n";
 
     double x_val = 0.5;
     auto result = evaluate(df, BinderPack{x = x_val});
@@ -168,9 +169,10 @@ auto main() -> int {
   std::cout << "\n✓ All demonstrations passed!\n";
   std::cout << "\nSummary of additions:\n";
   std::cout << "  • Hyperbolic function differentiation (sinh, cosh, tanh)\n";
-  std::cout << "  • Hyperbolic function simplification (identities & symmetry)\n";
+  std::cout
+      << "  • Hyperbolic function simplification (identities & symmetry)\n";
   std::cout << "  • Improved trigonometric simplification (symmetry rules)\n";
   std::cout << "  • All rules verified at compile-time with static_assert\n";
-  
+
   return 0;
 }

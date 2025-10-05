@@ -1,7 +1,7 @@
+#include <cassert>
+
 #include "symbolic2/symbolic.h"
 #include "unit.h"
-
-#include <cassert>
 
 using namespace tempura;
 

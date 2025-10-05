@@ -276,7 +276,8 @@ constexpr auto Identity = RewriteSystem{Rewrite{sinh(0_c), 0_c}};
 constexpr auto Symmetry =
     RewriteSystem{Rewrite{sinh(-x_), -sinh(x_)}};  // Odd function
 
-constexpr auto Inverse = RewriteSystem{Rewrite{sinh(log(x_)), (x_ - pow(x_, Constant<-1>{})) / 2_c}};
+constexpr auto Inverse =
+    RewriteSystem{Rewrite{sinh(log(x_)), (x_ - pow(x_, Constant<-1>{})) / 2_c}};
 }  // namespace SinhRuleCategories
 
 constexpr auto SinhRules =
@@ -295,7 +296,8 @@ constexpr auto Identity = RewriteSystem{Rewrite{cosh(0_c), 1_c}};
 constexpr auto Symmetry =
     RewriteSystem{Rewrite{cosh(-x_), cosh(x_)}};  // Even function
 
-constexpr auto Inverse = RewriteSystem{Rewrite{cosh(log(x_)), (x_ + pow(x_, Constant<-1>{})) / 2_c}};
+constexpr auto Inverse =
+    RewriteSystem{Rewrite{cosh(log(x_)), (x_ + pow(x_, Constant<-1>{})) / 2_c}};
 }  // namespace CoshRuleCategories
 
 constexpr auto CoshRules =
