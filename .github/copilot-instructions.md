@@ -120,6 +120,19 @@ ctest --test-dir build -L base            # By label
 - **Concepts for template constraints**: `template<Symbolic S>` not `template<typename S> requires Symbolic<S>`
 - **CHECK macro for assertions**: `CHECK(condition)` in `matrix2/matrix.h` prints file/line and terminates
 
+### Modern C++ APIs
+
+**Prefer modern C++20/C++26 standard library features over legacy alternatives:**
+
+- **Use `std::format` and `std::print` over `iostream`**: Type-safe, efficient, and more readable. Example: `std::print("Value: {}\n", x)` instead of `std::cout << "Value: " << x << std::endl;`
+- **Use `std::span` over raw pointers**: Type-safe views with bounds information
+- **Use `std::ranges` algorithms**: Composable and constexpr-friendly
+- **Use `std::expected` for error handling**: When appropriate (requires C++23 support)
+- **Use structured bindings**: `auto [x, y] = get_pair()` for clarity
+- **Use `std::string_view`**: For non-owning string references
+
+The codebase targets C++26 - embrace modern features that improve safety, readability, and compile-time evaluation.
+
 ### Naming Patterns
 
 - **`k` prefix for constants**: `kDynamic`, `kRowMajor`, `kMeta<T>`
