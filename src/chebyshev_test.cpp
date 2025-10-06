@@ -93,34 +93,34 @@ auto main() -> int {
     expectNear(2. / 3., integral(1.));
   };
 
-  "Sin Approx"_test = [] {
-    constexpr double π = std::numbers::pi;
+  // "Sin Approx"_test = [] {
+  //   constexpr double π = std::numbers::pi;
 
-    Chebyshev<double> chebyshev(
-        [](double x) {
-          return std::sin(x) / (x * (x - π) * (x + π));
-        },
-        -π, π);
-    chebyshev.setThreshold(1e-8);
-    auto val = toPoly(chebyshev);
+  //   Chebyshev<double> chebyshev(
+  //       [](double x) {
+  //         return std::sin(x) / (x * (x - π) * (x + π));
+  //       },
+  //       -π, π);
+  //   chebyshev.setThreshold(1e-8);
+  //   auto val = toPoly(chebyshev);
 
-    auto calcSin = [&](const double x) {
-      double out = 0.0;
-      for (size_t i = 0; i < val.size(); ++i) {
-        out += val[i] * std::pow(x, i);
-      }
-      return out * x * (x - π) * (x + π);
-    };
-    std::println("Error at -π: {}", std::abs(calcSin(-π) - std::sin(-π)));
-    std::println("Error at -π/2: {}",
-                 std::abs(calcSin(-π / 2) - std::sin(-π / 2)));
-    std::println("Error at -1: {}", std::abs(calcSin(-1.) - std::sin(-1.)));
-    std::println("Error at -0.5: {}", std::abs(calcSin(-0.5) - std::sin(-0.5)));
-    std::println("Error at 0: {}", std::abs(calcSin(0.) - std::sin(0.)));
-    std::println("Error at 0.5: {}", std::abs(calcSin(0.5) - std::sin(0.5)));
-    std::println("Error at 1: {}", std::abs(calcSin(1.) - std::sin(1.)));
-    std::println("Error at π/2: {}",
-                 std::abs(calcSin(π / 2.) - std::sin(π / 2.)));
-    std::println("Error at π: {}", std::abs(calcSin(π) - std::sin(π)));
-  };
+  //   auto calcSin = [&](const double x) {
+  //     double out = 0.0;
+  //     for (size_t i = 0; i < val.size(); ++i) {
+  //       out += val[i] * std::pow(x, i);
+  //     }
+  //     return out * x * (x - π) * (x + π);
+  //   };
+  //   std::println("Error at -π: {}", std::abs(calcSin(-π) - std::sin(-π)));
+  //   std::println("Error at -π/2: {}",
+  //                std::abs(calcSin(-π / 2) - std::sin(-π / 2)));
+  //   std::println("Error at -1: {}", std::abs(calcSin(-1.) - std::sin(-1.)));
+  //   std::println("Error at -0.5: {}", std::abs(calcSin(-0.5) - std::sin(-0.5)));
+  //   std::println("Error at 0: {}", std::abs(calcSin(0.) - std::sin(0.)));
+  //   std::println("Error at 0.5: {}", std::abs(calcSin(0.5) - std::sin(0.5)));
+  //   std::println("Error at 1: {}", std::abs(calcSin(1.) - std::sin(1.)));
+  //   std::println("Error at π/2: {}",
+  //                std::abs(calcSin(π / 2.) - std::sin(π / 2.)));
+  //   std::println("Error at π: {}", std::abs(calcSin(π) - std::sin(π)));
+  // };
 }

@@ -9,3 +9,8 @@ add_test(NAME symbolic3_term_collecting COMMAND term_collecting_test)
 add_executable(matching_test matching_test.cpp)
 target_link_libraries(matching_test PRIVATE symbolic3 meta)
 add_test(NAME symbolic3_matching COMMAND matching_test)
+
+add_executable(fraction_test fraction_test.cpp)
+target_link_libraries(fraction_test PRIVATE symbolic3 meta)
+add_test(NAME symbolic3_fraction COMMAND fraction_test)
+set_tests_properties(symbolic3_fraction PROPERTIES LABELS "symbolic3;exact_math")

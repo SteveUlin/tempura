@@ -11,10 +11,13 @@ namespace tempura {
 
 enum class TypeId : SizeT {};
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wnon-template-friend"
 template <TypeId>
 struct TypeIdResolver {
   consteval friend auto typeIdResolverFriend(TypeIdResolver);
 };
+#pragma GCC diagnostic pop
 
 // This is a meta-programming utility to generate unique type ids at
 // compile-time. It uses a binary search algorithm to find the next available

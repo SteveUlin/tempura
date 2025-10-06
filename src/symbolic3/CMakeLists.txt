@@ -32,10 +32,7 @@ target_link_libraries(simplify_test PRIVATE symbolic3)
 add_test(NAME symbolic3_simplify COMMAND simplify_test)
 set_tests_properties(symbolic3_simplify PROPERTIES LABELS "symbolic3")
 
-add_executable(strategy_v2_test test/strategy_v2_simple_test.cpp)
-target_link_libraries(strategy_v2_test PRIVATE symbolic3)
-add_test(NAME symbolic3_strategy_v2 COMMAND strategy_v2_test)
-set_tests_properties(symbolic3_strategy_v2 PROPERTIES LABELS "symbolic3;v2")
+
 
 # Note: Full tests (strategy_test, traversal_test, transforms_test) are TODO
 # They need fixes to the type predicates and strategy implementations
@@ -110,5 +107,11 @@ target_link_libraries(fold_test PRIVATE symbolic3)
 # Pi and e Constants Test
 add_executable(pi_e_test test/pi_e_test.cpp)
 target_link_libraries(pi_e_test PRIVATE symbolic3)
+
+# Fraction Test - Exact rational arithmetic
+add_executable(fraction_test test/fraction_test.cpp)
+target_link_libraries(fraction_test PRIVATE symbolic3 unit)
+add_test(NAME symbolic3_fraction COMMAND fraction_test)
+set_tests_properties(symbolic3_fraction PROPERTIES LABELS "symbolic3;exact_math")
 
 

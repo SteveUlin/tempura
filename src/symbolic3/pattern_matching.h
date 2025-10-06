@@ -47,6 +47,13 @@ constexpr bool match(PatternVar<Unique>, S) {
   return true;
 }
 
+// Special case: PatternVar should NOT match Never
+// (Never represents "no value", so it shouldn't bind to pattern variables)
+template <typename Unique>
+constexpr bool match(PatternVar<Unique>, Never) {
+  return false;
+}
+
 // =============================================================================
 // BINDING CONTEXT - Compile-time heterogeneous map
 // =============================================================================

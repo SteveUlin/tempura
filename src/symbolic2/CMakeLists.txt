@@ -69,17 +69,7 @@ add_test(NAME symbolic2_trigonometric_rules_test COMMAND symbolic2_trigonometric
 add_executable(symbolic2_basic_example examples/basic_usage.cpp)
 target_link_libraries(symbolic2_basic_example PRIVATE symbolic2_core)
 
-# Design exploration demo
-add_executable(simplify_design_demo examples/simplify_design_demo.cpp)
-target_link_libraries(simplify_design_demo PRIVATE symbolic2_core)
 
-# Aesthetic variations demo
-add_executable(aesthetic_demo examples/aesthetic_demo.cpp)
-target_link_libraries(aesthetic_demo PRIVATE symbolic2_core)
-
-# Pattern-based rules demo
-add_executable(pattern_demo examples/pattern_demo.cpp)
-target_link_libraries(pattern_demo PRIVATE symbolic2_core)
 
 # Hyperbolic functions demo
 add_executable(hyperbolic_demo examples/hyperbolic_demo.cpp)

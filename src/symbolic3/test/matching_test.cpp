@@ -32,10 +32,10 @@ int main() {
 
   // Test 3: Expression matching - the core fix
   "Expressions match structurally"_test = [] {
-    constexpr auto expr1 = Expression<AddOp, Constant<1>, Constant<2>>{};
-    constexpr auto expr2 = Expression<AddOp, Constant<1>, Constant<2>>{};
-    constexpr auto expr3 = Expression<AddOp, Constant<1>, Constant<3>>{};
-    constexpr auto expr4 = Expression<MulOp, Constant<1>, Constant<2>>{};
+    constexpr auto expr1 = Constant<1>{} + Constant<2>{};
+    constexpr auto expr2 = Constant<1>{} + Constant<2>{};
+    constexpr auto expr3 = Constant<1>{} + Constant<3>{};
+    constexpr auto expr4 = Constant<1>{} * Constant<2>{};
 
     static_assert(match(expr1, expr2), "Same expression should match");
     static_assert(!match(expr1, expr3), "Different args should not match");

@@ -31,6 +31,36 @@ struct Constant : SymbolicTag {
   static constexpr auto value = val;
 };
 
+// Constexpr GCD using Euclidean algorithm (no STL dependencies)
+constexpr long long gcd_impl(long long a, long long b) {
+  return b == 0 ? a : gcd_impl(b, a % b);
+}
+
+constexpr long long abs_val(long long x) { return x < 0 ? -x : x; }
+
+constexpr long long gcd(long long a, long long b) {
+  return gcd_impl(abs_val(a), abs_val(b));
+}
+
+// Compile-time rational number (exact fraction) - GCD-reduced automatically
+// Enables exact arithmetic without floating-point approximation
+template <long long N, long long D = 1>
+struct Fraction : SymbolicTag {
+  static_assert(D != 0, "Denominator cannot be zero");
+
+  // Reduce fraction to lowest terms at compile-time
+  static constexpr auto g = gcd(N, D);
+  static constexpr auto sign = ((N < 0) != (D < 0)) ? -1 : 1;  // XOR for sign
+
+  static constexpr auto numerator = sign * abs_val(N) / g;
+  static constexpr auto denominator = abs_val(D) / g;
+
+  // Convert to double for evaluation (opt-in only)
+  static constexpr double to_double() {
+    return static_cast<double>(numerator) / static_cast<double>(denominator);
+  }
+};
+
 // Expression node: operation + arguments encoded entirely in type system
 template <typename Op, Symbolic... Args>
 struct Expression : SymbolicTag {
@@ -57,6 +87,12 @@ constexpr bool is_constant = false;
 
 template <auto val>
 constexpr bool is_constant<Constant<val>> = true;
+
+template <typename T>
+constexpr bool is_fraction = false;
+
+template <long long N, long long D>
+constexpr bool is_fraction<Fraction<N, D>> = true;
 
 template <typename T>
 constexpr bool is_expression = false;

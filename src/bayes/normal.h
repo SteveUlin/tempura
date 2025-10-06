@@ -88,7 +88,7 @@ class Normal {
 
   constexpr auto cdf(T x) const {
     using std::erf;
-    0.5 * (1 + erf((x - mu_) / (sigma_ * std::numbers::sqrt2)));
+    return 0.5 * (1 + erf((x - mu_) / (sigma_ * std::numbers::sqrt2)));
   }
 
   constexpr auto mean() const { return mu_; }
