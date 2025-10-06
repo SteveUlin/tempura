@@ -77,7 +77,9 @@ constexpr auto matchImpl(Rank1, Expression<Op, LHSArgs...>,
   } else if constexpr (sizeof...(LHSArgs) == 0 && (sizeof...(RHSArgs) == 0)) {
     return true;
   } else {
-    return (matchImpl(Rank4{}, LHSArgs{}, RHSArgs{}) && ...);
+    // Use Rank5 (full match) instead of Rank4 (exact type) for recursive
+    // matching This allows nested patterns to match structurally
+    return (matchImpl(Rank5{}, LHSArgs{}, RHSArgs{}) && ...);
   }
 }
 

@@ -54,6 +54,10 @@ add_executable(symbolic2_derivative_test test/derivative_test.cpp)
 target_link_libraries(symbolic2_derivative_test PRIVATE symbolic2_derivative unit)
 add_test(NAME symbolic2_derivative_test COMMAND symbolic2_derivative_test)
 
+add_executable(symbolic2_trigonometric_rules_test test/trigonometric_rules_test.cpp)
+target_link_libraries(symbolic2_trigonometric_rules_test PRIVATE symbolic2_core unit)
+add_test(NAME symbolic2_trigonometric_rules_test COMMAND symbolic2_trigonometric_rules_test)
+
 # ToString support (to be added)
 # add_library(symbolic2_to_string INTERFACE)
 # target_sources(symbolic2_to_string INTERFACE

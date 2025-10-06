@@ -211,17 +211,55 @@ constexpr auto applyLogRules(S expr) {
 namespace SinRuleCategories {
 constexpr auto Identity = RewriteSystem{Rewrite{sin(0_c), 0_c}};
 
-constexpr auto SpecialAngles =
-    RewriteSystem{Rewrite{sin(π * 0.5_c), 1_c}, Rewrite{sin(π), 0_c},
-                  Rewrite{sin(π * 1.5_c), Constant<-1>{}}};
+constexpr auto SpecialAngles = RewriteSystem{
+    // Multiples of π/6 (30°) - division form and normalized (a*b^-1) form
+    Rewrite{sin(π / 6_c), 1_c / 2_c},
+    Rewrite{sin(π * pow(6_c, Constant<-1>{})), 1_c / 2_c},
+    Rewrite{sin(π * 5_c / 6_c), 1_c / 2_c},
+    Rewrite{sin(π * 5_c * pow(6_c, Constant<-1>{})), 1_c / 2_c},
+    Rewrite{sin(π * 7_c / 6_c), Constant<-1>{} / 2_c},
+    Rewrite{sin(π * 7_c * pow(6_c, Constant<-1>{})), Constant<-1>{} / 2_c},
+    Rewrite{sin(π * 11_c / 6_c), Constant<-1>{} / 2_c},
+    Rewrite{sin(π * 11_c * pow(6_c, Constant<-1>{})), Constant<-1>{} / 2_c},
+    // Multiples of π/4 (45°) - division form and normalized form
+    Rewrite{sin(π / 4_c), sqrt(2_c) / 2_c},
+    Rewrite{sin(π * pow(4_c, Constant<-1>{})), sqrt(2_c) / 2_c},
+    Rewrite{sin(π * 3_c / 4_c), sqrt(2_c) / 2_c},
+    Rewrite{sin(π * 3_c * pow(4_c, Constant<-1>{})), sqrt(2_c) / 2_c},
+    Rewrite{sin(π * 5_c / 4_c), -sqrt(2_c) / 2_c},
+    Rewrite{sin(π * 5_c * pow(4_c, Constant<-1>{})), -sqrt(2_c) / 2_c},
+    Rewrite{sin(π * 7_c / 4_c), -sqrt(2_c) / 2_c},
+    Rewrite{sin(π * 7_c * pow(4_c, Constant<-1>{})), -sqrt(2_c) / 2_c},
+    // Multiples of π/3 (60°) - division form and normalized form
+    Rewrite{sin(π / 3_c), sqrt(3_c) / 2_c},
+    Rewrite{sin(π * pow(3_c, Constant<-1>{})), sqrt(3_c) / 2_c},
+    Rewrite{sin(π * 2_c / 3_c), sqrt(3_c) / 2_c},
+    Rewrite{sin(π * 2_c * pow(3_c, Constant<-1>{})), sqrt(3_c) / 2_c},
+    Rewrite{sin(π * 4_c / 3_c), -sqrt(3_c) / 2_c},
+    Rewrite{sin(π * 4_c * pow(3_c, Constant<-1>{})), -sqrt(3_c) / 2_c},
+    Rewrite{sin(π * 5_c / 3_c), -sqrt(3_c) / 2_c},
+    Rewrite{sin(π * 5_c * pow(3_c, Constant<-1>{})), -sqrt(3_c) / 2_c},
+    // Multiples of π/2 (90°)
+    Rewrite{sin(π * 0.5_c), 1_c},
+    Rewrite{sin(π * pow(2_c, Constant<-1>{})), 1_c}, Rewrite{sin(π), 0_c},
+    Rewrite{sin(π * 1.5_c), Constant<-1>{}},
+    Rewrite{sin(π * 3_c * pow(2_c, Constant<-1>{})), Constant<-1>{}},
+    Rewrite{sin(π * 2_c), 0_c}};
 
 constexpr auto Symmetry =
     RewriteSystem{Rewrite{sin(-x_), -sin(x_)}};  // Odd function
+
+constexpr auto Periodicity = RewriteSystem{Rewrite{sin(x_ + π * 2_c), sin(x_)}};
+
+// Double angle formula: sin(2x) = 2·sin(x)·cos(x)
+constexpr auto DoubleAngle =
+    RewriteSystem{Rewrite{sin(2_c * x_), 2_c * sin(x_) * cos(x_)}};
 }  // namespace SinRuleCategories
 
 constexpr auto SinRules =
     compose(SinRuleCategories::Identity, SinRuleCategories::SpecialAngles,
-            SinRuleCategories::Symmetry);
+            SinRuleCategories::Symmetry, SinRuleCategories::Periodicity,
+            SinRuleCategories::DoubleAngle);
 
 template <Symbolic S>
   requires(match(S{}, sin(𝐚𝐧𝐲)))
@@ -232,17 +270,55 @@ constexpr auto applySinRules(S expr) {
 namespace CosRuleCategories {
 constexpr auto Identity = RewriteSystem{Rewrite{cos(0_c), 1_c}};
 
-constexpr auto SpecialAngles =
-    RewriteSystem{Rewrite{cos(π * 0.5_c), 0_c}, Rewrite{cos(π), Constant<-1>{}},
-                  Rewrite{cos(π * 1.5_c), 0_c}};
+constexpr auto SpecialAngles = RewriteSystem{
+    // Multiples of π/6 (30°) - division form and normalized (a*b^-1) form
+    Rewrite{cos(π / 6_c), sqrt(3_c) / 2_c},
+    Rewrite{cos(π * pow(6_c, Constant<-1>{})), sqrt(3_c) / 2_c},
+    Rewrite{cos(π * 5_c / 6_c), -sqrt(3_c) / 2_c},
+    Rewrite{cos(π * 5_c * pow(6_c, Constant<-1>{})), -sqrt(3_c) / 2_c},
+    Rewrite{cos(π * 7_c / 6_c), -sqrt(3_c) / 2_c},
+    Rewrite{cos(π * 7_c * pow(6_c, Constant<-1>{})), -sqrt(3_c) / 2_c},
+    Rewrite{cos(π * 11_c / 6_c), sqrt(3_c) / 2_c},
+    Rewrite{cos(π * 11_c * pow(6_c, Constant<-1>{})), sqrt(3_c) / 2_c},
+    // Multiples of π/4 (45°) - division form and normalized form
+    Rewrite{cos(π / 4_c), sqrt(2_c) / 2_c},
+    Rewrite{cos(π * pow(4_c, Constant<-1>{})), sqrt(2_c) / 2_c},
+    Rewrite{cos(π * 3_c / 4_c), -sqrt(2_c) / 2_c},
+    Rewrite{cos(π * 3_c * pow(4_c, Constant<-1>{})), -sqrt(2_c) / 2_c},
+    Rewrite{cos(π * 5_c / 4_c), -sqrt(2_c) / 2_c},
+    Rewrite{cos(π * 5_c * pow(4_c, Constant<-1>{})), -sqrt(2_c) / 2_c},
+    Rewrite{cos(π * 7_c / 4_c), sqrt(2_c) / 2_c},
+    Rewrite{cos(π * 7_c * pow(4_c, Constant<-1>{})), sqrt(2_c) / 2_c},
+    // Multiples of π/3 (60°) - division form and normalized form
+    Rewrite{cos(π / 3_c), 1_c / 2_c},
+    Rewrite{cos(π * pow(3_c, Constant<-1>{})), 1_c / 2_c},
+    Rewrite{cos(π * 2_c / 3_c), Constant<-1>{} / 2_c},
+    Rewrite{cos(π * 2_c * pow(3_c, Constant<-1>{})), Constant<-1>{} / 2_c},
+    Rewrite{cos(π * 4_c / 3_c), Constant<-1>{} / 2_c},
+    Rewrite{cos(π * 4_c * pow(3_c, Constant<-1>{})), Constant<-1>{} / 2_c},
+    Rewrite{cos(π * 5_c / 3_c), 1_c / 2_c},
+    Rewrite{cos(π * 5_c * pow(3_c, Constant<-1>{})), 1_c / 2_c},
+    // Multiples of π/2 (90°)
+    Rewrite{cos(π * 0.5_c), 0_c},
+    Rewrite{cos(π * pow(2_c, Constant<-1>{})), 0_c},
+    Rewrite{cos(π), Constant<-1>{}}, Rewrite{cos(π * 1.5_c), 0_c},
+    Rewrite{cos(π * 3_c * pow(2_c, Constant<-1>{})), 0_c},
+    Rewrite{cos(π * 2_c), 1_c}};
 
 constexpr auto Symmetry =
     RewriteSystem{Rewrite{cos(-x_), cos(x_)}};  // Even function
+
+constexpr auto Periodicity = RewriteSystem{Rewrite{cos(x_ + π * 2_c), cos(x_)}};
+
+// Double angle formula: cos(2x) = cos²(x) - sin²(x)
+constexpr auto DoubleAngle = RewriteSystem{
+    Rewrite{cos(2_c * x_), pow(cos(x_), 2_c) - pow(sin(x_), 2_c)}};
 }  // namespace CosRuleCategories
 
 constexpr auto CosRules =
     compose(CosRuleCategories::Identity, CosRuleCategories::SpecialAngles,
-            CosRuleCategories::Symmetry);
+            CosRuleCategories::Symmetry, CosRuleCategories::Periodicity,
+            CosRuleCategories::DoubleAngle);
 
 template <Symbolic S>
   requires(match(S{}, cos(𝐚𝐧𝐲)))
@@ -253,20 +329,75 @@ constexpr auto applyCosRules(S expr) {
 namespace TanRuleCategories {
 constexpr auto Identity = RewriteSystem{Rewrite{tan(0_c), 0_c}};
 
-constexpr auto SpecialAngles = RewriteSystem{Rewrite{tan(π), 0_c}};
+constexpr auto SpecialAngles = RewriteSystem{
+    // Multiples of π/6 (30°)
+    Rewrite{tan(π / 6_c), 1_c / sqrt(3_c)},
+    Rewrite{tan(π * 5_c / 6_c), Constant<-1>{} / sqrt(3_c)},
+    Rewrite{tan(π * 7_c / 6_c), 1_c / sqrt(3_c)},
+    Rewrite{tan(π * 11_c / 6_c), Constant<-1>{} / sqrt(3_c)},
+    // Multiples of π/4 (45°)
+    Rewrite{tan(π / 4_c), 1_c}, Rewrite{tan(π * 3_c / 4_c), Constant<-1>{}},
+    Rewrite{tan(π * 5_c / 4_c), 1_c},
+    Rewrite{tan(π * 7_c / 4_c), Constant<-1>{}},
+    // Multiples of π/3 (60°)
+    Rewrite{tan(π / 3_c), sqrt(3_c)}, Rewrite{tan(π * 2_c / 3_c), -sqrt(3_c)},
+    Rewrite{tan(π * 4_c / 3_c), sqrt(3_c)},
+    Rewrite{tan(π * 5_c / 3_c), -sqrt(3_c)},
+    // Multiples of π
+    Rewrite{tan(π), 0_c}, Rewrite{tan(π * 2_c), 0_c}};
 
 constexpr auto Symmetry =
     RewriteSystem{Rewrite{tan(-x_), -tan(x_)}};  // Odd function
+
+constexpr auto Periodicity = RewriteSystem{Rewrite{tan(x_ + π), tan(x_)}};
+
+// Relation to sin and cos: tan(x) = sin(x)/cos(x)
+constexpr auto SinCosRelation =
+    RewriteSystem{Rewrite{tan(x_), sin(x_) / cos(x_)}};
+
+// Double angle formula: tan(2x) = 2·tan(x)/(1 - tan²(x))
+constexpr auto DoubleAngle = RewriteSystem{
+    Rewrite{tan(2_c * x_), (2_c * tan(x_)) / (1_c - pow(tan(x_), 2_c))}};
 }  // namespace TanRuleCategories
 
 constexpr auto TanRules =
     compose(TanRuleCategories::Identity, TanRuleCategories::SpecialAngles,
-            TanRuleCategories::Symmetry);
+            TanRuleCategories::Symmetry, TanRuleCategories::Periodicity);
 
 template <Symbolic S>
   requires(match(S{}, tan(𝐚𝐧𝐲)))
 constexpr auto applyTanRules(S expr) {
   return applyRules<TanRules>(expr);
+}
+
+// Pythagorean identity simplification rules
+// sin²(x) + cos²(x) = 1
+namespace PythagoreanRuleCategories {
+constexpr auto SinCosSquared =
+    RewriteSystem{Rewrite{pow(sin(x_), 2_c) + pow(cos(x_), 2_c), 1_c},
+                  Rewrite{pow(cos(x_), 2_c) + pow(sin(x_), 2_c), 1_c}};
+
+constexpr auto SinSquaredIsolation =
+    RewriteSystem{Rewrite{pow(sin(x_), 2_c), 1_c - pow(cos(x_), 2_c)}};
+
+constexpr auto CosSquaredIsolation =
+    RewriteSystem{Rewrite{pow(cos(x_), 2_c), 1_c - pow(sin(x_), 2_c)}};
+
+// 1 + tan²(x) = sec²(x) = 1/cos²(x)
+constexpr auto TanIdentity =
+    RewriteSystem{Rewrite{1_c + pow(tan(x_), 2_c), 1_c / pow(cos(x_), 2_c)}};
+}  // namespace PythagoreanRuleCategories
+
+constexpr auto PythagoreanRules =
+    compose(PythagoreanRuleCategories::SinCosSquared,
+            PythagoreanRuleCategories::TanIdentity);
+
+template <Symbolic S>
+  requires(match(S{}, pow(sin(𝐚𝐧𝐲), 𝐜) + pow(cos(𝐚𝐧𝐲), 𝐜)) ||
+           match(S{}, pow(cos(𝐚𝐧𝐲), 𝐜) + pow(sin(𝐚𝐧𝐲), 𝐜)) ||
+           match(S{}, 1_c + pow(tan(𝐚𝐧𝐲), 𝐜)))
+constexpr auto applyPythagoreanRules(S expr) {
+  return applyRules<PythagoreanRules>(expr);
 }
 
 // Hyperbolic function simplification rules
@@ -352,6 +483,21 @@ template <Symbolic S, SizeT depth>
 constexpr auto simplifySymbolWithDepth(S sym) {
   if constexpr (depth >= 20) {
     return S{};
+    // Apply trigonometric rules BEFORE constant folding so that special angles
+    // can be recognized and simplified symbolically (e.g., sin(π/6) → 1/2)
+    // rather than being folded to floating-point constants
+  } else if constexpr (requires { applySinRules(sym); }) {
+    return trySimplify<S, depth, applySinRules<S>>(sym);
+  } else if constexpr (requires { applyCosRules(sym); }) {
+    return trySimplify<S, depth, applyCosRules<S>>(sym);
+  } else if constexpr (requires { applyTanRules(sym); }) {
+    return trySimplify<S, depth, applyTanRules<S>>(sym);
+  } else if constexpr (requires { applySinhRules(sym); }) {
+    return trySimplify<S, depth, applySinhRules<S>>(sym);
+  } else if constexpr (requires { applyCoshRules(sym); }) {
+    return trySimplify<S, depth, applyCoshRules<S>>(sym);
+  } else if constexpr (requires { applyTanhRules(sym); }) {
+    return trySimplify<S, depth, applyTanhRules<S>>(sym);
   } else if constexpr (requires { foldConstants(sym); }) {
     return foldConstants(sym);
   } else if constexpr (requires { applyPowerRules(sym); }) {
@@ -368,18 +514,8 @@ constexpr auto simplifySymbolWithDepth(S sym) {
     return trySimplify<S, depth, applyExpRules<S>>(sym);
   } else if constexpr (requires { applyLogRules(sym); }) {
     return trySimplify<S, depth, applyLogRules<S>>(sym);
-  } else if constexpr (requires { applySinRules(sym); }) {
-    return trySimplify<S, depth, applySinRules<S>>(sym);
-  } else if constexpr (requires { applyCosRules(sym); }) {
-    return trySimplify<S, depth, applyCosRules<S>>(sym);
-  } else if constexpr (requires { applyTanRules(sym); }) {
-    return trySimplify<S, depth, applyTanRules<S>>(sym);
-  } else if constexpr (requires { applySinhRules(sym); }) {
-    return trySimplify<S, depth, applySinhRules<S>>(sym);
-  } else if constexpr (requires { applyCoshRules(sym); }) {
-    return trySimplify<S, depth, applyCoshRules<S>>(sym);
-  } else if constexpr (requires { applyTanhRules(sym); }) {
-    return trySimplify<S, depth, applyTanhRules<S>>(sym);
+  } else if constexpr (requires { applyPythagoreanRules(sym); }) {
+    return trySimplify<S, depth, applyPythagoreanRules<S>>(sym);
   } else {
     return S{};
   }

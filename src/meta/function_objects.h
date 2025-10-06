@@ -19,7 +19,8 @@ struct StaticString {
   }
 
   constexpr StaticString(char c)
-  requires(N_ == 1) {
+    requires(N_ == 1)
+  {
     chars_[0] = c;
     chars_[1] = '\0';  // Null-terminate
   }
@@ -31,7 +32,7 @@ struct StaticString {
     chars_[0] = '\0';
   }
 
-  constexpr const char* c_str() const { return chars_.data(); }
+  constexpr const char* c_str() const { return chars_; }
   constexpr size_t size() const { return N_; }
 
   template <size_t M>
