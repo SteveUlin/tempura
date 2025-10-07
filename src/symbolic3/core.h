@@ -5,7 +5,9 @@
 #include "meta/type_id.h"
 
 // Core symbolic types and concepts for symbolic3 combinator system
-// Based on symbolic2 but designed for the combinator architecture
+// Combinator-based symbolic computation core types
+// Uses stateless lambdas for unique type identity (no NTTP hacks)
+// Zero runtime overhead - all computation is compile-time
 
 namespace tempura::symbolic3 {
 

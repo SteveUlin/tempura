@@ -1,3 +1,7 @@
+# Create an interface library for all bayes components
+add_library(bayes INTERFACE)
+target_link_libraries(bayes INTERFACE normal beta bernoulli random random_simd)
+
 add_library(normal INTERFACE normal.h)
 add_executable(normal_test normal_test.cpp)
 target_link_libraries(normal_test normal unit)

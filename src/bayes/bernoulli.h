@@ -1,10 +1,12 @@
 #pragma once
 
+#include <cmath>
+
 namespace tempura::bayes {
 
 template <typename T = double>
 class Bernoulli {
-public:
+ public:
   Bernoulli(T p) : p_{p} {}
 
   template <typename Generator>
@@ -13,20 +15,14 @@ public:
     return g() < p_ * delta;
   }
 
-  auto prob(bool x) const {
-    return x ? p_ : 1 - p_;
-  }
+  auto prob(bool x) const { return x ? p_ : 1 - p_; }
 
-  auto logProb(bool x) const {
-    return x ? log(p_) : log(1 - p_);
-  }
+  auto logProb(bool x) const { return x ? std::log(p_) : std::log(1 - p_); }
 
-  auto cdf(bool x) const {
-    return x ? 1 : 1 - p_;
-  }
+  auto cdf(bool x) const { return x ? 1 : 1 - p_; }
 
-private:
+ private:
   T p_;
 };
 
-} // namespace tempura::bayes
+}  // namespace tempura::bayes

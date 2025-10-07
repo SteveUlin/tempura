@@ -26,7 +26,7 @@ int main() {
     std::cout << "Test 1: full_simplify\n";
     // Nested expression: x * (y + (z * 0)) → x * y
     constexpr auto expr = x * (y + (z * 0_c));
-    constexpr auto result = full_simplify(expr, ctx);
+    [[maybe_unused]] constexpr auto result = full_simplify(expr, ctx);
     // TODO: Re-enable after fixing simplification
     // static_assert(match(result, x * y));
     std::cout << "  ✓ Deep nesting simplified\n";
@@ -37,7 +37,8 @@ int main() {
     std::cout << "Test 2: algebraic_simplify_recursive\n";
     // (x + 0) * 1 + 0 → x
     constexpr auto expr = (x + 0_c) * 1_c + 0_c;
-    constexpr auto result = algebraic_simplify_recursive(expr, ctx);
+    [[maybe_unused]] constexpr auto result =
+        algebraic_simplify_recursive(expr, ctx);
     // TODO: Re-enable after fixing simplification
     // static_assert(match(result, x));
     std::cout << "  ✓ Identity operations removed\n";
@@ -48,7 +49,7 @@ int main() {
     std::cout << "Test 3: bottomup_simplify\n";
     // (x * 1) + (y * 0) → x
     constexpr auto expr = (x * 1_c) + (y * 0_c);
-    constexpr auto result = bottomup_simplify(expr, ctx);
+    [[maybe_unused]] constexpr auto result = bottomup_simplify(expr, ctx);
     // TODO: Re-enable after fixing simplification
     // static_assert(match(result, x));
     std::cout << "  ✓ Post-order traversal works\n";
@@ -59,7 +60,7 @@ int main() {
     std::cout << "Test 4: topdown_simplify\n";
     // log(exp(x)) → x (note: x + 0 may not fully simplify in one topdown pass)
     constexpr auto expr = log(exp(x));
-    constexpr auto result = topdown_simplify(expr, ctx);
+    [[maybe_unused]] constexpr auto result = topdown_simplify(expr, ctx);
     // TODO: Re-enable after fixing simplification
     // static_assert(match(result, x));
     std::cout << "  ✓ Pre-order traversal works\n";
@@ -70,7 +71,7 @@ int main() {
     std::cout << "Test 5: trig_aware_simplify\n";
     // sin(0) + cos(0) * x → 0 + 1 * x → x
     constexpr auto expr = sin(0_c) + cos(0_c) * x;
-    constexpr auto result = trig_aware_simplify(expr, ctx);
+    [[maybe_unused]] constexpr auto result = trig_aware_simplify(expr, ctx);
     // TODO: Re-enable after fixing simplification
     // static_assert(match(result, x));
     std::cout << "  ✓ Trig special values handled\n";
@@ -81,7 +82,7 @@ int main() {
     std::cout << "Test 6: Power rules\n";
     // x^1 * x^2 → x * x^2 → x^(1+2) = x^3
     constexpr auto expr = pow(x, 1_c) * pow(x, 2_c);
-    constexpr auto result = full_simplify(expr, ctx);
+    [[maybe_unused]] constexpr auto result = full_simplify(expr, ctx);
     // Result should be x^3 or equivalent
     // TODO: Re-enable after fixing simplification
     // static_assert(match(result, pow(x, 2_c + 1_c)));
@@ -93,7 +94,7 @@ int main() {
     std::cout << "Test 7: Complex nesting\n";
     // ((x + 0) * 1) + ((y * 0) + z) → x + z
     constexpr auto expr = ((x + 0_c) * 1_c) + ((y * 0_c) + z);
-    constexpr auto result = full_simplify(expr, ctx);
+    [[maybe_unused]] constexpr auto result = full_simplify(expr, ctx);
     // TODO: Re-enable after fixing simplification
     // static_assert(match(result, x + z));
     std::cout << "  ✓ Complex nesting handled\n";
@@ -105,12 +106,13 @@ int main() {
     constexpr auto expr = x * (y + (z * 0_c));
 
     // Recursive simplifies nested expressions
-    constexpr auto recursive = algebraic_simplify_recursive(expr, ctx);
+    [[maybe_unused]] constexpr auto recursive =
+        algebraic_simplify_recursive(expr, ctx);
     // TODO: Re-enable after fixing simplification
     // static_assert(match(recursive, x * y));
 
     // Full with fixpoint ensures complete simplification
-    constexpr auto full = full_simplify(expr, ctx);
+    [[maybe_unused]] constexpr auto full = full_simplify(expr, ctx);
     // TODO: Re-enable after fixing simplification
     // static_assert(match(full, x * y));
 

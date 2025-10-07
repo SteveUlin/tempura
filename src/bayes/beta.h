@@ -11,7 +11,7 @@ class Beta {
   constexpr Beta(T alpha, T sigma) : X_{alpha, 1}, Y_{sigma, 1} {}
 
   template <std::uniform_random_bit_generator Generator>
-  constexpr auto sample(Generator& g) const -> T {
+  constexpr auto sample(Generator& g) -> T {
     T x = X_(g);
     return x / (x + Y_(g));
   }

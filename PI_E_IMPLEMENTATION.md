@@ -7,7 +7,7 @@
 
 ### 1. Added π (Pi) and e (Euler's number) to symbolic3
 
-Following the pattern from symbolic2, I added mathematical constants π and e as **zero-argument expressions** rather than numeric approximations.
+Mathematical constants π and e are implemented as **zero-argument expressions** rather than numeric approximations, maintaining exact symbolic computation.
 
 #### Files Modified:
 

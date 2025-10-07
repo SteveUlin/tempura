@@ -77,7 +77,8 @@
    - String conversion reference (integrated from TO_STRING_README)
    - Testing guide
    - Design rationale
-   - Comparison to symbolic2
+   - Implementation milestones
+   - Contributing guidelines
 
 3. **`CLEANUP_SUMMARY.md`** (this file)
    - Record of cleanup actions
@@ -93,15 +94,16 @@ These files contain valuable architectural documentation and should **NOT** be r
 
 ✅ **Kept:**
 
-- `SYMBOLIC2_COMBINATORS_DESIGN.md` (35KB) - Original architecture design
-- `SYMBOLIC2_COMBINATORS_QUICKREF.md` (11KB) - Quick reference for combinators
-- `SYMBOLIC2_GENERALIZATION_COMPLETE.md` (14KB) - Implementation guide
-- `SYMBOLIC2_GENERALIZATION_SUMMARY.md` (21KB) - Design summary
-- `DESIGN_DOCS_INDEX.md` (14KB) - Index of all design docs
-- `START_HERE.md` (7.6KB) - Project onboarding guide
-- `README.md` (2.4KB) - Project README
+- `DESIGN_DOCS_INDEX.md` - Index of design documentation
+- `README.md` - Project README
+- Implementation guides (PI_E, TERM_COLLECTING, etc.)
 
-**Why kept:** These are permanent architectural documentation that future developers will reference.
+📦 **Archived:**
+
+- `SYMBOLIC2_*.md` files moved to `docs/archive/` - Historical design documentation
+- `START_HERE.md` moved to `docs/archive/` - Referenced archived design docs
+
+**Rationale:** symbolic3 is the canonical implementation. Design documents preserved for historical reference.
 
 ---
 

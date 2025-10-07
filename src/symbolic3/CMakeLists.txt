@@ -114,4 +114,10 @@ target_link_libraries(fraction_test PRIVATE symbolic3 unit)
 add_test(NAME symbolic3_fraction COMMAND fraction_test)
 set_tests_properties(symbolic3_fraction PROPERTIES LABELS "symbolic3;exact_math")
 
+# Compile-time Debugging Utilities Test
+add_executable(debug_test test/debug_test.cpp)
+target_link_libraries(debug_test PRIVATE symbolic3 unit)
+add_test(NAME symbolic3_debug COMMAND debug_test)
+set_tests_properties(symbolic3_debug PROPERTIES LABELS "symbolic3;utilities")
+
 

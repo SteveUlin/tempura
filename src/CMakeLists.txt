@@ -1,9 +1,7 @@
 # add_subdirectory(autodiff)
 # add_subdirectory(cuda)
 # add_subdirectory(matrix)
-# add_subdirectory(symbolic)  # Removed - replaced by symbolic2
-add_subdirectory(symbolic2)
-add_subdirectory(symbolic3)  # Combinator-based symbolic system
+add_subdirectory(symbolic3)  # Combinator-based symbolic system (canonical)
 add_subdirectory(bayes)
 add_subdirectory(matrix2)
 add_subdirectory(matrix3)

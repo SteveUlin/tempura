@@ -1,0 +1,177 @@
+#include <iostream>
+
+#include "symbolic3/debug.h"
+#include "symbolic3/simplify.h"
+#include "symbolic3/symbolic3.h"
+
+using namespace tempura::symbolic3;
+
+// This example demonstrates compile-time debugging techniques for symbolic3
+
+int main() {
+  std::printf("=== Symbolic3 Compile-Time Debugging Demo ===\n\n");
+
+  // Create symbols
+  Symbol x;
+  Symbol y;
+  Symbol z;
+
+  // ==========================================================================
+  // 1. Expression Properties at Compile Time
+  // ==========================================================================
+  std::printf("1. Compile-Time Expression Properties\n");
+  std::printf("   ====================================\n");
+
+  constexpr auto expr1 = x + Constant<1>{};
+  constexpr auto expr2 = (x + y) * (x - y);
+  constexpr auto expr3 = sin(x) + cos(y) + tan(z);
+
+  std::printf("   Expression: x + 1\n");
+  std::printf("     Depth: %d\n", expression_depth(expr1));
+  std::printf("     Operations: %d\n", operation_count(expr1));
+  std::printf("     Likely simplified: %s\n\n",
+              is_likely_simplified(expr1) ? "yes" : "no");
+
+  std::printf("   Expression: (x + y) * (x - y)\n");
+  std::printf("     Depth: %d\n", expression_depth(expr2));
+  std::printf("     Operations: %d\n", operation_count(expr2));
+  std::printf("     Likely simplified: yes (no obvious 0 or 1 patterns)\n\n");
+
+  std::printf("   Expression: sin(x) + cos(y) + tan(z)\n");
+  std::printf("     Depth: %d\n", expression_depth(expr3));
+  std::printf("     Operations: %d\n", operation_count(expr3));
+  std::printf("     Likely simplified: yes (no obvious 0 or 1 patterns)\n\n");
+
+  // ==========================================================================
+  // 2. Detecting Unsimplified Expressions
+  // ==========================================================================
+  std::printf("\n2. Detecting Unsimplified Expressions\n");
+  std::printf("   ====================================\n");
+
+  constexpr auto unsimplified1 = x + Constant<0>{};
+  constexpr auto unsimplified2 = x * Constant<1>{};
+  constexpr auto simplified = x + Constant<2>{};
+
+  std::printf("   x + 0: likely simplified = %s\n",
+              is_likely_simplified(unsimplified1) ? "yes" : "no");
+  std::printf("   x * 1: likely simplified = %s\n",
+              is_likely_simplified(unsimplified2) ? "yes" : "no");
+  std::printf("   x + 2: likely simplified = %s\n\n",
+              is_likely_simplified(simplified) ? "yes" : "no");
+
+  // ==========================================================================
+  // 3. Verifying Simplification at Compile Time
+  // ==========================================================================
+  std::printf("3. Compile-Time Simplification Verification\n");
+  std::printf("   ==========================================\n");
+
+  constexpr auto before1 = x + Constant<0>{};
+  constexpr auto after1 = simplify.apply(before1, default_context());
+
+  std::printf("   Before: x + 0\n");
+  std::printf("     Operations: %d\n", operation_count(before1));
+  std::printf("   After simplification:\n");
+  std::printf("     Operations: %d\n", operation_count(after1));
+  std::printf("     Reduction: %d operations removed\n\n",
+              operation_count(before1) - operation_count(after1));
+
+  constexpr auto before2 = (x + Constant<0>{}) * Constant<1>{};
+  constexpr auto after2 = simplify.apply(before2, default_context());
+
+  std::printf("   Before: (x + 0) * 1\n");
+  std::printf("     Operations: %d\n", operation_count(before2));
+  std::printf("   After simplification:\n");
+  std::printf("     Operations: %d\n", operation_count(after2));
+  std::printf("     Reduction: %d operations removed\n\n",
+              operation_count(before2) - operation_count(after2));
+
+  // ==========================================================================
+  // 4. Structural Equality Checking
+  // ==========================================================================
+  std::printf("4. Structural Equality at Compile Time\n");
+  std::printf("   ====================================\n");
+
+  constexpr auto expr_a = x + Constant<1>{};
+  constexpr auto expr_b = x + Constant<1>{};
+  constexpr auto expr_c = x + Constant<2>{};
+
+  std::printf("   (x + 1) == (x + 1): %s\n",
+              structurally_equal(expr_a, expr_b) ? "true" : "false");
+  std::printf("   (x + 1) == (x + 2): %s\n\n",
+              structurally_equal(expr_a, expr_c) ? "true" : "false");
+
+  // ==========================================================================
+  // 5. Subexpression Detection
+  // ==========================================================================
+  std::printf("5. Subexpression Detection\n");
+  std::printf("   ====================================\n");
+
+  constexpr auto sub = x + y;
+  constexpr auto parent = (x + y) * z;
+
+  std::printf("   Does (x+y)*z contain (x+y)? %s\n",
+              contains_subexpression(parent, sub) ? "yes" : "no");
+  std::printf("   Does (x+y)*z contain x? %s\n",
+              contains_subexpression(parent, x) ? "yes" : "no");
+  std::printf("   Does x contain (x+y)*z? %s\n\n",
+              contains_subexpression(x, parent) ? "yes" : "no");
+
+  // ==========================================================================
+  // 6. Compile-Time vs Runtime String Conversion
+  // ==========================================================================
+  std::printf("6. String Conversion Verification\n");
+  std::printf("   ====================================\n");
+
+  constexpr auto complex = (sin(x) + cos(y)) * exp(z);
+  constexpr auto str_compile = toString(complex);
+  auto str_runtime = toStringRuntime(complex);
+
+  std::printf("   Compile-time string length: %zu\n", str_compile.size());
+  std::printf("   Runtime string: %s\n", str_runtime.c_str());
+  std::printf("   Compile-time string: %s\n\n", str_compile.c_str());
+
+  // ==========================================================================
+  // 7. Practical Debugging Pattern
+  // ==========================================================================
+  std::printf("7. Practical Debugging Pattern\n");
+  std::printf("   ====================================\n");
+  std::printf("   When developing new simplification rules:\n\n");
+
+  std::printf("   Step 1: Create test expression\n");
+  constexpr auto test_expr = Constant<2>{} * x + Constant<3>{} * x;
+  std::printf("     Expression: 2*x + 3*x\n");
+  std::printf("     Operations before: %d\n", operation_count(test_expr));
+
+  std::printf("\n   Step 2: Apply simplification\n");
+  constexpr auto test_result = simplify.apply(test_expr, default_context());
+  std::printf("     Operations after: %d\n", operation_count(test_result));
+
+  std::printf("\n   Step 3: Verify result properties\n");
+  std::printf("     Depth: %d\n", expression_depth(test_result));
+  std::printf("     Type changed: %s\n",
+              std::is_same_v<decltype(test_result), decltype(test_expr)>
+                  ? "no"
+                  : "yes");
+
+  std::printf("\n   Step 4: Use static_assert for regression tests\n");
+  std::printf(
+      "     static_assert(operation_count(result) <= "
+      "operation_count(input));\n");
+  std::printf("     static_assert(structurally_equal(result, expected));\n");
+
+  // ==========================================================================
+  // Debugging Tips
+  // ==========================================================================
+  std::printf("\n=== Debugging Tips ===\n");
+  std::printf("\nTo debug types during compilation, uncomment:\n");
+  std::printf("  // CONSTEXPR_PRINT_TYPE(decltype(expr));\n");
+  std::printf("\nTo verify simplification results, uncomment:\n");
+  std::printf("  // VERIFY_SIMPLIFICATION(result, expected);\n");
+  std::printf("\nTo compare expressions, uncomment:\n");
+  std::printf("  // CONSTEXPR_ASSERT_EQUAL(actual, expected);\n");
+  std::printf(
+      "\nThese will cause compilation errors showing type information!\n");
+
+  std::printf("\n=== Demo Complete ===\n");
+  return 0;
+}

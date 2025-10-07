@@ -14,25 +14,25 @@ add_executable(normal_reverse_autodiff_main normal_reverse_autodiff.cpp)
 add_executable(histogram histogram_main.cpp)
 add_executable(plot plot_main.cpp)
 add_executable(text_size text_size.cpp)
-add_executable(symbols_main symbols.cpp)
-add_executable(symbolic3_demo symbolic3_demo.cpp)
-target_link_libraries(symbolic3_demo PRIVATE symbolic3)
-add_executable(symbolic3_v2_demo symbolic3_v2_demo.cpp)
-target_link_libraries(symbolic3_v2_demo PRIVATE symbolic3)
+# add_executable(symbols_main symbols.cpp)  # Disabled - uses old symbolic system
 add_executable(symbolic3_debug_demo symbolic3_debug_demo.cpp)
 target_link_libraries(symbolic3_debug_demo PRIVATE symbolic3)
 add_executable(symbolic3_simplify_demo symbolic3_simplify_demo.cpp)
 target_link_libraries(symbolic3_simplify_demo PRIVATE symbolic3)
 add_executable(advanced_simplify_demo advanced_simplify_demo.cpp)
 target_link_libraries(advanced_simplify_demo PRIVATE symbolic3)
+# add_executable(constexpr_debugging_demo constexpr_debugging_demo.cpp)  # Disabled - has compilation errors
+# target_link_libraries(constexpr_debugging_demo PRIVATE symbolic3)
+# add_executable(simplify_demo simplify_demo.cpp)  # Disabled - needs StaticString formatter
+# target_link_libraries(simplify_demo PRIVATE symbolic3)
 add_executable(image_main image_main.cpp)
 add_executable(simd_main simd_main.cpp)
 target_link_libraries(simd_main PRIVATE profiler)
 
-add_executable(glfw_main glfw_main.cpp)
-target_link_libraries(glfw_main PRIVATE glfw OpenGL::GL)
-add_executable(hello_triangle_main hello_triangle.cpp)
-target_link_libraries(hello_triangle_main PRIVATE glfw Vulkan::Vulkan)
+# add_executable(glfw_main glfw_main.cpp)  # Disabled - missing GL/gl.h
+# target_link_libraries(glfw_main PRIVATE glfw OpenGL::GL)
+# add_executable(hello_triangle_main hello_triangle.cpp)  # Disabled - missing GL/gl.h
+# target_link_libraries(hello_triangle_main PRIVATE glfw Vulkan::Vulkan)
 
 # add_executable(single_producer_consumer_queue single_producer_consumer_queue.cpp)
 # target_link_libraries(single_producer_consumer_queue PRIVATE profiler)

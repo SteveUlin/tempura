@@ -24,7 +24,7 @@ auto main() -> int {
             << "\n\n";
 
   // Check the fold expression manually
-  using ExprType = decltype(expr);
+  // using ExprType = decltype(expr);  // Unused but kept for debugging
   constexpr bool args_are_constants =
       []<typename Op, Symbolic... Args>(Expression<Op, Args...>) {
         return (match(Args{}, 𝐜) && ...);

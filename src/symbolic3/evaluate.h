@@ -4,7 +4,7 @@
 #include "symbolic3/operators.h"
 
 // Evaluation of symbolic expressions with concrete values
-// Copied from symbolic2/evaluate.h approach - operators are directly callable
+// Operators are directly callable for efficient evaluation
 
 namespace tempura::symbolic3 {
 

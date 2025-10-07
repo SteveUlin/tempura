@@ -8,7 +8,7 @@ Tempura is an experimental **C++26 numerical methods library** emphasizing compi
 
 ### Major Components
 
-- **`symbolic2/`**: Compile-time symbolic math via type-system computation. Uses stateless lambdas for unique type identity, pattern-matching rewrite systems for simplification, and zero runtime overhead. Example: `auto f = x*x + 2_c*x; auto df = simplify(diff(f, x));` produces `2·x + 2` at compile-time.
+- **`symbolic3/`**: **[CANONICAL]** Combinator-based symbolic computation with compile-time evaluation. Uses stateless lambdas for unique type identity, composable transformation strategies, and zero runtime overhead. Example: `auto f = x*x + 2_c*x; auto df = full_simplify.apply(diff(f, x), default_context());` produces `2·x + 2` at compile-time. Supports multiple recursion strategies (fixpoint, fold, unfold, innermost, outermost), context-aware transformations, and user-extensible strategies.
 
 - **`matrix2/`**: **[CANONICAL]** Constexpr-first matrix library with static/dynamic extents. Uses `MatRef<T>` for non-owning views (ownership explicit in types). Interface libraries defined in `matrix2/storage/` for Dense, Banded, etc. Use this for all matrix work.
 
@@ -36,7 +36,7 @@ Tempura is an experimental **C++26 numerical methods library** emphasizing compi
 
 6. **Incremental development**: Libraries are built incrementally. **If functionality is missing, add it** - don't work around it. Extend existing APIs to support your needs.
 
-7. **Minimal stdlib for compile-time code**: `symbolic2/` and `meta/` should depend on standard library **as little as possible** to minimize compile times and enable pure compile-time computation.
+7. **Minimal stdlib for compile-time code**: `symbolic3/` and `meta/` should depend on standard library **as little as possible** to minimize compile times and enable pure compile-time computation.
 
 ## Build & Test Workflow
 
@@ -100,14 +100,14 @@ Uses custom `unit.h` testing framework (see `src/unit.h`):
 
 ```bash
 ctest --test-dir build                    # All tests
-ctest --test-dir build -R symbolic2       # Pattern match
+ctest --test-dir build -R symbolic3       # Pattern match
 ctest --test-dir build -L base            # By label
-./build/src/symbolic2/symbolic2_test      # Direct execution for debugging
+./build/src/symbolic3/test/basic_test     # Direct execution for debugging
 ```
 
 **Test organization**:
 
-- Most test files are in component directories: `src/symbolic2/test/`, `src/matrix2/test/`
+- Most test files are in component directories: `src/symbolic3/test/`, `src/matrix2/test/`
 - Some tests in `test/` directory: `test/polynomial_test.cpp`, `test/json_test.cpp`
 - Each test file produces one executable with multiple test cases
 
@@ -141,7 +141,7 @@ The codebase targets C++26 - embrace modern features that improve safety, readab
 
 ### Common Pitfalls
 
-1. **symbolic2 rewrite rules require exact ordering**: Distribution before Associativity to avoid infinite loops. See comments in `symbolic2/simplify.h`.
+1. **symbolic3 strategy ordering matters**: Some transformations must be applied in specific order to avoid infinite loops. Use composition operators (`>>`, `|`) to control application order. See comments in `symbolic3/simplify.h`.
 
 2. **Matrix extent handling**: `kDynamic` is `std::numeric_limits<int64_t>::min()`, not -1.
 
@@ -149,23 +149,27 @@ The codebase targets C++26 - embrace modern features that improve safety, readab
 
 4. **constexpr limitations**: Some functions have runtime fallbacks. Check if context allows compile-time eval.
 
-## Symbolic2 Deep Dive
+## Symbolic3 Deep Dive
 
 The symbolic math system is the most complex component:
 
-- **Core types** (`symbolic2/core.h`): `Symbol<unique>` uses stateless lambdas for type identity, `Expression<Op, Args...>` is pure type-system computation.
+- **Core types** (`symbolic3/core.h`): `Symbol<unique>` uses stateless lambdas for type identity, `Expression<Op, Args...>` is pure type-system computation. Includes `Fraction<N, D>` for exact arithmetic.
 
-- **Pattern matching** (`symbolic2/pattern_matching.h`): Wildcards `x_`, `a_`, `𝐜`, `𝐚𝐧𝐲`, `𝐚𝐧𝐲𝐞𝐱𝐩𝐫`. Match with `match(pattern, expr)`.
+- **Pattern matching** (`symbolic3/pattern_matching.h`): Wildcards `x_`, `a_`, `c_`, `AnyArg`, `AnyExpr`, `AnyConstant`, `AnySymbol`. Match with `match(expr, pattern)`.
 
-- **Rewrite systems** (`symbolic2/simplify.h`): `RewriteSystem{Rewrite{pattern, replacement, [predicate]}}`. Categories (Identity, Ordering, Distribution, etc.) compose via `compose()`.
+- **Strategy system** (`symbolic3/strategy.h`, `symbolic3/traversal.h`): Composable transformation strategies using concepts. Combinators include `>>` (sequential), `|` (choice), `when` (conditional), plus traversal strategies like `fold`, `unfold`, `innermost`, `outermost`, `fixpoint`.
 
-- **Evaluation** (`symbolic2/evaluate.h`): `evaluate(expr, BinderPack{x = 5, y = 3.0})` - heterogeneous type-safe bindings.
+- **Context-aware transforms** (`symbolic3/context.h`): Type-safe context passing with compile-time tags and data-driven modes for domain-specific simplification rules.
+
+- **Evaluation** (`symbolic3/evaluate.h`): `evaluate(expr, BinderPack{x = 5, y = 3.0})` - heterogeneous type-safe bindings with full constexpr support.
 
 ## Examples & Idioms
 
 See `examples/` for usage patterns. Key examples:
 
-- `examples/symbols.cpp`: Basic symbolic API (old `symbolic/` - replaced by `symbolic2/`)
+- `examples/symbolic3_simplify_demo.cpp`: Symbolic3 simplification pipelines and strategies
+- `examples/symbolic3_debug_demo.cpp`: Debugging and visualization of symbolic expressions
+- `examples/advanced_simplify_demo.cpp`: Advanced simplification techniques
 - `examples/normal_reverse_autodiff.cpp`: Autodiff computational graphs
 - `examples/idioms/`: Modern C++ design patterns (reference: Klaus Iglberger's C++ Software Design)
 

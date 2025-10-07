@@ -6,6 +6,7 @@
 
 #include "symbolic3/context.h"
 #include "symbolic3/core.h"
+#include "symbolic3/debug.h"
 #include "symbolic3/derivative.h"
 #include "symbolic3/evaluate.h"
 #include "symbolic3/matching.h"
@@ -43,11 +44,16 @@ using tempura::symbolic3::Identity;
 //   - tempura::symbolic3::bottomup(strategy)  - post-order traversal
 
 // Re-export predefined pipelines
+// Note: simplify is now the canonical function (alias for full_simplify)
 using tempura::symbolic3::algebraic_simplify;
 using tempura::symbolic3::algebraic_simplify_recursive;
 using tempura::symbolic3::bottomup_simplify;
-using tempura::symbolic3::full_simplify;
+using tempura::symbolic3::full_simplify;  // Explicit name for the same thing
+using tempura::symbolic3::simplify;       // CANONICAL: use this for most cases
 using tempura::symbolic3::topdown_simplify;
 using tempura::symbolic3::trig_aware_simplify;
+
+// Legacy (not recommended for new code)
+using tempura::symbolic3::simplify_bounded;  // Old fixed-iteration version
 
 }  // namespace tempura::symbolic3

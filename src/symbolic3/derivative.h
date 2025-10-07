@@ -17,8 +17,9 @@
 //
 // DESIGN PHILOSOPHY:
 // ------------------
-// Unlike symbolic2 which used recursive rewrite systems with special diff_()
-// notation, symbolic3 uses a simpler recursive strategy pattern.
+// Symbolic differentiation using the strategy pattern with direct
+// transformation. Uses pattern matching and recursive strategies to compute
+// derivatives.
 //
 // The differentiation rules are implemented as direct transformations that:
 // 1. Match expression patterns (e.g., sin(f))
@@ -125,8 +126,9 @@ struct DiffStrategy {
     template <typename Op, typename... Args, typename Context>
     static constexpr auto diff_expression(Expression<Op, Args...> expr, V var,
                                           Context ctx) {
-      // Extract operation and arguments
-      constexpr Op op{};
+      // Extract operation and arguments (unused but kept for potential future
+      // use)
+      [[maybe_unused]] constexpr Op op{};
 
       // Dispatch on operator type
       if constexpr (std::same_as<Op, AddOp>) {

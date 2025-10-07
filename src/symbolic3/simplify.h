@@ -431,10 +431,6 @@ constexpr auto algebraic_simplify = PowerRules | AdditionRules |
                                     MultiplicationRules |
                                     transcendental_simplify | constant_fold;
 
-// Apply simplification with fixpoint iteration (or up to 10 times)
-constexpr auto simplify =
-    Repeat<decltype(algebraic_simplify), 10>{algebraic_simplify};
-
 // Apply using FixPoint (keeps going until no more changes)
 constexpr auto simplify_fixpoint = FixPoint{algebraic_simplify};
 
@@ -442,11 +438,50 @@ constexpr auto simplify_fixpoint = FixPoint{algebraic_simplify};
 constexpr auto simplify_once = algebraic_simplify;
 
 // ============================================================================
+// LEGACY SIMPLIFICATION (Not Recommended)
+// ============================================================================
+//
+// The following simplification strategies are kept for backward compatibility
+// but are NOT RECOMMENDED for new code. They have limitations:
+//
+//   - simplify_bounded: Uses fixed iteration count (10 passes), which may be
+//     insufficient for complex expressions or wasteful for simple ones
+//   - Does not traverse nested expressions recursively
+//   - May leave subexpressions unsimplified
+//
+// For new code, use `simplify` (which is now an alias for `full_simplify`)
+// or the explicit pipeline functions below.
+
+// Apply simplification with bounded iteration (legacy)
+constexpr auto simplify_bounded =
+    Repeat<decltype(algebraic_simplify), 10>{algebraic_simplify};
+
+// ============================================================================
 // Comprehensive Simplification Pipelines
 // ============================================================================
 //
 // These pipelines combine algebraic simplification with traversal strategies
 // for robust, recursive simplification of nested expressions.
+//
+// HIERARCHY (from most to least recommended):
+//
+// 1. simplify / full_simplify (CANONICAL)
+//    - Multi-stage fixpoint pipeline
+//    - Handles all nesting and rule interactions
+//    - Use this for correctness
+//
+// 2. algebraic_simplify_recursive
+//    - Single pass per node, recursive traversal
+//    - Faster but may miss some simplifications
+//    - Use for performance-critical paths
+//
+// 3. bottomup_simplify / topdown_simplify
+//    - Explicit traversal order control
+//    - Use when you need specific traversal semantics
+//
+// 4. trig_aware_simplify
+//    - Specialized for trigonometric expressions
+//    - Currently similar to simplify, may diverge in future
 //
 // The pipelines build on the basic `algebraic_simplify` rules but add:
 //   1. Recursive traversal (innermost/bottomup/topdown)
@@ -458,24 +493,38 @@ constexpr auto simplify_once = algebraic_simplify;
 // They must be included via: #include "symbolic3/traversal.h"
 
 // ============================================================================
-// Full Simplification (Recommended for Most Use Cases)
+// CANONICAL SIMPLIFICATION (Recommended for All Use Cases)
 // ============================================================================
 //
-// Applies algebraic simplification exhaustively to all subexpressions,
-// working from innermost (leaves) to outermost (root).
+// This is the primary simplification function implementing a robust
+// multi-stage, fixed-point pipeline that mimics how mathematicians simplify:
 //
-// This is the most thorough simplification pipeline and should handle:
+// PIPELINE STRUCTURE:
+// 1. **Innermost Traversal**: Start at leaves and work upward
+// 2. **Main Rewrite Loop**: Apply fixpoint iteration at each node
+// 3. **Outer Fixpoint**: Repeat until entire tree is stable
+//
+// This architecture ensures:
 //   - Nested arithmetic: x * (y + (z * 0))  →  x * y
 //   - Deep expressions: ((x + 0) * 1) + 0   →  x
 //   - Mixed operations: exp(log(x + 0))     →  x
+//   - Term collection: (x+x)+x              →  3*x
+//   - Associativity changes are fully propagated
+//
+// WHY THIS WORKS:
+//   - Innermost ensures leaves are simplified before parents
+//   - Inner fixpoint (simplify_fixpoint) exhaustively applies rules at each
+//     node until stable, handling cases like (x+x)+x → 2*x+x → 3*x
+//   - Outer fixpoint handles rules that restructure the tree (like
+//     distribution a*(b+c) → a*b + a*c), ensuring newly created
+//     subexpressions are also simplified
 //
 // Usage:
-//   auto result = full_simplify(expr, default_context());
+//   auto result = simplify(expr, default_context());
 //
 // Implementation note:
-//   Returns a lambda that applies innermost(simplify_fixpoint).
-//   This ensures complete simplification from leaves upward with
-//   fixpoint iteration at each level.
+//   This is a lambda wrapper around FixPoint{innermost(simplify_fixpoint)}.
+//   The nested fixpoint structure is critical for correctness.
 constexpr auto full_simplify = [](auto expr, auto ctx) {
   // Must include traversal.h to use this
   // innermost applies rules at leaves first, then propagates upward
@@ -486,6 +535,28 @@ constexpr auto full_simplify = [](auto expr, auto ctx) {
   // newly created subexpressions won't be simplified.
   return FixPoint{innermost(simplify_fixpoint)}.apply(expr, ctx);
 };
+
+// ============================================================================
+// PRIMARY SIMPLIFICATION INTERFACE
+// ============================================================================
+//
+// `simplify` is now an alias for `full_simplify` following Recommendation 1
+// from SYMBOLIC3_RECOMMENDATIONS.md.
+//
+// This provides:
+//   - Multi-stage pipeline (innermost → fixpoint → outer fixpoint)
+//   - Handles all nesting levels correctly
+//   - Robust against complex expressions
+//   - Predictable, deterministic results
+//
+// MIGRATION NOTES:
+//   - Old code using `simplify` will now get the improved behavior
+//   - The old bounded-iteration version is available as `simplify_bounded`
+//   - Most code should not need changes, just better results
+//
+// Usage:
+//   auto result = simplify(expr, default_context());
+constexpr auto simplify = full_simplify;
 
 // ============================================================================
 // Algebraic Simplify with Traversal (Fast)
@@ -561,10 +632,53 @@ constexpr auto trig_aware_simplify = [](auto expr, auto ctx) {
 };
 
 // ============================================================================
-// Usage with Traversal Strategies
+// Usage Guide
 // ============================================================================
 //
-// For custom pipelines, combine basic rules with traversal strategies:
+// QUICK START (Most Use Cases):
+//
+//   #include "symbolic3/symbolic3.h"
+//
+//   auto expr = x * (y + (z * 0));
+//   auto result = simplify(expr, default_context());  // x * y
+//
+// This gives you the full multi-stage simplification pipeline.
+//
+// ============================================================================
+// When to Use Each Pipeline:
+// ============================================================================
+//
+// ✅ simplify(expr, ctx)
+//    - DEFAULT CHOICE for all use cases
+//    - Handles nested expressions correctly
+//    - Applies fixpoint iteration at all levels
+//    - Predictable, robust results
+//
+// ⚡ algebraic_simplify_recursive(expr, ctx)
+//    - PERFORMANCE-CRITICAL paths only
+//    - Single pass per node (may miss some simplifications)
+//    - Use when expressions are already mostly simplified
+//
+// 🔧 bottomup_simplify(expr, ctx) / topdown_simplify(expr, ctx)
+//    - EXPLICIT TRAVERSAL ORDER control
+//    - Use when you need specific semantics
+//    - bottomup: children before parents
+//    - topdown: parents before children
+//
+// 📐 trig_aware_simplify(expr, ctx)
+//    - TRIGONOMETRIC EXPRESSIONS
+//    - Currently similar to simplify, may specialize in future
+//
+// 🔍 algebraic_simplify.apply(expr, ctx)
+//    - LOW-LEVEL tool for custom pipelines
+//    - Single node, no traversal
+//    - Use as building block for custom strategies
+//
+// ============================================================================
+// Custom Pipelines (Advanced):
+// ============================================================================
+//
+// For specialized needs, combine basic rules with traversal strategies:
 //
 // Traversal strategy factories (template functions from traversal.h):
 //   - innermost(rules) - apply at leaves first, propagate upward (recommended)
@@ -576,24 +690,37 @@ constexpr auto trig_aware_simplify = [](auto expr, auto ctx) {
 //   #include "symbolic3/traversal.h"
 //
 //   // Only power and addition rules, exhaustive
-//   auto custom = innermost(PowerRules | AdditionRules | FixPoint{...});
+//   auto custom = FixPoint{innermost(PowerRules | AdditionRules)};
 //   auto result = custom.apply(expr, ctx);
 //
-// Example usage of predefined pipelines:
+// Example comparison:
 //   auto expr = x * (y + 0);
 //   auto ctx = default_context();
 //
-//   // Quick simplification (top-level only):
-//   auto simple = algebraic_simplify.apply(expr, ctx);  // May leave nested
-//   issues
+//   // ✅ Recommended (exhaustive, correct):
+//   auto result = simplify(expr, ctx);  // x * y
 //
-//   // Full simplification (recursive, exhaustive):
-//   auto complete = full_simplify(expr, ctx);  // x * y
-//
-//   // Fast recursive (one pass per node):
+//   // ⚡ Fast (single pass per node):
 //   auto fast = algebraic_simplify_recursive(expr, ctx);  // x * y
 //
-// Recommended for most use cases:
-//   full_simplify(expr, ctx)  - Exhaustive, correct, handles all nesting
+//   // 🔍 Low-level (top-level only, leaves nested issues):
+//   auto partial = algebraic_simplify.apply(expr, ctx);  // x * (y + 0)
+//   [incomplete]
+//
+// ============================================================================
+// Migration from Old Code:
+// ============================================================================
+//
+// If your code uses the old `simplify` (bounded iteration):
+//
+//   OLD: auto result = simplify.apply(expr, ctx);  // 10 iterations max
+//   NEW: auto result = simplify(expr, ctx);         // fixpoint iteration
+//
+// The new `simplify` is a callable lambda, not a Strategy object, so:
+//   - Use simplify(expr, ctx) instead of simplify.apply(expr, ctx)
+//   - Or continue using .apply() with simplify_bounded if needed
+//
+// For backward compatibility:
+//   auto result = simplify_bounded.apply(expr, ctx);  // old behavior
 
 }  // namespace tempura::symbolic3

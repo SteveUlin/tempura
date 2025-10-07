@@ -17,12 +17,12 @@ int main() {
 
     // x^0 → 1
     constexpr auto expr1 = pow(x, Constant<0>{});
-    constexpr auto result1 = power_zero.apply(expr1, ctx);
+    [[maybe_unused]] constexpr auto result1 = power_zero.apply(expr1, ctx);
     // Should be Constant<1>{}
 
     // x^1 → x
     constexpr auto expr2 = pow(x, Constant<1>{});
-    constexpr auto result2 = power_one.apply(expr2, ctx);
+    [[maybe_unused]] constexpr auto result2 = power_one.apply(expr2, ctx);
     // Should be x
   }
 
@@ -33,7 +33,8 @@ int main() {
 
     // y + 0 → y
     constexpr auto expr = y + Constant<0>{};
-    constexpr auto result = AdditionRuleCategories::Identity.apply(expr, ctx);
+    [[maybe_unused]] constexpr auto result =
+        AdditionRuleCategories::Identity.apply(expr, ctx);
     // Should be y
   }
 
@@ -44,13 +45,13 @@ int main() {
 
     // z * 1 → z
     constexpr auto expr1 = z * Constant<1>{};
-    constexpr auto result1 =
+    [[maybe_unused]] constexpr auto result1 =
         MultiplicationRuleCategories::Identity.apply(expr1, ctx);
     // Should be z
 
     // z * 0 → 0
     constexpr auto expr2 = z * Constant<0>{};
-    constexpr auto result2 =
+    [[maybe_unused]] constexpr auto result2 =
         MultiplicationRuleCategories::Identity.apply(expr2, ctx);
     // Should be Constant<0>{}
   }

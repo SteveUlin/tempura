@@ -223,7 +223,7 @@ int main() {
   {
     std::cout << "Test: Complex expression with full_simplify\n";
     constexpr auto expr = log(x * y) + exp(a + b);
-    constexpr auto result = full_simplify(expr, ctx);
+    [[maybe_unused]] constexpr auto result = full_simplify(expr, ctx);
     // After simplification should expand both log and exp
     // log(x*y) → log(x) + log(y)
     // exp(a+b) → exp(a) * exp(b)
@@ -235,7 +235,7 @@ int main() {
   {
     std::cout << "Test: Nested trig with double angles\n";
     constexpr auto expr = sin(2_c * x) * cos(2_c * x);
-    constexpr auto result = full_simplify(expr, ctx);
+    [[maybe_unused]] constexpr auto result = full_simplify(expr, ctx);
     // sin(2*x) → 2*sin(x)*cos(x)
     // cos(2*x) → cos²(x) - sin²(x)
     // Result: 2*sin(x)*cos(x) * (cos²(x) - sin²(x))

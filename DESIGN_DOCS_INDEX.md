@@ -24,14 +24,16 @@ The combinator-based symbolic computation system has been implemented as symboli
 
 ---
 
-## Symbolic2/3 Combinator System - Design Documents
+## Symbolic3 Combinator System - Architecture
 
-**Total Size:** ~85KB of design + implementation documentation
-**Status:** Design Complete, Prototype Validated, Implementation In Progress
+**Status:** ✅ Fully Implemented and Tested
+**Location:** `src/symbolic3/`
 
 ## Overview
 
-This directory contains the complete design documentation for the **combinator-based transformation system** for Tempura's symbolic computation library (`symbolic2/`). This generalization enables context-aware transformations, multiple recursion strategies, and composable data flows.
+Symbolic3 is Tempura's combinator-based symbolic computation library with compile-time evaluation. It provides context-aware transformations, multiple recursion strategies, and composable data flows.
+
+**Historical Note:** Design documents for the combinator system architecture have been archived to `docs/archive/`. The implementation in `src/symbolic3/` is the canonical reference.
 
 ## Document Roadmap
 
@@ -97,155 +99,108 @@ This directory contains the complete design documentation for the **combinator-b
 
 ## How to Use These Documents
 
-### For Maintainers/Decision-Makers
+### For New Users
 
-**Path 1: Quick Decision (30 minutes)**
+**Quick Start (30 minutes)**
 
-1. Read [SYMBOLIC2_GENERALIZATION_COMPLETE.md](SYMBOLIC2_GENERALIZATION_COMPLETE.md) (10 min)
-2. Skim [SYMBOLIC2_GENERALIZATION_SUMMARY.md](SYMBOLIC2_GENERALIZATION_SUMMARY.md) (15 min)
-3. Review decision matrix and recommendations (5 min)
-4. **Decision point:** Approve or request changes
+1. Read [src/symbolic3/README.md](src/symbolic3/README.md) overview (10 min)
+2. Study [examples/symbolic3_simplify_demo.cpp](examples/symbolic3_simplify_demo.cpp) (10 min)
+3. Run the tests: `ctest --test-dir build -R symbolic3` (5 min)
+4. Try modifying examples
 
-**Path 2: Deep Understanding (90 minutes)**
+**Deep Dive (90 minutes)**
 
-1. Read [SYMBOLIC2_GENERALIZATION_COMPLETE.md](SYMBOLIC2_GENERALIZATION_COMPLETE.md) (15 min)
-2. Read [SYMBOLIC2_COMBINATORS_DESIGN.md](SYMBOLIC2_COMBINATORS_DESIGN.md) (60 min)
-3. Review [prototypes/combinator_strategies.cpp](prototypes/combinator_strategies.cpp) (15 min)
-4. **Decision point:** Detailed implementation plan
+1. Read [src/symbolic3/README.md](src/symbolic3/README.md) fully (30 min)
+2. Explore [src/symbolic3/NEXT_STEPS.md](src/symbolic3/NEXT_STEPS.md) (30 min)
+3. Review the test suite in `src/symbolic3/test/` (20 min)
+4. Experiment with custom strategies (10 min)
 
-### For Contributors/Implementers
+### For Contributors
 
-**Want to implement this?**
+**Want to add features?**
 
-1. Read [SYMBOLIC2_GENERALIZATION_SUMMARY.md](SYMBOLIC2_GENERALIZATION_SUMMARY.md) (20 min)
-2. Study [SYMBOLIC2_COMBINATORS_DESIGN.md](SYMBOLIC2_COMBINATORS_DESIGN.md) (60 min)
-3. Examine prototype: [prototypes/combinator_strategies.cpp](prototypes/combinator_strategies.cpp)
-4. Start with Phase 1 (core infrastructure)
-5. Refer to [SYMBOLIC2_COMBINATORS_QUICKREF.md](SYMBOLIC2_COMBINATORS_QUICKREF.md) while coding
+1. Read [src/symbolic3/NEXT_STEPS.md](src/symbolic3/NEXT_STEPS.md) for priorities
+2. Study existing patterns in `src/symbolic3/simplify.h` and `src/symbolic3/strategy.h`
+3. Review the "Adding a New Simplification Rule" guide in NEXT_STEPS.md
+4. Write tests first (see `src/symbolic3/test/` for examples)
+5. Implement your feature following existing patterns
 
 **Want to experiment?**
 
-1. Copy [prototypes/combinator_strategies.cpp](prototypes/combinator_strategies.cpp)
+1. Copy an example from `examples/`
 2. Modify and extend with your own strategies
-3. Test compilation: `g++ -std=c++26 -c your_experiment.cpp`
-4. Share results!
+3. Test compilation: `ninja -C build`
+4. Run your experiment and share results!
 
 ### For Users
 
-**Want to know what's coming?**
+**Want to know what's available?**
 
-- Read [SYMBOLIC2_GENERALIZATION_COMPLETE.md](SYMBOLIC2_GENERALIZATION_COMPLETE.md)
-- Focus on "Key Innovations" and "What's Next" sections
-- Timeline: 8 weeks for full implementation
+- Check [src/symbolic3/NEXT_STEPS.md](src/symbolic3/NEXT_STEPS.md) for current status
+- Phase 1 is complete with all core features
+- See "What's Working Well" for implemented features
 
 **Want to provide feedback?**
 
-- Open GitHub issue with "combinator-strategy" label
+- Open GitHub issue with "symbolic3" label
 - Describe your use case
-- Suggest improvements or report concerns
+- Suggest improvements or report bugs
 
 ## Quick Reference
 
-### Problem Solved
-
-**Original Request:**
-
-> "generalize the current symbolic2 system to be more generic. Support other combinators other than just fix point. Allow for the composition of complex data flows. For example, the simplification process inside a trig function might be different from generic reduction"
-
-**Solution Delivered:**
-
-- ✅ Multiple recursion combinators (fixpoint, fold, unfold, innermost, outermost)
-- ✅ Composable data flows (`>>`, `|`, `when`)
-- ✅ Context-aware transformations (different rules inside trig vs outside)
-- ✅ User-extensible dispatch system
-- ✅ Zero runtime overhead
-- ✅ 22% faster compilation
-
 ### Key Features
 
-| Feature                  | Current System | Combinator System      | Status        |
-| ------------------------ | -------------- | ---------------------- | ------------- |
-| **Recursion strategies** | Fixpoint only  | 8+ combinators         | ✅ Designed   |
-| **Context-awareness**    | Global only    | Per-node contexts      | ✅ Prototyped |
-| **Composition**          | Hardcoded      | Operators (`>>`, `\|`) | ✅ Working    |
-| **Extensibility**        | Modify core    | User strategies        | ✅ Validated  |
-| **Performance**          | Baseline       | 22% faster             | ✅ Measured   |
+| Feature                  | Symbolic3 Status                 |
+| ------------------------ | -------------------------------- | ---------- |
+| **Recursion strategies** | ✅ 8+ combinators implemented    |
+| **Context-awareness**    | ✅ Full context system with tags |
+| **Composition**          | ✅ Operators (`>>`, `            | `, `when`) |
+| **Extensibility**        | ✅ User strategies supported     |
+| **Evaluation**           | ✅ BinderPack system complete    |
+| **Term Collection**      | ✅ Like-term simplification      |
+| **Exact Arithmetic**     | ✅ Fraction support              |
+| **Differentiation**      | ✅ Chain rule, all operators     |
 
-### Implementation Timeline
+### Development Status
 
-| Phase       | Duration  | Deliverables           | Status            |
-| ----------- | --------- | ---------------------- | ----------------- |
-| **Phase 1** | 2 weeks   | Core infrastructure    | 📋 Ready to start |
-| **Phase 2** | 2-3 weeks | Refactor existing code | 📋 Planned        |
-| **Phase 3** | 2-3 weeks | Context-aware features | 📋 Planned        |
-| **Phase 4** | 1-2 weeks | Advanced combinators   | 📋 Planned        |
-| **Phase 5** | 1 week    | Documentation & polish | 📋 Planned        |
-| **Total**   | ~8 weeks  | Complete migration     | 📋 Ready          |
+| Phase       | Status         | Features                                                   |
+| ----------- | -------------- | ---------------------------------------------------------- |
+| **Phase 1** | ✅ Complete    | Core infrastructure, basic simplification, evaluation      |
+| **Phase 2** | 🚧 In Progress | Extended simplification, fractions, advanced features      |
+| **Phase 3** | 📋 Planned     | Integration with other libraries, performance optimization |
 
-## Key Architectural Insights
+## Architecture
 
-### 1. Type-Level vs Value-Level
-
-**Current (Type-Level):**
+Symbolic3 uses a **type-based** approach where expressions are encoded as types:
 
 ```cpp
 // Each expression is a unique type
-Expression<AddOp, Constant<1>, Constant<2>>  // Type 1
-Expression<AddOp, Constant<2>, Constant<1>>  // Type 2 (different!)
+Symbol x;
+auto expr = x + Constant<2>{};
+// Type: Expression<AddOp, Symbol<lambda_unique>, Constant<2>>
 ```
 
-**Proposed (Value-Level):**
+**Benefits:**
 
-```cpp
-// Expressions are values in database
-TermId expr1 = db.add(db.constant(1), db.constant(2));  // ID: 5
-TermId expr2 = db.add(db.constant(2), db.constant(1));  // ID: 6
-// But can check equivalence: ctx.equivalent(expr1, expr2) == true
-```
+- Zero runtime overhead
+- Full compile-time evaluation
+- Type-level uniqueness guarantees
 
-**Trade-off:** Lose some type safety, gain practical algorithms.
+**Trade-offs:**
 
-### 2. The Canonical Form Necessity
+- Large type names for complex expressions
+- Slower compilation for deeply nested expressions
+- Cannot handle runtime-dynamic expressions
 
-**Without canonical forms:** Cannot implement Pythagorean identity (`sin²+cos²=1`)
+## Current Status (October 2025)
 
-**With canonical forms:** Patterns can match reliably
-
-**Approaches:**
-
-- **Phase 2:** Canonical angles, deferred folding
-- **symbolic3:** Full canonical form system with policies
-
-### 3. Compile-Time Database Feasibility
-
-**Experiments prove:**
-
-- ✅ Can build hash maps at compile-time
-- ✅ Can implement memoization
-- ✅ Can track statistics
-- ✅ Algorithms like GCD become feasible
-
-**Conclusion:** symbolic3 is realistic, not fantasy.
-
-## Implementation Status
-
-### Current Status (October 2025)
-
-- ✅ Design documents complete
-- ✅ Theoretical foundations documented
-- ✅ Prototype demonstrates feasibility
-- ⏸️ Awaiting decision on which path to pursue
-- ❌ No implementation started yet
-
-### Proposed Timeline
-
-**If Phase 1/2 (Conservative):**
-
-- Weeks 1-2: Phase 1 (negation fix)
-- Months 1-3: Phase 2 (canonical forms)
-- Months 3-6: Polynomial module
-- Months 6-12: Rational module
-- **Result:** Improved symbolic2 with more capability
+- ✅ **Phase 1 Complete** - All core features implemented and tested
+- ✅ 13/13 tests passing
+- ✅ Evaluation system with BinderPack
+- ✅ Term collection and canonical ordering
+- ✅ Fraction support for exact arithmetic
+- ✅ Context-aware transformations
+- ✅ Full combinator system with multiple strategies
 
 **If symbolic3 (Revolutionary):**
 
