@@ -4,6 +4,7 @@
 // Includes all necessary components for building and transforming symbolic
 // expressions
 
+#include "symbolic3/canonical.h"
 #include "symbolic3/context.h"
 #include "symbolic3/core.h"
 #include "symbolic3/debug.h"

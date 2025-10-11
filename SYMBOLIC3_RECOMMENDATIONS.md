@@ -43,7 +43,7 @@ auto expr = x * (y + (z * 0));
 auto result = simplify(expr, default_context());  // x * y
 ```
 
-### Recommendation 2: Implement a Canonical Form
+### Recommendation 2: Implement a Canonical Form 🚧 **IN PROGRESS**
 
 - **Problem**: You have many rules for commutative and associative properties (e.g., `a+b -> b+a`, `(a+b)+c -> a+(b+c)`). This can be complex to manage.
 - **Solution**: Enforce a **canonical form** for associative operators like `+` and `*`. Instead of representing `a+b+c` as a nested binary tree like `Expression<Add, Expression<Add, a, b>, c>`, flatten it into a single type with a sorted tuple of arguments: `Expression<Add, std::tuple<a, b, c>>`.
@@ -54,6 +54,36 @@ auto result = simplify(expr, default_context());  // x * y
   - **Easier Term Collection**: To simplify `2*x + 3*x`, you would iterate through the arguments of the `Add` expression, find terms with a common factor `x`, and combine their coefficients.
 
   **Implementation**: This is a significant architectural change. It would require specializing operators like `+` to check if the left or right-hand side is already an `Add` expression. If so, it would merge the arguments into a new, sorted `std::tuple`.
+
+**Implementation Status**:
+
+- ✅ Variadic function objects (`AddOp`, `MulOp`) supporting N-ary evaluation
+- ✅ Canonical form infrastructure: type sorting, flattening algorithms, trait system
+- ✅ `to_canonical` strategy for applying canonical forms
+- ✅ Comprehensive test suite - all tests passing
+- 🚧 Full flattening implementation pending TypeList/tuple adapter
+- 📄 See `RECOMMENDATION_2_IMPLEMENTATION.md` and `RECOMMENDATION_2_SUCCESS.md` for details
+
+**Benefits Achieved**:
+
+- Function objects can evaluate multiple arguments
+- Infrastructure ready for N-ary expressions
+- Operation-specific sorting strategies (group constants for term collection)
+- Clean integration with existing combinator system
+
+**Usage** (once complete):
+
+```cpp
+#include "symbolic3/symbolic3.h"
+
+auto expr = (x + y) + z;  // Binary tree: Expression<Add, Expression<Add, x, y>, z>
+auto canonical = to_canonical.apply(expr, default_context());  // Flattened: Expression<Add, x, y, z>
+
+// Commutativity automatically handled
+auto expr1 = x + y;  // After canonicalization
+auto expr2 = y + x;  // After canonicalization
+// Both have same canonical type (sorted arguments)
+```
 
 ### Recommendation 3: Improve `constexpr` Debugging ✅ **IMPLEMENTED**
 

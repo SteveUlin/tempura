@@ -9,10 +9,21 @@
 namespace tempura::symbolic3 {
 
 // Operation tags - made callable for evaluation with metadata for display
+// AddOp is variadic and associative/commutative
 struct AddOp {
   static constexpr StaticString kSymbol = "+";
   static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
+
+  // Unary - identity
+  constexpr auto operator()(auto a) const { return a; }
+
+  // Binary
   constexpr auto operator()(auto a, auto b) const { return a + b; }
+
+  // Variadic (3+) - left fold: (((first + second) + ...) + rest)
+  constexpr auto operator()(auto first, auto second, auto... rest) const {
+    return ((first + second) + ... + rest);
+  }
 };
 
 struct SubOp {
@@ -21,10 +32,21 @@ struct SubOp {
   constexpr auto operator()(auto a, auto b) const { return a - b; }
 };
 
+// MulOp is variadic and associative/commutative
 struct MulOp {
   static constexpr StaticString kSymbol = "*";
   static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
+
+  // Unary - identity
+  constexpr auto operator()(auto a) const { return a; }
+
+  // Binary
   constexpr auto operator()(auto a, auto b) const { return a * b; }
+
+  // Variadic (3+) - left fold: (((first * second) * ...) * rest)
+  constexpr auto operator()(auto first, auto second, auto... rest) const {
+    return ((first * second) * ... * rest);
+  }
 };
 
 struct DivOp {
@@ -137,6 +159,7 @@ struct NotOp {};
 // Binary Operations
 // ============================================================================
 
+// Addition - binary operation (canonical form will be applied by strategies)
 template <Symbolic L, Symbolic R>
 constexpr auto operator+(L, R) {
   return Expression<AddOp, L, R>{};
@@ -147,6 +170,8 @@ constexpr auto operator-(L, R) {
   return Expression<SubOp, L, R>{};
 }
 
+// Multiplication - binary operation (canonical form will be applied by
+// strategies)
 template <Symbolic L, Symbolic R>
 constexpr auto operator*(L, R) {
   return Expression<MulOp, L, R>{};

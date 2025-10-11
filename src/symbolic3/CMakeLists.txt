@@ -120,4 +120,22 @@ target_link_libraries(debug_test PRIVATE symbolic3 unit)
 add_test(NAME symbolic3_debug COMMAND debug_test)
 set_tests_properties(symbolic3_debug PROPERTIES LABELS "symbolic3;utilities")
 
+# Canonical Form Test - Recommendation #2 implementation
+add_executable(canonical_test test/canonical_test.cpp)
+target_link_libraries(canonical_test PRIVATE symbolic3 unit)
+add_test(NAME symbolic3_canonical COMMAND canonical_test)
+set_tests_properties(symbolic3_canonical PROPERTIES LABELS "symbolic3;canonical_form")
+
+# Term Structure Test - sophisticated sorting for term collection
+add_executable(term_structure_test test/term_structure_test.cpp)
+target_link_libraries(term_structure_test PRIVATE symbolic3 unit)
+add_test(NAME symbolic3_term_structure COMMAND term_structure_test)
+set_tests_properties(symbolic3_term_structure PROPERTIES LABELS "symbolic3;term_structure")
+
+# Sophisticated Sorting Demo - shows how algebraic sorting enables term collection
+add_executable(sophisticated_sorting_demo test/sophisticated_sorting_demo.cpp)
+target_link_libraries(sophisticated_sorting_demo PRIVATE symbolic3 unit)
+add_test(NAME symbolic3_sophisticated_sorting_demo COMMAND sophisticated_sorting_demo)
+set_tests_properties(symbolic3_sophisticated_sorting_demo PROPERTIES LABELS "symbolic3;demo")
+
 
