@@ -88,6 +88,12 @@ target_link_libraries(simplification_pipeline_test PRIVATE symbolic3 unit)
 add_test(NAME symbolic3_simplification_pipeline COMMAND simplification_pipeline_test)
 set_tests_properties(symbolic3_simplification_pipeline PROPERTIES LABELS "symbolic3;consolidated;simplification")
 
+# Term-Structure-Aware Ordering Test (tests algebraic term grouping)
+add_executable(term_ordering_test test/term_ordering_test.cpp)
+target_link_libraries(term_ordering_test PRIVATE symbolic3 unit)
+add_test(NAME symbolic3_term_ordering COMMAND term_ordering_test)
+set_tests_properties(symbolic3_term_ordering PROPERTIES LABELS "symbolic3;term_structure;simplification")
+
 # Term Collecting Debug (quick debug tool - not a formal test)
 add_executable(term_collecting_debug test/term_collecting_debug.cpp)
 target_link_libraries(term_collecting_debug PRIVATE symbolic3)

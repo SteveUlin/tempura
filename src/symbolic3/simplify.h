@@ -7,6 +7,7 @@
 #include "symbolic3/ordering.h"
 #include "symbolic3/pattern_matching.h"
 #include "symbolic3/strategy.h"
+#include "symbolic3/term_structure.h"
 #include "symbolic3/traversal.h"
 
 // ============================================================================
@@ -171,70 +172,112 @@ constexpr inline ConstantFold constant_fold{};
 // ============================================================================
 // Addition Simplification Rules
 // ============================================================================
+//
+// Rule Categories (applied in this order):
+//   1. Identity   : 0 + x → x
+//   2. LikeTerms  : x + x → 2·x
+//   3. Ordering   : y + x → x + y  (when x < y)
+//   4. Factoring  : x·a + x·b → x·(a+b)
+//   5. Associativity: Strategic reassociation to group like terms
+//
+// The ordering ensures termination and establishes canonical forms.
 
 namespace AdditionRuleCategories {
 
-// Identity: 0 + x → x, x + 0 → x
+// ────────────────────────────────────────────────────────────────────────────
+// Identity Rules: Eliminate additive identity (zero)
+// ────────────────────────────────────────────────────────────────────────────
+
 constexpr auto zero_left = Rewrite{0_c + x_, x_};
 constexpr auto zero_right = Rewrite{x_ + 0_c, x_};
 constexpr auto Identity = zero_left | zero_right;
 
-// Constant folding: c1 + c2 → c3 (evaluate at compile-time)
-// Note: This requires a special rule that evaluates constants
-// For now, we'll add specific common cases as they come up
-// TODO: Add general constant folding using constexpr evaluation
+// ────────────────────────────────────────────────────────────────────────────
+// Like Terms: Collect identical terms
+// ────────────────────────────────────────────────────────────────────────────
 
-// Like terms: x + x → 2·x
+// x + x → 2·x
 constexpr auto LikeTerms = Rewrite{x_ + x_, x_ * 2_c};
 
-// Canonical ordering: y + x → x + y iff x < y
-// This prevents infinite rewrite loops by establishing a total ordering
+// ────────────────────────────────────────────────────────────────────────────
+// Canonical Ordering: Establish total order to prevent rewrite loops
+// ────────────────────────────────────────────────────────────────────────────
+
+// y + x → x + y  when x < y (using term-structure-aware comparison)
+// Uses compareAdditionTerms() from term_structure.h for algebraic ordering:
+//   - Groups terms by their base: x, 2*x, 3*x are adjacent
+//   - Within same base, sorts by coefficient: x < 2*x < 3*x
+//   - Constants come first: 5 < x < 2*x < y < 3*y
+// Example: 3*x + y + 2*y + x → x + 3*x + y + 2*y (ready for factoring)
 constexpr auto canonical_order =
-    Rewrite{y_ + x_, x_ + y_,
-            [](auto ctx) { return lessThan(get(ctx, x_), get(ctx, y_)); }};
+    Rewrite{y_ + x_, x_ + y_, [](auto ctx) {
+              return compareAdditionTerms(get(ctx, x_), get(ctx, y_)) ==
+                     Ordering::Less;
+            }};
 constexpr auto Ordering = canonical_order;
 
-// Term collecting/factoring: x·a + x → x·(a+1), x·a + x·b → x·(a+b)
-// These rules combine like terms by factoring out common factors
+// ────────────────────────────────────────────────────────────────────────────
+// Factoring: Extract common factors to enable term collection
+// ────────────────────────────────────────────────────────────────────────────
+
+// x·a + x → x·(a+1)  (factor out x from scaled and unscaled term)
 constexpr auto factor_simple = Rewrite{x_ * a_ + x_, x_*(a_ + 1_c)};
+
+// x + x·a → x·(1+a)  (symmetric case)
 constexpr auto factor_simple_rev = Rewrite{x_ + x_ * a_, x_ * (1_c + a_)};
+
+// x·a + x·b → x·(a+b)  (factor out common base from two scaled terms)
 constexpr auto factor_both = Rewrite{x_ * a_ + x_ * b_, x_*(a_ + b_)};
+
 constexpr auto Factoring = factor_simple | factor_simple_rev | factor_both;
 
-// Right-associative: (a + b) + c → a + (b + c)
-// Bidirectional associativity with conditional reordering for canonical form
+// Associativity Rules with Canonical Ordering
+// -----------------------------------------------
+// Bidirectional associativity with conditional reordering for canonical form.
 //
 // Strategy: Use both left and right association, with ordering predicates
-// to ensure termination. The fixpoint combinator will find stable form.
+// to ensure termination and establish a canonical form where a < b < c.
+// Uses term-structure-aware comparison to group like terms.
+// The fixpoint combinator will find a stable form.
 //
-// Key insight: a + (b + c) → (a + b) + c  should fire when a <= b
-// This way x + (x + y) → (x + x) + y  (since x == x)
-// And prevents infinite loops because we only reassociate when maintaining
-// order
-constexpr auto assoc_left =
-    Rewrite{a_ + (b_ + c_), (a_ + b_) + c_, [](auto ctx) {
-              // Associate left when a should come before or equal to b
-              // This groups like terms: x + (x + y) → (x + x) + y
-              return !lessThan(get(ctx, b_), get(ctx, a_));
-            }};
+// Ordering ensures:
+//   - Terms are arranged in canonical order (smaller terms first)
+//   - Like terms are grouped together (e.g., x + (2*x + y) → (x + 2*x) + y)
+//   - Prevents infinite rewrite loops
 
-// Right-associate: (a + b) + c → a + (b + c)  when b should come after c
-// This "bubbles" larger terms rightward
-constexpr auto assoc_right =
-    Rewrite{(a_ + b_) + c_, a_ + (b_ + c_),
-            [](auto ctx) { return lessThan(get(ctx, c_), get(ctx, b_)); }};
+// Left-associate: a + (b + c) → (a + b) + c  when a ≤ b (term-aware)
+// Groups like terms when a and b have the same base: x + (2*x + y) → (x + 2*x) + y
+constexpr auto assoc_left = Rewrite{a_ + (b_ + c_), (a_ + b_) + c_, [](auto ctx) {
+  return compareAdditionTerms(get(ctx, b_), get(ctx, a_)) != Ordering::Less;
+}};
 
-// Reorder during left-association: (a + c) + b → (a + b) + c  (iff b < c)
-constexpr auto assoc_reorder =
-    Rewrite{(a_ + c_) + b_, (a_ + b_) + c_,
-            [](auto ctx) { return lessThan(get(ctx, b_), get(ctx, c_)); }};
+// Right-associate: (a + c) + b → a + (c + b)  when b < c (term-aware)
+// Bubbles smaller term b rightward to maintain canonical ordering a < b < c
+constexpr auto assoc_right = Rewrite{(a_ + c_) + b_, a_ + (c_ + b_), [](auto ctx) {
+  return compareAdditionTerms(get(ctx, b_), get(ctx, c_)) == Ordering::Less;
+}};
 
-constexpr auto Associativity = assoc_left | assoc_reorder | assoc_right;
+// Reorder within right-side: a + (c + b) → a + (b + c)  when b < c (term-aware)
+// Swaps rightmost terms to maintain canonical ordering a < b < c
+constexpr auto assoc_reorder = Rewrite{a_ + (c_ + b_), a_ + (b_ + c_), [](auto ctx) {
+  return compareAdditionTerms(get(ctx, b_), get(ctx, c_)) == Ordering::Less;
+}};
+
+constexpr auto Associativity = assoc_left | assoc_right | assoc_reorder;
 
 }  // namespace AdditionRuleCategories
 
-// Try each category as a choice
-// Note: Ordering must come before Associativity to establish canonical form
+// ────────────────────────────────────────────────────────────────────────────
+// Combined Addition Rules (Choice Combinator)
+// ────────────────────────────────────────────────────────────────────────────
+//
+// Order matters for efficiency and correctness:
+//   - Identity first (simple, fast pattern match)
+//   - LikeTerms before Factoring (simpler pattern: x+x vs x·a+x·b)
+//   - Ordering before Associativity (establishes canonical form first)
+//   - Factoring before Associativity (groups terms before rearrangement)
+//   - Associativity last (most complex, benefits from prior simplifications)
+
 constexpr auto AdditionRules =
     AdditionRuleCategories::Identity | AdditionRuleCategories::LikeTerms |
     AdditionRuleCategories::Ordering | AdditionRuleCategories::Factoring |
