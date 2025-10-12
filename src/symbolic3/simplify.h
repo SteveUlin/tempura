@@ -150,6 +150,25 @@ struct ConstantFold {
 constexpr inline ConstantFold constant_fold{};
 
 // ============================================================================
+// Exact Arithmetic - Promote integer division to fractions
+// ============================================================================
+
+// Promote integer division to Fraction when result is non-integer
+// This maintains exact arithmetic instead of premature float conversion
+// Examples:
+//   6 / 2  → 3 (exact integer result - fold to Constant<3>)
+//   5 / 2  → Fraction<5, 2> (non-integer result - keep exact)
+//   5.0 / 2 → 2.5 (float involved - fold to float)
+//
+// NOTE: Automatic division-to-fraction promotion is NOT YET IMPLEMENTED
+// due to C++ template metaprogramming challenges with return type deduction.
+// See FRACTION_IMPLEMENTATION_SUMMARY.md for details and workarounds.
+//
+// For now, use fractions manually:
+//   auto half = Fraction<1, 2>{};
+//   auto expr = x * half;
+
+// ============================================================================
 // Addition Simplification Rules
 // ============================================================================
 
@@ -382,8 +401,7 @@ constexpr auto Identity = Rewrite{sinh(0_c), 0_c};
 constexpr auto Symmetry = Rewrite{sinh(-x_), -sinh(x_)};
 
 // Definition: sinh(x) → (exp(x) - exp(-x))/2
-constexpr auto definition =
-    Rewrite{sinh(x_), (exp(x_) - exp(-x_)) / 2_c};
+constexpr auto definition = Rewrite{sinh(x_), (exp(x_) - exp(-x_)) / 2_c};
 
 }  // namespace SinhRuleCategories
 
@@ -399,8 +417,7 @@ constexpr auto Identity = Rewrite{cosh(0_c), 1_c};
 constexpr auto Symmetry = Rewrite{cosh(-x_), cosh(x_)};
 
 // Definition: cosh(x) → (exp(x) + exp(-x))/2
-constexpr auto definition =
-    Rewrite{cosh(x_), (exp(x_) + exp(-x_)) / 2_c};
+constexpr auto definition = Rewrite{cosh(x_), (exp(x_) + exp(-x_)) / 2_c};
 
 }  // namespace CoshRuleCategories
 

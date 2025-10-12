@@ -10,6 +10,7 @@
 #include "symbolic3/debug.h"
 #include "symbolic3/derivative.h"
 #include "symbolic3/evaluate.h"
+#include "symbolic3/fraction.h"
 #include "symbolic3/matching.h"
 #include "symbolic3/operators.h"
 #include "symbolic3/pattern_matching.h"

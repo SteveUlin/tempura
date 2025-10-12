@@ -14,3 +14,8 @@ add_executable(fraction_test fraction_test.cpp)
 target_link_libraries(fraction_test PRIVATE symbolic3 meta)
 add_test(NAME symbolic3_fraction COMMAND fraction_test)
 set_tests_properties(symbolic3_fraction PROPERTIES LABELS "symbolic3;exact_math")
+
+add_executable(exact_division_test exact_division_test.cpp)
+target_link_libraries(exact_division_test PRIVATE symbolic3 meta)
+add_test(NAME symbolic3_exact_division COMMAND exact_division_test)
+set_tests_properties(symbolic3_exact_division PROPERTIES LABELS "symbolic3;exact_math")

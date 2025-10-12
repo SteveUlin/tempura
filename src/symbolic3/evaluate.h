@@ -57,6 +57,12 @@ constexpr auto evaluate(Constant<V>, const BinderPack<Binders...>&) {
   return V;
 }
 
+// Fraction evaluation - convert to double for numeric evaluation
+template <long long N, long long D, typename... Binders>
+constexpr auto evaluate(Fraction<N, D>, const BinderPack<Binders...>&) {
+  return Fraction<N, D>::to_double();
+}
+
 // Symbol evaluation - lookup in binder pack
 template <typename unique, typename... Binders>
 constexpr auto evaluate(Symbol<unique>, const BinderPack<Binders...>& binders) {

@@ -1,7 +1,7 @@
 # Hyperbolic Functions Implementation Summary
 
-**Date:** October 12, 2025  
-**Feature:** Added hyperbolic trigonometric functions to symbolic3  
+**Date:** October 12, 2025
+**Feature:** Added hyperbolic trigonometric functions to symbolic3
 **Status:** ✅ Complete - All tests passing
 
 ## Overview
@@ -15,7 +15,7 @@ Implemented full support for hyperbolic trigonometric functions (`sinh`, `cosh`,
 **Added three new operation types:**
 
 - `SinhOp` - Hyperbolic sine
-- `CoshOp` - Hyperbolic cosine  
+- `CoshOp` - Hyperbolic cosine
 - `TanhOp` - Hyperbolic tangent
 
 **Added template functions:**
@@ -31,22 +31,26 @@ template <Symbolic S> constexpr auto tanh(S);
 **Added rule categories for each function:**
 
 #### `SinhRuleCategories`:
+
 - **Identity**: `sinh(0) → 0`
 - **Symmetry**: `sinh(-x) → -sinh(x)` (odd function)
 - **Definition**: `sinh(x) → (exp(x) - exp(-x))/2`
 
 #### `CoshRuleCategories`:
+
 - **Identity**: `cosh(0) → 1`
 - **Symmetry**: `cosh(-x) → cosh(x)` (even function)
 - **Definition**: `cosh(x) → (exp(x) + exp(-x))/2`
 
 #### `TanhRuleCategories`:
+
 - **Identity**: `tanh(0) → 0`
 - **Symmetry**: `tanh(-x) → -tanh(x)` (odd function)
 - **Definition**: `tanh(x) → sinh(x)/cosh(x)`
 - **Alternative**: `tanh(x) → (exp(2x) - 1)/(exp(2x) + 1)`
 
 #### `HyperbolicIdentityCategories`:
+
 - **Main identity**: `cosh²(x) - sinh²(x) → 1`
 - **Derived forms**: `cosh²(x) → 1 + sinh²(x)`, `sinh²(x) → cosh²(x) - 1`
 
@@ -67,6 +71,7 @@ Updated `transcendental_simplify` to include: `SinhRules | CoshRules | TanhRules
 - ✅ Complex expression evaluation
 
 **Test results:**
+
 ```
 14/14 symbolic3 tests passed
 New test: symbolic3_hyperbolic (labeled: symbolic3;transcendental)
@@ -75,9 +80,10 @@ New test: symbolic3_hyperbolic (labeled: symbolic3;transcendental)
 ### 4. Demo (`examples/hyperbolic_demo.cpp`)
 
 Created demonstration program showing:
+
 - Basic expression creation
 - Identity rules
-- Symmetry properties  
+- Symmetry properties
 - Hyperbolic identity verification
 - Numerical evaluation
 - Relationship to exponential function
@@ -110,6 +116,7 @@ Hyperbolic functions follow the same design patterns as trigonometric functions 
 ### Test Philosophy
 
 Tests verify:
+
 1. **Compile-time behavior** via `static_assert` where possible
 2. **Runtime behavior** for numerical evaluation
 3. **Rule application** in isolation and through full simplification pipeline
@@ -165,6 +172,7 @@ Potential additions (not implemented):
 ## Testing
 
 Run tests with:
+
 ```bash
 # Just hyperbolic tests
 ctest --test-dir build -R hyperbolic

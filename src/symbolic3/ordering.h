@@ -71,6 +71,26 @@ constexpr auto compareConstants(Constant<LhsVal>, Constant<RhsVal>)
 }
 
 // ============================================================================
+// Compare Fractions
+// ============================================================================
+
+template <long long LhsN, long long LhsD, long long RhsN, long long RhsD>
+constexpr auto compareFractions(Fraction<LhsN, LhsD>, Fraction<RhsN, RhsD>)
+    -> Ordering {
+  // Compare via cross-multiplication: a/b < c/d iff a*d < c*b
+  // (assuming positive denominators after normalization)
+  constexpr auto lhs_cross = LhsN * RhsD;
+  constexpr auto rhs_cross = RhsN * LhsD;
+
+  if constexpr (lhs_cross < rhs_cross)
+    return Ordering::Less;
+  else if constexpr (lhs_cross > rhs_cross)
+    return Ordering::Greater;
+  else
+    return Ordering::Equal;
+}
+
+// ============================================================================
 // Compare Symbols
 // ============================================================================
 
@@ -160,10 +180,13 @@ constexpr auto compareExprs() -> Ordering {
 
 template <Symbolic Lhs, Symbolic Rhs>
 constexpr auto compare(Lhs lhs, Rhs rhs) -> Ordering {
-  // Category ordering: Expression < Symbol < Constant
-  // Note: is_constant, is_symbol, is_expression are defined in core.h
+  // Category ordering: Expression < Symbol < Fraction < Constant
+  // Note: is_constant, is_symbol, is_expression, is_fraction are defined in
+  // core.h
   constexpr bool lhs_is_const = is_constant<Lhs>;
   constexpr bool rhs_is_const = is_constant<Rhs>;
+  constexpr bool lhs_is_frac = is_fraction<Lhs>;
+  constexpr bool rhs_is_frac = is_fraction<Rhs>;
   constexpr bool lhs_is_sym = is_symbol<Lhs>;
   constexpr bool rhs_is_sym = is_symbol<Rhs>;
   constexpr bool lhs_is_expr = is_expression<Lhs>;
@@ -174,14 +197,20 @@ constexpr auto compare(Lhs lhs, Rhs rhs) -> Ordering {
     return Ordering::Less;
   } else if constexpr (!lhs_is_expr && rhs_is_expr) {
     return Ordering::Greater;
-  } else if constexpr (lhs_is_sym && rhs_is_const) {
+  } else if constexpr (lhs_is_sym && (rhs_is_frac || rhs_is_const)) {
     return Ordering::Less;
-  } else if constexpr (lhs_is_const && rhs_is_sym) {
+  } else if constexpr ((lhs_is_frac || lhs_is_const) && rhs_is_sym) {
+    return Ordering::Greater;
+  } else if constexpr (lhs_is_frac && rhs_is_const) {
+    return Ordering::Less;
+  } else if constexpr (lhs_is_const && rhs_is_frac) {
     return Ordering::Greater;
   }
   // Same category: compare within category
   else if constexpr (lhs_is_const && rhs_is_const) {
     return compareConstants(lhs, rhs);
+  } else if constexpr (lhs_is_frac && rhs_is_frac) {
+    return compareFractions(lhs, rhs);
   } else if constexpr (lhs_is_sym && rhs_is_sym) {
     return compareSymbols(lhs, rhs);
   } else if constexpr (lhs_is_expr && rhs_is_expr) {

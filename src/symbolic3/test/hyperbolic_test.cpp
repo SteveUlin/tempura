@@ -9,31 +9,31 @@
 // - Hyperbolic identities (cosh² - sinh² = 1)
 //==============================================================================
 
+#include <cassert>
+#include <cmath>
+#include <iostream>
+
 #include "symbolic3/constants.h"
 #include "symbolic3/context.h"
 #include "symbolic3/core.h"
+#include "symbolic3/evaluate.h"
 #include "symbolic3/matching.h"
 #include "symbolic3/operators.h"
 #include "symbolic3/simplify.h"
 #include "symbolic3/traversal.h"
-#include "symbolic3/evaluate.h"
 #include "unit.h"
-#include <iostream>
-#include <cmath>
-#include <cassert>
 
 using namespace tempura;
 using namespace tempura::symbolic3;
 
 auto main() -> int {
-
   //============================================================================
   // SINH RULES
   //============================================================================
 
   "sinh(0) → 0"_test = [] {
     constexpr auto ctx = default_context();
-    
+
     constexpr auto expr = sinh(0_c);
     constexpr auto result = SinhRules.apply(expr, ctx);
     static_assert(match(result, 0_c));
@@ -43,7 +43,7 @@ auto main() -> int {
   "sinh(-x) → -sinh(x) (odd function)"_test = [] {
     constexpr Symbol x;
     constexpr auto ctx = default_context();
-    
+
     constexpr auto expr = sinh(-x);
     constexpr auto result = SinhRules.apply(expr, ctx);
     static_assert(match(result, -sinh(x)));
@@ -53,7 +53,7 @@ auto main() -> int {
   "sinh definition: sinh(x) → (exp(x) - exp(-x))/2"_test = [] {
     constexpr Symbol x;
     constexpr auto ctx = default_context();
-    
+
     constexpr auto expr = sinh(x);
     constexpr auto result = SinhRuleCategories::definition.apply(expr, ctx);
     static_assert(match(result, (exp(x) - exp(-x)) / 2_c));
@@ -66,7 +66,7 @@ auto main() -> int {
 
   "cosh(0) → 1"_test = [] {
     constexpr auto ctx = default_context();
-    
+
     constexpr auto expr = cosh(0_c);
     constexpr auto result = CoshRules.apply(expr, ctx);
     static_assert(match(result, 1_c));
@@ -76,7 +76,7 @@ auto main() -> int {
   "cosh(-x) → cosh(x) (even function)"_test = [] {
     constexpr Symbol x;
     constexpr auto ctx = default_context();
-    
+
     constexpr auto expr = cosh(-x);
     constexpr auto result = CoshRules.apply(expr, ctx);
     static_assert(match(result, cosh(x)));
@@ -86,7 +86,7 @@ auto main() -> int {
   "cosh definition: cosh(x) → (exp(x) + exp(-x))/2"_test = [] {
     constexpr Symbol x;
     constexpr auto ctx = default_context();
-    
+
     constexpr auto expr = cosh(x);
     constexpr auto result = CoshRuleCategories::definition.apply(expr, ctx);
     static_assert(match(result, (exp(x) + exp(-x)) / 2_c));
@@ -99,7 +99,7 @@ auto main() -> int {
 
   "tanh(0) → 0"_test = [] {
     constexpr auto ctx = default_context();
-    
+
     constexpr auto expr = tanh(0_c);
     constexpr auto result = TanhRules.apply(expr, ctx);
     static_assert(match(result, 0_c));
@@ -109,7 +109,7 @@ auto main() -> int {
   "tanh(-x) → -tanh(x) (odd function)"_test = [] {
     constexpr Symbol x;
     constexpr auto ctx = default_context();
-    
+
     constexpr auto expr = tanh(-x);
     constexpr auto result = TanhRules.apply(expr, ctx);
     static_assert(match(result, -tanh(x)));
@@ -119,7 +119,7 @@ auto main() -> int {
   "tanh definition: tanh(x) → sinh(x)/cosh(x)"_test = [] {
     constexpr Symbol x;
     constexpr auto ctx = default_context();
-    
+
     constexpr auto expr = tanh(x);
     constexpr auto result = TanhRuleCategories::definition.apply(expr, ctx);
     static_assert(match(result, sinh(x) / cosh(x)));
@@ -133,7 +133,7 @@ auto main() -> int {
   "Hyperbolic identity: cosh²(x) - sinh²(x) → 1"_test = [] {
     constexpr Symbol x;
     constexpr auto ctx = default_context();
-    
+
     constexpr auto expr = pow(cosh(x), 2_c) - pow(sinh(x), 2_c);
     constexpr auto result = HyperbolicIdentityRules.apply(expr, ctx);
     static_assert(match(result, 1_c));
@@ -148,39 +148,42 @@ auto main() -> int {
     constexpr Symbol x;
     auto expr = sinh(x);
     auto result = evaluate(expr, BinderPack{x = 1.0});
-    
+
     // sinh(1) ≈ 1.1752
     auto expected = std::sinh(1.0);
     assert(std::abs(result - expected) < 1e-10);
-    std::cout << "  ✓ sinh(1) = " << result << " (expected: " << expected << ")\n";
+    std::cout << "  ✓ sinh(1) = " << result << " (expected: " << expected
+              << ")\n";
   };
 
   "Evaluate cosh at x=1"_test = [] {
     constexpr Symbol x;
     auto expr = cosh(x);
     auto result = evaluate(expr, BinderPack{x = 1.0});
-    
+
     // cosh(1) ≈ 1.5431
     auto expected = std::cosh(1.0);
     assert(std::abs(result - expected) < 1e-10);
-    std::cout << "  ✓ cosh(1) = " << result << " (expected: " << expected << ")\n";
+    std::cout << "  ✓ cosh(1) = " << result << " (expected: " << expected
+              << ")\n";
   };
 
   "Evaluate tanh at x=1"_test = [] {
     constexpr Symbol x;
     auto expr = tanh(x);
     auto result = evaluate(expr, BinderPack{x = 1.0});
-    
+
     // tanh(1) ≈ 0.7616
     auto expected = std::tanh(1.0);
     assert(std::abs(result - expected) < 1e-10);
-    std::cout << "  ✓ tanh(1) = " << result << " (expected: " << expected << ")\n";
+    std::cout << "  ✓ tanh(1) = " << result << " (expected: " << expected
+              << ")\n";
   };
 
   "Verify hyperbolic identity numerically: cosh²(x) - sinh²(x) = 1"_test = [] {
     constexpr Symbol x;
     auto expr = pow(cosh(x), 2_c) - pow(sinh(x), 2_c);
-    
+
     // Test at several values
     for (double val : {0.0, 0.5, 1.0, 2.0, -1.0}) {
       auto result = evaluate(expr, BinderPack{x = val});
@@ -195,7 +198,7 @@ auto main() -> int {
 
   "Full simplification: sinh(0) + cosh(0)"_test = [] {
     constexpr auto ctx = default_context();
-    
+
     constexpr auto expr = sinh(0_c) + cosh(0_c);
     constexpr auto result = simplify(expr, ctx);
     // sinh(0) = 0, cosh(0) = 1, so result should be 1
@@ -206,19 +209,20 @@ auto main() -> int {
   "Full simplification: sinh(-x) + sinh(x) should apply symmetry"_test = [] {
     constexpr Symbol x;
     constexpr auto ctx = default_context();
-    
+
     constexpr auto expr = sinh(-x) + sinh(x);
     constexpr auto result = simplify(expr, ctx);
     // sinh(-x) = -sinh(x), so we get -sinh(x) + sinh(x)
     // Full cancellation requires term collection which may not be complete
     // Just verify symmetry is applied to sinh(-x)
-    std::cout << "  ✓ sinh(-x) + sinh(x) simplified (term collection tested elsewhere)\n";
+    std::cout << "  ✓ sinh(-x) + sinh(x) simplified (term collection tested "
+                 "elsewhere)\n";
   };
 
   "Full simplification: cosh(-x) should equal cosh(x)"_test = [] {
     constexpr Symbol x;
     constexpr auto ctx = default_context();
-    
+
     constexpr auto expr = cosh(-x);
     constexpr auto result = CoshRules.apply(expr, ctx);
     // cosh(-x) = cosh(x) (even function symmetry)
@@ -232,10 +236,10 @@ auto main() -> int {
 
   "Complex: evaluate sinh(x) + cosh(x) = exp(x)"_test = [] {
     constexpr Symbol x;
-    
+
     // sinh(x) + cosh(x) = (e^x - e^(-x))/2 + (e^x + e^(-x))/2 = e^x
     auto expr = sinh(x) + cosh(x);
-    
+
     // Verify numerically at several points
     for (double val : {0.0, 0.5, 1.0, 2.0}) {
       auto result = evaluate(expr, BinderPack{x = val});
@@ -247,11 +251,11 @@ auto main() -> int {
 
   "Complex: tanh definition equivalence"_test = [] {
     constexpr Symbol x;
-    
+
     // tanh(x) = sinh(x)/cosh(x)
     auto expr1 = tanh(x);
     auto expr2 = sinh(x) / cosh(x);
-    
+
     // Verify numerically
     for (double val : {0.5, 1.0, 2.0}) {
       auto result1 = evaluate(expr1, BinderPack{x = val});

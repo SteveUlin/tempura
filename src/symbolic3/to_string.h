@@ -79,6 +79,17 @@ constexpr auto toString(Symbol<SymbolTag>) {
          toString(Constant<static_cast<int>(kMeta<Symbol<SymbolTag>>)>{});
 }
 
+// Fraction conversion - show as "N/D"
+template <long long N, long long D>
+constexpr auto toString(Fraction<N, D>) {
+  if constexpr (D == 1) {
+    return toString(Constant<N>{});
+  } else {
+    return toString(Constant<N>{}) + StaticString("/") +
+           toString(Constant<D>{});
+  }
+}
+
 // =============================================================================
 // EXPRESSION PRINTING - Uses operator metadata directly from operators
 // =============================================================================
@@ -148,6 +159,16 @@ inline std::string toStringRuntime(Constant<VALUE>) {
 template <typename SymbolTag>
 inline std::string toStringRuntime(Symbol<SymbolTag>) {
   return std::format("x{}", static_cast<int>(kMeta<Symbol<SymbolTag>>));
+}
+
+// Runtime fraction conversion
+template <long long N, long long D>
+inline std::string toStringRuntime(Fraction<N, D>) {
+  if constexpr (D == 1) {
+    return std::format("{}", N);
+  } else {
+    return std::format("{}/{}", N, D);
+  }
 }
 
 // Runtime expression conversion
