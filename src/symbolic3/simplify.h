@@ -371,6 +371,84 @@ constexpr auto TanRules = TanRuleCategories::Identity |
                           TanRuleCategories::definition;
 
 // ============================================================================
+// Hyperbolic Function Rules
+// ============================================================================
+
+namespace SinhRuleCategories {
+// sinh(0) → 0
+constexpr auto Identity = Rewrite{sinh(0_c), 0_c};
+
+// Symmetry: sinh(-x) → -sinh(x) (odd function)
+constexpr auto Symmetry = Rewrite{sinh(-x_), -sinh(x_)};
+
+// Definition: sinh(x) → (exp(x) - exp(-x))/2
+constexpr auto definition =
+    Rewrite{sinh(x_), (exp(x_) - exp(-x_)) / 2_c};
+
+}  // namespace SinhRuleCategories
+
+constexpr auto SinhRules = SinhRuleCategories::Identity |
+                           SinhRuleCategories::Symmetry |
+                           SinhRuleCategories::definition;
+
+namespace CoshRuleCategories {
+// cosh(0) → 1
+constexpr auto Identity = Rewrite{cosh(0_c), 1_c};
+
+// Symmetry: cosh(-x) → cosh(x) (even function)
+constexpr auto Symmetry = Rewrite{cosh(-x_), cosh(x_)};
+
+// Definition: cosh(x) → (exp(x) + exp(-x))/2
+constexpr auto definition =
+    Rewrite{cosh(x_), (exp(x_) + exp(-x_)) / 2_c};
+
+}  // namespace CoshRuleCategories
+
+constexpr auto CoshRules = CoshRuleCategories::Identity |
+                           CoshRuleCategories::Symmetry |
+                           CoshRuleCategories::definition;
+
+namespace TanhRuleCategories {
+// tanh(0) → 0
+constexpr auto Identity = Rewrite{tanh(0_c), 0_c};
+
+// Symmetry: tanh(-x) → -tanh(x) (odd function)
+constexpr auto Symmetry = Rewrite{tanh(-x_), -tanh(x_)};
+
+// Definition: tanh(x) → sinh(x)/cosh(x)
+constexpr auto definition = Rewrite{tanh(x_), sinh(x_) / cosh(x_)};
+
+// Alternative definition: tanh(x) → (exp(2x) - 1)/(exp(2x) + 1)
+constexpr auto exp_definition =
+    Rewrite{tanh(x_), (exp(2_c * x_) - 1_c) / (exp(2_c * x_) + 1_c)};
+
+}  // namespace TanhRuleCategories
+
+constexpr auto TanhRules = TanhRuleCategories::Identity |
+                           TanhRuleCategories::Symmetry |
+                           TanhRuleCategories::definition;
+
+// ============================================================================
+// Hyperbolic Identity Rules
+// ============================================================================
+
+namespace HyperbolicIdentityCategories {
+// cosh²(x) - sinh²(x) → 1
+constexpr auto cosh_sinh_identity =
+    Rewrite{pow(cosh(x_), 2_c) - pow(sinh(x_), 2_c), 1_c};
+
+// Derived forms: cosh²(x) → 1 + sinh²(x), sinh²(x) → cosh²(x) - 1
+constexpr auto cosh_squared =
+    Rewrite{pow(cosh(x_), 2_c), 1_c + pow(sinh(x_), 2_c)};
+constexpr auto sinh_squared =
+    Rewrite{pow(sinh(x_), 2_c), pow(cosh(x_), 2_c) - 1_c};
+
+}  // namespace HyperbolicIdentityCategories
+
+constexpr auto HyperbolicIdentityRules =
+    HyperbolicIdentityCategories::cosh_sinh_identity;
+
+// ============================================================================
 // Pythagorean Identity Rules
 // ============================================================================
 
@@ -419,9 +497,10 @@ constexpr auto SqrtRules = SqrtRuleCategories::Identity |
 // ============================================================================
 
 // Transcendental functions
-constexpr auto transcendental_simplify = ExpRules | LogRules | SinRules |
-                                         CosRules | TanRules | SqrtRules |
-                                         PythagoreanRules;
+constexpr auto transcendental_simplify =
+    ExpRules | LogRules | SinRules | CosRules | TanRules | SinhRules |
+    CoshRules | TanhRules | SqrtRules | PythagoreanRules |
+    HyperbolicIdentityRules;
 
 // Basic algebraic simplification: apply all rule categories, then fold
 // constants Constant folding comes AFTER structural rules so we simplify

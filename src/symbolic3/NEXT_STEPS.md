@@ -98,11 +98,13 @@
 
 **Mathematical functions:**- [x] Fraction arithmetic operators (+, -, \*, /, negation)
 
-- Hyperbolic functions: `sinh`, `cosh`, `tanh`- [x] Mixed arithmetic with Constants (Fraction + Constant)
+- [x] Hyperbolic functions: `sinh`, `cosh`, `tanh` ✅ **COMPLETED (Oct 12, 2025)**
 
-- Inverse trig functions: `asin`, `acos`, `atan`- [x] Comparison operators for fractions
+- [x] Mixed arithmetic with Constants (Fraction + Constant)
 
-- Absolute value, sign function
+- [ ] Inverse trig functions: `asin`, `acos`, `atan`- [x] Comparison operators for fractions
+
+- [ ] Absolute value, sign function
 
 - Min/max operators❌ **TODO (High Priority):**
 
@@ -168,7 +170,11 @@
 
 ✅ **Compile-time debugging** - `debug.h` utilities for type inspection (Oct 7, 2025)
 
-✅ **Test consolidation** - Organized into basic/advanced/pipeline suites (Oct 11, 2025)### Files to Modify
+✅ **Test consolidation** - Organized into basic/advanced/pipeline suites (Oct 11, 2025)
+
+✅ **Hyperbolic functions** - `sinh`, `cosh`, `tanh` with full simplification rules (Oct 12, 2025)
+
+### Files to Modify
 
 ## Notes- **`src/symbolic3/simplify.h`**:
 

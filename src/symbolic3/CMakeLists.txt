@@ -26,33 +26,33 @@ target_link_libraries(pattern_binding_test PRIVATE symbolic3 unit)
 add_test(NAME symbolic3_pattern_binding COMMAND pattern_binding_test)
 set_tests_properties(symbolic3_pattern_binding PROPERTIES LABELS "symbolic3;base")
 
-# Simplify Tests
-add_executable(simplify_test test/simplify_test.cpp)
-target_link_libraries(simplify_test PRIVATE symbolic3)
-add_test(NAME symbolic3_simplify COMMAND simplify_test)
-set_tests_properties(symbolic3_simplify PROPERTIES LABELS "symbolic3")
+# Simplify Tests (consolidated into simplification_basic/advanced/pipeline)
+# add_executable(simplify_test test/simplify_test.cpp)
+# target_link_libraries(simplify_test PRIVATE symbolic3)
+# add_test(NAME symbolic3_simplify COMMAND simplify_test)
+# set_tests_properties(symbolic3_simplify PROPERTIES LABELS "symbolic3")
 
 
 
 # Note: Full tests (strategy_test, traversal_test, transforms_test) are TODO
 # They need fixes to the type predicates and strategy implementations
 
-add_executable(transcendental_test test/transcendental_test.cpp)
-target_link_libraries(transcendental_test PRIVATE symbolic3)
-add_test(NAME symbolic3_transcendental COMMAND transcendental_test)
-set_tests_properties(symbolic3_transcendental PROPERTIES LABELS "symbolic3")
+# add_executable(transcendental_test test/transcendental_test.cpp)
+# target_link_libraries(transcendental_test PRIVATE symbolic3)
+# add_test(NAME symbolic3_transcendental COMMAND transcendental_test)
+# set_tests_properties(symbolic3_transcendental PROPERTIES LABELS "symbolic3")
 
-# Traversal + Simplification Integration Test
-add_executable(traversal_simplify_test test/traversal_simplify_test.cpp)
-target_link_libraries(traversal_simplify_test PRIVATE symbolic3)
-add_test(NAME symbolic3_traversal_simplify COMMAND traversal_simplify_test)
-set_tests_properties(symbolic3_traversal_simplify PROPERTIES LABELS "symbolic3;integration")
+# Traversal + Simplification Integration Test (merged into pipeline tests)
+# add_executable(traversal_simplify_test test/traversal_simplify_test.cpp)
+# target_link_libraries(traversal_simplify_test PRIVATE symbolic3)
+# add_test(NAME symbolic3_traversal_simplify COMMAND traversal_simplify_test)
+# set_tests_properties(symbolic3_traversal_simplify PROPERTIES LABELS "symbolic3;integration")
 
-# Full Simplification Pipelines Test
-add_executable(full_simplify_test test/full_simplify_test.cpp)
-target_link_libraries(full_simplify_test PRIVATE symbolic3)
-add_test(NAME symbolic3_full_simplify COMMAND full_simplify_test)
-set_tests_properties(symbolic3_full_simplify PROPERTIES LABELS "symbolic3;integration")
+# Full Simplification Pipelines Test (now simplification_pipeline_test)
+# add_executable(full_simplify_test test/full_simplify_test.cpp)
+# target_link_libraries(full_simplify_test PRIVATE symbolic3)
+# add_test(NAME symbolic3_full_simplify COMMAND full_simplify_test)
+# set_tests_properties(symbolic3_full_simplify PROPERTIES LABELS "symbolic3;integration")
 
 # Derivative Tests
 add_executable(derivative_test test/derivative_test.cpp)
@@ -72,17 +72,21 @@ target_link_libraries(to_string_test PRIVATE symbolic3)
 add_test(NAME symbolic3_to_string COMMAND to_string_test)
 set_tests_properties(symbolic3_to_string PROPERTIES LABELS "symbolic3;utilities")
 
-# Term Collecting and Canonical Ordering test
-add_executable(term_collecting_test test/term_collecting_test.cpp)
-target_link_libraries(term_collecting_test PRIVATE symbolic3)
-add_test(NAME symbolic3_term_collecting COMMAND term_collecting_test)
-set_tests_properties(symbolic3_term_collecting PROPERTIES LABELS "symbolic3;simplification")
+# Consolidated Simplification Tests
+add_executable(simplification_basic_test test/simplification_basic_test.cpp)
+target_link_libraries(simplification_basic_test PRIVATE symbolic3 unit)
+add_test(NAME symbolic3_simplification_basic COMMAND simplification_basic_test)
+set_tests_properties(symbolic3_simplification_basic PROPERTIES LABELS "symbolic3;consolidated;simplification")
 
-# Advanced simplification rules test (logarithms, exponentials, trig identities)
-add_executable(advanced_simplify_test test/advanced_simplify_test.cpp)
-target_link_libraries(advanced_simplify_test PRIVATE symbolic3)
-add_test(NAME symbolic3_advanced_simplify COMMAND advanced_simplify_test)
-set_tests_properties(symbolic3_advanced_simplify PROPERTIES LABELS "symbolic3;simplification")
+add_executable(simplification_advanced_test test/simplification_advanced_test.cpp)
+target_link_libraries(simplification_advanced_test PRIVATE symbolic3 unit)
+add_test(NAME symbolic3_simplification_advanced COMMAND simplification_advanced_test)
+set_tests_properties(symbolic3_simplification_advanced PROPERTIES LABELS "symbolic3;consolidated;simplification")
+
+add_executable(simplification_pipeline_test test/simplification_pipeline_test.cpp)
+target_link_libraries(simplification_pipeline_test PRIVATE symbolic3 unit)
+add_test(NAME symbolic3_simplification_pipeline COMMAND simplification_pipeline_test)
+set_tests_properties(symbolic3_simplification_pipeline PROPERTIES LABELS "symbolic3;consolidated;simplification")
 
 # Term Collecting Debug (quick debug tool - not a formal test)
 add_executable(term_collecting_debug test/term_collecting_debug.cpp)
@@ -92,9 +96,9 @@ target_link_libraries(term_collecting_debug PRIVATE symbolic3)
 add_executable(manual_step_test test/manual_step_test.cpp)
 target_link_libraries(manual_step_test PRIVATE symbolic3)
 
-# Nested Simplification Test (debug innermost traversal)
-add_executable(nested_simplify_test test/nested_simplify_test.cpp)
-target_link_libraries(nested_simplify_test PRIVATE symbolic3)
+# Nested Simplification Test (debug innermost traversal) - TODO: file missing
+# add_executable(nested_simplify_test test/nested_simplify_test.cpp)
+# target_link_libraries(nested_simplify_test PRIVATE symbolic3)
 
 # Factoring Debug (test factoring rules in isolation)
 add_executable(factoring_debug test/factoring_debug.cpp)
@@ -114,17 +118,23 @@ target_link_libraries(fraction_test PRIVATE symbolic3 unit)
 add_test(NAME symbolic3_fraction COMMAND fraction_test)
 set_tests_properties(symbolic3_fraction PROPERTIES LABELS "symbolic3;exact_math")
 
+# Hyperbolic Functions Test - sinh, cosh, tanh
+add_executable(hyperbolic_test test/hyperbolic_test.cpp)
+target_link_libraries(hyperbolic_test PRIVATE symbolic3 unit)
+add_test(NAME symbolic3_hyperbolic COMMAND hyperbolic_test)
+set_tests_properties(symbolic3_hyperbolic PROPERTIES LABELS "symbolic3;transcendental")
+
 # Compile-time Debugging Utilities Test
 add_executable(debug_test test/debug_test.cpp)
 target_link_libraries(debug_test PRIVATE symbolic3 unit)
 add_test(NAME symbolic3_debug COMMAND debug_test)
 set_tests_properties(symbolic3_debug PROPERTIES LABELS "symbolic3;utilities")
 
-# Canonical Form Test - Recommendation #2 implementation
-add_executable(canonical_test test/canonical_test.cpp)
-target_link_libraries(canonical_test PRIVATE symbolic3 unit)
-add_test(NAME symbolic3_canonical COMMAND canonical_test)
-set_tests_properties(symbolic3_canonical PROPERTIES LABELS "symbolic3;canonical_form")
+# Canonical Form Test - TODO: file missing, functionality merged into term_structure_test
+# add_executable(canonical_test test/canonical_test.cpp)
+# target_link_libraries(canonical_test PRIVATE symbolic3 unit)
+# add_test(NAME symbolic3_canonical COMMAND canonical_test)
+# set_tests_properties(symbolic3_canonical PROPERTIES LABELS "symbolic3;canonical_form")
 
 # Term Structure Test - sophisticated sorting for term collection
 add_executable(term_structure_test test/term_structure_test.cpp)

@@ -98,6 +98,34 @@ struct TanOp {
   }
 };
 
+// Hyperbolic trigonometric functions
+struct SinhOp {
+  static constexpr StaticString kSymbol = "sinh";
+  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
+  constexpr auto operator()(auto a) const {
+    using namespace std;
+    return sinh(a);
+  }
+};
+
+struct CoshOp {
+  static constexpr StaticString kSymbol = "cosh";
+  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
+  constexpr auto operator()(auto a) const {
+    using namespace std;
+    return cosh(a);
+  }
+};
+
+struct TanhOp {
+  static constexpr StaticString kSymbol = "tanh";
+  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
+  constexpr auto operator()(auto a) const {
+    using namespace std;
+    return tanh(a);
+  }
+};
+
 struct ExpOp {
   static constexpr StaticString kSymbol = "exp";
   static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
@@ -208,6 +236,21 @@ constexpr auto cos(S) {
 template <Symbolic S>
 constexpr auto tan(S) {
   return Expression<TanOp, S>{};
+}
+
+template <Symbolic S>
+constexpr auto sinh(S) {
+  return Expression<SinhOp, S>{};
+}
+
+template <Symbolic S>
+constexpr auto cosh(S) {
+  return Expression<CoshOp, S>{};
+}
+
+template <Symbolic S>
+constexpr auto tanh(S) {
+  return Expression<TanhOp, S>{};
 }
 
 template <Symbolic S>

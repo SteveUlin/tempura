@@ -21,6 +21,8 @@ add_executable(symbolic3_simplify_demo symbolic3_simplify_demo.cpp)
 target_link_libraries(symbolic3_simplify_demo PRIVATE symbolic3)
 add_executable(advanced_simplify_demo advanced_simplify_demo.cpp)
 target_link_libraries(advanced_simplify_demo PRIVATE symbolic3)
+add_executable(hyperbolic_demo hyperbolic_demo.cpp)
+target_link_libraries(hyperbolic_demo PRIVATE symbolic3)
 add_executable(term_sorting_visual term_sorting_visual.cpp)
 target_link_libraries(term_sorting_visual PRIVATE symbolic3)
 # add_executable(constexpr_debugging_demo constexpr_debugging_demo.cpp)  # Disabled - has compilation errors
