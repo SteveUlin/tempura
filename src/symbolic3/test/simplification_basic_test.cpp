@@ -1,6 +1,6 @@
 //==============================================================================
 // Consolidated Basic Simplification Tests
-// 
+//
 // This file consolidates:
 // - simplify_test.cpp (basic power, addition, multiplication rules)
 // - canonical_test.cpp (canonical form infrastructure and variadic operations)
@@ -9,12 +9,12 @@
 // of the symbolic3 system.
 //==============================================================================
 
-#include "symbolic3/simplify.h"
 #include "symbolic3/context.h"
 #include "symbolic3/core.h"
 #include "symbolic3/matching.h"
 #include "symbolic3/operators.h"
 #include "symbolic3/pattern_matching.h"
+#include "symbolic3/simplify.h"
 #include "symbolic3/symbolic3.h"
 #include "unit.h"
 
@@ -22,7 +22,6 @@ using namespace tempura;
 using namespace tempura::symbolic3;
 
 auto main() -> int {
-  
   //============================================================================
   // POWER RULES
   //============================================================================
@@ -30,23 +29,23 @@ auto main() -> int {
   "Power zero rule: x^0 → 1"_test = [] {
     constexpr Symbol x;
     constexpr auto ctx = default_context();
-    
+
     constexpr auto expr = pow(x, Constant<0>{});
-    [[maybe_unused]] constexpr auto result = power_zero.apply(expr, ctx);
-    
-    // Note: Full compile-time verification depends on power_zero implementation
-    // For now, just verify the rule can be applied
+    constexpr auto result = power_zero.apply(expr, ctx);
+
+    // Verify the result is exactly Constant<1>
+    static_assert(match(result, Constant<1>{}), "x^0 should simplify to 1");
   };
 
   "Power one rule: x^1 → x"_test = [] {
     constexpr Symbol x;
     constexpr auto ctx = default_context();
-    
+
     constexpr auto expr = pow(x, Constant<1>{});
-    [[maybe_unused]] constexpr auto result = power_one.apply(expr, ctx);
-    
-    // Note: Result verification requires pattern matching infrastructure
-    // For now, just verify the rule can be applied
+    constexpr auto result = power_one.apply(expr, ctx);
+
+    // Verify the result is exactly x
+    static_assert(match(result, x), "x^1 should simplify to x");
   };
 
   //============================================================================
@@ -56,23 +55,23 @@ auto main() -> int {
   "Addition identity: y + 0 → y"_test = [] {
     constexpr Symbol y;
     constexpr auto ctx = default_context();
-    
+
     constexpr auto expr = y + Constant<0>{};
-    [[maybe_unused]] constexpr auto result = AdditionRuleCategories::Identity.apply(expr, ctx);
-    
-    // Note: Result verification requires pattern matching infrastructure
-    // For now, just verify the rule can be applied
+    constexpr auto result = AdditionRuleCategories::Identity.apply(expr, ctx);
+
+    // Verify the result is exactly y
+    static_assert(match(result, y), "y + 0 should simplify to y");
   };
 
   "Addition zero: 0 + y → y"_test = [] {
     constexpr Symbol y;
     constexpr auto ctx = default_context();
-    
+
     constexpr auto expr = Constant<0>{} + y;
-    [[maybe_unused]] constexpr auto result = AdditionRuleCategories::Identity.apply(expr, ctx);
-    
-    // Note: Result verification requires pattern matching infrastructure
-    // For now, just verify the rule can be applied
+    constexpr auto result = AdditionRuleCategories::Identity.apply(expr, ctx);
+
+    // Verify the result is exactly y
+    static_assert(match(result, y), "0 + y should simplify to y");
   };
 
   //============================================================================
@@ -82,34 +81,37 @@ auto main() -> int {
   "Multiplication identity: z * 1 → z"_test = [] {
     constexpr Symbol z;
     constexpr auto ctx = default_context();
-    
+
     constexpr auto expr = z * Constant<1>{};
-    [[maybe_unused]] constexpr auto result = MultiplicationRuleCategories::Identity.apply(expr, ctx);
-    
-    // Note: Result verification requires pattern matching infrastructure
-    // For now, just verify the rule can be applied
+    constexpr auto result =
+        MultiplicationRuleCategories::Identity.apply(expr, ctx);
+
+    // Verify the result is exactly z
+    static_assert(match(result, z), "z * 1 should simplify to z");
   };
 
   "Multiplication zero: z * 0 → 0"_test = [] {
     constexpr Symbol z;
     constexpr auto ctx = default_context();
-    
+
     constexpr auto expr = z * Constant<0>{};
-    [[maybe_unused]] constexpr auto result = MultiplicationRuleCategories::Identity.apply(expr, ctx);
-    
-    // Note: Result verification requires pattern matching infrastructure
-    // For now, just verify the rule can be applied
+    constexpr auto result =
+        MultiplicationRuleCategories::Identity.apply(expr, ctx);
+
+    // Verify the result is exactly Constant<0>
+    static_assert(match(result, Constant<0>{}), "z * 0 should simplify to 0");
   };
 
   "Multiplication one: 1 * z → z"_test = [] {
     constexpr Symbol z;
     constexpr auto ctx = default_context();
-    
+
     constexpr auto expr = Constant<1>{} * z;
-    [[maybe_unused]] constexpr auto result = MultiplicationRuleCategories::Identity.apply(expr, ctx);
-    
-    // Note: Result verification requires pattern matching infrastructure
-    // For now, just verify the rule can be applied
+    constexpr auto result =
+        MultiplicationRuleCategories::Identity.apply(expr, ctx);
+
+    // Verify the result is exactly z
+    static_assert(match(result, z), "1 * z should simplify to z");
   };
 
   //============================================================================
@@ -173,7 +175,7 @@ auto main() -> int {
     // Test that the to_canonical strategy exists
     // Note: Full flattening implementation is in progress
     // This test just verifies the infrastructure compiles
-    
+
     // Just verify the strategy can be instantiated
     // Full implementation details in RECOMMENDATION_2_IMPLEMENTATION.md
   };
