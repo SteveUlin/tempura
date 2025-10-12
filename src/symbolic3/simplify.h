@@ -413,9 +413,18 @@ constexpr auto Associativity = assoc_left | assoc_right | assoc_reorder;
 //   - PowerCombining before Associativity (groups powers before rearrangement)
 //   - Associativity last (most complex, benefits from prior simplifications)
 
+// TEMPORARY FIX: Distribution disabled to prevent oscillation with Factoring
+// Distribution and Factoring are inverses:
+//   - Factoring: x·a + x·b → x·(a+b)  [collect like terms]
+//   - Distribution: x·(a+b) → x·a + x·b  [expand products]
+// When both are in the same pipeline, they fight each other causing
+// oscillation. For simplification, we prefer Factoring so we can fold nested
+// constants.
+// TODO: Implement conditional Distribution (only when beneficial)
 constexpr auto MultiplicationRules =
     MultiplicationRuleCategories::Identity |
-    MultiplicationRuleCategories::Distribution |
+    // MultiplicationRuleCategories::Distribution |  // DISABLED - conflicts
+    // with Factoring
     MultiplicationRuleCategories::Ordering |
     MultiplicationRuleCategories::PowerCombining |
     MultiplicationRuleCategories::Associativity;
@@ -747,15 +756,42 @@ constexpr auto simplify_bounded =
 // Implementation note:
 //   This is a lambda wrapper around FixPoint{innermost(simplify_fixpoint)}.
 //   The nested fixpoint structure is critical for correctness.
+// Helper strategy for two-stage simplification
+// Stage 1: Apply algebraic rules (factoring, etc.) to whole expression
+// Stage 2: Fold nested constants created by factoring
+struct TwoStageSimplify {
+  template <Symbolic Expr, typename Context>
+  constexpr auto apply(Expr expr, Context ctx) const {
+    // Apply algebraic rules first (enables factoring at parent level)
+    auto with_alg_rules = algebraic_simplify.apply(expr, ctx);
+
+    // Then fold any nested constants using innermost traversal
+    // (constant_fold wrapped in Try so it doesn't break on non-constants)
+    return innermost(try_strategy(constant_fold)).apply(with_alg_rules, ctx);
+  }
+};
+
+constexpr inline TwoStageSimplify two_stage_simplify{};
+
 constexpr auto full_simplify = [](auto expr, auto ctx) {
   // Must include traversal.h to use this
-  // innermost applies rules at leaves first, then propagates upward
-  // simplify_fixpoint ensures we reach a stable form at each level
   //
-  // CRITICAL: Wrap innermost in fixpoint to handle rules that create new
-  // nested structures (e.g., associativity). Without the outer fixpoint,
-  // newly created subexpressions won't be simplified.
-  return FixPoint{innermost(simplify_fixpoint)}.apply(expr, ctx);
+  // Two-stage pipeline with FixPoint:
+  // 1. Apply algebraic_simplify to the whole expression (enables factoring)
+  // 2. Apply innermost(constant_fold) to fold nested constants
+  // 3. Repeat until stable
+  //
+  // WHY THIS WORKS:
+  // - algebraic_simplify includes factoring rules that need to match the
+  //   parent-level pattern (e.g., x·a + x → x·(a+1))
+  // - Wrapping algebraic rules in innermost() would apply them to children
+  //   first, preventing parent patterns from matching
+  // - So we apply algebraic rules to the whole expression first
+  // - Then use innermost to fold any nested constants created by factoring
+  //
+  // CRITICAL: constant_fold wrapped in Try so it doesn't break traversal when
+  // applied to non-constant expressions
+  return FixPoint{two_stage_simplify}.apply(expr, ctx);
 };
 
 // ============================================================================
