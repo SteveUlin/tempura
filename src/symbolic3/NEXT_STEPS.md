@@ -1,102 +1,188 @@
-# Symbolic3: Next Steps and Improvements
+# Symbolic3: Future Development# Symbolic3: Next Steps and Improvements
 
-**Date:** October 5, 2025
+**Last Updated:** October 12, 2025**Date:** October 5, 2025
+
 **Status:** Phase 1 Complete - All Tests Passing (10/10)
-**Purpose:** Living document for future development priorities
+
+## High Priority**Purpose:** Living document for future development priorities
+
 **Last Updated:** October 5, 2025 - Added exact mathematics priorities
 
+### 1. Exact Arithmetic for Division
+
 ---
+
+**Problem:** Division of integers currently may fold to float, violating exact math principles.
 
 ## CRITICAL: Exact Mathematics Design Principles
 
-### Core Philosophy
+**Solution:**
 
-**Symbolic3 must maintain mathematical exactness by default.** Numerical approximations should be explicit opt-ins, not implicit conversions.
+- `int / int` with exact result → fold to integer (e.g., `6 / 2` → `3`)### Core Philosophy
+
+- `int / int` with non-integer result → create `Fraction<N, D>` (e.g., `5 / 2` → `Fraction<5, 2>`)
+
+- Add explicit rounding operators: `floor()`, `ceil()`, `round()`**Symbolic3 must maintain mathematical exactness by default.** Numerical approximations should be explicit opt-ins, not implicit conversions.
+
+- Float involved → fold to float (e.g., `5.0 / 2` → `2.5`)
 
 ### Key Principles
 
-1. **No Implicit Float Evaluation**
+**Files to modify:**
 
-   - `1/3` should remain as a symbolic fraction, NOT evaluate to `0.333...`
+- `src/symbolic3/simplify.h` - Update ConstantFold, add FractionPromote strategy1. **No Implicit Float Evaluation**
+
+- `src/symbolic3/operators.h` - Add rounding operators
+
+  - `1/3` should remain as a symbolic fraction, NOT evaluate to `0.333...`
+
+### 2. Enhanced Simplification Rules
 
 2. **Fractions as First-Class Values**
 
-   - Need `Fraction<numerator, denominator>` type (compile-time rational numbers)
-   - Literal suffix: `0.5_c` → `Fraction<1, 2>` (not float `0.5`)
-   - Automatic GCD reduction: `Fraction<4, 6>` → `Fraction<2, 3>`
+**Missing rules:**
+
+- Logarithm laws: `log(a*b) → log(a) + log(b)`, `log(a^n) → n*log(a)` - Need `Fraction<numerator, denominator>` type (compile-time rational numbers)
+
+- Exponential laws: `exp(a+b) → exp(a)*exp(b)` - Literal suffix: `0.5_c` → `Fraction<1, 2>` (not float `0.5`)
+
+- Additional trig identities: `sin²+cos²=1`, double angle formulas - Automatic GCD reduction: `Fraction<4, 6>` → `Fraction<2, 3>`
+
+- Rational function simplification
 
 3. **Type Absorption Rules for Numeric Constants**
 
-   - Floats absorb integers: `2.5 * 3` → float result type
-   - Floats absorb floats: `2.5 * 3.5` → float result type
-   - BUT: Evaluation should still be delayed wth pi and other symbols unless explicitly requested
-   - Fractions promote to floats only when mixed: `Fraction<1,2> * 2.5` → float
+**Term collection improvements:**
+
+- Better handling of nested expressions - Floats absorb integers: `2.5 * 3` → float result type
+
+- Distribution before collection: `x*(y+z) → x*y + x*z` - Floats absorb floats: `2.5 * 3.5` → float result type
+
+- Factor extraction: `x*y + x*z → x*(y+z)` - BUT: Evaluation should still be delayed wth pi and other symbols unless explicitly requested
+
+  - Fractions promote to floats only when mixed: `Fraction<1,2> * 2.5` → float
+
+### 3. Performance and Compile-Time Optimization
 
 4. **Exact Symbolic Constants**
-   - Added `π` and `e` as zero-argument expressions (not numeric approximations)
-   - These should remain symbolic until explicit numerical evaluation
-   - Example: `π * 2` → `2π` (symbolic), not `6.283...`
 
-### Implementation Status
+**Investigations needed:** - Added `π` and `e` as zero-argument expressions (not numeric approximations)
 
-✅ **Completed:**
+- Profile compile times for large expressions - These should remain symbolic until explicit numerical evaluation
 
-- π and e added as `Expression<PiOp>` and `Expression<EOp>` (Oct 5, 2025)
+- Measure GCD overhead in Fraction operations - Example: `π * 2` → `2π` (symbolic), not `6.283...`
+
+- Evaluate strategy application order for efficiency
+
+- Consider memoization for repeated subexpressions### Implementation Status
+
+## Medium Priority✅ **Completed:**
+
+### 4. Enhanced Context System- π and e added as `Expression<PiOp>` and `Expression<EOp>` (Oct 5, 2025)
+
 - Zero-arg operations infrastructure in place
 
-✅ **COMPLETED (October 5, 2025):**
+**Possible extensions:**
 
-- [x] Implement `Fraction<N, D>` template type in `core.h`
+- Domain-specific simplification modes (polynomial, trigonometric, etc.)✅ **COMPLETED (October 5, 2025):**
+
+- User-defined rewrite rules
+
+- Assumption tracking (e.g., "x is positive")- [x] Implement `Fraction<N, D>` template type in `core.h`
+
 - [x] Add GCD reduction for fraction simplification (automatic at construction)
-- [x] Add literal suffix `_frac` for creating fractions: `1_frac / 2_frac`
+
+### 5. Additional Operators- [x] Add literal suffix `_frac` for creating fractions: `1_frac / 2_frac`
+
 - [x] Add tests for exact arithmetic behavior (`fraction_test.cpp`)
-- [x] Fraction arithmetic operators (+, -, \*, /, negation)
-- [x] Mixed arithmetic with Constants (Fraction + Constant)
-- [x] Comparison operators for fractions
 
-❌ **TODO (High Priority):**
+**Mathematical functions:**- [x] Fraction arithmetic operators (+, -, \*, /, negation)
 
-- [ ] **Re-evaluate constant folding strategy for division**
+- Hyperbolic functions: `sinh`, `cosh`, `tanh`- [x] Mixed arithmetic with Constants (Fraction + Constant)
 
-  - **Current behavior**: Division of integers may fold to float (INCORRECT for exact math)
-  - **Desired behavior**:
-    - `int / int` where result is exact integer → fold to integer (e.g., `6 / 2` → `3`)
-    - `int / int` where result is non-integer → **create `Fraction<N, D>`** (e.g., `5 / 2` → `Fraction<5, 2>`)
-    - Integer division requires **explicit `floor()`** call: `floor(5 / 2)` → `2`
-    - Float involved → fold to float (e.g., `5.0 / 2` → `2.5`)
-  - **Philosophy**: Assume exact math by default; floats must be explicit
-  - **Implementation**: Add `numeric_div_to_fraction` rewrite rule in `simplify.h`
-  - **Pattern**: `Constant<n> / Constant<d>` where `n % d != 0` → `Fraction<n, d>`
+- Inverse trig functions: `asin`, `acos`, `atan`- [x] Comparison operators for fractions
 
-- [ ] Update type absorption rules in `simplify.h` for float/int/fraction mixing
+- Absolute value, sign function
+
+- Min/max operators❌ **TODO (High Priority):**
+
+### 6. Integration Support- [ ] **Re-evaluate constant folding strategy for division**
+
+**Symbolic integration:** - **Current behavior**: Division of integers may fold to float (INCORRECT for exact math)
+
+- Power rule - **Desired behavior**:
+
+- Basic trig integrals - `int / int` where result is exact integer → fold to integer (e.g., `6 / 2` → `3`)
+
+- Substitution (where tractable at compile-time) - `int / int` where result is non-integer → **create `Fraction<N, D>`** (e.g., `5 / 2` → `Fraction<5, 2>`)
+
+  - Integer division requires **explicit `floor()`** call: `floor(5 / 2)` → `2`
+
+## Low Priority - Float involved → fold to float (e.g., `5.0 / 2` → `2.5`)
+
+- **Philosophy**: Assume exact math by default; floats must be explicit
+
+### 7. Canonical Form Enhancements - **Implementation**: Add `numeric_div_to_fraction` rewrite rule in `simplify.h`
+
+- **Pattern**: `Constant<n> / Constant<d>` where `n % d != 0` → `Fraction<n, d>`
+
+**Current:** Binary tree representation of commutative operations
+
+**Possible improvement:** Flatten `a+b+c` into `Expression<Add, tuple<a,b,c>>` with sorted arguments- [ ] Update type absorption rules in `simplify.h` for float/int/fraction mixing
+
 - [ ] Add symbolic division → fraction promotion during simplification
-- [ ] Add `floor()`, `ceil()`, `round()` operators for explicit integer division
 
-- [ ] **Explore specialized fraction routines leveraging reduced-form invariant**
-  - **Observation**: `Fraction<N, D>` is ALWAYS in reduced form (GCD reduction at construction)
-  - **Opportunity**: Can skip GCD computation in many operations since we know inputs are reduced
+**Trade-offs:**- [ ] Add `floor()`, `ceil()`, `round()` operators for explicit integer division
+
+- Simpler pattern matching (no associativity rules needed)
+
+- Faster simplification (unique representation)- [ ] **Explore specialized fraction routines leveraging reduced-form invariant**
+
+- More complex implementation - **Observation**: `Fraction<N, D>` is ALWAYS in reduced form (GCD reduction at construction)
+
+- Different type structure - **Opportunity**: Can skip GCD computation in many operations since we know inputs are reduced
+
   - **Examples**:
-    - Fraction equality: Just compare numerators and denominators (no cross-multiply needed)
+
+### 8. Runtime Symbolic Computation - Fraction equality: Just compare numerators and denominators (no cross-multiply needed)
+
     - Fraction comparison: Can optimize when both fractions share same denominator
-    - Addition optimization: `a/b + c/b = (a+c)/b` (same denominator - no GCD needed)
-  - **Trade-off**: Reduced form is guaranteed by template system, but operations may temporarily create unreduced intermediate results that get re-reduced
-  - **Question**: Can we avoid redundant GCD calls? Or does compile-time optimization already handle this?
-  - **Investigation**: Benchmark fraction arithmetic vs. naive implementation to measure actual overhead
 
-### Files Modified
+**Challenge:** Current design is entirely compile-time - Addition optimization: `a/b + c/b = (a+c)/b` (same denominator - no GCD needed)
 
-- **`src/symbolic3/core.h`**: Added `Fraction<N, D>` struct with GCD reduction ✅
-- **`src/symbolic3/fraction.h`**: Added operators and `_frac` literal ✅
-- **`src/symbolic3/test/fraction_test.cpp`**: Comprehensive test suite ✅
+**Exploration:** Hybrid approach for runtime expression construction while preserving compile-time benefits where possible - **Trade-off**: Reduced form is guaranteed by template system, but operations may temporarily create unreduced intermediate results that get re-reduced
 
-### Files to Modify
+- **Question**: Can we avoid redundant GCD calls? Or does compile-time optimization already handle this?
 
-- **`src/symbolic3/simplify.h`**:
-  - Modify `ConstantFold` to check divisibility before folding division
-  - Add `FractionPromote` strategy: numeric division → Fraction when non-integer
-- **`src/symbolic3/operators.h`**: Add `floor()`, `ceil()`, `round()` for explicit rounding
+## Completed Features - **Investigation**: Benchmark fraction arithmetic vs. naive implementation to measure actual overhead
 
----
+✅ **Fraction arithmetic** - `Fraction<N,D>` with GCD reduction (Oct 5, 2025) ### Files Modified
+
+✅ **Mathematical constants** - π and e as symbolic expressions (Oct 5, 2025)
+
+✅ **Evaluation system** - `evaluate()` with BinderPack for runtime values (Oct 4, 2025) - **`src/symbolic3/core.h`**: Added `Fraction<N, D>` struct with GCD reduction ✅
+
+✅ **Enhanced simplification** - Multi-stage fixpoint pipeline as default (Oct 7, 2025) - **`src/symbolic3/fraction.h`**: Added operators and `_frac` literal ✅
+
+✅ **Term collection** - Like-term collection with factoring (Oct 6, 2025) - **`src/symbolic3/test/fraction_test.cpp`**: Comprehensive test suite ✅
+
+✅ **Compile-time debugging** - `debug.h` utilities for type inspection (Oct 7, 2025)
+
+✅ **Test consolidation** - Organized into basic/advanced/pipeline suites (Oct 11, 2025)### Files to Modify
+
+## Notes- **`src/symbolic3/simplify.h`**:
+
+- Modify `ConstantFold` to check divisibility before folding division
+
+- See `README.md` for usage guide and examples - Add `FractionPromote` strategy: numeric division → Fraction when non-integer
+
+- Code and tests are canonical documentation- **`src/symbolic3/operators.h`**: Add `floor()`, `ceil()`, `round()` for explicit rounding
+
+- Development is incremental - add features as needed
+
+- Prioritize correctness over performance---
+
+- Maintain constexpr-by-default philosophy
 
 ## Current State Assessment
 

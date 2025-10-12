@@ -151,7 +151,9 @@ The codebase targets C++26 - embrace modern features that improve safety, readab
 
 ## Symbolic3 Deep Dive
 
-The symbolic math system is the most complex component:
+The symbolic math system is the most complex component. **See `src/symbolic3/README.md` for comprehensive documentation.**
+
+**Quick reference:**
 
 - **Core types** (`symbolic3/core.h`): `Symbol<unique>` uses stateless lambdas for type identity, `Expression<Op, Args...>` is pure type-system computation. Includes `Fraction<N, D>` for exact arithmetic.
 
@@ -159,9 +161,15 @@ The symbolic math system is the most complex component:
 
 - **Strategy system** (`symbolic3/strategy.h`, `symbolic3/traversal.h`): Composable transformation strategies using concepts. Combinators include `>>` (sequential), `|` (choice), `when` (conditional), plus traversal strategies like `fold`, `unfold`, `innermost`, `outermost`, `fixpoint`.
 
-- **Context-aware transforms** (`symbolic3/context.h`): Type-safe context passing with compile-time tags and data-driven modes for domain-specific simplification rules.
+- **Simplification** (`symbolic3/simplify.h`): Use `simplify(expr, default_context())` for full multi-stage pipeline. Individual rule sets: `algebraic_simplify`, `transcendental_simplify`, `collect_terms`.
 
 - **Evaluation** (`symbolic3/evaluate.h`): `evaluate(expr, BinderPack{x = 5, y = 3.0})` - heterogeneous type-safe bindings with full constexpr support.
+
+**Additional documentation:**
+
+- `src/symbolic3/DEBUGGING.md` - Debugging guide and compile-time utilities
+- `src/symbolic3/NEXT_STEPS.md` - Future development roadmap
+- `src/symbolic3/LEARNING_RESOURCES.md` - Theory and references
 
 ## Examples & Idioms
 
@@ -177,7 +185,7 @@ See `examples/` for usage patterns. Key examples:
 
 1. **Template errors**: Use `__PRETTY_FUNCTION__` or compiler's `-ftemplate-backtrace-limit=0` to see full instantiation chains.
 
-2. **Compile-time debugging**: `static_assert(false, typeid(expr).name())` to print types (fails compilation but shows info).
+2. **Compile-time debugging**: Use `symbolic3/debug.h` utilities like `force_type_display(expr)`, `expression_depth()`, `operation_count()`. See `src/symbolic3/DEBUGGING.md` for full guide.
 
 3. **Performance profiling**: `profiler.h` provides simple benchmarking. See `benchmark.h` for more sophisticated timing.
 
