@@ -112,16 +112,44 @@ static_assert(match(result, x * Constant<2>{}) ||
 - ✓ Pure compile-time verification (no runtime needed)
 - ✓ Tests the symbolic manipulation, not just numeric correctness
 
-## Bugs Identified
+## Bugs Identified & Analyzed
 
-The structural tests have identified **8 specific bugs** in the simplification library:
+The structural tests have identified **8 specific bugs** in the simplification library.
 
-1. Factoring rule `x*a + x → x*(a+1)` not firing
-2. Factoring rule `x + x*a → x*(1+a)` not firing
-3. Factoring rule `x*a + x*b → x*(a+b)` not firing
+### Bug Analysis (See FACTORING_BUG_ANALYSIS.md)
+
+Through systematic testing, I've determined that:
+
+**The Factoring Rules DO Fire**:
+
+- `x * 2 + x` correctly matches and applies `factor_simple: x·a + x → x·(a+1)`
+- Result: `x * (2 + 1)` ✓
+
+**Constant Folding Works in Isolation**:
+
+- `2 + 1` can be folded to `3` ✓
+- `x * (2 + 1)` can be simplified to `x * 3` ✓
+
+**But the Pipeline Doesn't Connect Them**:
+
+- `full_simplify(x * 2 + x)` produces `x * (2 + 1)` and **stops** ✗
+- The nested `(2 + 1)` is never simplified
+
+### Root Cause
+
+The `full_simplify` pipeline doesn't properly handle **nested constant folding** after factoring creates nested structures. The `FixPoint{innermost(simplify_fixpoint)}` structure either:
+
+1. Terminates before nested constants are folded, OR
+2. Doesn't properly traverse into nested multiplication arguments
+
+This affects all factoring tests:
+
+1. Factoring rule `x*a + x → x*(a+1)` fires but produces `x*(a+1)` instead of `x*<folded>`
+2. Factoring rule `x + x*a → x*(1+a)` fires but produces `x*(1+a)` instead of `x*<folded>`
+3. Factoring rule `x*a + x*b → x*(a+b)` fires but produces `x*(a+b)` instead of `x*<folded>`
 4. Nested identity rules not applying recursively
 5. Traversal strategies not reaching deeply nested terms
-6. Constant folding in nested contexts
+6. Constant folding in nested contexts (ROOT CAUSE)
 7. Trigonometric constant evaluation in expressions
 8. Power combining with simplified bases
 
