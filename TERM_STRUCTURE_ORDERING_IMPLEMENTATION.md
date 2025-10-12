@@ -9,23 +9,28 @@ Enhanced addition simplification rules to use **algebraic term structure** inste
 ## The Problem
 
 **Before:** Using plain `lessThan()` comparison, terms were ordered lexicographically:
+
 ```cpp
 3*x + y + 2*y + x
 ```
+
 Would order as: `2*y < 3*x < x < y` (arbitrary type-based ordering)
 
 **Issue:** Like terms (terms with the same base) were scattered, making factoring inefficient:
+
 - `3*x` and `x` not adjacent → hard to factor
 - `y` and `2*y` not adjacent → hard to factor
 
 ## The Solution
 
 **After:** Using `compareAdditionTerms()` from `term_structure.h`, terms are ordered by:
+
 1. **Constants first** (pure numbers like `5`, `7`)
 2. **Group by base** (all `x` terms together, all `y` terms together)
 3. **Within group, sort by coefficient** (`x < 2*x < 3*x`)
 
 Example transformation:
+
 ```cpp
 3*x + y + 2*y + x
 → x + 3*x + y + 2*y  (grouped by base)
@@ -43,6 +48,7 @@ Example transformation:
 ### 2. Updated Canonical Ordering Rule
 
 **Before:**
+
 ```cpp
 constexpr auto canonical_order =
     Rewrite{y_ + x_, x_ + y_, [](auto ctx) {
@@ -51,6 +57,7 @@ constexpr auto canonical_order =
 ```
 
 **After:**
+
 ```cpp
 constexpr auto canonical_order =
     Rewrite{y_ + x_, x_ + y_, [](auto ctx) {
@@ -60,6 +67,7 @@ constexpr auto canonical_order =
 ```
 
 **Key Addition:** Now uses `compareAdditionTerms()` which understands algebraic structure:
+
 - Groups terms by base (variable part)
 - Sorts by coefficient within each group
 - Places constants first
@@ -69,6 +77,7 @@ constexpr auto canonical_order =
 All three associativity rules now use term-structure-aware comparison:
 
 **`assoc_left`:**
+
 ```cpp
 constexpr auto assoc_left = Rewrite{a_ + (b_ + c_), (a_ + b_) + c_, [](auto ctx) {
   return compareAdditionTerms(get(ctx, b_), get(ctx, a_)) != Ordering::Less;
@@ -76,6 +85,7 @@ constexpr auto assoc_left = Rewrite{a_ + (b_ + c_), (a_ + b_) + c_, [](auto ctx)
 ```
 
 **`assoc_right`:**
+
 ```cpp
 constexpr auto assoc_right = Rewrite{(a_ + c_) + b_, a_ + (c_ + b_), [](auto ctx) {
   return compareAdditionTerms(get(ctx, b_), get(ctx, c_)) == Ordering::Less;
@@ -83,6 +93,7 @@ constexpr auto assoc_right = Rewrite{(a_ + c_) + b_, a_ + (c_ + b_), [](auto ctx
 ```
 
 **`assoc_reorder`:**
+
 ```cpp
 constexpr auto assoc_reorder = Rewrite{a_ + (c_ + b_), a_ + (b_ + c_), [](auto ctx) {
   return compareAdditionTerms(get(ctx, b_), get(ctx, c_)) == Ordering::Less;
@@ -96,10 +107,12 @@ From `term_structure.h`:
 ### Coefficient and Base Extraction
 
 For addition terms, we extract:
+
 - **Coefficient**: the numeric factor (default `1` if not present)
 - **Base**: the variable part
 
 Examples:
+
 - `x` → coefficient=`1`, base=`x`
 - `3*x` → coefficient=`3`, base=`x`
 - `2*y` → coefficient=`2`, base=`y`
@@ -111,11 +124,11 @@ Examples:
 constexpr auto compareAdditionTerms(A, B) -> Ordering {
   // 1. Pure constants (base=1) come first
   if (A_is_pure_const && !B_is_pure_const) return Ordering::Less;
-  
+
   // 2. Compare bases (group like terms)
   auto base_cmp = compare(A_base, B_base);
   if (base_cmp != Equal) return base_cmp;
-  
+
   // 3. Same base: compare coefficients (smaller first)
   return compare(A_coeff, B_coeff);
 }
@@ -128,19 +141,23 @@ Created comprehensive test suite: `term_ordering_test.cpp`
 ### Test Coverage
 
 ✅ **Basic term comparison:**
+
 - Constants before variables
 - Grouping by base
 - Coefficient ordering within groups
 
 ✅ **Canonical ordering:**
+
 - `2*x + x → x + 2*x`
 - Mixed bases handled correctly
 
 ✅ **Associativity with term structure:**
+
 - `x + (2*x + y)` groups correctly
 - Multiple bases maintained
 
 ✅ **Full simplification examples:**
+
 - `3*x + y + 2*x + y → 5*x + 2*y` ✓
 - `x + 3*x + 2*x → 6*x` ✓
 - `2*y + x + 3*x + y → 4*x + 3*y` ✓
@@ -171,6 +188,7 @@ Running... Complex expression: 3*x + 2*y + x + 5 + 4*x + y + 2
 ```
 
 All existing tests also pass:
+
 - ✓ `simplification_basic_test` - 12/12 tests
 - ✓ `simplification_pipeline_test` - 18/18 tests
 - ✓ `simplification_advanced_test` - (transcendental functions)
@@ -180,6 +198,7 @@ All existing tests also pass:
 ### 1. **Automatic Like-Term Grouping**
 
 Terms with the same algebraic base are automatically adjacent:
+
 ```
 3*x + y + x + 2*y  →  x + 3*x + y + 2*y
 ```
@@ -187,6 +206,7 @@ Terms with the same algebraic base are automatically adjacent:
 ### 2. **Efficient Factoring**
 
 Grouped terms enable straightforward factoring rules:
+
 ```
 x + 3*x  →  4*x
 y + 2*y  →  3*y
@@ -195,6 +215,7 @@ y + 2*y  →  3*y
 ### 3. **Consistent with Canonical Forms**
 
 Aligns with the flattening strategy in `canonical.h`:
+
 - Both use `AdditionTermComparator`
 - Both group by base, sort by coefficient
 - Unified approach across the codebase
@@ -202,22 +223,27 @@ Aligns with the flattening strategy in `canonical.h`:
 ### 4. **Natural Mathematical Ordering**
 
 Results match human intuition:
+
 ```
 5 + x + 2*x + y + 3*y
 ```
+
 Constants, then x terms, then y terms, each internally sorted.
 
 ## Comparison with canonical.h
 
 The `canonical.h` file implements a similar strategy for **type-level** canonical forms:
+
 - **Flattens**: `(a+b)+c` → `Expression<Add, a, b, c>`
 - **Sorts**: Uses `AdditionTermComparator` at type level
 
 Our `simplify.h` rules now implement the **value-level** equivalent:
+
 - **Reorders**: Binary expressions based on term structure
 - **Groups**: Like terms using same `compareAdditionTerms` logic
 
 **Complementary approaches:**
+
 - `canonical.h`: Type system (compile-time structure)
 - `simplify.h`: Rewrite rules (runtime/compile-time transformations)
 
@@ -242,13 +268,16 @@ Both use the same underlying term structure analysis from `term_structure.h`.
 ### Potential Enhancements
 
 1. **Multiplication term ordering**: Apply similar strategy
+
    - Group by base: `x`, `x^2`, `x^3` adjacent
    - Sort by exponent within groups
 
 2. **Nested expression handling**: Extend to nested structures
+
    - `(2*x + y) + (x + 3*y)` → flatten and group
 
 3. **Coefficient collection**: Smarter constant folding
+
    - Recognize `2*x + 3*x` pattern more aggressively
    - Combine with evaluation strategy
 
@@ -267,6 +296,7 @@ Both use the same underlying term structure analysis from `term_structure.h`.
 ## Files Added
 
 - `src/symbolic3/test/term_ordering_test.cpp`:
+
   - Comprehensive test suite for term-structure-aware ordering
   - 12 test cases covering basic to complex scenarios
   - Evaluation-based verification
@@ -279,11 +309,11 @@ Both use the same underlying term structure analysis from `term_structure.h`.
 
 The addition simplification rules now use **algebraic term structure** for ordering, matching the sophisticated strategy in `canonical.h`. This enables:
 
-✓ Automatic grouping of like terms (`x`, `2*x`, `3*x` adjacent)  
-✓ Efficient term collection and factoring  
-✓ Natural mathematical ordering (constants first, then by base)  
-✓ Consistency with canonical form infrastructure  
-✓ All existing tests pass  
-✓ New comprehensive test suite validates behavior  
+✓ Automatic grouping of like terms (`x`, `2*x`, `3*x` adjacent)
+✓ Efficient term collection and factoring
+✓ Natural mathematical ordering (constants first, then by base)
+✓ Consistency with canonical form infrastructure
+✓ All existing tests pass
+✓ New comprehensive test suite validates behavior
 
 The implementation demonstrates the power of compile-time term structure analysis for building intelligent symbolic manipulation systems.

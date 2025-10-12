@@ -209,11 +209,10 @@ constexpr auto LikeTerms = Rewrite{x_ + x_, x_ * 2_c};
 //   - Within same base, sorts by coefficient: x < 2*x < 3*x
 //   - Constants come first: 5 < x < 2*x < y < 3*y
 // Example: 3*x + y + 2*y + x → x + 3*x + y + 2*y (ready for factoring)
-constexpr auto canonical_order =
-    Rewrite{y_ + x_, x_ + y_, [](auto ctx) {
-              return compareAdditionTerms(get(ctx, x_), get(ctx, y_)) ==
-                     Ordering::Less;
-            }};
+constexpr auto canonical_order = Rewrite{
+    y_ + x_, x_ + y_, [](auto ctx) {
+      return compareAdditionTerms(get(ctx, x_), get(ctx, y_)) == Ordering::Less;
+    }};
 constexpr auto Ordering = canonical_order;
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -246,22 +245,26 @@ constexpr auto Factoring = factor_simple | factor_simple_rev | factor_both;
 //   - Prevents infinite rewrite loops
 
 // Left-associate: a + (b + c) → (a + b) + c  when a ≤ b (term-aware)
-// Groups like terms when a and b have the same base: x + (2*x + y) → (x + 2*x) + y
-constexpr auto assoc_left = Rewrite{a_ + (b_ + c_), (a_ + b_) + c_, [](auto ctx) {
-  return compareAdditionTerms(get(ctx, b_), get(ctx, a_)) != Ordering::Less;
-}};
+// Groups like terms when a and b have the same base: x + (2*x + y) → (x + 2*x)
+// + y
+constexpr auto assoc_left = Rewrite{
+    a_ + (b_ + c_), (a_ + b_) + c_, [](auto ctx) {
+      return compareAdditionTerms(get(ctx, b_), get(ctx, a_)) != Ordering::Less;
+    }};
 
 // Right-associate: (a + c) + b → a + (c + b)  when b < c (term-aware)
 // Bubbles smaller term b rightward to maintain canonical ordering a < b < c
-constexpr auto assoc_right = Rewrite{(a_ + c_) + b_, a_ + (c_ + b_), [](auto ctx) {
-  return compareAdditionTerms(get(ctx, b_), get(ctx, c_)) == Ordering::Less;
-}};
+constexpr auto assoc_right = Rewrite{
+    (a_ + c_) + b_, a_ + (c_ + b_), [](auto ctx) {
+      return compareAdditionTerms(get(ctx, b_), get(ctx, c_)) == Ordering::Less;
+    }};
 
 // Reorder within right-side: a + (c + b) → a + (b + c)  when b < c (term-aware)
 // Swaps rightmost terms to maintain canonical ordering a < b < c
-constexpr auto assoc_reorder = Rewrite{a_ + (c_ + b_), a_ + (b_ + c_), [](auto ctx) {
-  return compareAdditionTerms(get(ctx, b_), get(ctx, c_)) == Ordering::Less;
-}};
+constexpr auto assoc_reorder = Rewrite{
+    a_ + (c_ + b_), a_ + (b_ + c_), [](auto ctx) {
+      return compareAdditionTerms(get(ctx, b_), get(ctx, c_)) == Ordering::Less;
+    }};
 
 constexpr auto Associativity = assoc_left | assoc_right | assoc_reorder;
 
