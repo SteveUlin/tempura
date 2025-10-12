@@ -289,50 +289,122 @@ constexpr auto AdditionRules =
 // ============================================================================
 // Multiplication Simplification Rules
 // ============================================================================
+//
+// Rule Categories (applied in this order):
+//   1. Identity      : 0·x → 0, 1·x → x
+//   2. Distribution  : (a+b)·c → a·c + b·c
+//   3. Ordering      : y·x → x·y  (when x < y, by base then exponent)
+//   4. PowerCombining: x·x^a → x^(a+1)
+//   5. Associativity : Strategic reassociation to group like bases
+//
+// The ordering ensures termination and establishes canonical forms.
 
 namespace MultiplicationRuleCategories {
 
-// Identity: 0·x → 0, x·0 → 0, 1·x → x, x·1 → x
+// ────────────────────────────────────────────────────────────────────────────
+// Identity Rules: Eliminate multiplicative identity/annihilator
+// ────────────────────────────────────────────────────────────────────────────
+
 constexpr auto zero_left = Rewrite{0_c * x_, 0_c};
 constexpr auto zero_right = Rewrite{x_ * 0_c, 0_c};
 constexpr auto one_left = Rewrite{1_c * x_, x_};
 constexpr auto one_right = Rewrite{x_ * 1_c, x_};
 constexpr auto Identity = zero_left | zero_right | one_left | one_right;
 
-// Distribution: (a+b)·c → a·c + b·c, a·(b+c) → a·b + a·c
-// CRITICAL: Must come before Associativity to prevent re-factoring
+// ────────────────────────────────────────────────────────────────────────────
+// Distribution: Expand products over sums
+// ────────────────────────────────────────────────────────────────────────────
+
+// (a+b)·c → a·c + b·c  (distribute from left)
 constexpr auto dist_right = Rewrite{(a_ + b_) * c_, (a_ * c_) + (b_ * c_)};
+
+// a·(b+c) → a·b + a·c  (distribute from right)
 constexpr auto dist_left = Rewrite{a_ * (b_ + c_), (a_ * b_) + (a_ * c_)};
+
 constexpr auto Distribution = dist_right | dist_left;
 
-// Canonical ordering: y·x → x·y iff x < y
-// Prevents infinite rewrite loops by establishing a total ordering
+// CRITICAL: Distribution must come before Associativity to prevent re-factoring
+
+// ────────────────────────────────────────────────────────────────────────────
+// Canonical Ordering: Establish total order to prevent rewrite loops
+// ────────────────────────────────────────────────────────────────────────────
+
+// y·x → x·y  when x < y (using term-structure-aware comparison)
+// Uses compareMultiplicationTerms() from term_structure.h for algebraic ordering:
+//   - Groups terms by their base: x, x^2, x^3 are adjacent
+//   - Within same base, sorts by exponent: x < x^2 < x^3
+//   - Constants come first: 2 < x < x^2 < y < y^2
+// Example: x^3 · y · x · y^2 · x^2 → x · x^2 · x^3 · y · y^2 (ready for power combining)
 constexpr auto canonical_order =
-    Rewrite{y_ * x_, x_* y_,
-            [](auto ctx) { return lessThan(get(ctx, x_), get(ctx, y_)); }};
+    Rewrite{y_ * x_, x_ * y_, [](auto ctx) {
+              return compareMultiplicationTerms(get(ctx, x_), get(ctx, y_)) ==
+                     Ordering::Less;
+            }};
 constexpr auto Ordering = canonical_order;
 
-// Power combining: x·x^a → x^(a+1), x^a·x → x^(a+1), x^a·x^b → x^(a+b)
-// These rules collect terms with the same base
+// ────────────────────────────────────────────────────────────────────────────
+// Power Combining: Collect terms with the same base
+// ────────────────────────────────────────────────────────────────────────────
+
+// x·x^a → x^(a+1)  (combine base with power of same base)
 constexpr auto power_base_left = Rewrite{x_ * pow(x_, a_), pow(x_, a_ + 1_c)};
+
+// x^a·x → x^(a+1)  (symmetric case)
 constexpr auto power_base_right = Rewrite{pow(x_, a_) * x_, pow(x_, a_ + 1_c)};
+
+// x^a·x^b → x^(a+b)  (combine two powers of same base)
 constexpr auto power_both =
     Rewrite{pow(x_, a_) * pow(x_, b_), pow(x_, a_ + b_)};
+
 constexpr auto PowerCombining = power_base_left | power_base_right | power_both;
 
-// Right-associative: (a·b)·c → a·(b·c)
-// With conditional reordering for canonical form
-constexpr auto assoc_right = Rewrite{(a_ * b_) * c_, a_*(b_* c_)};
-constexpr auto assoc_reorder =
-    Rewrite{(a_ * c_) * b_, (a_ * b_) * c_,
-            [](auto ctx) { return lessThan(get(ctx, b_), get(ctx, c_)); }};
-constexpr auto Associativity = assoc_reorder | assoc_right;
+// Associativity Rules with Canonical Ordering
+// -----------------------------------------------
+// Bidirectional associativity with conditional reordering for canonical form.
+//
+// Strategy: Use both left and right association, with ordering predicates
+// to ensure termination and establish a canonical form where a < b < c.
+// Uses term-structure-aware comparison to group like bases (powers).
+// The fixpoint combinator will find a stable form.
+//
+// Ordering ensures:
+//   - Terms are arranged in canonical order (smaller terms first)
+//   - Like bases are grouped together (e.g., x · (x^2 · y) → (x · x^2) · y)
+//   - Prevents infinite rewrite loops
+
+// Left-associate: a · (b · c) → (a · b) · c  when a ≤ b (term-aware)
+// Groups like bases when they have the same base: x · (x^2 · y) → (x · x^2) · y
+constexpr auto assoc_left = Rewrite{a_ * (b_ * c_), (a_ * b_) * c_, [](auto ctx) {
+  return compareMultiplicationTerms(get(ctx, b_), get(ctx, a_)) != Ordering::Less;
+}};
+
+// Right-associate: (a · c) · b → a · (c · b)  when b < c (term-aware)
+// Bubbles smaller term b rightward to maintain canonical ordering a < b < c
+constexpr auto assoc_right = Rewrite{(a_ * c_) * b_, a_ * (c_ * b_), [](auto ctx) {
+  return compareMultiplicationTerms(get(ctx, b_), get(ctx, c_)) == Ordering::Less;
+}};
+
+// Reorder within right-side: a · (c · b) → a · (b · c)  when b < c (term-aware)
+// Swaps rightmost terms to maintain canonical ordering a < b < c
+constexpr auto assoc_reorder = Rewrite{a_ * (c_ * b_), a_ * (b_ * c_), [](auto ctx) {
+  return compareMultiplicationTerms(get(ctx, b_), get(ctx, c_)) == Ordering::Less;
+}};
+
+constexpr auto Associativity = assoc_left | assoc_right | assoc_reorder;
 
 }  // namespace MultiplicationRuleCategories
 
-// Try each category as a choice
-// Category ordering is critical: Distribution → Ordering → PowerCombining →
-// Associativity
+// ────────────────────────────────────────────────────────────────────────────
+// Combined Multiplication Rules (Choice Combinator)
+// ────────────────────────────────────────────────────────────────────────────
+//
+// Order matters for efficiency and correctness:
+//   - Identity first (simple, fast pattern match - also catches annihilator 0)
+//   - Distribution before Associativity (CRITICAL: prevents re-factoring)
+//   - Ordering before PowerCombining (establishes canonical form first)
+//   - PowerCombining before Associativity (groups powers before rearrangement)
+//   - Associativity last (most complex, benefits from prior simplifications)
+
 constexpr auto MultiplicationRules =
     MultiplicationRuleCategories::Identity |
     MultiplicationRuleCategories::Distribution |
