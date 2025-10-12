@@ -228,7 +228,19 @@ constexpr auto factor_simple_rev = Rewrite{x_ + x_ * a_, x_ * (1_c + a_)};
 // x·a + x·b → x·(a+b)  (factor out common base from two scaled terms)
 constexpr auto factor_both = Rewrite{x_ * a_ + x_ * b_, x_*(a_ + b_)};
 
-constexpr auto Factoring = factor_simple | factor_simple_rev | factor_both;
+// Additional patterns for canonical multiplication order (constant-first):
+// a·x + x → x·(a+1)  (constant-first version of factor_simple)
+constexpr auto factor_simple_cf = Rewrite{a_ * x_ + x_, x_*(a_ + 1_c)};
+
+// x + a·x → x·(1+a)  (constant-first version of factor_simple_rev)
+constexpr auto factor_simple_rev_cf = Rewrite{x_ + a_ * x_, x_ * (1_c + a_)};
+
+// a·x + b·x → x·(a+b)  (constant-first version of factor_both)
+constexpr auto factor_both_cf = Rewrite{a_ * x_ + b_ * x_, x_*(a_ + b_)};
+
+constexpr auto Factoring = factor_simple | factor_simple_rev | factor_both |
+                           factor_simple_cf | factor_simple_rev_cf |
+                           factor_both_cf;
 
 // Associativity Rules with Canonical Ordering
 // -----------------------------------------------
@@ -654,13 +666,25 @@ constexpr auto transcendental_simplify =
     CoshRules | TanhRules | SqrtRules | PythagoreanRules |
     HyperbolicIdentityRules;
 
-// Basic algebraic simplification: apply all rule categories, then fold
-// constants Constant folding comes AFTER structural rules so we simplify
-// expressions before evaluating (e.g., (1+2)+3 → 3+3 → 6 rather than 3+3
-// staying as-is)
-constexpr auto algebraic_simplify = PowerRules | AdditionRules |
+// Basic algebraic simplification: fold constants FIRST, then apply structural
+// rules
+//
+// CRITICAL: constant_fold must come BEFORE AdditionRules/MultiplicationRules
+// to prevent canonical ordering from creating oscillations.
+//
+// Example problem if constant_fold comes AFTER:
+//   x*(2+1) → try AdditionRules on (2+1) → swap to (1+2) by ordering
+//   x*(1+2) → try AdditionRules on (1+2) → swap to (2+1) by ordering
+//   Infinite oscillation! FixPoint can't detect it because types differ.
+//
+// With constant_fold FIRST:
+//   x*(2+1) → constant_fold → x*3 ✅
+//
+// This doesn't break the (1+2)+3 example from the old comment because:
+//   (1+2)+3 → fold (1+2) → 3+3 → fold 3+3 → 6 ✅
+constexpr auto algebraic_simplify = constant_fold | PowerRules | AdditionRules |
                                     MultiplicationRules |
-                                    transcendental_simplify | constant_fold;
+                                    transcendental_simplify;
 
 // Apply using FixPoint (keeps going until no more changes)
 constexpr auto simplify_fixpoint = FixPoint{algebraic_simplify};
@@ -756,42 +780,48 @@ constexpr auto simplify_bounded =
 // Implementation note:
 //   This is a lambda wrapper around FixPoint{innermost(simplify_fixpoint)}.
 //   The nested fixpoint structure is critical for correctness.
-// Helper strategy for two-stage simplification
-// Stage 1: Apply algebraic rules (factoring, etc.) to whole expression
-// Stage 2: Fold nested constants created by factoring
-struct TwoStageSimplify {
-  template <Symbolic Expr, typename Context>
-  constexpr auto apply(Expr expr, Context ctx) const {
-    // Apply algebraic rules first (enables factoring at parent level)
-    auto with_alg_rules = algebraic_simplify.apply(expr, ctx);
-
-    // Then fold any nested constants using innermost traversal
-    // (constant_fold wrapped in Try so it doesn't break on non-constants)
-    return innermost(try_strategy(constant_fold)).apply(with_alg_rules, ctx);
-  }
-};
-
-constexpr inline TwoStageSimplify two_stage_simplify{};
+// ============================================================================
+// Full Simplification Pipeline
+// ============================================================================
+//
+// The simplification pipeline must handle several challenges:
+//
+// 1. **Nested Expressions**: Rules must be applied recursively to
+// subexpressions
+//    Example: x * (y + (z * 0)) requires simplifying (z * 0) first
+//
+// 2. **Parent-Level Patterns**: Some rules match parent-level structures
+//    Example: x*2 + x requires seeing the whole Add expression
+//
+// 3. **Multiple Passes**: Some simplifications enable others
+//    Example: (x + x) + x → (2*x) + x → 3*x
+//
+// STRATEGY: Use bottomup (post-order) traversal with fixpoint iteration
+//
+// - bottomup: Apply rules to children first, then parent (handles nesting)
+// - FixPoint: Repeat until no more changes (handles multi-pass requirements)
+// - try_strategy: Wrap algebraic_simplify so it doesn't fail on leaves
+//
+// This ensures:
+//   - Leaf nodes are simplified first (constants, identities)
+//   - Parent nodes see already-simplified children
+//   - Parent-level patterns can match
+//   - Process repeats until stable
 
 constexpr auto full_simplify = [](auto expr, auto ctx) {
-  // Must include traversal.h to use this
+  // Bottom-up traversal with fixpoint iteration
   //
-  // Two-stage pipeline with FixPoint:
-  // 1. Apply algebraic_simplify to the whole expression (enables factoring)
-  // 2. Apply innermost(constant_fold) to fold nested constants
-  // 3. Repeat until stable
+  // bottomup applies algebraic_simplify at each node, starting from leaves.
+  // This ensures nested expressions are fully simplified before parent rules
+  // run.
   //
-  // WHY THIS WORKS:
-  // - algebraic_simplify includes factoring rules that need to match the
-  //   parent-level pattern (e.g., x·a + x → x·(a+1))
-  // - Wrapping algebraic rules in innermost() would apply them to children
-  //   first, preventing parent patterns from matching
-  // - So we apply algebraic rules to the whole expression first
-  // - Then use innermost to fold any nested constants created by factoring
+  // FixPoint repeats the process until the expression stops changing,
+  // handling cases that require multiple passes like term collection.
   //
-  // CRITICAL: constant_fold wrapped in Try so it doesn't break traversal when
-  // applied to non-constant expressions
-  return FixPoint{two_stage_simplify}.apply(expr, ctx);
+  // try_strategy wraps algebraic_simplify to return the original expression
+  // when rules don't match (instead of Never), which is necessary for
+  // traversal.
+  return FixPoint{bottomup(try_strategy(algebraic_simplify))}.apply(expr, ctx);
 };
 
 // ============================================================================
@@ -830,8 +860,16 @@ constexpr auto simplify = full_simplify;
 //
 // Usage:
 //   auto result = algebraic_simplify_recursive(expr, default_context());
+//
+// CRITICAL: Must wrap algebraic_simplify in try_strategy() because:
+//   - algebraic_simplify returns Never when no rules match (e.g., on leaf
+//   nodes)
+//   - Traversal strategies call apply_to_children which builds Expression<Op,
+//   ...>
+//   - If a child is Never, this creates invalid types
+//   - try_strategy converts Never back to the original expression
 constexpr auto algebraic_simplify_recursive = [](auto expr, auto ctx) {
-  return innermost(algebraic_simplify).apply(expr, ctx);
+  return innermost(try_strategy(algebraic_simplify)).apply(expr, ctx);
 };
 
 // ============================================================================
@@ -845,8 +883,11 @@ constexpr auto algebraic_simplify_recursive = [](auto expr, auto ctx) {
 //
 // Usage:
 //   auto result = bottomup_simplify(expr, default_context());
+//
+// CRITICAL: Must wrap algebraic_simplify in try_strategy() for same reasons
+// as algebraic_simplify_recursive above.
 constexpr auto bottomup_simplify = [](auto expr, auto ctx) {
-  return bottomup(algebraic_simplify).apply(expr, ctx);
+  return bottomup(try_strategy(algebraic_simplify)).apply(expr, ctx);
 };
 
 // ============================================================================
@@ -862,8 +903,11 @@ constexpr auto bottomup_simplify = [](auto expr, auto ctx) {
 //
 // Usage:
 //   auto result = topdown_simplify(expr, default_context());
+//
+// CRITICAL: Must wrap algebraic_simplify in try_strategy() for same reasons
+// as algebraic_simplify_recursive above.
 constexpr auto topdown_simplify = [](auto expr, auto ctx) {
-  return topdown(algebraic_simplify).apply(expr, ctx);
+  return topdown(try_strategy(algebraic_simplify)).apply(expr, ctx);
 };
 
 // ============================================================================

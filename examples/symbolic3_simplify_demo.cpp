@@ -32,12 +32,12 @@ int main() {
     constexpr auto expr = x * (y + (z * 0_c));
     constexpr auto result = full_simplify(expr, ctx);
 
-    // Verify at compile-time
-    static_assert(match(result, x * y),
-                  "Should simplify x * (y + (z * 0)) to x * y");
+    // Verify at compile-time (allow both x*y and y*x due to commutativity)
+    static_assert(match(result, x * y) || match(result, y * x),
+                  "Should simplify x * (y + (z * 0)) to x * y or y * x");
 
     std::cout << "   Expression: x * (y + (z * 0))\n";
-    std::cout << "   Result:     x * y\n";
+    std::cout << "   Result:     x * y (or y * x)\n";
     std::cout << "   ✓ Handles deep nesting automatically\n\n";
   }
 

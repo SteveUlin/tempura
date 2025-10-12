@@ -2,6 +2,10 @@ add_executable(simplify_test simplify_test.cpp)
 target_link_libraries(simplify_test PRIVATE symbolic3 meta)
 add_test(NAME symbolic3_simplify COMMAND simplify_test)
 
+add_executable(simplification_pipeline_test simplification_pipeline_test.cpp)
+target_link_libraries(simplification_pipeline_test PRIVATE symbolic3 meta)
+add_test(NAME symbolic3_simplification_pipeline COMMAND simplification_pipeline_test)
+
 add_executable(term_collecting_test term_collecting_test.cpp)
 target_link_libraries(term_collecting_test PRIVATE symbolic3 meta)
 add_test(NAME symbolic3_term_collecting COMMAND term_collecting_test)
