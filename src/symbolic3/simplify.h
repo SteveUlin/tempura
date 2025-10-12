@@ -330,13 +330,15 @@ constexpr auto Distribution = dist_right | dist_left;
 // ────────────────────────────────────────────────────────────────────────────
 
 // y·x → x·y  when x < y (using term-structure-aware comparison)
-// Uses compareMultiplicationTerms() from term_structure.h for algebraic ordering:
+// Uses compareMultiplicationTerms() from term_structure.h for algebraic
+// ordering:
 //   - Groups terms by their base: x, x^2, x^3 are adjacent
 //   - Within same base, sorts by exponent: x < x^2 < x^3
 //   - Constants come first: 2 < x < x^2 < y < y^2
-// Example: x^3 · y · x · y^2 · x^2 → x · x^2 · x^3 · y · y^2 (ready for power combining)
+// Example: x^3 · y · x · y^2 · x^2 → x · x^2 · x^3 · y · y^2 (ready for power
+// combining)
 constexpr auto canonical_order =
-    Rewrite{y_ * x_, x_ * y_, [](auto ctx) {
+    Rewrite{y_ * x_, x_* y_, [](auto ctx) {
               return compareMultiplicationTerms(get(ctx, x_), get(ctx, y_)) ==
                      Ordering::Less;
             }};
@@ -374,21 +376,27 @@ constexpr auto PowerCombining = power_base_left | power_base_right | power_both;
 
 // Left-associate: a · (b · c) → (a · b) · c  when a ≤ b (term-aware)
 // Groups like bases when they have the same base: x · (x^2 · y) → (x · x^2) · y
-constexpr auto assoc_left = Rewrite{a_ * (b_ * c_), (a_ * b_) * c_, [](auto ctx) {
-  return compareMultiplicationTerms(get(ctx, b_), get(ctx, a_)) != Ordering::Less;
-}};
+constexpr auto assoc_left =
+    Rewrite{a_ * (b_ * c_), (a_ * b_) * c_, [](auto ctx) {
+              return compareMultiplicationTerms(get(ctx, b_), get(ctx, a_)) !=
+                     Ordering::Less;
+            }};
 
 // Right-associate: (a · c) · b → a · (c · b)  when b < c (term-aware)
 // Bubbles smaller term b rightward to maintain canonical ordering a < b < c
-constexpr auto assoc_right = Rewrite{(a_ * c_) * b_, a_ * (c_ * b_), [](auto ctx) {
-  return compareMultiplicationTerms(get(ctx, b_), get(ctx, c_)) == Ordering::Less;
-}};
+constexpr auto assoc_right =
+    Rewrite{(a_ * c_) * b_, a_*(c_* b_), [](auto ctx) {
+              return compareMultiplicationTerms(get(ctx, b_), get(ctx, c_)) ==
+                     Ordering::Less;
+            }};
 
 // Reorder within right-side: a · (c · b) → a · (b · c)  when b < c (term-aware)
 // Swaps rightmost terms to maintain canonical ordering a < b < c
-constexpr auto assoc_reorder = Rewrite{a_ * (c_ * b_), a_ * (b_ * c_), [](auto ctx) {
-  return compareMultiplicationTerms(get(ctx, b_), get(ctx, c_)) == Ordering::Less;
-}};
+constexpr auto assoc_reorder =
+    Rewrite{a_ * (c_ * b_), a_*(b_* c_), [](auto ctx) {
+              return compareMultiplicationTerms(get(ctx, b_), get(ctx, c_)) ==
+                     Ordering::Less;
+            }};
 
 constexpr auto Associativity = assoc_left | assoc_right | assoc_reorder;
 

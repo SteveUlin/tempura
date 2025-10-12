@@ -9,23 +9,28 @@ Enhanced multiplication simplification rules to use **algebraic term structure**
 ## The Problem
 
 **Before:** Using plain `lessThan()` comparison, terms were ordered lexicographically:
+
 ```cpp
 x^3 · y · x · y^2 · x^2
 ```
+
 Would order arbitrarily based on expression type structure.
 
 **Issue:** Powers of the same base were scattered, making power combining inefficient:
+
 - `x`, `x^2`, `x^3` not adjacent → hard to combine into `x^6`
 - `y`, `y^2` not adjacent → hard to combine into `y^3`
 
 ## The Solution
 
 **After:** Using `compareMultiplicationTerms()` from `term_structure.h`, terms are ordered by:
+
 1. **Constants first** (pure numbers like `2`, `5`)
 2. **Group by base** (all `x` powers together, all `y` powers together)
 3. **Within group, sort by exponent** (`x < x^2 < x^3`)
 
 Example transformation:
+
 ```cpp
 x^3 · y · x · y^2 · x^2
 → x · x^2 · x^3 · y · y^2  (grouped by base)
@@ -37,6 +42,7 @@ x^3 · y · x · y^2 · x^2
 ### 1. Enhanced Documentation Structure
 
 Added comprehensive section header with rule categories overview:
+
 ```cpp
 // Rule Categories (applied in this order):
 //   1. Identity      : 0·x → 0, 1·x → x
@@ -51,6 +57,7 @@ Added visual separators for each rule category (like Addition rules).
 ### 2. Updated Canonical Ordering Rule
 
 **Before:**
+
 ```cpp
 constexpr auto canonical_order =
     Rewrite{y_ * x_, x_ * y_,
@@ -58,6 +65,7 @@ constexpr auto canonical_order =
 ```
 
 **After:**
+
 ```cpp
 constexpr auto canonical_order =
     Rewrite{y_ * x_, x_ * y_, [](auto ctx) {
@@ -67,6 +75,7 @@ constexpr auto canonical_order =
 ```
 
 **Key Addition:** Now uses `compareMultiplicationTerms()` which understands power structure:
+
 - Groups terms by base (variable part)
 - Sorts by exponent within each group
 - Places constants first
@@ -76,6 +85,7 @@ constexpr auto canonical_order =
 All three associativity rules now use term-structure-aware comparison:
 
 **`assoc_left`:**
+
 ```cpp
 constexpr auto assoc_left = Rewrite{a_ * (b_ * c_), (a_ * b_) * c_, [](auto ctx) {
   return compareMultiplicationTerms(get(ctx, b_), get(ctx, a_)) != Ordering::Less;
@@ -83,6 +93,7 @@ constexpr auto assoc_left = Rewrite{a_ * (b_ * c_), (a_ * b_) * c_, [](auto ctx)
 ```
 
 **`assoc_right`:**
+
 ```cpp
 constexpr auto assoc_right = Rewrite{(a_ * c_) * b_, a_ * (c_ * b_), [](auto ctx) {
   return compareMultiplicationTerms(get(ctx, b_), get(ctx, c_)) == Ordering::Less;
@@ -90,6 +101,7 @@ constexpr auto assoc_right = Rewrite{(a_ * c_) * b_, a_ * (c_ * b_), [](auto ctx
 ```
 
 **`assoc_reorder`:**
+
 ```cpp
 constexpr auto assoc_reorder = Rewrite{a_ * (c_ * b_), a_ * (b_ * c_), [](auto ctx) {
   return compareMultiplicationTerms(get(ctx, b_), get(ctx, c_)) == Ordering::Less;
@@ -107,10 +119,12 @@ From `term_structure.h`:
 ### Base and Exponent Extraction
 
 For multiplication terms, we extract:
+
 - **Base**: the variable part (default variable if not a power)
 - **Exponent**: the power (default `1` if not present)
 
 Examples:
+
 - `x` → base=`x`, exponent=`1`
 - `x^2` → base=`x`, exponent=`2`
 - `y^3` → base=`y`, exponent=`3`
@@ -122,11 +136,11 @@ Examples:
 constexpr auto compareMultiplicationTerms(A, B) -> Ordering {
   // 1. Constants come first
   if (A_is_const && !B_is_const) return Ordering::Less;
-  
+
   // 2. Compare bases (group like terms)
   auto base_cmp = compare(A_base, B_base);
   if (base_cmp != Equal) return base_cmp;
-  
+
   // 3. Same base: compare exponents (lower exponent first)
   return compare(A_exp, B_exp);
 }
@@ -139,24 +153,29 @@ Created comprehensive test suite: `mult_ordering_test.cpp`
 ### Test Coverage
 
 ✅ **Basic term comparison:**
+
 - Constants before variables
 - Grouping by base
 - Exponent ordering within groups
 
 ✅ **Canonical ordering:**
+
 - `x^2 · x → x · x^2`
 - Mixed bases handled correctly
 
 ✅ **Associativity with term structure:**
+
 - `x · (x^2 · y)` groups correctly
 - Multiple bases maintained
 
 ✅ **Power combining:**
+
 - `x · x → x^2` ✓
 - `x · x^2 → x^3` ✓
 - `x^2 · x^3 → x^5` ✓
 
 ✅ **Full simplification examples:**
+
 - `x^3 · x · x^2 → x^6` ✓
 - `x^2 · y · x · y^2 → x^3 · y^3` ✓
 - `2 · x · 3 · x^2 → 6 · x^3` ✓
@@ -190,6 +209,7 @@ Running... Complex expression: 2 · x^2 · y · 3 · x · y^3 · x^2
 ```
 
 All existing tests also pass:
+
 - ✓ `simplification_basic_test` - 12/12 tests
 - ✓ `simplification_pipeline_test` - 18/18 tests
 - ✓ `simplification_advanced_test` - 29/29 tests
@@ -201,6 +221,7 @@ All existing tests also pass:
 ### 1. **Automatic Like-Base Grouping**
 
 Powers with the same base are automatically adjacent:
+
 ```
 x^3 · y · x · y^2 · x^2  →  x · x^2 · x^3 · y · y^2
 ```
@@ -208,6 +229,7 @@ x^3 · y · x · y^2 · x^2  →  x · x^2 · x^3 · y · y^2
 ### 2. **Efficient Power Combining**
 
 Grouped powers enable straightforward combining rules:
+
 ```
 x · x^2 · x^3  →  x^6
 y · y^2        →  y^3
@@ -216,20 +238,24 @@ y · y^2        →  y^3
 ### 3. **Consistent with Addition Rules**
 
 Both addition and multiplication now use term-structure-aware ordering:
+
 - **Addition**: Groups by coefficient × base → `x + 2*x + 3*x → 6*x`
 - **Multiplication**: Groups by base^exponent → `x · x^2 · x^3 → x^6`
 
 ### 4. **Natural Mathematical Ordering**
 
 Results match human intuition:
+
 ```
 2 · 3 · x · x^2 · y · y^3
 ```
+
 Constants first, then x powers, then y powers, each internally sorted.
 
 ### 5. **Distribution Interacts Correctly**
 
 Power grouping works with distribution:
+
 ```
 x · x^2 · (y + y^2)
 → x^3 · (y + y^2)      (combine x powers)
@@ -238,14 +264,14 @@ x · x^2 · (y + y^2)
 
 ## Comparison with Addition Rules
 
-| Aspect | Addition Rules | Multiplication Rules |
-|--------|---------------|---------------------|
-| **Term Structure** | coefficient × base | base^exponent |
-| **Grouping Strategy** | Same base (variable) | Same base (power) |
-| **Within-Group Sort** | By coefficient (smaller first) | By exponent (smaller first) |
-| **Example Grouping** | `x, 2*x, 3*x` → `x, 2*x, 3*x` | `x, x^2, x^3` → `x, x^2, x^3` |
-| **Combining Rule** | Factoring: `x + 2*x → 3*x` | Power combining: `x · x^2 → x^3` |
-| **Comparison Function** | `compareAdditionTerms()` | `compareMultiplicationTerms()` |
+| Aspect                  | Addition Rules                 | Multiplication Rules             |
+| ----------------------- | ------------------------------ | -------------------------------- |
+| **Term Structure**      | coefficient × base             | base^exponent                    |
+| **Grouping Strategy**   | Same base (variable)           | Same base (power)                |
+| **Within-Group Sort**   | By coefficient (smaller first) | By exponent (smaller first)      |
+| **Example Grouping**    | `x, 2*x, 3*x` → `x, 2*x, 3*x`  | `x, x^2, x^3` → `x, x^2, x^3`    |
+| **Combining Rule**      | Factoring: `x + 2*x → 3*x`     | Power combining: `x · x^2 → x^3` |
+| **Comparison Function** | `compareAdditionTerms()`       | `compareMultiplicationTerms()`   |
 
 Both use the same underlying framework from `term_structure.h`.
 
@@ -294,6 +320,7 @@ The multiplication rules now follow the exact same structure as addition:
 ## Files Added
 
 - `src/symbolic3/test/mult_ordering_test.cpp`:
+
   - Comprehensive test suite for multiplication term-structure-aware ordering
   - 15 test cases covering basic to complex scenarios
   - All tests pass ✓
@@ -305,17 +332,18 @@ The multiplication rules now follow the exact same structure as addition:
 ## Conclusion
 
 The multiplication simplification rules now use **algebraic term structure** for ordering, matching both:
+
 1. The sophisticated strategy in `canonical.h`
 2. The addition rules we just refactored
 
 This enables:
 
-✓ Automatic grouping of like bases (`x`, `x^2`, `x^3` adjacent)  
-✓ Efficient power combining (`x · x^2 · x^3 → x^6`)  
-✓ Natural mathematical ordering (constants first, then by base and exponent)  
-✓ Consistency across addition and multiplication rules  
-✓ All existing tests pass  
-✓ New comprehensive test suite validates behavior  
+✓ Automatic grouping of like bases (`x`, `x^2`, `x^3` adjacent)
+✓ Efficient power combining (`x · x^2 · x^3 → x^6`)
+✓ Natural mathematical ordering (constants first, then by base and exponent)
+✓ Consistency across addition and multiplication rules
+✓ All existing tests pass
+✓ New comprehensive test suite validates behavior
 
 Both addition and multiplication now share a unified approach to term-structure-aware ordering, demonstrating the power of compile-time algebraic analysis for building sophisticated symbolic manipulation systems.
 
