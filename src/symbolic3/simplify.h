@@ -781,7 +781,124 @@ constexpr auto simplify_bounded =
 //   This is a lambda wrapper around FixPoint{innermost(simplify_fixpoint)}.
 //   The nested fixpoint structure is critical for correctness.
 // ============================================================================
-// Full Simplification Pipeline
+// TWO-STAGE SIMPLIFICATION (New Implementation)
+// ============================================================================
+//
+// This is the new, recommended simplification strategy that addresses the
+// inefficiencies of the single-phase bottom-up approach.
+//
+// Key improvements:
+//   1. Short-circuit patterns checked BEFORE recursing (0 * x → 0)
+//   2. Two-phase traversal: descent (expand) then ascent (collect)
+//   3. Resolves distribution/factoring conflict
+//   4. More efficient (fewer fixpoint iterations)
+//
+// Architecture:
+//   1. Quick patterns: annihilators, identities (short-circuit)
+//   2. Descent phase: rules applied going down (pre-order)
+//   3. Recurse into children
+//   4. Ascent phase: rules applied coming up (post-order)
+//   5. Fixpoint iteration until stable
+
+// ────────────────────────────────────────────────────────────────────────────
+// Phase 1: Quick Patterns (Short-Circuit)
+// ────────────────────────────────────────────────────────────────────────────
+//
+// These patterns are checked at parent level BEFORE recursing into children.
+// This enables major optimizations like 0 * (complex_expr) → 0
+
+constexpr auto quick_annihilators = Rewrite{0_c * x_, 0_c} |  // 0 * x → 0
+                                    Rewrite{x_ * 0_c, 0_c};   // x * 0 → 0
+
+constexpr auto quick_identities =
+    Rewrite{1_c * x_, x_} |      // 1 * x → x
+    Rewrite{x_ * 1_c, x_} |      // x * 1 → x
+    Rewrite{0_c + x_, x_} |      // 0 + x → x
+    Rewrite{x_ + 0_c, x_} |      // x + 0 → x
+    Rewrite{x_ * 1_c, x_} |      // x^1 → x (using multiplication for now)
+    Rewrite{exp(log(x_)), x_} |  // exp(log(x)) → x
+    Rewrite{log(exp(x_)), x_};   // log(exp(x)) → x
+
+constexpr auto quick_patterns = quick_annihilators | quick_identities;
+
+// ────────────────────────────────────────────────────────────────────────────
+// Phase 2: Descent Rules (Going Down, Pre-Order)
+// ────────────────────────────────────────────────────────────────────────────
+//
+// These rules are applied BEFORE recursing into children.
+// Good for: expansion, unwrapping, transformations that don't need simplified
+// children
+
+constexpr auto descent_unwrapping =
+    Rewrite{-(-x_), x_};  // Double negation: -(-x) → x
+
+// Note: Distribution is intentionally OMITTED from descent to avoid
+// oscillation with factoring in ascent. Distribution can be enabled later
+// with conditional logic (only when beneficial).
+
+constexpr auto descent_rules = descent_unwrapping;
+
+// ────────────────────────────────────────────────────────────────────────────
+// Phase 3: Ascent Rules (Coming Up, Post-Order)
+// ────────────────────────────────────────────────────────────────────────────
+//
+// These rules are applied AFTER children are simplified.
+// Good for: collection, factoring, folding, canonicalization
+
+constexpr auto ascent_constant_folding = constant_fold;
+
+constexpr auto ascent_collection =
+    AdditionRuleCategories::LikeTerms |  // x + x → 2*x
+    AdditionRuleCategories::Factoring;   // x*a + x*b → x*(a+b)
+
+constexpr auto ascent_power_combining =
+    MultiplicationRuleCategories::PowerCombining;  // x * x^a → x^(a+1)
+
+constexpr auto ascent_canonicalization =
+    AdditionRuleCategories::Ordering |        // y + x → x + y (if x < y)
+    MultiplicationRuleCategories::Ordering |  // y * x → x * y (if x < y)
+    AdditionRuleCategories::Associativity |   // Strategic reassociation
+    MultiplicationRuleCategories::Associativity;
+
+constexpr auto ascent_rules = ascent_constant_folding |
+                              PowerRules |  // x^0 → 1, x^1 → x, etc.
+                              ascent_collection | ascent_power_combining |
+                              ascent_canonicalization | transcendental_simplify;
+
+// ────────────────────────────────────────────────────────────────────────────
+// Two-Stage Pipeline Assembly
+// ────────────────────────────────────────────────────────────────────────────
+
+// Build the two-stage strategy using existing combinators
+// This avoids return type inconsistency by using the strategy composition
+// system
+
+// Phase 1: Descent phase (pre-order)
+// At each node going down: try quick patterns first, then descent rules
+// topdown() automatically applies this strategy at every node during traversal
+constexpr auto descent_with_quick = quick_patterns | descent_rules;
+constexpr auto descent_phase = topdown(descent_with_quick);
+
+// Phase 2: Ascent phase (post-order)
+// At each node coming up: apply ascent rules after children are simplified
+// bottomup() automatically applies this strategy at every node during traversal
+constexpr auto ascent_phase = bottomup(ascent_rules);
+
+// Combine: descent (with quick checks at each node), then ascent
+// No try_strategy wrapper needed - traversals handle the per-node application
+constexpr auto two_phase_core = descent_phase >> ascent_phase;
+
+// Add fixpoint iteration to repeat until stable
+// Using FixPoint with CTAD (class template argument deduction)
+constexpr auto two_phase_with_fixpoint = FixPoint{two_phase_core};
+
+// Public interface: two_stage_simplify
+constexpr auto two_stage_simplify = [](auto expr, auto ctx) {
+  return two_phase_with_fixpoint.apply(expr, ctx);
+};
+
+// ============================================================================
+// TRADITIONAL SINGLE-PHASE SIMPLIFICATION (For Comparison)
 // ============================================================================
 //
 // The simplification pipeline must handle several challenges:
@@ -828,23 +945,25 @@ constexpr auto full_simplify = [](auto expr, auto ctx) {
 // PRIMARY SIMPLIFICATION INTERFACE
 // ============================================================================
 //
-// `simplify` is now an alias for `full_simplify` following Recommendation 1
-// from SYMBOLIC3_RECOMMENDATIONS.md.
+// `simplify` is now an alias for `two_stage_simplify`, the new recommended
+// simplification pipeline that provides:
 //
 // This provides:
-//   - Multi-stage pipeline (innermost → fixpoint → outer fixpoint)
-//   - Handles all nesting levels correctly
-//   - Robust against complex expressions
-//   - Predictable, deterministic results
+//   - Short-circuit patterns (0*x → 0 without recursing)
+//   - Two-phase traversal: descent (expand) then ascent (collect)
+//   - Resolves distribution/factoring conflict
+//   - More efficient than single-phase bottom-up
+//   - Fixpoint iteration for exhaustive simplification
 //
 // MIGRATION NOTES:
-//   - Old code using `simplify` will now get the improved behavior
+//   - Previous `simplify` (aliased to full_simplify) is still available
+//   - The two-stage approach is more efficient and handles edge cases better
+//   - Old code using `simplify` will now get the improved two-stage behavior
 //   - The old bounded-iteration version is available as `simplify_bounded`
-//   - Most code should not need changes, just better results
 //
 // Usage:
 //   auto result = simplify(expr, default_context());
-constexpr auto simplify = full_simplify;
+constexpr auto simplify = two_stage_simplify;
 
 // ============================================================================
 // Algebraic Simplify with Traversal (Fast)

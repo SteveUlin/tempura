@@ -23,3 +23,8 @@ add_executable(exact_division_test exact_division_test.cpp)
 target_link_libraries(exact_division_test PRIVATE symbolic3 meta)
 add_test(NAME symbolic3_exact_division COMMAND exact_division_test)
 set_tests_properties(symbolic3_exact_division PROPERTIES LABELS "symbolic3;exact_math")
+
+add_executable(two_stage_simplify_test two_stage_simplify_test.cpp)
+target_link_libraries(two_stage_simplify_test PRIVATE symbolic3 meta)
+add_test(NAME symbolic3_two_stage_simplify COMMAND two_stage_simplify_test)
+set_tests_properties(symbolic3_two_stage_simplify PROPERTIES LABELS "symbolic3;simplification")

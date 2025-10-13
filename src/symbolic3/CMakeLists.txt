@@ -160,4 +160,10 @@ target_link_libraries(sophisticated_sorting_demo PRIVATE symbolic3 unit)
 add_test(NAME symbolic3_sophisticated_sorting_demo COMMAND sophisticated_sorting_demo)
 set_tests_properties(symbolic3_sophisticated_sorting_demo PROPERTIES LABELS "symbolic3;demo")
 
+# Two-Stage Simplify Test - exhaustive test suite for the two-stage simplification pipeline
+add_executable(two_stage_simplify_test test/two_stage_simplify_test.cpp)
+target_link_libraries(two_stage_simplify_test PRIVATE symbolic3 unit)
+add_test(NAME symbolic3_two_stage_simplify COMMAND two_stage_simplify_test)
+set_tests_properties(symbolic3_two_stage_simplify PROPERTIES LABELS "symbolic3;simplification")
+
 
