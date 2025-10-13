@@ -15,7 +15,8 @@ int main() {
         promote_division_to_fraction.apply(expr, default_context());
 
     // Should fold to Constant<3>
-    static_assert(std::is_same_v<decltype(result), Constant<3>>);
+    static_assert(
+        std::is_same_v<std::remove_cvref_t<decltype(result)>, Constant<3>>);
   };
 
   "Integer division with non-integer result promotes to Fraction"_test = [] {
@@ -25,7 +26,8 @@ int main() {
         promote_division_to_fraction.apply(expr, default_context());
 
     // Should become Fraction<5, 2>
-    static_assert(std::is_same_v<decltype(result), Fraction<5, 2>>);
+    static_assert(
+        std::is_same_v<std::remove_cvref_t<decltype(result)>, Fraction<5, 2>>);
     static_assert(result.numerator == 5);
     static_assert(result.denominator == 2);
   };
@@ -36,7 +38,8 @@ int main() {
     constexpr auto result =
         promote_division_to_fraction.apply(expr, default_context());
 
-    static_assert(std::is_same_v<decltype(result), Fraction<2, 3>>);
+    static_assert(
+        std::is_same_v<std::remove_cvref_t<decltype(result)>, Fraction<2, 3>>);
     static_assert(result.numerator == 2);
     static_assert(result.denominator == 3);
   };
@@ -47,7 +50,8 @@ int main() {
     constexpr auto result =
         promote_division_to_fraction.apply(expr, default_context());
 
-    static_assert(std::is_same_v<decltype(result), Constant<7>>);
+    static_assert(
+        std::is_same_v<std::remove_cvref_t<decltype(result)>, Constant<7>>);
   };
 
   "Negative division handles signs correctly"_test = [] {
@@ -56,7 +60,8 @@ int main() {
     constexpr auto result =
         promote_division_to_fraction.apply(expr, default_context());
 
-    static_assert(std::is_same_v<decltype(result), Fraction<-5, 2>>);
+    static_assert(
+        std::is_same_v<std::remove_cvref_t<decltype(result)>, Fraction<-5, 2>>);
     static_assert(result.numerator == -5);
     static_assert(result.denominator == 2);
   };
@@ -146,7 +151,8 @@ int main() {
         promote_division_to_fraction.apply(expr, default_context());
 
     // Should be Fraction<1, 3>, not a float constant
-    static_assert(std::is_same_v<decltype(result), Fraction<1, 3>>);
+    static_assert(
+        std::is_same_v<std::remove_cvref_t<decltype(result)>, Fraction<1, 3>>);
 
     // Verify it converts correctly when needed
     auto numeric = evaluate(result, BinderPack{});

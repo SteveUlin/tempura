@@ -3,6 +3,7 @@
 #include "symbolic3/constants.h"
 #include "symbolic3/core.h"
 #include "symbolic3/evaluate.h"
+#include "symbolic3/fraction.h"
 #include "symbolic3/operators.h"
 #include "symbolic3/ordering.h"
 #include "symbolic3/pattern_matching.h"
@@ -160,14 +161,95 @@ constexpr inline ConstantFold constant_fold{};
 //   6 / 2  → 3 (exact integer result - fold to Constant<3>)
 //   5 / 2  → Fraction<5, 2> (non-integer result - keep exact)
 //   5.0 / 2 → 2.5 (float involved - fold to float)
-//
-// NOTE: Automatic division-to-fraction promotion is NOT YET IMPLEMENTED
-// due to C++ template metaprogramming challenges with return type deduction.
-// See FRACTION_IMPLEMENTATION_SUMMARY.md for details and workarounds.
-//
-// For now, use fractions manually:
-//   auto half = Fraction<1, 2>{};
-//   auto expr = x * half;
+
+// Helper to promote division of constants to fractions or constants
+// Uses if constexpr and compile-time arithmetic to decide promotion
+template <auto n, auto d>
+constexpr auto promote_div_const() {
+  if constexpr (d == 1) {
+    // Division by 1: return numerator as constant
+    return Constant<n>{};
+  } else if constexpr (n % d == 0) {
+    // Exact division: return quotient as constant
+    return Constant<n / d>{};
+  } else {
+    // Non-integer division: return as reduced fraction
+    // Compute reduced numerator and denominator at compile-time
+    constexpr auto g = gcd(n, d);
+    constexpr auto sign = ((n < 0) != (d < 0)) ? -1 : 1;
+    constexpr auto reduced_num = sign * abs_val(n) / g;
+    constexpr auto reduced_den = abs_val(d) / g;
+    return Fraction<reduced_num, reduced_den>{};
+  }
+}
+
+// Strategy: Use SFINAE-based overloading to handle each case with consistent
+// return types
+struct PromoteDivisionToFraction {
+  // Match division of two constants
+  template <auto n, auto d, typename Context>
+    requires(d != 0)
+  constexpr auto apply(Expression<DivOp, Constant<n>, Constant<d>>,
+                       Context) const {
+    return promote_div_const<n, d>();
+  }
+
+  // No match - return unchanged (for non-constant divisions like x / y)
+  template <Symbolic S, typename Context>
+  constexpr auto apply(S expr, Context) const {
+    return expr;
+  }
+};
+
+constexpr inline PromoteDivisionToFraction promote_division_to_fraction{};
+
+// ============================================================================
+// Fraction Simplification Rules
+// ============================================================================
+
+// Fractions are already in their simplest form (GCD-reduced at construction),
+// but we need rules for combining fractions with other expressions
+
+namespace FractionRuleCategories {
+
+// ────────────────────────────────────────────────────────────────────────────
+// Fraction Identity Rules
+// ────────────────────────────────────────────────────────────────────────────
+
+// Fraction<n, 1> → Constant<n> (denominator 1 means integer)
+// This is handled by pattern matching on specific Fraction types
+template <long long n>
+constexpr auto frac_to_int = Rewrite{Fraction<n, 1>{}, Constant<n>{}};
+
+// Fraction<0, d> → Constant<0> (zero numerator is always zero)
+template <long long d>
+  requires(d != 0)
+constexpr auto zero_frac = Rewrite{Fraction<0, d>{}, Constant<0>{}};
+
+// ────────────────────────────────────────────────────────────────────────────
+// Fraction Arithmetic Integration
+// ────────────────────────────────────────────────────────────────────────────
+
+// When fractions appear in symbolic expressions, they participate in
+// simplification like any other constant. The actual arithmetic is handled
+// by the operators in fraction.h, and ConstantFold will evaluate them.
+
+// x * Fraction<1, 1> → x  (multiply by 1)
+constexpr auto mult_by_one_frac = Rewrite{x_ * Fraction<1, 1>{}, x_};
+
+// Fraction<1, 1> * x → x  (symmetric)
+constexpr auto one_frac_mult = Rewrite{Fraction<1, 1>{} * x_, x_};
+
+// x * Fraction<0, d> → Constant<0>  (multiply by zero)
+// This will be caught by zero_frac first, so not strictly necessary
+
+}  // namespace FractionRuleCategories
+
+// Combined fraction rules - mostly handled by constant folding
+// The main work is done by PromoteDivisionToFraction and the fraction
+// arithmetic operators
+constexpr auto FractionRules = FractionRuleCategories::mult_by_one_frac |
+                               FractionRuleCategories::one_frac_mult;
 
 // ============================================================================
 // Addition Simplification Rules
@@ -682,9 +764,12 @@ constexpr auto transcendental_simplify =
 //
 // This doesn't break the (1+2)+3 example from the old comment because:
 //   (1+2)+3 → fold (1+2) → 3+3 → fold 3+3 → 6 ✅
-constexpr auto algebraic_simplify = constant_fold | PowerRules | AdditionRules |
-                                    MultiplicationRules |
-                                    transcendental_simplify;
+// CRITICAL: promote_division_to_fraction must come BEFORE constant_fold
+// Otherwise constant_fold will evaluate Constant<5>{}/Constant<2>{} to
+// Constant<2> using integer division, losing precision
+constexpr auto algebraic_simplify =
+    promote_division_to_fraction | constant_fold | PowerRules | AdditionRules |
+    MultiplicationRules | FractionRules | transcendental_simplify;
 
 // Apply using FixPoint (keeps going until no more changes)
 constexpr auto simplify_fixpoint = FixPoint{algebraic_simplify};
@@ -845,7 +930,8 @@ constexpr auto descent_rules = descent_unwrapping;
 // These rules are applied AFTER children are simplified.
 // Good for: collection, factoring, folding, canonicalization
 
-constexpr auto ascent_constant_folding = constant_fold;
+constexpr auto ascent_constant_folding =
+    promote_division_to_fraction | constant_fold;
 
 constexpr auto ascent_collection =
     AdditionRuleCategories::LikeTerms |  // x + x → 2*x

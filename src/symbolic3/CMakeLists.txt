@@ -130,6 +130,12 @@ target_link_libraries(fraction_test PRIVATE symbolic3 unit)
 add_test(NAME symbolic3_fraction COMMAND fraction_test)
 set_tests_properties(symbolic3_fraction PROPERTIES LABELS "symbolic3;exact_math")
 
+# Exact Division Test - Automatic promotion of integer division to fractions
+add_executable(exact_division_test test/exact_division_test.cpp)
+target_link_libraries(exact_division_test PRIVATE symbolic3 unit)
+add_test(NAME symbolic3_exact_division COMMAND exact_division_test)
+set_tests_properties(symbolic3_exact_division PROPERTIES LABELS "symbolic3;exact_math")
+
 # Hyperbolic Functions Test - sinh, cosh, tanh
 add_executable(hyperbolic_test test/hyperbolic_test.cpp)
 target_link_libraries(hyperbolic_test PRIVATE symbolic3 unit)
