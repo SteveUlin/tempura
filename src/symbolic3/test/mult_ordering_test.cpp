@@ -130,7 +130,7 @@ auto main() -> int {
     assert(evaluate(result, BinderPack{x = 2, y = 5}) == 40);
 
     // After full simplification, like bases will be combined
-    auto fully_simplified = full_simplify(expr, default_context());
+    auto fully_simplified = simplify(expr, default_context());
     assert(evaluate(fully_simplified, BinderPack{x = 2, y = 5}) == 40);
   };
 
@@ -160,7 +160,7 @@ auto main() -> int {
 
     // Note: This requires recognizing x as x^1
     // The PowerCombining rules handle this
-    auto result = full_simplify(expr, default_context());
+    auto result = simplify(expr, default_context());
 
     // Verify: x^2
     auto val = evaluate(result, BinderPack{x = 3});
@@ -200,7 +200,7 @@ auto main() -> int {
 
     // Multiple powers of same base: x^3 · x · x^2 = x^(3+1+2) = x^6
     auto expr = pow(x, 3_c) * x * pow(x, 2_c);
-    auto result = full_simplify(expr, default_context());
+    auto result = simplify(expr, default_context());
 
     // Verify: x^6
     auto val = evaluate(result, BinderPack{x = 2});
@@ -214,7 +214,7 @@ auto main() -> int {
     // Mixed bases: group x powers and y powers
     // x^2 · y · x · y^2 → x^3 · y^3
     auto expr = pow(x, 2_c) * y * x * pow(y, 2_c);
-    auto result = full_simplify(expr, default_context());
+    auto result = simplify(expr, default_context());
 
     // Verify: x^3 · y^3 = 2^3 · 3^3 = 8 · 27 = 216
     auto val = evaluate(result, BinderPack{x = 2, y = 3});
@@ -226,7 +226,7 @@ auto main() -> int {
 
     // Constants and powers: 2 · x · 3 · x^2 = 6 · x^3
     auto expr = 2_c * x * 3_c * pow(x, 2_c);
-    auto result = full_simplify(expr, default_context());
+    auto result = simplify(expr, default_context());
 
     // Verify: 6 · x^3 = 6 · 2^3 = 6 · 8 = 48
     auto val = evaluate(result, BinderPack{x = 2});
@@ -244,7 +244,7 @@ auto main() -> int {
     auto right = y + pow(y, 2_c);
     auto expr = left * right;
 
-    auto result = full_simplify(expr, default_context());
+    auto result = simplify(expr, default_context());
 
     // Verify with x=2, y=3:
     // x^3 = 8, y = 3, y^2 = 9
@@ -266,7 +266,7 @@ auto main() -> int {
     // together 2 · x^2 · y · 3 · x · y^3 · x^2 = (2 · 3) · (x^2 · x · x^2) · (y
     // · y^3) = 6 · x^5 · y^4
     auto expr = 2_c * pow(x, 2_c) * y * 3_c * x * pow(y, 3_c) * pow(x, 2_c);
-    auto result = full_simplify(expr, default_context());
+    auto result = simplify(expr, default_context());
 
     // Verify: 6 · x^5 · y^4 = 6 · 2^5 · 3^4 = 6 · 32 · 81 = 15552
     auto val = evaluate(result, BinderPack{x = 2, y = 3});

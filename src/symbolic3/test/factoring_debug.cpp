@@ -18,7 +18,7 @@ auto main() -> int {
     std::cout << "Expression: x*2 + x\n";
     std::cout << "  Initial type: " << typeid(expr).name() << "\n";
 
-    auto result = full_simplify(expr, default_context());
+    auto result = simplify(expr, default_context());
     std::cout << "  After simplify: " << typeid(result).name() << "\n";
     std::cout << "  Evaluates to: " << evaluate(result, BinderPack{x = 10})
               << " (expected: 30)\n\n";
@@ -66,8 +66,8 @@ auto main() -> int {
               << (typeid(expr1).name() == typeid(expr2).name() ? "YES" : "NO")
               << "\n";
 
-    auto simplified1 = full_simplify(expr1, default_context());
-    auto simplified2 = full_simplify(expr2, default_context());
+    auto simplified1 = simplify(expr1, default_context());
+    auto simplified2 = simplify(expr2, default_context());
     std::cout << "  After simplify, x*2: " << typeid(simplified1).name()
               << "\n";
     std::cout << "  After simplify, 2*x: " << typeid(simplified2).name()
@@ -87,7 +87,7 @@ auto main() -> int {
     std::cout << "  1 + 2 type: " << typeid(expr).name() << "\n";
     std::cout << "  Evaluates to: " << evaluate(expr, BinderPack{}) << "\n";
 
-    auto simplified = full_simplify(expr, default_context());
+    auto simplified = simplify(expr, default_context());
     std::cout << "  After simplify type: " << typeid(simplified).name() << "\n";
     std::cout << "  Evaluates to: " << evaluate(simplified, BinderPack{})
               << "\n";
@@ -107,7 +107,7 @@ auto main() -> int {
     std::cout << "  Evaluates to: " << evaluate(expr, BinderPack{x = 10})
               << "\n";
 
-    auto simplified = full_simplify(expr, default_context());
+    auto simplified = simplify(expr, default_context());
     std::cout << "  After simplify type: " << typeid(simplified).name() << "\n";
     std::cout << "  Evaluates to: " << evaluate(simplified, BinderPack{x = 10})
               << "\n";

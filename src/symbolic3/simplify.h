@@ -12,99 +12,28 @@
 #include "symbolic3/traversal.h"
 
 // ============================================================================
-// TERM REWRITING THEORY & SIMPLIFICATION DESIGN
+// TWO-STAGE SIMPLIFICATION ARCHITECTURE
 // ============================================================================
 //
-// This file implements algebraic simplification using **term rewriting
-// systems**, a formal framework from theoretical computer science for
-// transforming expressions.
+// This file implements algebraic simplification using a two-stage pipeline:
 //
-// CORE CONCEPTS:
-// --------------
-// A term rewriting system consists of:
-//   1. A set of rewrite rules: pattern → replacement
-//   2. A strategy for applying rules (innermost, outermost, etc.)
-//   3. Termination guarantees to avoid infinite loops
+// 1. **Descent Phase** (pre-order): Quick patterns and unwrapping
+//    - Short-circuit patterns: 0*x → 0 (before recursing into x)
+//    - Unwrapping: -(-x) → x
 //
-// In our implementation:
-//   - Rules are expressed as Rewrite{pattern, replacement, predicate}
-//   - Strategies are composable using combinators (| for choice, >> for
-//   sequence)
-//   - Termination is ensured through careful rule ordering
+// 2. **Ascent Phase** (post-order): Collection and canonicalization
+//    - Constant folding: 2+3 → 5
+//    - Term collection: x+x → 2*x, x*a+x*b → x*(a+b)
+//    - Canonical ordering: y+x → x+y (when x<y)
+//    - Power combining: x*x^2 → x^3
 //
-// AVOIDING INFINITE LOOPS:
-// ------------------------
-// Infinite rewrite loops occur when rules cyclically transform expressions:
-//   Example: (a + b) → (b + a) and (b + a) → (a + b) loops forever
+// The pipeline uses fixpoint iteration to repeat until stable.
 //
-// We prevent this through THREE mechanisms:
-//
-// 1. **Directional Rules with Total Ordering**:
-//    Use predicates to ensure rules only fire in one direction.
-//    Example: Rewrite{x_ + y_, y_ + x_, [](ctx) { return y < x; }}
-//    This establishes a canonical order, preventing oscillation.
-//
-// 2. **Rule Category Ordering**:
-//    Apply rule categories in a specific sequence to avoid conflicts.
-//    Critical ordering in this file:
-//      - Identity rules (0 + x → x)
-//      - Distribution rules ((a+b)·c → a·c + b·c)
-//      - Associativity rules ((a+b)+c → a+(b+c))
-//
-//    Why? Distribution MUST precede Associativity. Otherwise:
-//      - Distribution: (a+b)·c → a·c + b·c
-//      - Associativity: a·c + b·c → (a·c + b)·c  [WRONG! Re-factors]
-//
-// 3. **Bounded Iteration**:
-//    Use Repeat<Strategy, N> for fixed iteration count, or FixPoint for
-//    convergence detection (stops when expression stops changing).
-//
-// NORMALIZATION & CANONICAL FORMS:
-// ---------------------------------
-// To minimize rule count and ensure deterministic results, we normalize:
-//   - Subtraction → addition:     a - b  →  a + (-1)·b
-//   - Division → multiplication:  a / b  →  a · b^(-1)
-//   - Negation → multiplication:  -x     →  (-1)·x
-//
-// This means we only need rules for +, ·, and ^ (not -, /, or unary minus).
-// All expressions are reduced to a single canonical form.
-//
-// CONSTANT LITERAL SYNTAX:
-// -------------------------
-// We use the _c suffix for compile-time numeric literals: 0_c, 1_c, 2_c
-//
-// **CRITICAL DISTINCTION**:
-//   - Constant<-1>{}  is an atomic constant with value -1
-//   - -1_c            is parsed as -(1_c), creating Expression<Neg,
-//   Constant<1>>
-//
-// Due to C++ operator precedence, -N_c is ALWAYS a negation expression, never
-// an atomic constant. When writing patterns:
-//   - Use Constant<N>{} for matching specific atomic constants
-//   - Use N_c for building replacement expressions (more readable)
-//
-// Example:
-//   Rewrite{x_ * Constant<0>{}, Constant<0>{}}  // Matches atomic 0
-//   Rewrite{x_ * 0_c, 0_c}                       // Also works, but less
-//   explicit
-//
-// COMBINATOR ARCHITECTURE:
-// ------------------------
-// Rules are Strategies, enabling direct composition without adapters:
-//
-//   auto rule1 = Rewrite{pattern1, replacement1};
-//   auto rule2 = Rewrite{pattern2, replacement2};
-//   auto combined = rule1 | rule2;  // Try rule1, if fails try rule2
-//
-// Available combinators:
-//   - r1 | r2        Choice: try r1, if unchanged try r2
-//   - r1 >> r2       Sequence: apply r1, then r2 to result
-//   - Repeat<R, N>   Apply R up to N times
-//   - FixPoint<R>    Apply R until convergence (no more changes)
-//
-// This design eliminates the need for explicit RewriteSystem as an
-// intermediary. Every Rewrite IS a Strategy, and combinators compose them
-// naturally.
+// KEY DESIGN DECISIONS:
+// - Rules use predicates for directional application (prevents oscillation)
+// - Term-structure-aware ordering groups like terms
+// - Distribution is disabled to avoid conflict with factoring
+// - Fractions maintain exact arithmetic (5/2 → Fraction<5,2>, not 2.5)
 
 namespace tempura::symbolic3 {
 
@@ -254,126 +183,39 @@ constexpr auto FractionRules = FractionRuleCategories::mult_by_one_frac |
 // ============================================================================
 // Addition Simplification Rules
 // ============================================================================
-//
-// Rule Categories (applied in this order):
-//   1. Identity   : 0 + x → x
-//   2. LikeTerms  : x + x → 2·x
-//   3. Ordering   : y + x → x + y  (when x < y)
-//   4. Factoring  : x·a + x·b → x·(a+b)
-//   5. Associativity: Strategic reassociation to group like terms
-//
-// The ordering ensures termination and establishes canonical forms.
 
 namespace AdditionRuleCategories {
-
-// ────────────────────────────────────────────────────────────────────────────
-// Identity Rules: Eliminate additive identity (zero)
-// ────────────────────────────────────────────────────────────────────────────
-
-constexpr auto zero_left = Rewrite{0_c + x_, x_};
-constexpr auto zero_right = Rewrite{x_ + 0_c, x_};
-constexpr auto Identity = zero_left | zero_right;
-
-// ────────────────────────────────────────────────────────────────────────────
-// Like Terms: Collect identical terms
-// ────────────────────────────────────────────────────────────────────────────
-
-// x + x → 2·x
+constexpr auto Identity = Rewrite{0_c + x_, x_} | Rewrite{x_ + 0_c, x_};
 constexpr auto LikeTerms = Rewrite{x_ + x_, x_ * 2_c};
 
-// ────────────────────────────────────────────────────────────────────────────
-// Canonical Ordering: Establish total order to prevent rewrite loops
-// ────────────────────────────────────────────────────────────────────────────
-
-// y + x → x + y  when x < y (using term-structure-aware comparison)
-// Uses compareAdditionTerms() from term_structure.h for algebraic ordering:
-//   - Groups terms by their base: x, 2*x, 3*x are adjacent
-//   - Within same base, sorts by coefficient: x < 2*x < 3*x
-//   - Constants come first: 5 < x < 2*x < y < 3*y
-// Example: 3*x + y + 2*y + x → x + 3*x + y + 2*y (ready for factoring)
-constexpr auto canonical_order = Rewrite{
+constexpr auto Ordering = Rewrite{
     y_ + x_, x_ + y_, [](auto ctx) {
       return compareAdditionTerms(get(ctx, x_), get(ctx, y_)) == Ordering::Less;
     }};
-constexpr auto Ordering = canonical_order;
 
-// ────────────────────────────────────────────────────────────────────────────
-// Factoring: Extract common factors to enable term collection
-// ────────────────────────────────────────────────────────────────────────────
+constexpr auto Factoring = Rewrite{x_ * a_ + x_, x_*(a_ + 1_c)} |
+                           Rewrite{x_ + x_ * a_, x_ * (1_c + a_)} |
+                           Rewrite{x_ * a_ + x_ * b_, x_*(a_ + b_)} |
+                           Rewrite{a_ * x_ + x_, x_*(a_ + 1_c)} |
+                           Rewrite{x_ + a_ * x_, x_ * (1_c + a_)} |
+                           Rewrite{a_ * x_ + b_ * x_, x_*(a_ + b_)};
 
-// x·a + x → x·(a+1)  (factor out x from scaled and unscaled term)
-constexpr auto factor_simple = Rewrite{x_ * a_ + x_, x_*(a_ + 1_c)};
-
-// x + x·a → x·(1+a)  (symmetric case)
-constexpr auto factor_simple_rev = Rewrite{x_ + x_ * a_, x_ * (1_c + a_)};
-
-// x·a + x·b → x·(a+b)  (factor out common base from two scaled terms)
-constexpr auto factor_both = Rewrite{x_ * a_ + x_ * b_, x_*(a_ + b_)};
-
-// Additional patterns for canonical multiplication order (constant-first):
-// a·x + x → x·(a+1)  (constant-first version of factor_simple)
-constexpr auto factor_simple_cf = Rewrite{a_ * x_ + x_, x_*(a_ + 1_c)};
-
-// x + a·x → x·(1+a)  (constant-first version of factor_simple_rev)
-constexpr auto factor_simple_rev_cf = Rewrite{x_ + a_ * x_, x_ * (1_c + a_)};
-
-// a·x + b·x → x·(a+b)  (constant-first version of factor_both)
-constexpr auto factor_both_cf = Rewrite{a_ * x_ + b_ * x_, x_*(a_ + b_)};
-
-constexpr auto Factoring = factor_simple | factor_simple_rev | factor_both |
-                           factor_simple_cf | factor_simple_rev_cf |
-                           factor_both_cf;
-
-// Associativity Rules with Canonical Ordering
-// -----------------------------------------------
-// Bidirectional associativity with conditional reordering for canonical form.
-//
-// Strategy: Use both left and right association, with ordering predicates
-// to ensure termination and establish a canonical form where a < b < c.
-// Uses term-structure-aware comparison to group like terms.
-// The fixpoint combinator will find a stable form.
-//
-// Ordering ensures:
-//   - Terms are arranged in canonical order (smaller terms first)
-//   - Like terms are grouped together (e.g., x + (2*x + y) → (x + 2*x) + y)
-//   - Prevents infinite rewrite loops
-
-// Left-associate: a + (b + c) → (a + b) + c  when a ≤ b (term-aware)
-// Groups like terms when a and b have the same base: x + (2*x + y) → (x + 2*x)
-// + y
-constexpr auto assoc_left = Rewrite{
-    a_ + (b_ + c_), (a_ + b_) + c_, [](auto ctx) {
-      return compareAdditionTerms(get(ctx, b_), get(ctx, a_)) != Ordering::Less;
-    }};
-
-// Right-associate: (a + c) + b → a + (c + b)  when b < c (term-aware)
-// Bubbles smaller term b rightward to maintain canonical ordering a < b < c
-constexpr auto assoc_right = Rewrite{
-    (a_ + c_) + b_, a_ + (c_ + b_), [](auto ctx) {
-      return compareAdditionTerms(get(ctx, b_), get(ctx, c_)) == Ordering::Less;
-    }};
-
-// Reorder within right-side: a + (c + b) → a + (b + c)  when b < c (term-aware)
-// Swaps rightmost terms to maintain canonical ordering a < b < c
-constexpr auto assoc_reorder = Rewrite{
-    a_ + (c_ + b_), a_ + (b_ + c_), [](auto ctx) {
-      return compareAdditionTerms(get(ctx, b_), get(ctx, c_)) == Ordering::Less;
-    }};
-
-constexpr auto Associativity = assoc_left | assoc_right | assoc_reorder;
-
+constexpr auto Associativity =
+    Rewrite{a_ + (b_ + c_), (a_ + b_) + c_,
+            [](auto ctx) {
+              return compareAdditionTerms(get(ctx, b_), get(ctx, a_)) !=
+                     Ordering::Less;
+            }} |
+    Rewrite{(a_ + c_) + b_, a_ + (c_ + b_),
+            [](auto ctx) {
+              return compareAdditionTerms(get(ctx, b_), get(ctx, c_)) ==
+                     Ordering::Less;
+            }} |
+    Rewrite{a_ + (c_ + b_), a_ + (b_ + c_), [](auto ctx) {
+              return compareAdditionTerms(get(ctx, b_), get(ctx, c_)) ==
+                     Ordering::Less;
+            }};
 }  // namespace AdditionRuleCategories
-
-// ────────────────────────────────────────────────────────────────────────────
-// Combined Addition Rules (Choice Combinator)
-// ────────────────────────────────────────────────────────────────────────────
-//
-// Order matters for efficiency and correctness:
-//   - Identity first (simple, fast pattern match)
-//   - LikeTerms before Factoring (simpler pattern: x+x vs x·a+x·b)
-//   - Ordering before Associativity (establishes canonical form first)
-//   - Factoring before Associativity (groups terms before rearrangement)
-//   - Associativity last (most complex, benefits from prior simplifications)
 
 constexpr auto AdditionRules =
     AdditionRuleCategories::Identity | AdditionRuleCategories::LikeTerms |
@@ -383,142 +225,41 @@ constexpr auto AdditionRules =
 // ============================================================================
 // Multiplication Simplification Rules
 // ============================================================================
-//
-// Rule Categories (applied in this order):
-//   1. Identity      : 0·x → 0, 1·x → x
-//   2. Distribution  : (a+b)·c → a·c + b·c
-//   3. Ordering      : y·x → x·y  (when x < y, by base then exponent)
-//   4. PowerCombining: x·x^a → x^(a+1)
-//   5. Associativity : Strategic reassociation to group like bases
-//
-// The ordering ensures termination and establishes canonical forms.
 
 namespace MultiplicationRuleCategories {
+constexpr auto Identity = Rewrite{0_c * x_, 0_c} | Rewrite{x_ * 0_c, 0_c} |
+                          Rewrite{1_c * x_, x_} | Rewrite{x_ * 1_c, x_};
 
-// ────────────────────────────────────────────────────────────────────────────
-// Identity Rules: Eliminate multiplicative identity/annihilator
-// ────────────────────────────────────────────────────────────────────────────
-
-constexpr auto zero_left = Rewrite{0_c * x_, 0_c};
-constexpr auto zero_right = Rewrite{x_ * 0_c, 0_c};
-constexpr auto one_left = Rewrite{1_c * x_, x_};
-constexpr auto one_right = Rewrite{x_ * 1_c, x_};
-constexpr auto Identity = zero_left | zero_right | one_left | one_right;
-
-// ────────────────────────────────────────────────────────────────────────────
-// Distribution: Expand products over sums
-// ────────────────────────────────────────────────────────────────────────────
-
-// (a+b)·c → a·c + b·c  (distribute from left)
-constexpr auto dist_right = Rewrite{(a_ + b_) * c_, (a_ * c_) + (b_ * c_)};
-
-// a·(b+c) → a·b + a·c  (distribute from right)
-constexpr auto dist_left = Rewrite{a_ * (b_ + c_), (a_ * b_) + (a_ * c_)};
-
-constexpr auto Distribution = dist_right | dist_left;
-
-// CRITICAL: Distribution must come before Associativity to prevent re-factoring
-
-// ────────────────────────────────────────────────────────────────────────────
-// Canonical Ordering: Establish total order to prevent rewrite loops
-// ────────────────────────────────────────────────────────────────────────────
-
-// y·x → x·y  when x < y (using term-structure-aware comparison)
-// Uses compareMultiplicationTerms() from term_structure.h for algebraic
-// ordering:
-//   - Groups terms by their base: x, x^2, x^3 are adjacent
-//   - Within same base, sorts by exponent: x < x^2 < x^3
-//   - Constants come first: 2 < x < x^2 < y < y^2
-// Example: x^3 · y · x · y^2 · x^2 → x · x^2 · x^3 · y · y^2 (ready for power
-// combining)
-constexpr auto canonical_order =
+constexpr auto Ordering =
     Rewrite{y_ * x_, x_* y_, [](auto ctx) {
               return compareMultiplicationTerms(get(ctx, x_), get(ctx, y_)) ==
                      Ordering::Less;
             }};
-constexpr auto Ordering = canonical_order;
 
-// ────────────────────────────────────────────────────────────────────────────
-// Power Combining: Collect terms with the same base
-// ────────────────────────────────────────────────────────────────────────────
-
-// x·x^a → x^(a+1)  (combine base with power of same base)
-constexpr auto power_base_left = Rewrite{x_ * pow(x_, a_), pow(x_, a_ + 1_c)};
-
-// x^a·x → x^(a+1)  (symmetric case)
-constexpr auto power_base_right = Rewrite{pow(x_, a_) * x_, pow(x_, a_ + 1_c)};
-
-// x^a·x^b → x^(a+b)  (combine two powers of same base)
-constexpr auto power_both =
+constexpr auto PowerCombining =
+    Rewrite{x_ * pow(x_, a_), pow(x_, a_ + 1_c)} |
+    Rewrite{pow(x_, a_) * x_, pow(x_, a_ + 1_c)} |
     Rewrite{pow(x_, a_) * pow(x_, b_), pow(x_, a_ + b_)};
 
-constexpr auto PowerCombining = power_base_left | power_base_right | power_both;
-
-// Associativity Rules with Canonical Ordering
-// -----------------------------------------------
-// Bidirectional associativity with conditional reordering for canonical form.
-//
-// Strategy: Use both left and right association, with ordering predicates
-// to ensure termination and establish a canonical form where a < b < c.
-// Uses term-structure-aware comparison to group like bases (powers).
-// The fixpoint combinator will find a stable form.
-//
-// Ordering ensures:
-//   - Terms are arranged in canonical order (smaller terms first)
-//   - Like bases are grouped together (e.g., x · (x^2 · y) → (x · x^2) · y)
-//   - Prevents infinite rewrite loops
-
-// Left-associate: a · (b · c) → (a · b) · c  when a ≤ b (term-aware)
-// Groups like bases when they have the same base: x · (x^2 · y) → (x · x^2) · y
-constexpr auto assoc_left =
-    Rewrite{a_ * (b_ * c_), (a_ * b_) * c_, [](auto ctx) {
+constexpr auto Associativity =
+    Rewrite{a_ * (b_ * c_), (a_ * b_) * c_,
+            [](auto ctx) {
               return compareMultiplicationTerms(get(ctx, b_), get(ctx, a_)) !=
                      Ordering::Less;
-            }};
-
-// Right-associate: (a · c) · b → a · (c · b)  when b < c (term-aware)
-// Bubbles smaller term b rightward to maintain canonical ordering a < b < c
-constexpr auto assoc_right =
-    Rewrite{(a_ * c_) * b_, a_*(c_* b_), [](auto ctx) {
+            }} |
+    Rewrite{(a_ * c_) * b_, a_*(c_* b_),
+            [](auto ctx) {
               return compareMultiplicationTerms(get(ctx, b_), get(ctx, c_)) ==
                      Ordering::Less;
-            }};
-
-// Reorder within right-side: a · (c · b) → a · (b · c)  when b < c (term-aware)
-// Swaps rightmost terms to maintain canonical ordering a < b < c
-constexpr auto assoc_reorder =
+            }} |
     Rewrite{a_ * (c_ * b_), a_*(b_* c_), [](auto ctx) {
               return compareMultiplicationTerms(get(ctx, b_), get(ctx, c_)) ==
                      Ordering::Less;
             }};
-
-constexpr auto Associativity = assoc_left | assoc_right | assoc_reorder;
-
 }  // namespace MultiplicationRuleCategories
 
-// ────────────────────────────────────────────────────────────────────────────
-// Combined Multiplication Rules (Choice Combinator)
-// ────────────────────────────────────────────────────────────────────────────
-//
-// Order matters for efficiency and correctness:
-//   - Identity first (simple, fast pattern match - also catches annihilator 0)
-//   - Distribution before Associativity (CRITICAL: prevents re-factoring)
-//   - Ordering before PowerCombining (establishes canonical form first)
-//   - PowerCombining before Associativity (groups powers before rearrangement)
-//   - Associativity last (most complex, benefits from prior simplifications)
-
-// TEMPORARY FIX: Distribution disabled to prevent oscillation with Factoring
-// Distribution and Factoring are inverses:
-//   - Factoring: x·a + x·b → x·(a+b)  [collect like terms]
-//   - Distribution: x·(a+b) → x·a + x·b  [expand products]
-// When both are in the same pipeline, they fight each other causing
-// oscillation. For simplification, we prefer Factoring so we can fold nested
-// constants.
-// TODO: Implement conditional Distribution (only when beneficial)
 constexpr auto MultiplicationRules =
     MultiplicationRuleCategories::Identity |
-    // MultiplicationRuleCategories::Distribution |  // DISABLED - conflicts
-    // with Factoring
     MultiplicationRuleCategories::Ordering |
     MultiplicationRuleCategories::PowerCombining |
     MultiplicationRuleCategories::Associativity;
@@ -742,129 +483,15 @@ constexpr auto SqrtRules = SqrtRuleCategories::Identity |
 // Combined Simplification Strategy
 // ============================================================================
 
-// Transcendental functions
 constexpr auto transcendental_simplify =
     ExpRules | LogRules | SinRules | CosRules | TanRules | SinhRules |
     CoshRules | TanhRules | SqrtRules | PythagoreanRules |
     HyperbolicIdentityRules;
 
-// Basic algebraic simplification: fold constants FIRST, then apply structural
-// rules
-//
-// CRITICAL: constant_fold must come BEFORE AdditionRules/MultiplicationRules
-// to prevent canonical ordering from creating oscillations.
-//
-// Example problem if constant_fold comes AFTER:
-//   x*(2+1) → try AdditionRules on (2+1) → swap to (1+2) by ordering
-//   x*(1+2) → try AdditionRules on (1+2) → swap to (2+1) by ordering
-//   Infinite oscillation! FixPoint can't detect it because types differ.
-//
-// With constant_fold FIRST:
-//   x*(2+1) → constant_fold → x*3 ✅
-//
-// This doesn't break the (1+2)+3 example from the old comment because:
-//   (1+2)+3 → fold (1+2) → 3+3 → fold 3+3 → 6 ✅
-// CRITICAL: promote_division_to_fraction must come BEFORE constant_fold
-// Otherwise constant_fold will evaluate Constant<5>{}/Constant<2>{} to
-// Constant<2> using integer division, losing precision
+// Combined algebraic rules (for building custom pipelines)
 constexpr auto algebraic_simplify =
     promote_division_to_fraction | constant_fold | PowerRules | AdditionRules |
     MultiplicationRules | FractionRules | transcendental_simplify;
-
-// Apply using FixPoint (keeps going until no more changes)
-constexpr auto simplify_fixpoint = FixPoint{algebraic_simplify};
-
-// Alternative: just one pass
-constexpr auto simplify_once = algebraic_simplify;
-
-// ============================================================================
-// LEGACY SIMPLIFICATION (Not Recommended)
-// ============================================================================
-//
-// The following simplification strategies are kept for backward compatibility
-// but are NOT RECOMMENDED for new code. They have limitations:
-//
-//   - simplify_bounded: Uses fixed iteration count (10 passes), which may be
-//     insufficient for complex expressions or wasteful for simple ones
-//   - Does not traverse nested expressions recursively
-//   - May leave subexpressions unsimplified
-//
-// For new code, use `simplify` (which is now an alias for `full_simplify`)
-// or the explicit pipeline functions below.
-
-// Apply simplification with bounded iteration (legacy)
-constexpr auto simplify_bounded =
-    Repeat<decltype(algebraic_simplify), 10>{algebraic_simplify};
-
-// ============================================================================
-// Comprehensive Simplification Pipelines
-// ============================================================================
-//
-// These pipelines combine algebraic simplification with traversal strategies
-// for robust, recursive simplification of nested expressions.
-//
-// HIERARCHY (from most to least recommended):
-//
-// 1. simplify / full_simplify (CANONICAL)
-//    - Multi-stage fixpoint pipeline
-//    - Handles all nesting and rule interactions
-//    - Use this for correctness
-//
-// 2. algebraic_simplify_recursive
-//    - Single pass per node, recursive traversal
-//    - Faster but may miss some simplifications
-//    - Use for performance-critical paths
-//
-// 3. bottomup_simplify / topdown_simplify
-//    - Explicit traversal order control
-//    - Use when you need specific traversal semantics
-//
-// 4. trig_aware_simplify
-//    - Specialized for trigonometric expressions
-//    - Currently similar to simplify, may diverge in future
-//
-// The pipelines build on the basic `algebraic_simplify` rules but add:
-//   1. Recursive traversal (innermost/bottomup/topdown)
-//   2. Fixpoint iteration for exhaustive simplification
-//   3. Context-aware behavior for different use cases
-
-// Forward declarations from traversal.h (included by clients)
-// These are template functions, so we can't declare them constexpr here
-// They must be included via: #include "symbolic3/traversal.h"
-
-// ============================================================================
-// CANONICAL SIMPLIFICATION (Recommended for All Use Cases)
-// ============================================================================
-//
-// This is the primary simplification function implementing a robust
-// multi-stage, fixed-point pipeline that mimics how mathematicians simplify:
-//
-// PIPELINE STRUCTURE:
-// 1. **Innermost Traversal**: Start at leaves and work upward
-// 2. **Main Rewrite Loop**: Apply fixpoint iteration at each node
-// 3. **Outer Fixpoint**: Repeat until entire tree is stable
-//
-// This architecture ensures:
-//   - Nested arithmetic: x * (y + (z * 0))  →  x * y
-//   - Deep expressions: ((x + 0) * 1) + 0   →  x
-//   - Mixed operations: exp(log(x + 0))     →  x
-//   - Term collection: (x+x)+x              →  3*x
-//   - Associativity changes are fully propagated
-//
-// WHY THIS WORKS:
-//   - Innermost ensures leaves are simplified before parents
-//   - Inner fixpoint (simplify_fixpoint) exhaustively applies rules at each
-//     node until stable, handling cases like (x+x)+x → 2*x+x → 3*x
-//   - Outer fixpoint handles rules that restructure the tree (like
-//     distribution a*(b+c) → a*b + a*c), ensuring newly created
-//     subexpressions are also simplified
-//
-// Usage:
-//   auto result = simplify(expr, default_context());
-//
-// Implementation note:
-//   This is a lambda wrapper around FixPoint{innermost(simplify_fixpoint)}.
-//   The nested fixpoint structure is critical for correctness.
 // ============================================================================
 // TWO-STAGE SIMPLIFICATION (New Implementation)
 // ============================================================================
@@ -955,279 +582,26 @@ constexpr auto ascent_rules = ascent_constant_folding |
 // Two-Stage Pipeline Assembly
 // ────────────────────────────────────────────────────────────────────────────
 
-// Build the two-stage strategy using existing combinators
-// This avoids return type inconsistency by using the strategy composition
-// system
-
-// Phase 1: Descent phase (pre-order)
-// At each node going down: try quick patterns first, then descent rules
-// topdown() automatically applies this strategy at every node during traversal
 constexpr auto descent_with_quick = quick_patterns | descent_rules;
 constexpr auto descent_phase = topdown(descent_with_quick);
-
-// Phase 2: Ascent phase (post-order)
-// At each node coming up: apply ascent rules after children are simplified
-// bottomup() automatically applies this strategy at every node during traversal
 constexpr auto ascent_phase = bottomup(ascent_rules);
-
-// Combine: descent (with quick checks at each node), then ascent
-// No try_strategy wrapper needed - traversals handle the per-node application
 constexpr auto two_phase_core = descent_phase >> ascent_phase;
-
-// Add fixpoint iteration to repeat until stable
-// Using FixPoint with CTAD (class template argument deduction)
 constexpr auto two_phase_with_fixpoint = FixPoint{two_phase_core};
-
-// Public interface: two_stage_simplify
-constexpr auto two_stage_simplify = [](auto expr, auto ctx) {
-  return two_phase_with_fixpoint.apply(expr, ctx);
-};
-
-// ============================================================================
-// TRADITIONAL SINGLE-PHASE SIMPLIFICATION (For Comparison)
-// ============================================================================
-//
-// The simplification pipeline must handle several challenges:
-//
-// 1. **Nested Expressions**: Rules must be applied recursively to
-// subexpressions
-//    Example: x * (y + (z * 0)) requires simplifying (z * 0) first
-//
-// 2. **Parent-Level Patterns**: Some rules match parent-level structures
-//    Example: x*2 + x requires seeing the whole Add expression
-//
-// 3. **Multiple Passes**: Some simplifications enable others
-//    Example: (x + x) + x → (2*x) + x → 3*x
-//
-// STRATEGY: Use bottomup (post-order) traversal with fixpoint iteration
-//
-// - bottomup: Apply rules to children first, then parent (handles nesting)
-// - FixPoint: Repeat until no more changes (handles multi-pass requirements)
-// - try_strategy: Wrap algebraic_simplify so it doesn't fail on leaves
-//
-// This ensures:
-//   - Leaf nodes are simplified first (constants, identities)
-//   - Parent nodes see already-simplified children
-//   - Parent-level patterns can match
-//   - Process repeats until stable
-
-constexpr auto full_simplify = [](auto expr, auto ctx) {
-  // Bottom-up traversal with fixpoint iteration
-  //
-  // bottomup applies algebraic_simplify at each node, starting from leaves.
-  // This ensures nested expressions are fully simplified before parent rules
-  // run.
-  //
-  // FixPoint repeats the process until the expression stops changing,
-  // handling cases that require multiple passes like term collection.
-  //
-  // try_strategy wraps algebraic_simplify to return the original expression
-  // when rules don't match (instead of Never), which is necessary for
-  // traversal.
-  return FixPoint{bottomup(try_strategy(algebraic_simplify))}.apply(expr, ctx);
-};
 
 // ============================================================================
 // PRIMARY SIMPLIFICATION INTERFACE
 // ============================================================================
 //
-// `simplify` is now an alias for `two_stage_simplify`, the new recommended
-// simplification pipeline that provides:
+// Usage: auto result = simplify(expr, default_context());
 //
-// This provides:
-//   - Short-circuit patterns (0*x → 0 without recursing)
-//   - Two-phase traversal: descent (expand) then ascent (collect)
-//   - Resolves distribution/factoring conflict
-//   - More efficient than single-phase bottom-up
-//   - Fixpoint iteration for exhaustive simplification
+// Architecture:
+//   1. Descent phase: Quick patterns (0*x→0) and unwrapping before recursing
+//   2. Ascent phase: Collection, canonicalization after children simplified
+//   3. Fixpoint iteration: Repeat until stable
 //
-// MIGRATION NOTES:
-//   - Previous `simplify` (aliased to full_simplify) is still available
-//   - The two-stage approach is more efficient and handles edge cases better
-//   - Old code using `simplify` will now get the improved two-stage behavior
-//   - The old bounded-iteration version is available as `simplify_bounded`
-//
-// Usage:
-//   auto result = simplify(expr, default_context());
-constexpr auto simplify = two_stage_simplify;
-
-// ============================================================================
-// Algebraic Simplify with Traversal (Fast)
-// ============================================================================
-//
-// Lighter-weight version that does ONE pass of simplification per node
-// instead of fixpoint iteration. Faster but may miss some simplifications.
-//
-// Good for:
-//   - Performance-critical paths
-//   - Expressions that are already mostly simplified
-//   - Quick cleanup passes
-//
-// Usage:
-//   auto result = algebraic_simplify_recursive(expr, default_context());
-//
-// CRITICAL: Must wrap algebraic_simplify in try_strategy() because:
-//   - algebraic_simplify returns Never when no rules match (e.g., on leaf
-//   nodes)
-//   - Traversal strategies call apply_to_children which builds Expression<Op,
-//   ...>
-//   - If a child is Never, this creates invalid types
-//   - try_strategy converts Never back to the original expression
-constexpr auto algebraic_simplify_recursive = [](auto expr, auto ctx) {
-  return innermost(try_strategy(algebraic_simplify)).apply(expr, ctx);
+// Handles nested expressions, term collection, and canonical forms.
+constexpr auto simplify = [](auto expr, auto ctx) {
+  return two_phase_with_fixpoint.apply(expr, ctx);
 };
-
-// ============================================================================
-// Bottom-Up Simplification
-// ============================================================================
-//
-// Applies simplification in post-order (children before parents).
-// Similar to innermost but with slightly different traversal order.
-//
-// Use when you want explicit control over traversal order.
-//
-// Usage:
-//   auto result = bottomup_simplify(expr, default_context());
-//
-// CRITICAL: Must wrap algebraic_simplify in try_strategy() for same reasons
-// as algebraic_simplify_recursive above.
-constexpr auto bottomup_simplify = [](auto expr, auto ctx) {
-  return bottomup(try_strategy(algebraic_simplify)).apply(expr, ctx);
-};
-
-// ============================================================================
-// Top-Down Simplification
-// ============================================================================
-//
-// Applies simplification in pre-order (parents before children).
-// Useful when parent simplifications enable child simplifications.
-//
-// Example: log(exp(x + 0))
-//   - Top-down: log(exp(...)) → (x + 0) → x    [Two passes]
-//   - Bottom-up: (x + 0) → x, log(exp(x)) → x [Also works]
-//
-// Usage:
-//   auto result = topdown_simplify(expr, default_context());
-//
-// CRITICAL: Must wrap algebraic_simplify in try_strategy() for same reasons
-// as algebraic_simplify_recursive above.
-constexpr auto topdown_simplify = [](auto expr, auto ctx) {
-  return topdown(try_strategy(algebraic_simplify)).apply(expr, ctx);
-};
-
-// ============================================================================
-// Trigonometric-Aware Simplification (Experimental)
-// ============================================================================
-//
-// Combines algebraic simplification with trigonometric identities.
-// Useful for expressions involving sin, cos, tan.
-//
-// Handles:
-//   - Pythagorean identity: sin²(x) + cos²(x) → 1
-//   - Angle simplification: sin(-x) → -sin(x)
-//   - Special values: sin(0) → 0, cos(0) → 1
-//
-// Usage:
-//   auto result = trig_aware_simplify(expr, default_context());
-//
-// Note: This is the same as full_simplify currently since
-// transcendental_simplify is already included in algebraic_simplify.
-// Future versions may add more sophisticated trig rules.
-constexpr auto trig_aware_simplify = [](auto expr, auto ctx) {
-  return innermost(transcendental_simplify | algebraic_simplify)
-      .apply(expr, ctx);
-};
-
-// ============================================================================
-// Usage Guide
-// ============================================================================
-//
-// QUICK START (Most Use Cases):
-//
-//   #include "symbolic3/symbolic3.h"
-//
-//   auto expr = x * (y + (z * 0));
-//   auto result = simplify(expr, default_context());  // x * y
-//
-// This gives you the full multi-stage simplification pipeline.
-//
-// ============================================================================
-// When to Use Each Pipeline:
-// ============================================================================
-//
-// ✅ simplify(expr, ctx)
-//    - DEFAULT CHOICE for all use cases
-//    - Handles nested expressions correctly
-//    - Applies fixpoint iteration at all levels
-//    - Predictable, robust results
-//
-// ⚡ algebraic_simplify_recursive(expr, ctx)
-//    - PERFORMANCE-CRITICAL paths only
-//    - Single pass per node (may miss some simplifications)
-//    - Use when expressions are already mostly simplified
-//
-// 🔧 bottomup_simplify(expr, ctx) / topdown_simplify(expr, ctx)
-//    - EXPLICIT TRAVERSAL ORDER control
-//    - Use when you need specific semantics
-//    - bottomup: children before parents
-//    - topdown: parents before children
-//
-// 📐 trig_aware_simplify(expr, ctx)
-//    - TRIGONOMETRIC EXPRESSIONS
-//    - Currently similar to simplify, may specialize in future
-//
-// 🔍 algebraic_simplify.apply(expr, ctx)
-//    - LOW-LEVEL tool for custom pipelines
-//    - Single node, no traversal
-//    - Use as building block for custom strategies
-//
-// ============================================================================
-// Custom Pipelines (Advanced):
-// ============================================================================
-//
-// For specialized needs, combine basic rules with traversal strategies:
-//
-// Traversal strategy factories (template functions from traversal.h):
-//   - innermost(rules) - apply at leaves first, propagate upward (recommended)
-//   - bottomup(rules)  - post-order traversal with rule application
-//   - topdown(rules)   - pre-order traversal with rule application
-//   - outermost(rules) - apply at root first, recurse if changed
-//
-// Example custom pipeline:
-//   #include "symbolic3/traversal.h"
-//
-//   // Only power and addition rules, exhaustive
-//   auto custom = FixPoint{innermost(PowerRules | AdditionRules)};
-//   auto result = custom.apply(expr, ctx);
-//
-// Example comparison:
-//   auto expr = x * (y + 0);
-//   auto ctx = default_context();
-//
-//   // ✅ Recommended (exhaustive, correct):
-//   auto result = simplify(expr, ctx);  // x * y
-//
-//   // ⚡ Fast (single pass per node):
-//   auto fast = algebraic_simplify_recursive(expr, ctx);  // x * y
-//
-//   // 🔍 Low-level (top-level only, leaves nested issues):
-//   auto partial = algebraic_simplify.apply(expr, ctx);  // x * (y + 0)
-//   [incomplete]
-//
-// ============================================================================
-// Migration from Old Code:
-// ============================================================================
-//
-// If your code uses the old `simplify` (bounded iteration):
-//
-//   OLD: auto result = simplify.apply(expr, ctx);  // 10 iterations max
-//   NEW: auto result = simplify(expr, ctx);         // fixpoint iteration
-//
-// The new `simplify` is a callable lambda, not a Strategy object, so:
-//   - Use simplify(expr, ctx) instead of simplify.apply(expr, ctx)
-//   - Or continue using .apply() with simplify_bounded if needed
-//
-// For backward compatibility:
-//   auto result = simplify_bounded.apply(expr, ctx);  // old behavior
 
 }  // namespace tempura::symbolic3

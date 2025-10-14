@@ -265,7 +265,7 @@ constexpr auto diff(E expr, [[maybe_unused]] V var) {
 
 // Differentiate and automatically simplify the result
 //
-// This combines differentiation with full_simplify to produce clean results:
+// This combines differentiation with simplify to produce clean results:
 //
 //   diff_simplified(x * x, x) → 2 * x (instead of x + x)
 //
@@ -274,7 +274,7 @@ constexpr auto diff(E expr, [[maybe_unused]] V var) {
 template <Symbolic E, Symbolic V, typename Context>
 constexpr auto diff_simplified(E expr, V var, Context ctx) {
   auto derivative = diff(expr, var);
-  return full_simplify(derivative, ctx);
+  return simplify(derivative, ctx);
 }
 
 // Convenience overload using default context
@@ -314,7 +314,7 @@ constexpr auto nth_derivative_simplified(E expr, V var, Context ctx) {
     return expr;
   } else {
     auto deriv = diff(expr, var);
-    auto simplified = full_simplify(deriv, ctx);
+    auto simplified = simplify(deriv, ctx);
     return nth_derivative_simplified<N - 1>(simplified, var, ctx);
   }
 }

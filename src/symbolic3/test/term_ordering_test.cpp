@@ -134,7 +134,7 @@ auto main() -> int {
     assert(evaluate(result, BinderPack{x = 10, y = 5}) == 35);
 
     // The key is that after full simplification, like terms will be grouped
-    auto fully_simplified = full_simplify(expr, default_context());
+    auto fully_simplified = simplify(expr, default_context());
     assert(evaluate(fully_simplified, BinderPack{x = 10, y = 5}) == 35);
   };
 
@@ -164,7 +164,7 @@ auto main() -> int {
     // Expected: group x terms and y terms, then factor
     auto expr = 3_c * x + y + 2_c * x + y;
 
-    auto result = full_simplify(expr, default_context());
+    auto result = simplify(expr, default_context());
 
     // Verify by evaluation
     auto val = evaluate(result, BinderPack{x = 10, y = 5});
@@ -176,7 +176,7 @@ auto main() -> int {
 
     // Multiple like terms with different coefficients
     auto expr = x + 3_c * x + 2_c * x;
-    auto result = full_simplify(expr, default_context());
+    auto result = simplify(expr, default_context());
 
     // Should factor to 6*x (or equivalent)
     auto val = evaluate(result, BinderPack{x = 10});
@@ -189,7 +189,7 @@ auto main() -> int {
 
     // Mixed terms: group by base, then factor
     auto expr = 2_c * y + x + 3_c * x + y;
-    auto result = full_simplify(expr, default_context());
+    auto result = simplify(expr, default_context());
 
     // Verify: 4*x + 3*y
     auto val = evaluate(result, BinderPack{x = 10, y = 5});
@@ -201,7 +201,7 @@ auto main() -> int {
 
     // Constants and variable terms mixed
     auto expr = 5_c + 2_c * x + 3_c + x;
-    auto result = full_simplify(expr, default_context());
+    auto result = simplify(expr, default_context());
 
     // Constants should be grouped and added, x terms factored
     auto val = evaluate(result, BinderPack{x = 10});
@@ -223,7 +223,7 @@ auto main() -> int {
     // constants: 5 + 2 = 7
     // Total: 7 + 80 + 15 = 102
     auto expr = 3_c * x + 2_c * y + x + 5_c + 4_c * x + y + 2_c;
-    auto result = full_simplify(expr, default_context());
+    auto result = simplify(expr, default_context());
 
     // Verify: 7 + 8*x + 3*y = 7 + 80 + 15 = 102
     auto val = evaluate(result, BinderPack{x = 10, y = 5});

@@ -45,7 +45,7 @@ auto main() -> int {
 
     // 0 * (x + y + z) should short-circuit to 0
     constexpr auto expr = 0_c * (x + y + z);
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, 0_c), "0 * expr should short-circuit to 0");
   };
@@ -57,7 +57,7 @@ auto main() -> int {
 
     // (x * y) * 0 should simplify to 0
     constexpr auto expr = (x * y) * 0_c;
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, 0_c), "expr * 0 should short-circuit to 0");
   };
@@ -70,7 +70,7 @@ auto main() -> int {
 
     // x + (0 * (y + z)) should simplify to x
     constexpr auto expr = x + (0_c * (y + z));
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, x), "x + (0 * expr) should simplify to x");
   };
@@ -82,7 +82,7 @@ auto main() -> int {
 
     // 1 * (x + y) should simplify to (x + y)
     constexpr auto expr = 1_c * (x + y);
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, x + y), "1 * expr should simplify to expr");
   };
@@ -94,7 +94,7 @@ auto main() -> int {
 
     // (x * y) * 1 should simplify to x * y
     constexpr auto expr = (x * y) * 1_c;
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, x * y), "expr * 1 should simplify to expr");
   };
@@ -105,7 +105,7 @@ auto main() -> int {
 
     // 0 + x should simplify to x
     constexpr auto expr = 0_c + x;
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, x), "0 + x should simplify to x");
   };
@@ -116,7 +116,7 @@ auto main() -> int {
 
     // x + 0 should simplify to x
     constexpr auto expr = x + 0_c;
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, x), "x + 0 should simplify to x");
   };
@@ -127,7 +127,7 @@ auto main() -> int {
 
     // exp(log(x)) should simplify to x
     constexpr auto expr = exp(log(x));
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, x), "exp(log(x)) should simplify to x");
   };
@@ -138,7 +138,7 @@ auto main() -> int {
 
     // log(exp(x)) should simplify to x
     constexpr auto expr = log(exp(x));
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, x), "log(exp(x)) should simplify to x");
   };
@@ -154,7 +154,7 @@ auto main() -> int {
 
     // -(-x) should simplify to x
     constexpr auto expr = -(-x);
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, x), "-(-x) should simplify to x");
   };
@@ -166,7 +166,7 @@ auto main() -> int {
 
     // x + (-(-y)) should simplify to x + y
     constexpr auto expr = x + (-(-y));
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, x + y), "x + (-(-y)) should simplify to x + y");
   };
@@ -177,7 +177,7 @@ auto main() -> int {
 
     // -(-(-x)) should simplify to -x
     constexpr auto expr = -(-(-x));
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, -x), "-(-(-x)) should simplify to -x");
   };
@@ -196,7 +196,7 @@ auto main() -> int {
 
     // 2 + 3 should fold to 5
     constexpr auto expr = 2_c + 3_c;
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, 5_c), "2 + 3 should fold to 5");
   };
@@ -206,7 +206,7 @@ auto main() -> int {
 
     // 2 * 3 should fold to 6
     constexpr auto expr = 2_c * 3_c;
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, 6_c), "2 * 3 should fold to 6");
   };
@@ -216,7 +216,7 @@ auto main() -> int {
 
     // 2^3 should fold to 8
     constexpr auto expr = pow(2_c, 3_c);
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, 8_c), "2^3 should fold to 8");
   };
@@ -227,7 +227,7 @@ auto main() -> int {
 
     // 2 + 3 + x should simplify to 5 + x (constants first in canonical order)
     constexpr auto expr = 2_c + 3_c + x;
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, 5_c + x), "2 + 3 + x should simplify to 5 + x");
   };
@@ -242,7 +242,7 @@ auto main() -> int {
 
     // x + x should collect to 2*x (coefficient first in canonical order)
     constexpr auto expr = x + x;
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, 2_c * x), "x + x should simplify to 2*x");
   };
@@ -253,7 +253,7 @@ auto main() -> int {
 
     // x + x + x should collect to 3*x (coefficient first in canonical order)
     constexpr auto expr = x + x + x;
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, 3_c * x), "x + x + x should simplify to 3*x");
   };
@@ -264,7 +264,7 @@ auto main() -> int {
 
     // 2*x + 3*x should collect to 5*x (coefficient first in canonical order)
     constexpr auto expr = 2_c * x + 3_c * x;
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, 5_c * x), "2*x + 3*x should simplify to 5*x");
   };
@@ -275,7 +275,7 @@ auto main() -> int {
 
     // x*2 + x*3 should collect to 5*x (coefficient first in canonical order)
     constexpr auto expr = x * 2_c + x * 3_c;
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, 5_c * x), "x*2 + x*3 should simplify to 5*x");
   };
@@ -294,7 +294,7 @@ auto main() -> int {
     // Canonical form: expressions come before symbols in multiplication
     // ordering
     constexpr auto expr = x * a + x * b;
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, (a + b) * x),
                   "x*a + x*b should factor to (a+b)*x");
@@ -307,7 +307,7 @@ auto main() -> int {
     // 2*x + 3*x should simplify to 5*x (collection, not just factoring)
     // Canonical form: coefficient first
     constexpr auto expr = 2_c * x + 3_c * x;
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, 5_c * x), "2*x + 3*x should simplify to 5*x");
   };
@@ -322,7 +322,7 @@ auto main() -> int {
 
     // x * x should combine to x^2
     constexpr auto expr = x * x;
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     // Note: Power combining might not be fully implemented yet
     // Accept either x^2 or x*x as valid
@@ -336,7 +336,7 @@ auto main() -> int {
 
     // x * x^2 should combine to x^3
     constexpr auto expr = x * pow(x, 2_c);
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, pow(x, 3_c)), "x * x^2 should simplify to x^3");
   };
@@ -349,7 +349,7 @@ auto main() -> int {
 
     // x^a * x^b should combine to x^(a+b)
     constexpr auto expr = pow(x, a) * pow(x, b);
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, pow(x, a + b)),
                   "x^a * x^b should simplify to x^(a+b)");
@@ -367,7 +367,7 @@ auto main() -> int {
     // y + x should reorder to x + y (canonical order based on symbol
     // comparison)
     constexpr auto expr = y + x;
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     // Canonical form is determined by symbol ordering
     static_assert(match(result, x + y), "y + x should canonicalize to x + y");
@@ -381,7 +381,7 @@ auto main() -> int {
     // y * x should reorder to x * y (canonical order based on symbol
     // comparison)
     constexpr auto expr = y * x;
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     // Canonical form is determined by symbol ordering
     static_assert(match(result, x * y), "y * x should canonicalize to x * y");
@@ -395,7 +395,7 @@ auto main() -> int {
 
     // (x + y) + z is valid, but may reassociate
     constexpr auto expr = (x + y) + z;
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     // Should simplify to some form of x + y + z
     // Exact structure depends on canonicalization rules
@@ -413,7 +413,7 @@ auto main() -> int {
 
     // x^0 should simplify to 1
     constexpr auto expr = pow(x, 0_c);
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, 1_c), "x^0 should simplify to 1");
   };
@@ -424,7 +424,7 @@ auto main() -> int {
 
     // x^1 should simplify to x
     constexpr auto expr = pow(x, 1_c);
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, x), "x^1 should simplify to x");
   };
@@ -437,7 +437,7 @@ auto main() -> int {
 
     // (x^a)^b should simplify to x^(a*b)
     constexpr auto expr = pow(pow(x, a), b);
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, pow(x, a * b)),
                   "(x^a)^b should simplify to x^(a*b)");
@@ -452,7 +452,7 @@ auto main() -> int {
 
     // sin(0) should simplify to 0
     constexpr auto expr = sin(0_c);
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, 0_c), "sin(0) should simplify to 0");
   };
@@ -462,7 +462,7 @@ auto main() -> int {
 
     // cos(0) should simplify to 1
     constexpr auto expr = cos(0_c);
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, 1_c), "cos(0) should simplify to 1");
   };
@@ -472,7 +472,7 @@ auto main() -> int {
 
     // exp(0) should simplify to 1
     constexpr auto expr = exp(0_c);
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, 1_c), "exp(0) should simplify to 1");
   };
@@ -482,7 +482,7 @@ auto main() -> int {
 
     // log(1) should simplify to 0
     constexpr auto expr = log(1_c);
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, 0_c), "log(1) should simplify to 0");
   };
@@ -500,7 +500,7 @@ auto main() -> int {
 
     // Should simplify: z*0 → 0, y+0 → y, x*y → x*y
     constexpr auto expr = x * (y + (z * 0_c));
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, x * y),
                   "x * (y + (z * 0)) should simplify to x * y");
@@ -512,7 +512,7 @@ auto main() -> int {
 
     // Should fully simplify to x
     constexpr auto expr = ((x + 0_c) * 1_c) + 0_c;
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, x), "((x + 0) * 1) + 0 should simplify to x");
   };
@@ -525,7 +525,7 @@ auto main() -> int {
 
         // Should simplify: 0*y → 0, 2+3 → 5, x+x → 2*x, 2*x+5 → final
         constexpr auto expr = (x + x) + (0_c * y) + 2_c + 3_c;
-        constexpr auto result = two_stage_simplify(expr, ctx);
+        constexpr auto result = simplify(expr, ctx);
 
         // Result should be valid - exact form may vary depending on
         // implementation This test documents the behavior, not prescribes it
@@ -543,7 +543,7 @@ auto main() -> int {
 
     // Should simplify: x+0 → x, exp(log(x)) → x
     constexpr auto expr = exp(log(x + 0_c));
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, x), "exp(log(x + 0)) should simplify to x");
   };
@@ -554,7 +554,7 @@ auto main() -> int {
 
     // Should simplify: x*1 → x, 1+0 → 1, x^1 → x
     constexpr auto expr = pow(x * 1_c, 1_c + 0_c);
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, x), "(x * 1)^(1 + 0) should simplify to x");
   };
@@ -567,7 +567,7 @@ auto main() -> int {
 
     // Should collect x*a + x*a → 2*x*a, then factor with x*b
     constexpr auto expr = x * a + x * b + x * a;
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     // Result should be x*(2*a + b) or equivalent
     // Due to complexity, just verify it's valid
@@ -582,7 +582,7 @@ auto main() -> int {
 
     // Should simplify: 2*x+3*x → 5*x, y+0 → y, 5*x*y → final
     constexpr auto expr = (2_c * x + 3_c * x) * (y + 0_c);
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     // Result should be 5*x*y or some permutation
     static_assert(is_expression<decltype(result)>,
@@ -596,7 +596,7 @@ auto main() -> int {
     // Should fold: 2+3 → 5, 4+5 → 9, 5*9 → 45, 45+x → final
     // Canonical form: constant first
     constexpr auto expr = (2_c + 3_c) * (4_c + 5_c) + x;
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, 45_c + x),
                   "(2 + 3) * (4 + 5) + x should simplify to 45 + x");
@@ -614,7 +614,7 @@ auto main() -> int {
 
     // This pattern previously caused oscillation in some implementations
     constexpr auto expr = (x + y) + z;
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     // Should stabilize to some canonical form
     static_assert(is_expression<decltype(result)>,
@@ -628,7 +628,7 @@ auto main() -> int {
 
     // 0 should propagate through entire expression
     constexpr auto expr = 0_c * (x + (y * 0_c));
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, 0_c), "0 * anything should be 0");
   };
@@ -639,7 +639,7 @@ auto main() -> int {
 
     // Multiple identities should all be eliminated
     constexpr auto expr = 1_c * (x * 1_c + 0_c) * 1_c;
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, x), "1 * (x * 1 + 0) * 1 should simplify to x");
   };
@@ -650,7 +650,7 @@ auto main() -> int {
 
     // Quadruple negation should reduce to identity
     constexpr auto expr = -(-(-(-x)));
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, x), "quadruple negation should cancel");
   };
@@ -661,7 +661,7 @@ auto main() -> int {
 
     // Nested transcendental inverses
     constexpr auto expr = log(exp(log(exp(x))));
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, x),
                   "nested transcendental inverses should cancel");
@@ -670,7 +670,7 @@ auto main() -> int {
   //============================================================================
   // COMPARISON WITH FULL_SIMPLIFY
   //============================================================================
-  // Verify that two_stage_simplify produces equivalent results.
+  // Verify that simplify produces equivalent results.
 
   "Comparison - both produce same result for nested arithmetic"_test = [] {
     constexpr Symbol x;
@@ -680,8 +680,8 @@ auto main() -> int {
 
     constexpr auto expr = x * (y + (z * 0_c));
 
-    constexpr auto two_stage_result = two_stage_simplify(expr, ctx);
-    constexpr auto full_result = full_simplify(expr, ctx);
+    constexpr auto two_stage_result = simplify(expr, ctx);
+    constexpr auto full_result = simplify(expr, ctx);
 
     // Both should produce x * y in canonical form
     static_assert(match(two_stage_result, x * y) && match(full_result, x * y),
@@ -694,8 +694,8 @@ auto main() -> int {
 
     constexpr auto expr = x + x + x;
 
-    constexpr auto two_stage_result = two_stage_simplify(expr, ctx);
-    constexpr auto full_result = full_simplify(expr, ctx);
+    constexpr auto two_stage_result = simplify(expr, ctx);
+    constexpr auto full_result = simplify(expr, ctx);
 
     // Both should produce 3*x in canonical form (coefficient first)
     static_assert(
@@ -709,8 +709,8 @@ auto main() -> int {
 
     constexpr auto expr = exp(log(x));
 
-    constexpr auto two_stage_result = two_stage_simplify(expr, ctx);
-    constexpr auto full_result = full_simplify(expr, ctx);
+    constexpr auto two_stage_result = simplify(expr, ctx);
+    constexpr auto full_result = simplify(expr, ctx);
 
     // Both should produce x
     static_assert(match(two_stage_result, x) && match(full_result, x),
@@ -731,7 +731,7 @@ auto main() -> int {
 
     // Quick pattern should catch this without recursing into (x+y+z+w)
     constexpr auto expr = 0_c * (x + y + z + w);
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, 0_c), "0 * complex_expr should short-circuit");
 
@@ -745,7 +745,7 @@ auto main() -> int {
 
     // This should converge in a reasonable number of iterations
     constexpr auto expr = x + x + x + x + x;
-    constexpr auto result = two_stage_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     static_assert(match(result, 5_c * x), "x+x+x+x+x should converge to 5*x");
   };

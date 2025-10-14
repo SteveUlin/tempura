@@ -2,7 +2,7 @@
 // Consolidated Simplification Pipeline Tests
 //
 // This file consolidates:
-// - full_simplify_test.cpp (comprehensive simplification pipelines)
+// - simplify_test.cpp (comprehensive simplification pipelines)
 // - traversal_simplify_test.cpp (traversal strategies with simplification)
 // - term_collecting_test.cpp (term collection and factoring)
 // - nested_simplify_test.cpp (nested expression handling)
@@ -28,7 +28,7 @@ auto main() -> int {
   // COMPREHENSIVE SIMPLIFICATION PIPELINES
   //============================================================================
 
-  "Full simplify - exhaustive nested simplification"_test = [] {
+  "Simplify - exhaustive nested simplification"_test = [] {
     constexpr Symbol x;
     constexpr Symbol y;
     constexpr Symbol z;
@@ -36,61 +36,56 @@ auto main() -> int {
 
     // Nested expression: x * (y + (z * 0)) → x * y
     constexpr auto expr = x * (y + (z * 0_c));
-    constexpr auto result = full_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
-    // NOTE: If this fails, it indicates a bug in the simplification library
     static_assert(match(result, x * y) || match(result, y * x),
                   "BUG: x * (y + (z * 0)) should simplify to x * y");
   };
 
-  "Algebraic simplify recursive - fast recursive"_test = [] {
+  "Simplify - fast recursive"_test = [] {
     constexpr Symbol x;
     constexpr auto ctx = default_context();
 
     // (x + 0) * 1 + 0 → x
     constexpr auto expr = (x + 0_c) * 1_c + 0_c;
-    constexpr auto result = algebraic_simplify_recursive(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
-    // NOTE: If this fails, it indicates a bug in the simplification library
     static_assert(match(result, x),
                   "BUG: (x + 0) * 1 + 0 should simplify to x");
   };
 
-  "Bottomup simplify - post-order traversal"_test = [] {
+  "Simplify - post-order traversal"_test = [] {
     constexpr Symbol x;
     constexpr Symbol y;
     constexpr auto ctx = default_context();
 
     // (x * 1) + (y * 0) → x + 0 → x
     constexpr auto expr = (x * 1_c) + (y * 0_c);
-    constexpr auto result = bottomup_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
-    // NOTE: If this fails, it indicates a bug in the simplification library
     static_assert(match(result, x),
                   "BUG: (x * 1) + (y * 0) should simplify to x");
   };
 
-  "Topdown simplify - pre-order traversal"_test = [] {
+  "Simplify - pre-order traversal"_test = [] {
     constexpr Symbol x;
     constexpr auto ctx = default_context();
 
     // log(exp(x)) → x
     constexpr auto expr = log(exp(x));
-    constexpr auto result = topdown_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
-    // NOTE: If this fails, it indicates a bug in the simplification library
     static_assert(match(result, x), "BUG: log(exp(x)) should simplify to x");
   };
 
-  "Trig aware simplify - trigonometric expressions"_test = [] {
+  "Simplify - trigonometric expressions"_test = [] {
     constexpr Symbol x;
     constexpr auto ctx = default_context();
 
     // sin(0) + cos(0) * x → 0 + 1 * x → x
     constexpr auto expr = sin(0_c) + cos(0_c) * x;
-    constexpr auto result = trig_aware_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
-    // NOTE: If this fails, it indicates a bug in the simplification library
     static_assert(match(result, x),
                   "BUG: sin(0) + cos(0) * x should simplify to x");
   };
@@ -146,7 +141,7 @@ auto main() -> int {
 
     // Using innermost with fixpoint for exhaustive simplification
     constexpr auto fully_simplified =
-        innermost(simplify_fixpoint).apply(expr, ctx);
+        innermost(FixPoint{algebraic_simplify}).apply(expr, ctx);
     (void)fully_simplified;  // TODO: Add verification when simplification
                              // stabilizes
   };
@@ -172,7 +167,7 @@ auto main() -> int {
     constexpr Symbol x;
     constexpr auto ctx = default_context();
     constexpr auto expr = x + x;
-    constexpr auto result = full_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     // Check structure: should be x * 2 (factored form)
     // The result should be either x * 2 or 2 * x depending on ordering
@@ -188,7 +183,7 @@ auto main() -> int {
     constexpr Symbol x;
     constexpr auto ctx = default_context();
     constexpr auto expr = x * 2_c + x;
-    constexpr auto result = full_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     // Should simplify to x * 3 (factoring out x)
     // The result should be either x * 3 or 3 * x
@@ -203,7 +198,7 @@ auto main() -> int {
     constexpr Symbol x;
     constexpr auto ctx = default_context();
     constexpr auto expr = x * 2_c + x * 3_c;
-    constexpr auto result = full_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     // Should simplify to x * 5 (collecting coefficients)
     // NOTE: If this fails, it indicates a bug in the simplification library
@@ -217,7 +212,7 @@ auto main() -> int {
     constexpr Symbol x;
     constexpr auto ctx = default_context();
     constexpr auto expr = x + x * 2_c;
-    constexpr auto result = full_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     // Should simplify to x * 3 (factoring regardless of order)
     // NOTE: If this fails, it indicates a bug in the simplification library
@@ -231,7 +226,7 @@ auto main() -> int {
     constexpr Symbol x;
     constexpr auto ctx = default_context();
     constexpr auto expr = x * 2_c + x * 3_c + x * 4_c;
-    constexpr auto result = full_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     // Should simplify to x * 9 (collecting all coefficients)
     // NOTE: If this fails, it indicates a bug in the simplification library
@@ -265,8 +260,8 @@ auto main() -> int {
     // Result should contain simplified inner expression
     // Exact form depends on simplification pipeline
 
-    // Apply full_simplify to outer: should fully simplify
-    constexpr auto full_result = full_simplify(outer, ctx);
+    // Apply simplify to outer: should fully simplify
+    constexpr auto full_result = simplify(outer, ctx);
     // Result should be 2*x + y or y + 2*x (various forms possible)
   };
 
@@ -282,7 +277,7 @@ auto main() -> int {
     // Step 1: x^1 → x (power_one rule)
     // Step 2: x * x^2 → x^(1+2) = x^3 (power combining)
     constexpr auto expr = pow(x, 1_c) * pow(x, 2_c);
-    constexpr auto result = full_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     // Result should be x^3
     // NOTE: If this fails, it indicates a bug in the simplification library
@@ -309,7 +304,7 @@ auto main() -> int {
     // - (0 + z) → z
     // - x + z (final)
     constexpr auto expr = ((x + 0_c) * 1_c) + ((y * 0_c) + z);
-    constexpr auto result = full_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     // Result should be x + z or z + x (order may vary)
     // NOTE: If this fails, it indicates a bug in the simplification library
@@ -337,17 +332,16 @@ auto main() -> int {
     constexpr auto expr = x * (y + (z * 0_c));
 
     // Recursive simplifies nested expressions
-    constexpr auto recursive = algebraic_simplify_recursive(expr, ctx);
+    constexpr auto recursive = simplify(expr, ctx);
     // NOTE: If this fails, it indicates a bug in the simplification library
     static_assert(match(recursive, x * y) || match(recursive, y * x),
                   "BUG: recursive should simplify x * (y + (z * 0)) to x * y");
 
     // Full with fixpoint ensures complete simplification
-    constexpr auto full = full_simplify(expr, ctx);
+    constexpr auto full = simplify(expr, ctx);
     // NOTE: If this fails, it indicates a bug in the simplification library
-    static_assert(
-        match(full, x * y) || match(full, y * x),
-        "BUG: full_simplify should simplify x * (y + (z * 0)) to x * y");
+    static_assert(match(full, x * y) || match(full, y * x),
+                  "BUG: simplify should simplify x * (y + (z * 0)) to x * y");
   };
 
   return 0;

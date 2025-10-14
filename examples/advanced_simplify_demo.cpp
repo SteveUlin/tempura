@@ -34,19 +34,19 @@ int main() {
   std::cout << "=== Logarithm Identities ===\n";
   {
     auto expr = log(x * y);
-    auto simplified = full_simplify(expr, ctx);
+    auto simplified = simplify(expr, ctx);
     std::cout << "log(x*y) → " << to_string(simplified) << "\n";
     // Expected: log(x) + log(y)
   }
   {
     auto expr = log(x / y);
-    auto simplified = full_simplify(expr, ctx);
+    auto simplified = simplify(expr, ctx);
     std::cout << "log(x/y) → " << to_string(simplified) << "\n";
     // Expected: log(x) - log(y)
   }
   {
     auto expr = log(pow(x, 3_c));
-    auto simplified = full_simplify(expr, ctx);
+    auto simplified = simplify(expr, ctx);
     std::cout << "log(x³) → " << to_string(simplified) << "\n";
     // Expected: 3*log(x)
   }
@@ -55,19 +55,19 @@ int main() {
   std::cout << "\n=== Exponential Identities ===\n";
   {
     auto expr = exp(a + b);
-    auto simplified = full_simplify(expr, ctx);
+    auto simplified = simplify(expr, ctx);
     std::cout << "exp(a+b) → " << to_string(simplified) << "\n";
     // Expected: exp(a)*exp(b)
   }
   {
     auto expr = exp(a - b);
-    auto simplified = full_simplify(expr, ctx);
+    auto simplified = simplify(expr, ctx);
     std::cout << "exp(a-b) → " << to_string(simplified) << "\n";
     // Expected: exp(a)/exp(b)
   }
   {
     auto expr = exp(2_c * log(x));
-    auto simplified = full_simplify(expr, ctx);
+    auto simplified = simplify(expr, ctx);
     std::cout << "exp(2*log(x)) → " << to_string(simplified) << "\n";
     // Expected: x²
   }
@@ -76,19 +76,19 @@ int main() {
   std::cout << "\n=== Trigonometric Identities ===\n";
   {
     auto expr = sin(2_c * x);
-    auto simplified = full_simplify(expr, ctx);
+    auto simplified = simplify(expr, ctx);
     std::cout << "sin(2x) → " << to_string(simplified) << "\n";
     // Expected: 2*sin(x)*cos(x)
   }
   {
     auto expr = cos(2_c * x);
-    auto simplified = full_simplify(expr, ctx);
+    auto simplified = simplify(expr, ctx);
     std::cout << "cos(2x) → " << to_string(simplified) << "\n";
     // Expected: cos²(x) - sin²(x)
   }
   {
     auto expr = tan(x);
-    auto simplified = full_simplify(expr, ctx);
+    auto simplified = simplify(expr, ctx);
     std::cout << "tan(x) → " << to_string(simplified) << "\n";
     // Expected: sin(x)/cos(x)
   }
@@ -97,7 +97,7 @@ int main() {
   std::cout << "\n=== Pythagorean Identity ===\n";
   {
     auto expr = pow(sin(x), 2_c) + pow(cos(x), 2_c);
-    auto simplified = full_simplify(expr, ctx);
+    auto simplified = simplify(expr, ctx);
     std::cout << "sin²(x) + cos²(x) → " << to_string(simplified) << "\n";
     // Expected: 1
   }
@@ -107,7 +107,7 @@ int main() {
   {
     // Inverse operations should cancel
     auto expr = exp(log(x)) + log(exp(y));
-    auto simplified = full_simplify(expr, ctx);
+    auto simplified = simplify(expr, ctx);
     std::cout << "exp(log(x)) + log(exp(y)) → " << to_string(simplified)
               << "\n";
     // Expected: x + y
@@ -115,14 +115,14 @@ int main() {
   {
     // Pythagorean identity in multiplication
     auto expr = (pow(sin(x), 2_c) + pow(cos(x), 2_c)) * y;
-    auto simplified = full_simplify(expr, ctx);
+    auto simplified = simplify(expr, ctx);
     std::cout << "(sin²(x) + cos²(x)) * y → " << to_string(simplified) << "\n";
     // Expected: y
   }
   {
     // Nested transcendental functions
     auto expr = log(exp(a) * exp(b));
-    auto simplified = full_simplify(expr, ctx);
+    auto simplified = simplify(expr, ctx);
     std::cout << "log(exp(a)*exp(b)) → " << to_string(simplified) << "\n";
     // Expected: a + b (via multiple rule applications)
   }
@@ -135,7 +135,7 @@ int main() {
 
     // If we had differentiation (which symbolic3 has), we could:
     // auto df = diff(f, x);
-    // auto df_simplified = full_simplify(df, ctx);
+    // auto df_simplified = simplify(df, ctx);
     // std::cout << "Derivative: " << to_string(df_simplified) << "\n";
   }
 

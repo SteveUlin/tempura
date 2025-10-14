@@ -15,7 +15,7 @@ auto main() -> int {
     std::cout << "Expression: x + x\n";
     std::cout << "Type: " << typeid(expr).name() << "\n";
 
-    auto result = full_simplify(expr, default_context());
+    auto result = simplify(expr, default_context());
     std::cout << "After simplification type: " << typeid(result).name() << "\n";
 
     auto val = evaluate(result, BinderPack{x = 5});
@@ -30,7 +30,7 @@ auto main() -> int {
     std::cout << "Expression: x*2 + x\n";
     std::cout << "Type: " << typeid(expr).name() << "\n";
 
-    auto result = full_simplify(expr, default_context());
+    auto result = simplify(expr, default_context());
     std::cout << "After simplification type: " << typeid(result).name() << "\n";
 
     auto val = evaluate(result, BinderPack{x = 10});
@@ -44,12 +44,12 @@ auto main() -> int {
     Symbol y;
 
     auto expr1 = y + x;
-    auto result1 = full_simplify(expr1, default_context());
+    auto result1 = simplify(expr1, default_context());
     std::cout << "Expression: y + x\n";
     std::cout << "Type: " << typeid(result1).name() << "\n";
 
     auto expr2 = x + y;
-    auto result2 = full_simplify(expr2, default_context());
+    auto result2 = simplify(expr2, default_context());
     std::cout << "Expression: x + y\n";
     std::cout << "Type: " << typeid(result2).name() << "\n";
     std::cout << "Types are same: "
@@ -68,7 +68,7 @@ auto main() -> int {
     std::cout << "Expression: x + y + x + z + y + x\n";
     std::cout << "Type: " << typeid(expr).name() << "\n";
 
-    auto result = full_simplify(expr, default_context());
+    auto result = simplify(expr, default_context());
     std::cout << "After simplification type: " << typeid(result).name() << "\n";
 
     // Check structure - should have collected all x's together
@@ -93,7 +93,7 @@ auto main() -> int {
     std::cout << "Expression: 2x + 3y + 4x + 5y + 6x (5 terms)\n";
     std::cout << "Type: " << typeid(expr).name() << "\n";
 
-    auto result = full_simplify(expr, default_context());
+    auto result = simplify(expr, default_context());
     std::cout << "After simplification type: " << typeid(result).name() << "\n";
 
     // Should be JUST TWO TERMS: 12x + 8y (or 8y + 12x)
@@ -121,7 +121,7 @@ auto main() -> int {
         << "Expression: ((x + y) + (z + x)) + ((y + z) + x) [7 symbols]\n";
     std::cout << "Type: " << typeid(expr).name() << "\n";
 
-    auto result = full_simplify(expr, default_context());
+    auto result = simplify(expr, default_context());
     std::cout << "After simplification type: " << typeid(result).name() << "\n";
 
     // Should be 3 terms: 3x + 2y + 2z (with coefficients)
@@ -148,7 +148,7 @@ auto main() -> int {
     std::cout << "Expression: (x*2 + y*3) + ((x*4 + y) + (x + y*2))\n";
     std::cout << "Type: " << typeid(expr).name() << "\n";
 
-    auto result = full_simplify(expr, default_context());
+    auto result = simplify(expr, default_context());
     std::cout << "After simplification type: " << typeid(result).name() << "\n";
 
     auto val = evaluate(result, BinderPack{x = 10, y = 100});
@@ -165,7 +165,7 @@ auto main() -> int {
     std::cout << "Expression: (x^2 * x^3) * (x * x^4)\n";
     std::cout << "Type: " << typeid(expr).name() << "\n";
 
-    auto result = full_simplify(expr, default_context());
+    auto result = simplify(expr, default_context());
     std::cout << "After simplification type: " << typeid(result).name() << "\n";
 
     auto val = evaluate(result, BinderPack{x = 2});
@@ -185,7 +185,7 @@ auto main() -> int {
     std::cout << "Expression: (x + x*2) + (y*3 + y) + (x*4 + y*5)\n";
     std::cout << "Type: " << typeid(expr).name() << "\n";
 
-    auto result = full_simplify(expr, default_context());
+    auto result = simplify(expr, default_context());
     std::cout << "After simplification type: " << typeid(result).name() << "\n";
 
     auto val = evaluate(result, BinderPack{x = 10, y = 100});
@@ -203,7 +203,7 @@ auto main() -> int {
     std::cout << "Expression: x + (x + (x + (x + (x + x))))\n";
     std::cout << "Type: " << typeid(expr).name() << "\n";
 
-    auto result = full_simplify(expr, default_context());
+    auto result = simplify(expr, default_context());
     std::cout << "After simplification type: " << typeid(result).name() << "\n";
 
     auto val = evaluate(result, BinderPack{x = 7});

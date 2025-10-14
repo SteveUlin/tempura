@@ -165,7 +165,7 @@ struct SimplifyTrig {
 // ApplyAlgebraicRules
 
 // With trig awareness
-// inline constexpr auto full_simplify_with_trig =
+// inline constexpr auto simplify_with_trig =
 //     algebraic_simplify | SimplifyTrig{};
 
 }  // namespace tempura::symbolic3

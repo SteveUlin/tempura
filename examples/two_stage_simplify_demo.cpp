@@ -108,15 +108,15 @@ int main() {
     std::cout << "  ✓ Quick patterns applied at multiple levels\n\n";
   }
 
-  // Test 8: Compare with traditional full_simplify
+  // Test 8: Compare with traditional simplify
   {
-    std::cout << "Test 8: Comparison with full_simplify\n";
+    std::cout << "Test 8: Comparison with simplify\n";
     std::cout << "  Expression: 0 * (x + y + z)\n";
 
     constexpr auto expr = 0_c * (x + y + z);
 
     auto two_stage_result = two_stage_simplify(expr, default_context());
-    auto full_result = full_simplify(expr, default_context());
+    auto full_result = simplify(expr, default_context());
 
     std::cout << "  Two-stage result: " << toString(two_stage_result).c_str()
               << "\n";

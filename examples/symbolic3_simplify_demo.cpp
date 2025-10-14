@@ -21,16 +21,16 @@ int main() {
       << "The new simplify logic provides several high-level pipelines:\n\n";
 
   // ==========================================================================
-  // Example 1: full_simplify (Recommended)
+  // Example 1: simplify (Recommended)
   // ==========================================================================
-  std::cout << "1. full_simplify - Exhaustive simplification\n";
+  std::cout << "1. simplify - Exhaustive simplification\n";
   std::cout << "   Best for: Most use cases\n";
   std::cout << "   Strategy: innermost + fixpoint\n\n";
 
   {
     // Complex nested expression
     constexpr auto expr = x * (y + (z * 0_c));
-    constexpr auto result = full_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     // Verify at compile-time (allow both x*y and y*x due to commutativity)
     static_assert(match(result, x * y) || match(result, y * x),
@@ -42,16 +42,16 @@ int main() {
   }
 
   // ==========================================================================
-  // Example 2: algebraic_simplify_recursive (Fast)
+  // Example 2: simplify (Fast)
   // ==========================================================================
-  std::cout << "2. algebraic_simplify_recursive - Fast recursive\n";
+  std::cout << "2. simplify - Fast recursive\n";
   std::cout << "   Best for: Performance-critical paths\n";
   std::cout << "   Strategy: innermost (one pass)\n\n";
 
   {
     constexpr auto expr = (x + 0_c) * 1_c;
     [[maybe_unused]] constexpr auto result =
-        algebraic_simplify_recursive(expr, ctx);
+        simplify(expr, ctx);
 
     // TODO: Fix simplification to fully reduce to x
     // static_assert(match(result, x), "Should simplify (x + 0) * 1 to x");
@@ -62,15 +62,15 @@ int main() {
   }
 
   // ==========================================================================
-  // Example 3: trig_aware_simplify
+  // Example 3: simplify
   // ==========================================================================
-  std::cout << "3. trig_aware_simplify - Trigonometric functions\n";
+  std::cout << "3. simplify - Trigonometric functions\n";
   std::cout << "   Best for: Expressions with sin, cos, tan\n";
   std::cout << "   Strategy: Trig identities + algebraic rules\n\n";
 
   {
     constexpr auto expr = sin(0_c) + cos(0_c) * x;
-    [[maybe_unused]] constexpr auto result = trig_aware_simplify(expr, ctx);
+    [[maybe_unused]] constexpr auto result = simplify(expr, ctx);
 
     // TODO: Fix trig simplification to evaluate sin(0)=0, cos(0)=1
     // static_assert(match(result, x), "Should simplify sin(0) + cos(0) * x to
@@ -114,7 +114,7 @@ int main() {
   {
     // Everything is constexpr - errors caught at compile time
     constexpr auto expr = pow(x, 0_c);
-    constexpr auto result = full_simplify(expr, ctx);
+    constexpr auto result = simplify(expr, ctx);
 
     // This static_assert ensures correctness at compile-time
     static_assert(match(result, 1_c), "x^0 should simplify to 1");
@@ -131,26 +131,26 @@ int main() {
   std::cout << "-------\n\n";
 
   std::cout << "Available pipelines:\n";
-  std::cout << "  • full_simplify(expr, ctx)\n";
+  std::cout << "  • simplify(expr, ctx)\n";
   std::cout << "      → Exhaustive, handles all nesting [RECOMMENDED]\n\n";
 
-  std::cout << "  • algebraic_simplify_recursive(expr, ctx)\n";
+  std::cout << "  • simplify(expr, ctx)\n";
   std::cout << "      → Fast, one pass per node\n\n";
 
-  std::cout << "  • bottomup_simplify(expr, ctx)\n";
+  std::cout << "  • simplify(expr, ctx)\n";
   std::cout << "      → Post-order traversal\n\n";
 
-  std::cout << "  • topdown_simplify(expr, ctx)\n";
+  std::cout << "  • simplify(expr, ctx)\n";
   std::cout << "      → Pre-order traversal\n\n";
 
-  std::cout << "  • trig_aware_simplify(expr, ctx)\n";
+  std::cout << "  • simplify(expr, ctx)\n";
   std::cout << "      → Trigonometric-aware\n\n";
 
   std::cout << "  • Custom: innermost/bottomup/topdown(rules)\n";
   std::cout << "      → Build your own pipeline\n\n";
 
   std::cout << "Quick Start:\n";
-  std::cout << "  auto result = full_simplify(my_expr, default_context());\n\n";
+  std::cout << "  auto result = simplify(my_expr, default_context());\n\n";
 
   std::cout << "All simplifications are:\n";
   std::cout << "  ✓ Compile-time evaluated (constexpr)\n";

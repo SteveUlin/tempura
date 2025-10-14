@@ -27,10 +27,10 @@ auto main() -> int {
   std::cout << "  Evaluates to: " << evaluate(expr, BinderPack{x = 10, y = 5})
             << "\n\n";
 
-  // Apply full_simplify
+  // Apply simplify
   {
-    auto result = full_simplify(expr, default_context());
-    std::cout << "After full_simplify:\n";
+    auto result = simplify(expr, default_context());
+    std::cout << "After simplify:\n";
     print_type<decltype(result)>("  Type");
     std::cout << "  Evaluates to: "
               << evaluate(result, BinderPack{x = 10, y = 5}) << "\n\n";
@@ -48,7 +48,7 @@ auto main() -> int {
     std::cout << "Simple case: x + x\n";
     print_type<decltype(simple)>("  Before Type");
 
-    auto result = full_simplify(simple, default_context());
+    auto result = simplify(simple, default_context());
     print_type<decltype(result)>("  After Type");
     std::cout << "  Evaluates to: " << evaluate(result, BinderPack{x = 10})
               << "\n";

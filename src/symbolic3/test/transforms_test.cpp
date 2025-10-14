@@ -160,7 +160,7 @@ auto main() -> int {
     // (x + 0) + 5 should simplify
     constexpr auto expr = (x + zero) + five;
 
-    constexpr auto result = full_simplify.apply(expr, default_context());
+    constexpr auto result = simplify.apply(expr, default_context());
 
     // Result should be x + 5 after simplification
     static_assert(is_add<decltype(result)>);
@@ -176,7 +176,7 @@ auto main() -> int {
     constexpr auto sum = two + three;
     constexpr auto trig_expr = sin(sum);
 
-    constexpr auto strategy = trig_aware_simplify;
+    constexpr auto strategy = simplify;
     constexpr auto ctx = default_context();
 
     // When we apply trig-aware strategy, it should detect we're in a trig
