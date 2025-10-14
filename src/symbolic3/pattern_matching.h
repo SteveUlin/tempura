@@ -122,6 +122,8 @@ struct BindingContext {
   static constexpr int size = sizeof...(Entries);
 
   // Lookup a pattern variable's bound expression
+  // Returns the bound expression if found, otherwise returns the PatternVar
+  // itself
   template <TypeId VarId>
   static constexpr auto lookup() {
     if constexpr (sizeof...(Entries) == 0) {
@@ -142,16 +144,21 @@ struct BindingContext {
   }
 
  private:
-  // Index-based lookup - pure compile-time, uses meta/type_list.h Get_t
+  // Index-based lookup - linear search through entries at compile-time
+  // While O(N), the compiler optimizes this to jump-table or binary search
+  // Uses meta/type_list.h Get_t for type-level indexing into parameter pack
   template <TypeId VarId, SizeT Idx>
   static constexpr auto lookupImpl() {
     if constexpr (Idx >= sizeof...(Entries)) {
+      // Not found - return unbound pattern variable
       return PatternVar<TypeOf<VarId>>{};
     } else {
       using CurrentEntry = Get_t<Idx, Entries...>;
       if constexpr (CurrentEntry::var_id == VarId) {
+        // Found - return bound expression
         return typename CurrentEntry::bound_expr{};
       } else {
+        // Keep searching
         return lookupImpl<VarId, Idx + 1>();
       }
     }

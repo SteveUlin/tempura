@@ -7,8 +7,28 @@
 // Term structure analysis for sophisticated sorting in canonical forms
 // Extracts algebraic meaning from expressions to enable like-term grouping
 //
-// For addition: extract coefficient and base so that x and 3*x are adjacent
-// For multiplication: extract base and exponent for power grouping
+// PURPOSE:
+// Standard lexicographic ordering would sort x, 2*x, 3*x separately
+// This module extracts structure (coefficient, base) to group them together
+//
+// ADDITION TERMS: coefficient * base
+//   Term      Coefficient  Base
+//   ----      -----------  ----
+//   x         1            x
+//   3*x       3            x
+//   x*a       1            x*a
+//   2*(x*a)   2            x*a
+//
+// MULTIPLICATION TERMS: base ^ exponent
+//   Term      Base  Exponent
+//   ----      ----  --------
+//   x         x     1
+//   x^2       x     2
+//   3         3     1
+//
+// USAGE:
+// compareAdditionTerms(a, b) sorts terms to group like bases
+// compareMultiplicationTerms(a, b) sorts terms to group like bases
 
 namespace tempura::symbolic3 {
 
@@ -123,6 +143,16 @@ constexpr auto compare(Lhs lhs, Rhs rhs) -> Ordering;
 
 // Compare two addition terms by their algebraic structure
 // Groups terms with the same base together, then sorts by coefficient
+//
+// SORTING STRATEGY:
+// 1. Constants (pure numbers) first
+// 2. Terms with same base grouped together
+// 3. Within same-base group, sort by coefficient
+//
+// EXAMPLE:
+//   Input:  x + 3*y + 2 + 5*x + 1
+//   Groups: [2, 1] [x, 5*x] [3*y]
+//   Output: 1 + 2 + x + 5*x + 3*y
 template <Symbolic A, Symbolic B>
 constexpr auto compareAdditionTerms(A, B) -> Ordering {
   using A_coeff = GetCoefficient<A>;
@@ -144,12 +174,13 @@ constexpr auto compareAdditionTerms(A, B) -> Ordering {
     // Both are constants: compare the coefficients (which are the values)
     return compare(A_coeff{}, B_coeff{});
   } else {
-    // Neither is a pure constant: compare bases first
+    // Neither is a pure constant: compare bases first to group like terms
     constexpr auto base_cmp = compare(A_base{}, B_base{});
     if constexpr (base_cmp != Ordering::Equal) {
       return base_cmp;
     } else {
       // Same base: compare coefficients (smaller coefficient first)
+      // This enables factoring rules: x + 2*x + 3*x → (1+2+3)*x → 6*x
       return compare(A_coeff{}, B_coeff{});
     }
   }
@@ -157,6 +188,17 @@ constexpr auto compareAdditionTerms(A, B) -> Ordering {
 
 // Compare two multiplication terms by their algebraic structure
 // Groups terms with the same base together, then sorts by exponent
+//
+// SORTING STRATEGY:
+// 1. Constants (numbers) first
+// 2. Terms with same base grouped together
+// 3. Within same-base group, sort by exponent (ascending)
+//
+// EXAMPLE:
+//   Input:  x * 3 * y^2 * x^2 * 2
+//   Groups: [3, 2] [x, x^2] [y^2]
+//   Output: 2 * 3 * x * x^2 * y^2  (then constant folding → 6 * x * x^2 * y^2)
+//   Then power combining: 6 * x^3 * y^2
 template <Symbolic A, Symbolic B>
 constexpr auto compareMultiplicationTerms(A, B) -> Ordering {
   using A_base = GetPowerBase<A>;
@@ -177,12 +219,13 @@ constexpr auto compareMultiplicationTerms(A, B) -> Ordering {
     // Both constants: compare values directly
     return compare(A{}, B{});
   } else {
-    // Neither is constant: compare bases first
+    // Neither is constant: compare bases first to group like terms
     constexpr auto base_cmp = compare(A_base{}, B_base{});
     if constexpr (base_cmp != Ordering::Equal) {
       return base_cmp;
     } else {
       // Same base: compare exponents (lower exponent first)
+      // This enables power combining: x * x^2 → x^(1+2) → x^3
       return compare(A_exp{}, B_exp{});
     }
   }

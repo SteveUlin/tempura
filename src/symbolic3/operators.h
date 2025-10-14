@@ -5,6 +5,7 @@
 
 // Operations for building symbolic expressions
 // All operators have kSymbol and kDisplayMode for string conversion
+// Operators are callable for evaluation with values (see evaluate.h)
 
 namespace tempura::symbolic3 {
 
@@ -20,7 +21,10 @@ struct AddOp {
   // Binary
   constexpr auto operator()(auto a, auto b) const { return a + b; }
 
-  // Variadic (3+) - left fold: (((first + second) + ...) + rest)
+  // Variadic (3+) - left fold expansion
+  // Example: AddOp{}(1, 2, 3, 4) expands to (((1 + 2) + 3) + 4)
+  // The fold expression ((first + second) + ... + rest) builds left-associated
+  // tree
   constexpr auto operator()(auto first, auto second, auto... rest) const {
     return ((first + second) + ... + rest);
   }
@@ -43,7 +47,8 @@ struct MulOp {
   // Binary
   constexpr auto operator()(auto a, auto b) const { return a * b; }
 
-  // Variadic (3+) - left fold: (((first * second) * ...) * rest)
+  // Variadic (3+) - left fold expansion
+  // Example: MulOp{}(2, 3, 4) expands to (((2 * 3) * 4)
   constexpr auto operator()(auto first, auto second, auto... rest) const {
     return ((first * second) * ... * rest);
   }

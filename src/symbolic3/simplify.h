@@ -46,6 +46,10 @@ constexpr auto power_zero = Rewrite{pow(x_, 0_c), 1_c};
 constexpr auto power_one = Rewrite{pow(x_, 1_c), x_};
 constexpr auto one_power = Rewrite{pow(1_c, x_), 1_c};
 constexpr auto zero_power = Rewrite{pow(0_c, x_), 0_c};
+
+// Power composition is intentionally unidirectional (always composes, never
+// expands) This prevents oscillation with hypothetical power expansion rules
+// If power factoring is needed, implement with explicit predicates
 constexpr auto power_composition =
     Rewrite{pow(pow(x_, a_), b_), pow(x_, a_* b_)};
 
@@ -93,19 +97,22 @@ constexpr inline ConstantFold constant_fold{};
 
 // Helper to promote division of constants to fractions or constants
 // Uses if constexpr and compile-time arithmetic to decide promotion
+// Maintains exact arithmetic by avoiding premature float conversion
 template <auto n, auto d>
 constexpr auto promote_div_const() {
   if constexpr (d == 1) {
-    // Division by 1: return numerator as constant
+    // Division by 1: return numerator as constant (e.g., 6/1 → 6)
     return Constant<n>{};
   } else if constexpr (n % d == 0) {
-    // Exact division: return quotient as constant
+    // Exact division: return quotient as constant (e.g., 6/2 → 3)
     return Constant<n / d>{};
   } else {
-    // Non-integer division: return as reduced fraction
-    // Compute reduced numerator and denominator at compile-time
+    // Non-integer division: return as reduced fraction (e.g., 5/2 →
+    // Fraction<5,2>) Compute reduced numerator and denominator at
+    // compile-time using GCD Sign extraction ensures positive denominator
+    // invariant
     constexpr auto g = gcd(n, d);
-    constexpr auto sign = ((n < 0) != (d < 0)) ? -1 : 1;
+    constexpr auto sign = ((n < 0) != (d < 0)) ? -1 : 1;  // XOR for sign
     constexpr auto reduced_num = sign * abs_val(n) / g;
     constexpr auto reduced_den = abs_val(d) / g;
     return Fraction<reduced_num, reduced_den>{};
@@ -146,11 +153,15 @@ namespace FractionRuleCategories {
 // ────────────────────────────────────────────────────────────────────────────
 
 // Fraction<n, 1> → Constant<n> (denominator 1 means integer)
-// This is handled by pattern matching on specific Fraction types
+// NOTE: This is defined but currently unused - promote_div_const already
+// handles this case Cross-reference: promote_div_const (line ~100) returns
+// Constant for d==1
 template <long long n>
 constexpr auto frac_to_int = Rewrite{Fraction<n, 1>{}, Constant<n>{}};
 
 // Fraction<0, d> → Constant<0> (zero numerator is always zero)
+// NOTE: This is defined but currently unused - GCD reduction in Fraction
+// constructor handles this
 template <long long d>
   requires(d != 0)
 constexpr auto zero_frac = Rewrite{Fraction<0, d>{}, Constant<0>{}};
@@ -159,9 +170,10 @@ constexpr auto zero_frac = Rewrite{Fraction<0, d>{}, Constant<0>{}};
 // Fraction Arithmetic Integration
 // ────────────────────────────────────────────────────────────────────────────
 
-// When fractions appear in symbolic expressions, they participate in
-// simplification like any other constant. The actual arithmetic is handled
-// by the operators in fraction.h, and ConstantFold will evaluate them.
+// Fractions participate in simplification like any other constant
+// Arithmetic is defined in fraction.h (operator overloads)
+// ConstantFold will evaluate fraction expressions at compile-time
+// Example: Fraction<1,2> + Fraction<1,3> → Fraction<5,6> via constant folding
 
 // x * Fraction<1, 1> → x  (multiply by 1)
 constexpr auto mult_by_one_frac = Rewrite{x_ * Fraction<1, 1>{}, x_};
@@ -170,13 +182,16 @@ constexpr auto mult_by_one_frac = Rewrite{x_ * Fraction<1, 1>{}, x_};
 constexpr auto one_frac_mult = Rewrite{Fraction<1, 1>{} * x_, x_};
 
 // x * Fraction<0, d> → Constant<0>  (multiply by zero)
-// This will be caught by zero_frac first, so not strictly necessary
+// NOTE: This will be caught by zero_frac first, so not strictly necessary
+// Keeping for consistency with other multiplication identity rules
 
 }  // namespace FractionRuleCategories
 
 // Combined fraction rules - mostly handled by constant folding
-// The main work is done by PromoteDivisionToFraction and the fraction
-// arithmetic operators
+// The main work is done by:
+// 1. PromoteDivisionToFraction (converts integer division to fractions)
+// 2. Fraction arithmetic operators (fraction.h)
+// 3. ConstantFold (evaluates fraction expressions at compile-time)
 constexpr auto FractionRules = FractionRuleCategories::mult_by_one_frac |
                                FractionRuleCategories::one_frac_mult;
 
@@ -200,6 +215,12 @@ constexpr auto Factoring = Rewrite{x_ * a_ + x_, x_*(a_ + 1_c)} |
                            Rewrite{x_ + a_ * x_, x_ * (1_c + a_)} |
                            Rewrite{a_ * x_ + b_ * x_, x_*(a_ + b_)};
 
+// Associativity rules establish canonical left-associated form with sorted
+// terms Predicates use asymmetric comparisons (!=, ==) to prevent oscillation:
+// - Rule 1: Move deeper term left if not already ordered correctly
+// - Rule 2: Move right-outer term inward if it belongs before middle term
+// - Rule 3: Sort nested right terms
+// Together these converge to a canonical form without infinite reordering
 constexpr auto Associativity =
     Rewrite{a_ + (b_ + c_), (a_ + b_) + c_,
             [](auto ctx) {
@@ -283,6 +304,10 @@ constexpr auto log_power_inverse = Rewrite{exp(n_ * log(a_)), pow(a_, n_)};
 
 }  // namespace ExpRuleCategories
 
+// WARNING: Exp expansion rules can interact with log expansion to create
+// oscillation: exp(a+b) → exp(a)*exp(b), then log(exp(a)*exp(b)) →
+// log(exp(a))+log(exp(b)) → a+b The two-stage architecture and fixpoint
+// limiting prevent infinite loops, but be cautious when modifying these rules
 constexpr auto ExpRules =
     ExpRuleCategories::Inverse | ExpRuleCategories::Identity |
     ExpRuleCategories::Expansion | ExpRuleCategories::log_power_inverse;
@@ -294,6 +319,8 @@ constexpr auto Inverse = Rewrite{log(exp(x_)), x_};
 
 // Expansion: log(x^a) → a·log(x), log(x·y) → log(x) + log(y), log(x/y) →
 // log(x) - log(y)
+// WARNING: These rules can interact with exp expansion (see note above)
+// Currently safe because rules are in separate phases and fixpoint-limited
 constexpr auto power_rule = Rewrite{log(pow(x_, a_)), a_* log(x_)};
 constexpr auto product_rule = Rewrite{log(x_ * y_), log(x_) + log(y_)};
 constexpr auto quotient_rule = Rewrite{log(x_ / y_), log(x_) - log(y_)};
@@ -425,6 +452,9 @@ constexpr auto cosh_sinh_identity =
     Rewrite{pow(cosh(x_), 2_c) - pow(sinh(x_), 2_c), 1_c};
 
 // Derived forms: cosh²(x) → 1 + sinh²(x), sinh²(x) → cosh²(x) - 1
+// NOTE: These are NOT included in HyperbolicIdentityRules to avoid oscillation
+// Similar to Pythagorean identities, expansion rules would create loops
+// These are defined for potential future use with conditional application
 constexpr auto cosh_squared =
     Rewrite{pow(cosh(x_), 2_c), 1_c + pow(sinh(x_), 2_c)};
 constexpr auto sinh_squared =
@@ -432,6 +462,8 @@ constexpr auto sinh_squared =
 
 }  // namespace HyperbolicIdentityCategories
 
+// Only the contraction rule (cosh²-sinh² → 1) is active
+// Expansion rules would create oscillation without predicates
 constexpr auto HyperbolicIdentityRules =
     HyperbolicIdentityCategories::cosh_sinh_identity;
 
@@ -449,6 +481,9 @@ constexpr auto cos_sin_identity =
     Rewrite{pow(cos(x_), 2_c) + pow(sin(x_), 2_c), 1_c};
 
 // Derived forms: sin²(x) → 1 - cos²(x), cos²(x) → 1 - sin²(x)
+// NOTE: These are NOT included in PythagoreanRules to avoid oscillation:
+//   sin²(x) → 1-cos²(x) → 1-(1-sin²(x)) → sin²(x)  [infinite loop!]
+// These are defined for potential future use with conditional application
 constexpr auto sin_squared =
     Rewrite{pow(sin(x_), 2_c), 1_c - pow(cos(x_), 2_c)};
 constexpr auto cos_squared =
@@ -456,6 +491,8 @@ constexpr auto cos_squared =
 
 }  // namespace PythagoreanRuleCategories
 
+// Only the contraction rules (sin²+cos² → 1) are active
+// Expansion rules would create oscillation without predicates
 constexpr auto PythagoreanRules = PythagoreanRuleCategories::sin_cos_identity |
                                   PythagoreanRuleCategories::cos_sin_identity;
 

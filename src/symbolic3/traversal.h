@@ -6,6 +6,36 @@
 
 // Traversal strategies: control how transformations recurse through expression
 // trees
+//
+// TRAVERSAL PATTERNS:
+//
+// Fold (Bottom-Up):
+//        +              +
+//       / \            / \
+//      x   y    =>   x'  y'   =>  (x' + y')'
+//   1. Transform children first
+//   2. Transform parent with new children
+//
+// Unfold (Top-Down):
+//        +              +'             *'
+//       / \            / \            / \
+//      x   y    =>    x   y    =>   x'  y'
+//   1. Transform parent first
+//   2. Transform children of result
+//
+// Innermost: Bottom-up traversal, apply strategy at leaves first
+// Outermost: Top-down traversal, apply strategy at root first, retry if
+// changed
+//
+// TopDown: Pre-order traversal, apply at each node going down
+// BottomUp: Post-order traversal, apply at each node coming up
+//
+// USAGE GUIDELINES:
+// - Use Fold/BottomUp for rules that need simplified children (constant
+// folding)
+// - Use Unfold/TopDown for rules that enable further simplification (expansion)
+// - Use Innermost for exhaustive bottom-up application
+// - Use Outermost for exhaustive top-down application with retry
 
 namespace tempura::symbolic3 {
 

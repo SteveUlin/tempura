@@ -153,6 +153,21 @@ constexpr auto when(Pred pred, S const& strat) {
 // ============================================================================
 
 // FixPoint: apply strategy repeatedly until no change or depth limit
+//
+// TERMINATION:
+// - Detects fixed point by comparing types: isSame<Result, Input>
+// - Stops when strategy returns Never (indicates failure)
+// - Enforces depth limit to prevent infinite loops from oscillating rules
+//
+// DEPTH LIMITING:
+// - MaxDepth prevents infinite loops (default 20 is empirically sufficient)
+// - If limit reached, returns last result (may not be fully simplified)
+// - Use FixPoint only with strategies that eventually converge or stabilize
+//
+// OSCILLATION PREVENTION:
+// - Relies on rules having predicates that ensure progress
+// - Example: x + y → y + x should have predicate "y < x" to avoid swap loop
+// - See simplify.h for examples of oscillation-safe rule design
 template <Strategy S, std::size_t MaxDepth = 20>
 struct FixPoint {
   S strategy;

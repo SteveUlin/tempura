@@ -7,8 +7,23 @@
 #include "symbolic3/operators.h"
 
 // Total ordering for symbolic expressions to establish canonical forms.
-// This is critical for preventing infinite rewrite loops when using
-// ordering-based rules like: x + y → y + x iff y < x
+//
+// ORDERING SEMANTICS:
+// - Strict total order: antisymmetric, transitive, total
+// - Structural comparison: type precedence, then value/structure
+// - Type order: Constants < Symbols < Expressions (by operator precedence)
+// - Expression order: operator precedence first, then lexicographic on args
+// - Fraction ordering: cross-multiplication comparison for exact arithmetic
+//
+// OSCILLATION PREVENTION:
+// Ordering-based rewrite rules (e.g., x + y → y + x if y < x) rely on this
+// being a strict total order. Without totality, rules could endlessly swap
+// terms: If compare(a, b) is inconsistent, then:
+//   a + b → b + a  [because compare says b < a]
+//   b + a → a + b  [because compare changed its mind]
+//   ... infinite loop!
+//
+// This ordering ensures canonical forms are unique and reachable.
 //
 // ZERO STL DEPENDENCIES - Pure compile-time metaprogramming
 

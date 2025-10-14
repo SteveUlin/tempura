@@ -25,7 +25,10 @@ struct Symbol : SymbolicTag {
 
   constexpr Symbol() { (void)id; }  // Force ID generation for stable ordering
 
-  constexpr auto operator=(auto value) const;  // Enable x = 5 binding syntax
+  // Enable binding syntax for evaluation: x = value
+  // Returns TypeValueBinder for use in BinderPack{x = 5, y = 3}
+  // Actual implementation is in evaluate.h to avoid circular dependency
+  constexpr auto operator=(auto value) const;
 };
 
 // Numeric constant embedded in type system for compile-time computation
