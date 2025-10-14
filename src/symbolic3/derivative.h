@@ -1,5 +1,7 @@
 #pragma once
 
+#include <tuple>  // For std::apply in jacobian - std::tuple use is OK here
+
 #include "symbolic3/constants.h"
 #include "symbolic3/context.h"
 #include "symbolic3/core.h"

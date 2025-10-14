@@ -1,7 +1,6 @@
 #pragma once
 
-#include <type_traits>
-
+#include "meta/utility.h"
 #include "symbolic3/context.h"
 #include "symbolic3/core.h"
 
@@ -55,7 +54,7 @@ struct Sequence {
   template <Symbolic S, typename Context>
   constexpr auto apply(this auto const& self, S expr, Context ctx) {
     auto intermediate = self.first.apply(expr, ctx);
-    if constexpr (std::is_same_v<decltype(intermediate), Never>) {
+    if constexpr (isSame<decltype(intermediate), Never>) {
       return Never{};
     } else {
       return self.second.apply(intermediate, ctx);
@@ -81,11 +80,11 @@ struct Choice {
       auto result = first.apply(expr, ctx);
 
       // If first failed, try second
-      if constexpr (std::is_same_v<decltype(result), Never>) {
+      if constexpr (isSame<decltype(result), Never>) {
         return second.apply(expr, ctx);
       }
       // Check if first made no change - try second
-      else if constexpr (std::is_same_v<decltype(result), S>) {
+      else if constexpr (isSame<decltype(result), S>) {
         return second.apply(expr, ctx);
       }
       // First succeeded and made a change - return it
@@ -112,7 +111,7 @@ struct Try {
   template <Symbolic Expr, typename Context>
   constexpr auto apply(Expr expr, Context ctx) const {
     auto result = strategy.apply(expr, ctx);
-    if constexpr (std::is_same_v<decltype(result), Never>) {
+    if constexpr (isSame<decltype(result), Never>) {
       return expr;
     } else {
       return result;
@@ -166,8 +165,8 @@ struct FixPoint {
       auto result = strategy.apply(expr, ctx);
 
       // Check if we've reached a fixed point
-      constexpr bool unchanged = std::is_same_v<decltype(result), Expr>;
-      constexpr bool failed = std::is_same_v<decltype(result), Never>;
+      constexpr bool unchanged = isSame<decltype(result), Expr>;
+      constexpr bool failed = isSame<decltype(result), Never>;
 
       if constexpr (unchanged || failed) {
         return expr;
@@ -181,7 +180,7 @@ struct FixPoint {
 };
 
 // Repeat: apply strategy exactly N times
-template <Strategy S, std::size_t N>
+template <Strategy S, SizeT N>
 struct Repeat {
   S strategy;
 
@@ -191,7 +190,7 @@ struct Repeat {
       return expr;
     } else {
       auto result = strategy.apply(expr, ctx);
-      if constexpr (std::is_same_v<decltype(result), Never>) {
+      if constexpr (isSame<decltype(result), Never>) {
         return Never{};
       } else if constexpr (N == 1) {
         return result;

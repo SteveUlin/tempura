@@ -336,16 +336,14 @@ inline void debug_print_tree(S expr, int indent = 0,
     // Print arguments
     std::printf("%s  Args:\n", prefix.c_str());
     int argNum = 0;
-    std::apply(
-        [&]<typename... As>(As...) {
-          (
-              [&]() {
-                debug_print_tree(As{}, indent + 2,
-                                 std::format("[{}]", argNum++).c_str());
-              }(),
-              ...);
-        },
-        Args{});
+    []<typename OpT, Symbolic... As>(Expression<OpT, As...> e, int& num,
+                                     int ind) {
+      (
+          [&]() {
+            debug_print_tree(As{}, ind + 2, std::format("[{}]", num++).c_str());
+          }(),
+          ...);
+    }(expr, argNum, indent);
   }
 }
 

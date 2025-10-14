@@ -1,8 +1,6 @@
 #pragma once
 
-#include <tuple>
-#include <type_traits>
-
+#include "meta/utility.h"
 #include "symbolic3/core.h"
 #include "symbolic3/strategy.h"
 
@@ -16,11 +14,15 @@ namespace tempura::symbolic3 {
 // ============================================================================
 
 template <typename T>
-struct has_children : std::false_type {};
+struct has_children {
+  static constexpr bool value = false;
+};
 
 template <typename Op, Symbolic... Args>
   requires(sizeof...(Args) > 0)
-struct has_children<Expression<Op, Args...>> : std::true_type {};
+struct has_children<Expression<Op, Args...>> {
+  static constexpr bool value = true;
+};
 
 template <typename T>
 constexpr bool has_children_v = has_children<T>::value;
@@ -35,12 +37,8 @@ constexpr auto apply_to_children(S strategy, Expression<Op, Args...>,
   if constexpr (sizeof...(Args) == 0) {
     return Expression<Op>{};
   } else {
-    auto transformed_children = std::tuple{strategy.apply(Args{}, ctx)...};
-    return std::apply(
-        [](auto... children) {
-          return Expression<Op, decltype(children)...>{};
-        },
-        transformed_children);
+    // Transform each child and build new expression - no runtime tuple needed
+    return Expression<Op, decltype(strategy.apply(Args{}, ctx))...>{};
   }
 }
 

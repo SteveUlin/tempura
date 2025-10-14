@@ -1,5 +1,7 @@
 #pragma once
 
+#include "meta/type_list.h"  // For Get_t
+#include "meta/utility.h"
 #include "symbolic3/core.h"
 #include "symbolic3/matching.h"
 #include "symbolic3/ordering.h"
@@ -140,13 +142,13 @@ struct BindingContext {
   }
 
  private:
-  // Index-based lookup using tuple element access for cleaner code
-  template <TypeId VarId, std::size_t Idx>
+  // Index-based lookup - pure compile-time, uses meta/type_list.h Get_t
+  template <TypeId VarId, SizeT Idx>
   static constexpr auto lookupImpl() {
     if constexpr (Idx >= sizeof...(Entries)) {
       return PatternVar<TypeOf<VarId>>{};
     } else {
-      using CurrentEntry = std::tuple_element_t<Idx, std::tuple<Entries...>>;
+      using CurrentEntry = Get_t<Idx, Entries...>;
       if constexpr (CurrentEntry::var_id == VarId) {
         return typename CurrentEntry::bound_expr{};
       } else {
@@ -155,12 +157,12 @@ struct BindingContext {
     }
   }
 
-  template <TypeId VarId, std::size_t Idx>
+  template <TypeId VarId, SizeT Idx>
   static constexpr bool isBoundImpl() {
     if constexpr (Idx >= sizeof...(Entries)) {
       return false;
     } else {
-      using CurrentEntry = std::tuple_element_t<Idx, std::tuple<Entries...>>;
+      using CurrentEntry = Get_t<Idx, Entries...>;
       if constexpr (CurrentEntry::var_id == VarId) {
         return true;
       } else {
@@ -179,11 +181,6 @@ template <typename T>
 constexpr bool isBindingFailure() {
   return __is_same(T, BindingFailure);
 }
-
-// Helper to get Nth type from parameter pack
-// Use std::tuple_element for better compile-time performance
-template <std::size_t N, typename... Ts>
-using GetNthType_t = std::tuple_element_t<N, std::tuple<Ts...>>;
 
 }  // namespace detail
 
@@ -297,21 +294,21 @@ constexpr auto extractBindingsImpl(Symbol<U>, S expr, Context ctx) {
 }
 
 // Helper to get Nth argument from an expression at compile-time
-template <std::size_t N, typename Op, Symbolic... Args>
+template <SizeT N, typename Op, Symbolic... Args>
 constexpr auto getNthArg(Expression<Op, Args...>) {
-  return GetNthType_t<N, Args...>{};
+  return Get_t<N, Args...>{};
 }
 
 // Forward declaration for mutual recursion
-template <std::size_t Idx, typename Op, Symbolic... PatternArgs,
-          typename ExprOp, Symbolic... ExprArgs, typename Context>
+template <SizeT Idx, typename Op, Symbolic... PatternArgs, typename ExprOp,
+          Symbolic... ExprArgs, typename Context>
 constexpr auto extractBindingsThreaded(Expression<Op, PatternArgs...> pattern,
                                        Expression<ExprOp, ExprArgs...> expr,
                                        Context ctx);
 
 // Helper to thread context through argument pairs (index-based)
-template <std::size_t Idx, typename Op, Symbolic... PatternArgs,
-          typename ExprOp, Symbolic... ExprArgs, typename Context>
+template <SizeT Idx, typename Op, Symbolic... PatternArgs, typename ExprOp,
+          Symbolic... ExprArgs, typename Context>
 constexpr auto extractBindingsThreaded(Expression<Op, PatternArgs...> pattern,
                                        Expression<ExprOp, ExprArgs...> expr,
                                        Context ctx) {
@@ -338,7 +335,7 @@ template <typename Op, Symbolic... PatternArgs, typename ExprOp,
 constexpr auto extractBindingsImpl(Expression<Op, PatternArgs...> pattern,
                                    Expression<ExprOp, ExprArgs...> expr,
                                    Context ctx) {
-  if constexpr (!std::is_same_v<Op, ExprOp>) {
+  if constexpr (!isSame<Op, ExprOp>) {
     return BindingFailure{};  // Operations don't match
   } else if constexpr (sizeof...(PatternArgs) != sizeof...(ExprArgs)) {
     return BindingFailure{};  // Argument counts don't match
@@ -396,9 +393,10 @@ namespace predicates {
 // Base predicate concept - any callable that takes Context and returns bool
 template <typename P>
 concept PredicateLike = requires(P pred) {
-  {
-    pred(std::declval<typename std::remove_cvref_t<decltype(pred)>>())
-  } -> std::convertible_to<bool>;
+  { pred(kDeclVal<P>()) };
+  requires requires(P pred) {
+    { pred(kDeclVal<P>()) } -> Invocable;
+  };
 };
 
 // Logical AND combinator
@@ -729,7 +727,7 @@ struct RewriteSystem {
     if constexpr (Index >= sizeof...(Rules)) {
       return expr;
     } else {
-      using CurrentRule = detail::GetNthType_t<Index, Rules...>;
+      using CurrentRule = Get_t<Index, Rules...>;
       if constexpr (CurrentRule::matches(expr)) {
         return CurrentRule{}.apply(expr, ctx);
       } else {
@@ -744,7 +742,7 @@ struct RewriteSystem {
     if constexpr (Index >= sizeof...(Rules)) {
       return expr;
     } else {
-      using CurrentRule = detail::GetNthType_t<Index, Rules...>;
+      using CurrentRule = Get_t<Index, Rules...>;
       if constexpr (CurrentRule::matches(expr)) {
         return CurrentRule::apply(expr);
       } else {

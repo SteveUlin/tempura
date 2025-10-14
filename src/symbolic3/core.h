@@ -1,8 +1,9 @@
 #pragma once
 
-#include <tuple>
-
+#include "meta/tags.h"  // For TypeList
 #include "meta/type_id.h"
+#include "meta/type_list.h"  // For Get_t
+#include "meta/utility.h"
 
 // Core symbolic types and concepts for symbolic3 combinator system
 // Combinator-based symbolic computation core types
@@ -124,15 +125,21 @@ struct get_op<Expression<Op, Args...>> {
 template <typename T>
 using get_op_t = typename get_op<T>::type;
 
+// Get arguments as TypeList
 template <typename T>
 struct get_args;
 
 template <typename Op, Symbolic... Args>
 struct get_args<Expression<Op, Args...>> {
-  using type = std::tuple<Args...>;
+  using type = TypeList<Args...>;
 };
 
 template <typename T>
 using get_args_t = typename get_args<T>::type;
+
+// Helper to extract Nth argument type from an expression
+// Uses meta/type_list.h Get_t helper
+template <SizeT N, typename T>
+using get_arg_t = Get_t<N, typename get_args<T>::type>;
 
 }  // namespace tempura::symbolic3

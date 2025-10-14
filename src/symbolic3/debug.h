@@ -96,28 +96,32 @@ constexpr bool is_likely_simplified(S) {
     return true;
   } else if constexpr (is_expression<S>) {
     using Op = get_op_t<S>;
-    using Args = get_args_t<S>;
 
-    // Check for obvious non-simplified patterns
-    if constexpr (std::same_as<Op, AddOp>) {
+    // Check for obvious non-simplified patterns - use expression directly
+    if constexpr (isSame<Op, AddOp>) {
       // Check for x + 0 or 0 + x
-      return !std::apply(
-          []<typename... As>(As...) {
-            return (... || std::is_same_v<As, Constant<0>>);
-          },
-          Args{});
-    } else if constexpr (std::same_as<Op, MulOp>) {
+      return []<typename OpT, Symbolic... As>(Expression<OpT, As...>) {
+        return !(... || isSame<As, Constant<0>>);
+      }(S{});
+    } else if constexpr (isSame<Op, MulOp>) {
       // Check for x * 1 or 1 * x or x * 0
-      return !std::apply(
-          []<typename... As>(As...) {
-            return (... || (std::is_same_v<As, Constant<0>> ||
-                            std::is_same_v<As, Constant<1>>));
-          },
-          Args{});
+      return []<typename OpT, Symbolic... As>(Expression<OpT, As...>) {
+        return !(... || (isSame<As, Constant<0>> || isSame<As, Constant<1>>));
+      }(S{});
     }
     return true;
   }
   return true;
+}
+
+// Helper to compute max depth from args
+template <typename Op, Symbolic... Args>
+constexpr int expression_depth_impl(Expression<Op, Args...>) {
+  if constexpr (sizeof...(Args) == 0) {
+    return 1;
+  } else {
+    return 1 + std::max({expression_depth(Args{})...});
+  }
 }
 
 // Get the "depth" of an expression tree
@@ -126,14 +130,19 @@ constexpr int expression_depth(S) {
   if constexpr (is_constant<S> || is_symbol<S>) {
     return 0;
   } else if constexpr (is_expression<S>) {
-    using Args = get_args_t<S>;
-    return 1 + std::apply(
-                   []<typename... As>(As...) {
-                     return std::max({expression_depth(As{})...});
-                   },
-                   Args{});
+    return expression_depth_impl(S{});
   }
   return 0;
+}
+
+// Helper to count operations from args
+template <typename Op, Symbolic... Args>
+constexpr int operation_count_impl(Expression<Op, Args...>) {
+  if constexpr (sizeof...(Args) == 0) {
+    return 1;
+  } else {
+    return 1 + (... + operation_count(Args{}));
+  }
 }
 
 // Count the number of operations in an expression
@@ -142,10 +151,7 @@ constexpr int operation_count(S) {
   if constexpr (is_constant<S> || is_symbol<S>) {
     return 0;
   } else if constexpr (is_expression<S>) {
-    using Args = get_args_t<S>;
-    return 1 + std::apply([]<typename... As>(
-                              As...) { return (... + operation_count(As{})); },
-                          Args{});
+    return operation_count_impl(S{});
   }
   return 0;
 }
@@ -191,18 +197,19 @@ constexpr bool structurally_equal(S1, S2) {
   return std::is_same_v<S1, S2>;
 }
 
+// Helper for contains_subexpression
+template <Symbolic Sub, typename Op, Symbolic... Args>
+constexpr bool contains_subexpression_impl(Expression<Op, Args...>, Sub) {
+  return (... || contains_subexpression(Args{}, Sub{}));
+}
+
 // Check if expression contains a sub-expression
 template <Symbolic S, Symbolic Sub>
 constexpr bool contains_subexpression(S, Sub) {
-  if constexpr (std::is_same_v<S, Sub>) {
+  if constexpr (isSame<S, Sub>) {
     return true;
   } else if constexpr (is_expression<S>) {
-    using Args = get_args_t<S>;
-    return std::apply(
-        []<typename... As>(As...) {
-          return (... || contains_subexpression(As{}, Sub{}));
-        },
-        Args{});
+    return contains_subexpression_impl(S{}, Sub{});
   }
   return false;
 }

@@ -1,11 +1,15 @@
 #pragma once
 
-#include <cstddef>
-#include <numbers>
-#include <type_traits>
+#include <numbers>  // For mathematical constants (pi, e) - compile-time only
+
+#include "meta/utility.h"
 
 // Data-driven context for transformation strategies
 // Context carries WHAT data/mode to use, not HOW to behave
+//
+// NOTE: This file minimally uses <numbers> for mathematical constants (π, e)
+// which are compile-time values. This is acceptable as they don't impact
+// compile times significantly.
 
 namespace tempura::symbolic3 {
 
@@ -57,17 +61,17 @@ struct SimplificationMode {
 // Transformation Context
 // ============================================================================
 
-template <std::size_t Depth = 0, Domain DomainType = Domain::Real,
+template <SizeT Depth = 0, Domain DomainType = Domain::Real,
           typename AngleConfig = AngleDomain<>, typename ModConfig = void>
 struct TransformContext {
-  static constexpr std::size_t depth = Depth;
+  static constexpr SizeT depth = Depth;
   static constexpr Domain domain = DomainType;
 
   // Data: what mode to operate in
   SimplificationMode mode{};
 
   // Depth tracking (for recursion limits)
-  template <std::size_t N>
+  template <SizeT N>
   constexpr auto increment_depth() const {
     TransformContext<Depth + N, DomainType, AngleConfig, ModConfig> result;
     result.mode = mode;
@@ -115,7 +119,7 @@ struct TransformContext {
 
   // Check if we're in modular arithmetic
   template <typename T = ModConfig>
-    requires(!std::is_void_v<T>)
+    requires(!isSame<T, void>)
   static constexpr auto modulus() {
     return T::modulus;
   }

@@ -1,7 +1,6 @@
 #pragma once
 
-#include <type_traits>
-
+#include "meta/utility.h"
 #include "symbolic3/core.h"
 #include "symbolic3/operators.h"
 
@@ -16,13 +15,13 @@ namespace tempura::symbolic3 {
 // Match two types
 template <typename T1, typename T2>
 constexpr bool match() {
-  return std::is_same_v<T1, T2>;
+  return isSame<T1, T2>;
 }
 
 // Symbol matches Symbol if same type
 template <typename U1, typename U2>
 constexpr bool match(Symbol<U1>, Symbol<U2>) {
-  return std::is_same_v<Symbol<U1>, Symbol<U2>>;
+  return isSame<Symbol<U1>, Symbol<U2>>;
 }
 
 // Constant matches Constant if same value
@@ -79,7 +78,7 @@ constexpr bool match(AnySymbol, Symbol<unique>) {
 template <typename Op1, Symbolic... Args1, typename Op2, Symbolic... Args2>
 constexpr bool match(Expression<Op1, Args1...>, Expression<Op2, Args2...>) {
   // Operations must match
-  if constexpr (!std::is_same_v<Op1, Op2>) {
+  if constexpr (!isSame<Op1, Op2>) {
     return false;
   }
   // Argument count must match
@@ -126,10 +125,14 @@ constexpr bool match(S1, S2) {
 
 // Check if expression matches specific operation
 template <typename Op, typename T>
-struct matches_op : std::false_type {};
+struct matches_op {
+  static constexpr bool value = false;
+};
 
 template <typename Op, Symbolic... Args>
-struct matches_op<Op, Expression<Op, Args...>> : std::true_type {};
+struct matches_op<Op, Expression<Op, Args...>> {
+  static constexpr bool value = true;
+};
 
 template <typename Op, typename T>
 constexpr bool matches_op_v = matches_op<Op, T>::value;

@@ -24,9 +24,8 @@ struct FoldConstants {
 
     // Fold addition of constants
     if constexpr (matches_op_v<AddOp, S>) {
-      using args = get_args_t<S>;
-      using L = std::tuple_element_t<0, args>;
-      using R = std::tuple_element_t<1, args>;
+      using L = get_arg_t<0, S>;
+      using R = get_arg_t<1, S>;
 
       if constexpr (is_constant<L> && is_constant<R>) {
         constexpr auto result = L::value + R::value;
@@ -44,9 +43,8 @@ struct FoldConstants {
 
     // Fold multiplication of constants
     if constexpr (matches_op_v<MulOp, S>) {
-      using args = get_args_t<S>;
-      using L = std::tuple_element_t<0, args>;
-      using R = std::tuple_element_t<1, args>;
+      using L = get_arg_t<0, S>;
+      using R = get_arg_t<1, S>;
 
       if constexpr (is_constant<L> && is_constant<R>) {
         constexpr auto result = L::value * R::value;
@@ -79,9 +77,8 @@ struct ApplyAlgebraicRules {
 
     // x + 0 → x
     if constexpr (matches_op_v<AddOp, S>) {
-      using args = get_args_t<S>;
-      using L = std::tuple_element_t<0, args>;
-      using R = std::tuple_element_t<1, args>;
+      using L = get_arg_t<0, S>;
+      using R = get_arg_t<1, S>;
 
       if constexpr (is_constant<R> && R::value == 0) {
         return L{};
@@ -93,9 +90,8 @@ struct ApplyAlgebraicRules {
 
     // x * 0 → 0
     if constexpr (matches_op_v<MulOp, S>) {
-      using args = get_args_t<S>;
-      using L = std::tuple_element_t<0, args>;
-      using R = std::tuple_element_t<1, args>;
+      using L = get_arg_t<0, S>;
+      using R = get_arg_t<1, S>;
 
       if constexpr (is_constant<R> && R::value == 0) {
         return Constant<0>{};
@@ -130,8 +126,7 @@ struct SimplifyTrig {
       // 1. Preserve special angle values (π/6, π/4, etc.) if in symbolic mode
       // 2. Normalize angles to [0, period) if in angle domain
 
-      using args = get_args_t<S>;
-      using Arg = std::tuple_element_t<0, args>;
+      using Arg = get_arg_t<0, S>;
 
       // If the argument is a constant and we should fold symbolic constants
       if constexpr (is_constant<Arg>) {
