@@ -7,35 +7,75 @@
 // Traversal strategies: control how transformations recurse through expression
 // trees
 //
-// TRAVERSAL PATTERNS:
+// ============================================================================
+// TRAVERSAL PATTERNS
+// ============================================================================
 //
-// Fold (Bottom-Up):
-//        +              +
-//       / \            / \
-//      x   y    =>   x'  y'   =>  (x' + y')'
-//   1. Transform children first
-//   2. Transform parent with new children
+// Fold (Bottom-Up): Transform leaves first, then propagate upward
+//        +              +              result
+//       / \            / \                |
+//      x   y    =>   x'  y'   =>     (x' + y')'
 //
-// Unfold (Top-Down):
-//        +              +'             *'
-//       / \            / \            / \
-//      x   y    =>    x   y    =>   x'  y'
-//   1. Transform parent first
-//   2. Transform children of result
+//   Order: 1) Transform x → x'
+//          2) Transform y → y'
+//          3) Transform (x' + y') with new children
 //
-// Innermost: Bottom-up traversal, apply strategy at leaves first
-// Outermost: Top-down traversal, apply strategy at root first, retry if
-// changed
+//   Use case: Constant folding - needs evaluated children before folding parent
+//   Example: (2+3)*5 → 5*5 → 25  [children must be folded before parent]
 //
-// TopDown: Pre-order traversal, apply at each node going down
-// BottomUp: Post-order traversal, apply at each node coming up
+// ============================================================================
 //
-// USAGE GUIDELINES:
-// - Use Fold/BottomUp for rules that need simplified children (constant
-// folding)
-// - Use Unfold/TopDown for rules that enable further simplification (expansion)
-// - Use Innermost for exhaustive bottom-up application
-// - Use Outermost for exhaustive top-down application with retry
+// Unfold (Top-Down): Transform root first, then recurse into result
+//        +              +'             result
+//       / \            / \                |
+//      x   y    =>    a   b    =>   transform(a, b)
+//
+//   Order: 1) Transform (x + y) → (a + b)   [parent changes structure]
+//          2) Transform a (new child)
+//          3) Transform b (new child)
+//
+//   Use case: Expansion rules that expose new simplification opportunities
+//   Example: exp(a+b) → exp(a)*exp(b)  [creates new structure to simplify]
+//
+// ============================================================================
+//
+// Innermost: Bottom-up with fixpoint - exhaustively simplify leaves first
+//   Applies strategy repeatedly at each node until stable before moving up
+//   Guarantees no further simplification possible at lower levels
+//
+// Outermost: Top-down with fixpoint - simplify root until stable, then recurse
+//   Applies strategy repeatedly at current node, retries if changed
+//   Can expose new simplification opportunities by transforming parent first
+//
+// TopDown: Pre-order traversal - visit each node going down (once)
+//   Apply strategy at node, then recurse into children (no retry at node)
+//
+// BottomUp: Post-order traversal - visit each node coming up (once)
+//   Recurse into children first, then apply strategy at node (no retry)
+//
+// ============================================================================
+// USAGE GUIDELINES
+// ============================================================================
+//
+// Choose based on rule dependencies:
+//
+// Fold/BottomUp:
+//   - Rules need simplified children (constant folding: 2+3 → 5)
+//   - Term collection (x+x → 2*x after simplifying x)
+//   - Most algebraic simplification
+//
+// Unfold/TopDown:
+//   - Rules that expose new structure (exp(a+b) → exp(a)*exp(b))
+//   - Distribution (x*(a+b) → x*a + x*b creates addition to simplify)
+//   - Expansion rules that enable further simplification
+//
+// Innermost:
+//   - Exhaustive bottom-up until no more changes possible
+//   - Safe default for algebraic simplification
+//
+// Outermost:
+//   - When parent transformation is critical (some expansion strategies)
+//   - Use with caution: can be less efficient than Innermost
 
 namespace tempura::symbolic3 {
 

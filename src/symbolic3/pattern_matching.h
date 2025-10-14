@@ -123,57 +123,70 @@ struct BindingContext {
 
   // Lookup a pattern variable's bound expression
   // Returns the bound expression if found, otherwise returns the PatternVar
-  // itself
+  // itself (unbound variables act as identity in substitution)
   template <TypeId VarId>
   static constexpr auto lookup() {
     if constexpr (sizeof...(Entries) == 0) {
-      return PatternVar<TypeOf<VarId>>{};
+      return PatternVar<TypeOf<VarId>>{};  // Empty context: nothing bound
     } else {
-      return lookupImpl<VarId, 0>();
+      return lookupImpl<VarId, 0>();  // Search from start
     }
   }
 
-  // Check if a pattern variable is bound
+  // Check if a pattern variable is bound in this context
+  // Used by predicates to verify pattern matches before substitution
   template <TypeId VarId>
   static constexpr bool isBound() {
     if constexpr (sizeof...(Entries) == 0) {
-      return false;
+      return false;  // Empty context: nothing bound
     } else {
-      return isBoundImpl<VarId, 0>();
+      return isBoundImpl<VarId, 0>();  // Check from start
     }
   }
 
  private:
   // Index-based lookup - linear search through entries at compile-time
-  // While O(N), the compiler optimizes this to jump-table or binary search
-  // Uses meta/type_list.h Get_t for type-level indexing into parameter pack
+  //
+  // IMPLEMENTATION NOTES:
+  // - While O(N) in theory, the compiler optimizes this aggressively
+  // - Common case: N < 10 pattern variables, so linear search is fast
+  // - Compiler may optimize to jump table or unrolled comparisons
+  // - Uses Get_t<Idx, Entries...> from meta/type_list.h for type-level indexing
+  //
+  // ALGORITHM:
+  // 1. Get entry at current index using Get_t
+  // 2. Compare entry's var_id with search key VarId
+  // 3. If match: return bound expression
+  // 4. If no match: recurse to next index (tail recursion)
+  // 5. If exhausted: return unbound PatternVar
   template <TypeId VarId, SizeT Idx>
   static constexpr auto lookupImpl() {
     if constexpr (Idx >= sizeof...(Entries)) {
-      // Not found - return unbound pattern variable
-      return PatternVar<TypeOf<VarId>>{};
+      // Base case: exhausted all entries without finding VarId
+      return PatternVar<TypeOf<VarId>>{};  // Return unbound variable
     } else {
-      using CurrentEntry = Get_t<Idx, Entries...>;
+      using CurrentEntry = Get_t<Idx, Entries...>;  // Type-level array access
       if constexpr (CurrentEntry::var_id == VarId) {
-        // Found - return bound expression
+        // Found the binding: return the bound expression type
         return typename CurrentEntry::bound_expr{};
       } else {
-        // Keep searching
+        // Not found yet: tail-recurse to next index
         return lookupImpl<VarId, Idx + 1>();
       }
     }
   }
 
+  // Check if variable is bound - same algorithm as lookupImpl but returns bool
   template <TypeId VarId, SizeT Idx>
   static constexpr bool isBoundImpl() {
     if constexpr (Idx >= sizeof...(Entries)) {
-      return false;
+      return false;  // Base case: not found
     } else {
       using CurrentEntry = Get_t<Idx, Entries...>;
       if constexpr (CurrentEntry::var_id == VarId) {
-        return true;
+        return true;  // Found: variable is bound
       } else {
-        return isBoundImpl<VarId, Idx + 1>();
+        return isBoundImpl<VarId, Idx + 1>();  // Keep searching
       }
     }
   }

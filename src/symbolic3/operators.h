@@ -21,10 +21,17 @@ struct AddOp {
   // Binary
   constexpr auto operator()(auto a, auto b) const { return a + b; }
 
-  // Variadic (3+) - left fold expansion
-  // Example: AddOp{}(1, 2, 3, 4) expands to (((1 + 2) + 3) + 4)
-  // The fold expression ((first + second) + ... + rest) builds left-associated
-  // tree
+  // Variadic (3+ arguments) - left fold expansion builds left-associated tree
+  //
+  // FOLD EXPANSION SEMANTICS:
+  // The fold expression ((first + second) + ... + rest) is C++17 syntax for:
+  //
+  //   AddOp{}(1, 2, 3, 4)
+  //   = ((1 + 2) + ... + {3, 4})       [fold begins with first + second]
+  //   = (((1 + 2) + 3) + 4)            [left-associates remaining args]
+  //
+  // This creates Expression<AddOp, Expression<AddOp, ...>> structure
+  // Matches the canonical form expected by simplification rules
   constexpr auto operator()(auto first, auto second, auto... rest) const {
     return ((first + second) + ... + rest);
   }
@@ -47,7 +54,8 @@ struct MulOp {
   // Binary
   constexpr auto operator()(auto a, auto b) const { return a * b; }
 
-  // Variadic (3+) - left fold expansion
+  // Variadic (3+ arguments) - left fold expansion
+  // Similar to AddOp: MulOp{}(2, 3, 4, 5) = (((2 * 3) * 4) * 5)
   // Example: MulOp{}(2, 3, 4) expands to (((2 * 3) * 4)
   constexpr auto operator()(auto first, auto second, auto... rest) const {
     return ((first * second) * ... * rest);

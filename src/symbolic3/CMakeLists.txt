@@ -73,6 +73,12 @@ target_link_libraries(two_stage_simplify_test PRIVATE symbolic3 unit)
 add_test(NAME symbolic3_two_stage_simplify COMMAND two_stage_simplify_test)
 set_tests_properties(symbolic3_two_stage_simplify PROPERTIES LABELS "symbolic3;simplification")
 
+# Oscillation prevention tests - verifies rules don't create infinite loops
+add_executable(oscillation_prevention_test test/oscillation_prevention_test.cpp)
+target_link_libraries(oscillation_prevention_test PRIVATE symbolic3 unit)
+add_test(NAME symbolic3_oscillation_prevention COMMAND oscillation_prevention_test)
+set_tests_properties(symbolic3_oscillation_prevention PROPERTIES LABELS "symbolic3;simplification;stability")
+
 # ============================================================================
 # Term Structure and Ordering Tests
 # ============================================================================
