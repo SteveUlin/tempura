@@ -215,15 +215,19 @@ constexpr auto Factoring = Rewrite{x_ * a_ + x_, x_*(a_ + 1_c)} |
                            Rewrite{x_ + a_ * x_, x_ * (1_c + a_)} |
                            Rewrite{a_ * x_ + b_ * x_, x_*(a_ + b_)};
 
-// Associativity rules establish canonical left-associated form with sorted terms
+// Associativity rules establish canonical left-associated form with sorted
+// terms
 //
 // OSCILLATION PREVENTION:
-// Predicates use asymmetric comparisons (!=, ==) to prevent infinite rewrite loops:
+// Predicates use asymmetric comparisons (!=, ==) to prevent infinite rewrite
+// loops:
 // - Rule 1 uses != : establishes baseline ordering (move b left if b not < a)
-// - Rules 2 & 3 use ==: handle specific re-association cases (move b left if b < c)
+// - Rules 2 & 3 use ==: handle specific re-association cases (move b left if b
+// < c)
 //
-// Together these predicates ensure mutual exclusivity - at most one rule applies
-// This guarantees convergence to a canonical form without endless swapping
+// Together these predicates ensure mutual exclusivity - at most one rule
+// applies This guarantees convergence to a canonical form without endless
+// swapping
 //
 // Example: (x + z) + y with ordering x < y < z:
 //   Step 1: (x + z) + y → x + (z + y)  [Rule 2: y < z, so re-associate]
@@ -475,8 +479,9 @@ constexpr auto cosh_sinh_identity =
 
 // Derived expansion forms: cosh²(x) → 1 + sinh²(x), sinh²(x) → cosh²(x) - 1
 //
-// OSCILLATION PREVENTION: These are INTENTIONALLY NOT included in HyperbolicIdentityRules
-// Similar to Pythagorean identities, simultaneous expansion rules create loops:
+// OSCILLATION PREVENTION: These are INTENTIONALLY NOT included in
+// HyperbolicIdentityRules Similar to Pythagorean identities, simultaneous
+// expansion rules create loops:
 //   cosh²(x) → 1 + sinh²(x)      [cosh_squared expansion]
 //   → 1 + (cosh²(x) - 1)         [sinh_squared applied to sinh² term]
 //   → cosh²(x)                   [after simplification]
@@ -484,7 +489,8 @@ constexpr auto cosh_sinh_identity =
 //
 // USAGE: These are defined as building blocks for future conditional expansion:
 // - Could be enabled with predicates checking expression complexity
-// - Could be used in specific simplification strategies (e.g., "expand all hyperbolics")
+// - Could be used in specific simplification strategies (e.g., "expand all
+// hyperbolics")
 // - Currently only the contraction rule (cosh²-sinh² → 1) is active below
 constexpr auto cosh_squared =
     Rewrite{pow(cosh(x_), 2_c), 1_c + pow(sinh(x_), 2_c)};
@@ -513,8 +519,9 @@ constexpr auto cos_sin_identity =
 
 // Derived expansion forms: sin²(x) → 1 - cos²(x), cos²(x) → 1 - sin²(x)
 //
-// OSCILLATION PREVENTION: These are INTENTIONALLY NOT included in PythagoreanRules
-// If both expansion rules were active, they would create an infinite loop:
+// OSCILLATION PREVENTION: These are INTENTIONALLY NOT included in
+// PythagoreanRules If both expansion rules were active, they would create an
+// infinite loop:
 //   sin²(x) → 1 - cos²(x)        [sin_squared expansion]
 //   → 1 - (1 - sin²(x))          [cos_squared applied to cos² term]
 //   → sin²(x)                    [after simplification]
@@ -522,7 +529,8 @@ constexpr auto cos_sin_identity =
 //
 // USAGE: These are defined as building blocks for future conditional expansion:
 // - Could be enabled with predicates checking expression complexity
-// - Could be used in specific simplification strategies (e.g., "expand all trig")
+// - Could be used in specific simplification strategies (e.g., "expand all
+// trig")
 // - Currently only the contraction rules (sin²+cos² → 1) are active below
 constexpr auto sin_squared =
     Rewrite{pow(sin(x_), 2_c), 1_c - pow(cos(x_), 2_c)};

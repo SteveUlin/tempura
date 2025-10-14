@@ -27,9 +27,9 @@ struct Symbol : SymbolicTag {
 
   // Enable binding syntax for evaluation: x = value
   // Returns TypeValueBinder for use in BinderPack{x = 5, y = 3}
-  // The key insight: operator= returns auto, allowing the binder to capture both
-  // the Symbol type (compile-time) and the value (runtime-compatible)
-  // This enables heterogeneous binding: BinderPack{x = 5, y = 3.14, z = "text"}
+  // The key insight: operator= returns auto, allowing the binder to capture
+  // both the Symbol type (compile-time) and the value (runtime-compatible) This
+  // enables heterogeneous binding: BinderPack{x = 5, y = 3.14, z = "text"}
   // Actual implementation is in evaluate.h to avoid circular dependency
   constexpr auto operator=(auto value) const;
 };

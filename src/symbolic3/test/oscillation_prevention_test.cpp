@@ -398,8 +398,9 @@ int main() {
 
     // Verify stability
     constexpr auto s2 = simplify(simplified, ctx);
-    static_assert(isSame<decltype(simplified), decltype(s2)>,
-                  "x*(a+b) should be stable (no distribute/factor oscillation)");
+    static_assert(
+        isSame<decltype(simplified), decltype(s2)>,
+        "x*(a+b) should be stable (no distribute/factor oscillation)");
   };
 
   "Factoring stability"_test = [] {
