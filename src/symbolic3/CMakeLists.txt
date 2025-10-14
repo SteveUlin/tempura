@@ -26,6 +26,12 @@ target_link_libraries(pattern_binding_test PRIVATE symbolic3 unit)
 add_test(NAME symbolic3_pattern_binding COMMAND pattern_binding_test)
 set_tests_properties(symbolic3_pattern_binding PROPERTIES LABELS "symbolic3;base")
 
+# Composable Predicates Tests
+add_executable(composable_predicates_test test/composable_predicates_test.cpp)
+target_link_libraries(composable_predicates_test PRIVATE symbolic3 unit)
+add_test(NAME symbolic3_composable_predicates COMMAND composable_predicates_test)
+set_tests_properties(symbolic3_composable_predicates PROPERTIES LABELS "symbolic3;base;predicates")
+
 # Simplify Tests (consolidated into simplification_basic/advanced/pipeline)
 # add_executable(simplify_test test/simplify_test.cpp)
 # target_link_libraries(simplify_test PRIVATE symbolic3)
@@ -103,6 +109,12 @@ set_tests_properties(symbolic3_mult_ordering PROPERTIES LABELS "symbolic3;term_s
 # Term Collecting Debug (quick debug tool - not a formal test)
 add_executable(term_collecting_debug test/term_collecting_debug.cpp)
 target_link_libraries(term_collecting_debug PRIVATE symbolic3)
+
+# Term Collection Test (isolated test for debugging) - TODO: file missing (term_collection_test.cpp doesn't exist)
+# add_executable(term_collection_test test/term_collection_test.cpp)
+# target_link_libraries(term_collection_test PRIVATE symbolic3 unit)
+# add_test(NAME symbolic3_term_collection COMMAND term_collection_test)
+# set_tests_properties(symbolic3_term_collection PROPERTIES LABELS "symbolic3;term_structure")
 
 # Manual Step Debugging (understanding simplification iteration)
 add_executable(manual_step_test test/manual_step_test.cpp)

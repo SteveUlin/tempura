@@ -2,12 +2,59 @@
 
 #include "symbolic3/core.h"
 #include "symbolic3/matching.h"
+#include "symbolic3/ordering.h"
 
-// Pattern-based expression rewriting with variable capture and substitution
+// ============================================================================
+// PATTERN MATCHING & REWRITING SYSTEM
+// ============================================================================
 //
-// Simplified migration from symbolic2/pattern_matching.h
-// Enables declarative transformation rules like:
-//   Rewrite{pow(x_, Constant<0>{}), Constant<1>{}}  // x^0 → 1
+// Provides compile-time pattern matching with variable capture and
+// substitution for symbolic expressions. Enables declarative transformation
+// rules in the style of term rewriting systems.
+//
+// KEY COMPONENTS:
+// ---------------
+// 1. PatternVar - Pattern variables (x_, y_, z_, etc.) that capture and bind
+//    subexpressions during matching
+//
+// 2. BindingContext - Compile-time heterogeneous map storing pattern variable
+//    bindings (TypeId → bound expression)
+//
+// 3. Rewrite - Single rewrite rule with pattern, replacement, and optional
+//    predicate: Rewrite{pattern, replacement, predicate}
+//
+// 4. RewriteSystem - Collection of rewrite rules applied in order until first
+//    match succeeds
+//
+// EXAMPLE USAGE:
+// --------------
+//   // Define a rewrite rule: x^0 → 1
+//   constexpr auto rule = Rewrite{pow(x_, 0_c), 1_c};
+//
+//   // Apply the rule
+//   constexpr auto result = rule.apply(pow(y, 0_c), default_context());
+//   // result == 1_c, with x_ bound to y
+//
+//   // Conditional rewrite with predicate
+//   constexpr auto comm_rule = Rewrite{
+//       x_ + y_,
+//       y_ + x_,
+//       [](auto ctx) { return lessThan(get(ctx, y_), get(ctx, x_)); }
+//   };
+//
+// STRATEGY INTERFACE:
+// -------------------
+// Both Rewrite and RewriteSystem implement the Strategy concept:
+//   - apply(expr, context) - Try to rewrite expr, return original if no match
+//   - Can be composed with other strategies using operators (>>, |, etc.)
+//
+// PERFORMANCE NOTES:
+// ------------------
+// - All operations are compile-time when used with constexpr expressions
+// - BindingContext uses index-based lookup (O(N) but optimized by compiler)
+// - Pattern matching uses structural recursion through expression trees
+//
+// See symbolic3/README.md for comprehensive documentation and examples.
 
 namespace tempura::symbolic3 {
 
@@ -75,46 +122,51 @@ struct BindingContext {
   // Lookup a pattern variable's bound expression
   template <TypeId VarId>
   static constexpr auto lookup() {
-    return lookupImpl<VarId, Entries...>();
+    if constexpr (sizeof...(Entries) == 0) {
+      return PatternVar<TypeOf<VarId>>{};
+    } else {
+      return lookupImpl<VarId, 0>();
+    }
   }
 
   // Check if a pattern variable is bound
   template <TypeId VarId>
   static constexpr bool isBound() {
-    return isBoundImpl<VarId, Entries...>();
+    if constexpr (sizeof...(Entries) == 0) {
+      return false;
+    } else {
+      return isBoundImpl<VarId, 0>();
+    }
   }
 
  private:
-  template <TypeId VarId, typename Entry, typename... Rest>
+  // Index-based lookup using tuple element access for cleaner code
+  template <TypeId VarId, std::size_t Idx>
   static constexpr auto lookupImpl() {
-    if constexpr (Entry::var_id == VarId) {
-      return typename Entry::bound_expr{};
-    } else if constexpr (sizeof...(Rest) > 0) {
-      return lookupImpl<VarId, Rest...>();
-    } else {
+    if constexpr (Idx >= sizeof...(Entries)) {
       return PatternVar<TypeOf<VarId>>{};
-    }
-  }
-
-  template <TypeId VarId>
-  static constexpr auto lookupImpl() {
-    return PatternVar<TypeOf<VarId>>{};
-  }
-
-  template <TypeId VarId, typename Entry, typename... Rest>
-  static constexpr bool isBoundImpl() {
-    if constexpr (Entry::var_id == VarId) {
-      return true;
-    } else if constexpr (sizeof...(Rest) > 0) {
-      return isBoundImpl<VarId, Rest...>();
     } else {
-      return false;
+      using CurrentEntry = std::tuple_element_t<Idx, std::tuple<Entries...>>;
+      if constexpr (CurrentEntry::var_id == VarId) {
+        return typename CurrentEntry::bound_expr{};
+      } else {
+        return lookupImpl<VarId, Idx + 1>();
+      }
     }
   }
 
-  template <TypeId VarId>
+  template <TypeId VarId, std::size_t Idx>
   static constexpr bool isBoundImpl() {
-    return false;
+    if constexpr (Idx >= sizeof...(Entries)) {
+      return false;
+    } else {
+      using CurrentEntry = std::tuple_element_t<Idx, std::tuple<Entries...>>;
+      if constexpr (CurrentEntry::var_id == VarId) {
+        return true;
+      } else {
+        return isBoundImpl<VarId, Idx + 1>();
+      }
+    }
   }
 };
 
@@ -129,15 +181,9 @@ constexpr bool isBindingFailure() {
 }
 
 // Helper to get Nth type from parameter pack
-template <int N, typename First, typename... Rest>
-struct GetNthType {
-  using type = typename GetNthType<N - 1, Rest...>::type;
-};
-
-template <typename First, typename... Rest>
-struct GetNthType<0, First, Rest...> {
-  using type = First;
-};
+// Use std::tuple_element for better compile-time performance
+template <std::size_t N, typename... Ts>
+using GetNthType_t = std::tuple_element_t<N, std::tuple<Ts...>>;
 
 }  // namespace detail
 
@@ -253,7 +299,7 @@ constexpr auto extractBindingsImpl(Symbol<U>, S expr, Context ctx) {
 // Helper to get Nth argument from an expression at compile-time
 template <std::size_t N, typename Op, Symbolic... Args>
 constexpr auto getNthArg(Expression<Op, Args...>) {
-  return typename GetNthType<N, Args...>::type{};
+  return GetNthType_t<N, Args...>{};
 }
 
 // Forward declaration for mutual recursion
@@ -327,6 +373,270 @@ constexpr auto extractBindings(Pattern pattern, Expr expr) {
 }
 
 // =============================================================================
+// COMPOSABLE PREDICATE SYSTEM
+// =============================================================================
+//
+// Predicates can be composed using logical operators to build complex
+// conditions from simple building blocks.
+//
+// USAGE EXAMPLES:
+//   // Simple predicate
+//   auto pred1 = [](auto ctx) { return is_constant(get(ctx, x_)); };
+//
+//   // Composed predicates
+//   auto pred2 = pred1 && [](auto ctx) { return get(ctx, x_) != 0; };
+//   auto pred3 = pred1 || pred2;
+//   auto pred4 = !pred1;
+//
+//   // Use in rewrite rules
+//   Rewrite{pattern, replacement, pred2}
+
+namespace predicates {
+
+// Base predicate concept - any callable that takes Context and returns bool
+template <typename P>
+concept PredicateLike = requires(P pred) {
+  {
+    pred(std::declval<typename std::remove_cvref_t<decltype(pred)>>())
+  } -> std::convertible_to<bool>;
+};
+
+// Logical AND combinator
+template <typename Pred1, typename Pred2>
+struct AndPredicate {
+  [[no_unique_address]] Pred1 pred1{};
+  [[no_unique_address]] Pred2 pred2{};
+
+  template <typename Context>
+  constexpr bool operator()(Context ctx) const {
+    return pred1(ctx) && pred2(ctx);
+  }
+};
+
+// Logical OR combinator
+template <typename Pred1, typename Pred2>
+struct OrPredicate {
+  [[no_unique_address]] Pred1 pred1{};
+  [[no_unique_address]] Pred2 pred2{};
+
+  template <typename Context>
+  constexpr bool operator()(Context ctx) const {
+    return pred1(ctx) || pred2(ctx);
+  }
+};
+
+// Logical NOT combinator
+template <typename Pred>
+struct NotPredicate {
+  [[no_unique_address]] Pred pred{};
+
+  template <typename Context>
+  constexpr bool operator()(Context ctx) const {
+    return !pred(ctx);
+  }
+};
+
+// Deduction guides
+template <typename P1, typename P2>
+AndPredicate(P1, P2) -> AndPredicate<P1, P2>;
+
+template <typename P1, typename P2>
+OrPredicate(P1, P2) -> OrPredicate<P1, P2>;
+
+template <typename P>
+NotPredicate(P) -> NotPredicate<P>;
+
+// =============================================================================
+// PREDICATE OPERATORS
+// =============================================================================
+
+// Logical AND: pred1 && pred2
+template <typename Pred1, typename Pred2>
+constexpr auto operator&&(Pred1 pred1, Pred2 pred2) {
+  return AndPredicate{pred1, pred2};
+}
+
+// Logical OR: pred1 || pred2
+template <typename Pred1, typename Pred2>
+constexpr auto operator||(Pred1 pred1, Pred2 pred2) {
+  return OrPredicate{pred1, pred2};
+}
+
+// Logical NOT: !pred
+template <typename Pred>
+constexpr auto operator!(Pred pred) {
+  return NotPredicate{pred};
+}
+
+// =============================================================================
+// COMMON PREDICATE BUILDERS
+// =============================================================================
+
+// Check if bound pattern variable is a constant
+template <typename PatternVar>
+struct IsConstant {
+  [[no_unique_address]] PatternVar var{};
+
+  template <typename Context>
+  constexpr bool operator()(Context ctx) const {
+    return is_constant<decltype(get(ctx, var))>;
+  }
+};
+
+// Check if bound pattern variable is a symbol
+template <typename PatternVar>
+struct IsSymbol {
+  [[no_unique_address]] PatternVar var{};
+
+  template <typename Context>
+  constexpr bool operator()(Context ctx) const {
+    return is_symbol<decltype(get(ctx, var))>;
+  }
+};
+
+// Check if bound pattern variable is an expression
+template <typename PatternVar>
+struct IsExpression {
+  [[no_unique_address]] PatternVar var{};
+
+  template <typename Context>
+  constexpr bool operator()(Context ctx) const {
+    return is_expression<decltype(get(ctx, var))>;
+  }
+};
+
+// Check if two bound pattern variables satisfy an ordering
+template <typename PatternVar1, typename PatternVar2, typename Comparator>
+struct ComparePredicate {
+  [[no_unique_address]] PatternVar1 var1{};
+  [[no_unique_address]] PatternVar2 var2{};
+  [[no_unique_address]] Comparator comp{};
+
+  template <typename Context>
+  constexpr bool operator()(Context ctx) const {
+    return comp(get(ctx, var1), get(ctx, var2));
+  }
+};
+
+// =============================================================================
+// PREDICATE FACTORY FUNCTIONS
+// =============================================================================
+// Note: These predicates work with pattern variable bindings, not raw
+// symbolic expressions. For expression-level predicates, see matching.h
+
+// var_is_constant(x_) - Check if bound pattern variable is a constant
+template <typename PatternVar>
+constexpr auto var_is_constant(PatternVar var) {
+  return IsConstant<PatternVar>{var};
+}
+
+// var_is_symbol(x_) - Check if bound pattern variable is a symbol
+template <typename PatternVar>
+constexpr auto var_is_symbol(PatternVar var) {
+  return IsSymbol<PatternVar>{var};
+}
+
+// var_is_expression(x_) - Check if bound pattern variable is an expression
+template <typename PatternVar>
+constexpr auto var_is_expression(PatternVar var) {
+  return IsExpression<PatternVar>{var};
+}
+
+// var_compare(x_, y_, comp) - Compare two bound pattern variables using
+// comparator
+template <typename PatternVar1, typename PatternVar2, typename Comparator>
+constexpr auto var_compare(PatternVar1 var1, PatternVar2 var2,
+                           Comparator comp) {
+  return ComparePredicate<PatternVar1, PatternVar2, Comparator>{var1, var2,
+                                                                comp};
+}
+
+// var_less_than(x_, y_) - Check if bound x < bound y
+template <typename PatternVar1, typename PatternVar2>
+constexpr auto var_less_than(PatternVar1 var1, PatternVar2 var2) {
+  return var_compare(var1, var2, [](auto a, auto b) { return lessThan(a, b); });
+}
+
+// var_greater_than(x_, y_) - Check if bound x > bound y
+template <typename PatternVar1, typename PatternVar2>
+constexpr auto var_greater_than(PatternVar1 var1, PatternVar2 var2) {
+  return var_compare(var1, var2,
+                     [](auto a, auto b) { return greaterThan(a, b); });
+}
+
+// var_equal_to(x_, y_) - Check if bound x == bound y (structural equality)
+template <typename PatternVar1, typename PatternVar2>
+constexpr auto var_equal_to(PatternVar1 var1, PatternVar2 var2) {
+  return var_compare(var1, var2, [](auto a, auto b) { return match(a, b); });
+}
+
+// var_not_equal_to(x_, y_) - Check if bound x != bound y
+template <typename PatternVar1, typename PatternVar2>
+constexpr auto var_not_equal_to(PatternVar1 var1, PatternVar2 var2) {
+  return !var_equal_to(var1, var2);
+}
+
+// =============================================================================
+// PREDICATE BUILDERS FOR LITERAL COMPARISONS
+// =============================================================================
+
+// Compare bound pattern variable with literal value using lessThan
+template <typename PatternVar, Symbolic Literal>
+struct VarLessThanLiteral {
+  [[no_unique_address]] PatternVar var{};
+  [[no_unique_address]] Literal lit{};
+
+  template <typename Context>
+  constexpr bool operator()(Context ctx) const {
+    return lessThan(get(ctx, var), lit);
+  }
+};
+
+// Compare bound pattern variable with literal value using greaterThan
+template <typename PatternVar, Symbolic Literal>
+struct VarGreaterThanLiteral {
+  [[no_unique_address]] PatternVar var{};
+  [[no_unique_address]] Literal lit{};
+
+  template <typename Context>
+  constexpr bool operator()(Context ctx) const {
+    return greaterThan(get(ctx, var), lit);
+  }
+};
+
+// Compare bound pattern variable with literal value using match
+template <typename PatternVar, Symbolic Literal>
+struct VarEqualToLiteral {
+  [[no_unique_address]] PatternVar var{};
+  [[no_unique_address]] Literal lit{};
+
+  template <typename Context>
+  constexpr bool operator()(Context ctx) const {
+    return match(get(ctx, var), lit);
+  }
+};
+
+// var_less_than_literal(x_, 5_c) - Check if bound x < 5
+template <typename PatternVar, Symbolic Literal>
+constexpr auto var_less_than_literal(PatternVar var, Literal lit) {
+  return VarLessThanLiteral<PatternVar, Literal>{var, lit};
+}
+
+// var_greater_than_literal(x_, 0_c) - Check if bound x > 0
+template <typename PatternVar, Symbolic Literal>
+constexpr auto var_greater_than_literal(PatternVar var, Literal lit) {
+  return VarGreaterThanLiteral<PatternVar, Literal>{var, lit};
+}
+
+// var_equal_to_literal(x_, 5_c) - Check if bound x == 5
+template <typename PatternVar, Symbolic Literal>
+constexpr auto var_equal_to_literal(PatternVar var, Literal lit) {
+  return VarEqualToLiteral<PatternVar, Literal>{var, lit};
+}
+
+}  // namespace predicates
+
+// =============================================================================
 // NO PREDICATE - Default for rewrite rules without conditions
 // =============================================================================
 
@@ -344,9 +654,9 @@ struct NoPredicate {
 template <typename Pattern, typename Replacement,
           typename Predicate = NoPredicate>
 struct Rewrite {
-  Pattern pattern;
-  Replacement replacement;
-  [[no_unique_address]] Predicate predicate = {};
+  [[no_unique_address]] Pattern pattern{};
+  [[no_unique_address]] Replacement replacement{};
+  [[no_unique_address]] Predicate predicate{};
 
   // Check if pattern matches and predicate holds
   template <Symbolic S>
@@ -368,25 +678,19 @@ struct Rewrite {
   // bindings_ctx is the pattern variable bindings
   template <Symbolic S, typename TransformCtx>
   constexpr auto apply(S expr, TransformCtx) const {
-    if constexpr (!match(Pattern{}, expr)) {
-      return expr;
-    } else {
-      auto bindings_ctx = extractBindings(Pattern{}, expr);
-      if constexpr (detail::isBindingFailure<decltype(bindings_ctx)>()) {
-        return expr;
-      } else {
-        if constexpr (!Predicate{}(bindings_ctx)) {
-          return expr;
-        } else {
-          return substitute(Replacement{}, bindings_ctx);
-        }
-      }
-    }
+    return applyImpl(expr);
   }
 
   // Legacy static interface for compatibility
   template <Symbolic S>
   static constexpr auto apply(S expr) {
+    return Rewrite{}.applyImpl(expr);
+  }
+
+ private:
+  // Core implementation shared by both apply methods
+  template <Symbolic S>
+  constexpr auto applyImpl(S expr) const {
     if constexpr (!match(Pattern{}, expr)) {
       return expr;
     } else {
@@ -425,7 +729,7 @@ struct RewriteSystem {
     if constexpr (Index >= sizeof...(Rules)) {
       return expr;
     } else {
-      using CurrentRule = typename detail::GetNthType<Index, Rules...>::type;
+      using CurrentRule = detail::GetNthType_t<Index, Rules...>;
       if constexpr (CurrentRule::matches(expr)) {
         return CurrentRule{}.apply(expr, ctx);
       } else {
@@ -440,7 +744,7 @@ struct RewriteSystem {
     if constexpr (Index >= sizeof...(Rules)) {
       return expr;
     } else {
-      using CurrentRule = typename detail::GetNthType<Index, Rules...>::type;
+      using CurrentRule = detail::GetNthType_t<Index, Rules...>;
       if constexpr (CurrentRule::matches(expr)) {
         return CurrentRule::apply(expr);
       } else {

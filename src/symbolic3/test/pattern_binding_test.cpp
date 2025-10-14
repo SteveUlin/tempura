@@ -18,7 +18,7 @@ int main() {
     constexpr auto expr = y;
 
     constexpr auto bindings = extractBindings(pattern, expr);
-    static_assert(!detail::isBindingFailure<decltype(bindings)>(),
+    static_assert(!symbolic3::detail::isBindingFailure<decltype(bindings)>(),
                   "Binding should succeed");
 
     // Verify the binding was captured
@@ -33,7 +33,7 @@ int main() {
     constexpr auto expr = y + 0_c;
 
     constexpr auto bindings = extractBindings(pattern, expr);
-    static_assert(!detail::isBindingFailure<decltype(bindings)>(),
+    static_assert(!symbolic3::detail::isBindingFailure<decltype(bindings)>(),
                   "Binding should succeed");
 
     // Verify x_ was bound to y
@@ -48,7 +48,7 @@ int main() {
     constexpr auto expr = a + b;
 
     constexpr auto bindings = extractBindings(pattern, expr);
-    static_assert(!detail::isBindingFailure<decltype(bindings)>(),
+    static_assert(!symbolic3::detail::isBindingFailure<decltype(bindings)>(),
                   "Binding should succeed");
 
     // Verify both bindings
@@ -65,7 +65,7 @@ int main() {
     constexpr auto expr = a + a;       // Same symbol twice
 
     constexpr auto bindings = extractBindings(pattern, expr);
-    static_assert(!detail::isBindingFailure<decltype(bindings)>(),
+    static_assert(!symbolic3::detail::isBindingFailure<decltype(bindings)>(),
                   "Binding should succeed when repeated var matches same expr");
 
     constexpr auto bound = get(bindings, x_);
@@ -82,7 +82,7 @@ int main() {
     // NOTE: This test would pass if the binding check worked properly
     // For now, we just verify the binding extraction completes
     // TODO: Fix the consistency check in extractBindingsImpl
-    // static_assert(detail::isBindingFailure<decltype(bindings)>(),
+    // static_assert(symbolic3::detail::isBindingFailure<decltype(bindings)>(),
     //               "Binding should fail when repeated var matches different
     //               exprs");
     (void)bindings;  // Silence unused variable warning
@@ -95,7 +95,7 @@ int main() {
     constexpr auto expr = (a + b) * 2_c;
 
     constexpr auto bindings = extractBindings(pattern, expr);
-    static_assert(!detail::isBindingFailure<decltype(bindings)>(),
+    static_assert(!symbolic3::detail::isBindingFailure<decltype(bindings)>(),
                   "Binding should succeed for nested expressions");
 
     constexpr auto x_bound = get(bindings, x_);
