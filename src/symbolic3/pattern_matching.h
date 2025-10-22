@@ -87,8 +87,23 @@ inline constexpr AnyExpr 𝐚𝐧𝐲𝐞𝐱𝐩𝐫{};
 inline constexpr AnyConstant 𝐜{};
 
 // =============================================================================
-// PATTERN MATCHING - PatternVar matches any expression
+// PATTERN VARIABLE MATCHING - PatternVar matches and captures expressions
 // =============================================================================
+// Pattern variables are the core of the rewrite system - they capture
+// subexpressions during matching and allow them to be substituted in the
+// replacement pattern.
+//
+// BEHAVIOR:
+// - PatternVar<Unique> matches ANY symbolic expression (universal capture)
+// - Captured expression is bound in BindingContext for later substitution
+// - Multiple occurrences of same PatternVar must bind to same expression
+// - PatternVar does NOT match Never (Never is a sentinel, not a value)
+//
+// EXAMPLE:
+//   Pattern: x_ + 0_c  (x_ is PatternVar)
+//   Expression: y + 0_c
+//   Result: Match succeeds, x_ binds to y
+//   Replacement: x_ → substitutes to y
 
 // PatternVar matches any symbolic expression (captures it for binding)
 template <typename Unique, Symbolic S>

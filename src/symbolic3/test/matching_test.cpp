@@ -85,5 +85,24 @@ int main() {
     // static_assert(!match(𝐜, y), "𝐜 should not match symbol");
   };
 
+  // Test 8: Fraction matching
+  "Fractions match by reduced form"_test = [] {
+    constexpr auto f1 = Fraction<1, 2>{};
+    constexpr auto f2 = Fraction<2, 4>{};  // Reduces to 1/2
+    constexpr auto f3 = Fraction<1, 3>{};
+
+    static_assert(match(f1, f2), "1/2 should match 2/4 (same reduced form)");
+    static_assert(!match(f1, f3), "1/2 should not match 1/3");
+  };
+
+  // Test 9: AnyConstant matches fractions
+  "AnyConstant matches fractions"_test = [] {
+    constexpr auto f = Fraction<1, 2>{};
+    constexpr auto c = Constant<5>{};
+
+    static_assert(match(𝐜, f), "AnyConstant should match fraction");
+    static_assert(match(𝐜, c), "AnyConstant should match constant");
+  };
+
   return TestRegistry::result();
 }

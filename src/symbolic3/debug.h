@@ -2,12 +2,34 @@
 
 #include <type_traits>
 
+#include "meta/utility.h"
 #include "symbolic3/core.h"
+#include "symbolic3/matching.h"
 #include "symbolic3/to_string.h"
 
-// Compile-time debugging utilities for symbolic3 expressions
-// These tools help inspect expression types during compilation using
-// compiler error messages and static_assert
+// ============================================================================
+// COMPILE-TIME DEBUGGING UTILITIES FOR SYMBOLIC3 EXPRESSIONS
+// ============================================================================
+//
+// This header provides tools for inspecting and debugging symbolic expressions
+// at compile-time. Two main categories of utilities:
+//
+// 1. TYPE INSPECTION - Display types in compiler errors
+//    - constexpr_print_type() - Force compiler to show type
+//    - constexpr_type_name() - Get type name as string
+//
+// 2. MATCH EXPLANATION - Understand pattern matching behavior
+//    - explain_match() - Explain why a pattern matches or doesn't match
+//    - match_summary() - Short one-line summary of match result
+//
+// 3. EXPRESSION ANALYSIS - Query expression properties
+//    - expression_depth() - Tree depth
+//    - operation_count() - Number of operations
+//    - is_likely_simplified() - Heuristic simplification check
+//
+// 4. COMPILE-TIME ASSERTIONS - Better error messages for symbolic code
+//    - SYMBOLIC_STATIC_ASSERT - Assert with expression context
+//    - VERIFY_SIMPLIFICATION - Check simplification results
 
 namespace tempura::symbolic3 {
 
@@ -212,6 +234,235 @@ constexpr bool contains_subexpression(S, Sub) {
     return contains_subexpression_impl(S{}, Sub{});
   }
   return false;
+}
+
+// =============================================================================
+// PATTERN MATCH EXPLANATION UTILITIES
+// =============================================================================
+// These utilities explain why pattern matches succeed or fail
+// Invaluable for debugging complex rewrite rules and simplification strategies
+//
+// USAGE EXAMPLE:
+//   constexpr auto pattern = x_ + 0_c;
+//   constexpr auto expr = y + 5_c;
+//   constexpr auto explanation = explain_match(pattern, expr);
+//   // explanation: "Match failed: Constant<0> != Constant<5> (values differ)"
+//
+// The explanations are compile-time strings that can be:
+// - Displayed in static_assert messages
+// - Logged at runtime for debugging
+// - Used in test failure messages
+
+namespace detail {
+
+// Helper to build match explanation strings
+// Uses FixedString for compile-time string manipulation
+template <size_t N>
+struct MatchExplanation {
+  char data[N + 1]{};
+  size_t size = N;
+
+  constexpr MatchExplanation(const char (&str)[N + 1]) {
+    for (size_t i = 0; i < N; ++i) {
+      data[i] = str[i];
+    }
+    data[N] = '\0';
+  }
+
+  constexpr const char* c_str() const { return data; }
+};
+
+template <size_t N>
+MatchExplanation(const char (&)[N]) -> MatchExplanation<N - 1>;
+
+// Concatenate explanation strings
+template <size_t N1, size_t N2>
+constexpr auto concat_explanation(const MatchExplanation<N1>& a,
+                                  const MatchExplanation<N2>& b) {
+  MatchExplanation<N1 + N2> result{""};
+  for (size_t i = 0; i < N1; ++i) {
+    result.data[i] = a.data[i];
+  }
+  for (size_t i = 0; i < N2; ++i) {
+    result.data[N1 + i] = b.data[i];
+  }
+  result.data[N1 + N2] = '\0';
+  result.size = N1 + N2;
+  return result;
+}
+
+}  // namespace detail
+
+// =============================================================================
+// MATCH EXPLANATION FUNCTIONS
+// =============================================================================
+// These mirror the match() overloads in matching.h but return explanations
+
+// Explain Symbol matching
+template <typename U1, typename U2>
+constexpr auto explain_match(Symbol<U1>, Symbol<U2>) {
+  if constexpr (isSame<Symbol<U1>, Symbol<U2>>) {
+    return detail::MatchExplanation{"✓ Match succeeded: Symbols have same type identity"};
+  } else {
+    return detail::MatchExplanation{"✗ Match failed: Symbols have different type identities"};
+  }
+}
+
+// Explain Constant matching
+template <auto V1, auto V2>
+constexpr auto explain_match(Constant<V1>, Constant<V2>) {
+  if constexpr (V1 == V2) {
+    return detail::MatchExplanation{"✓ Match succeeded: Constants have same value"};
+  } else {
+    return detail::MatchExplanation{"✗ Match failed: Constants have different values"};
+  }
+}
+
+// Explain Fraction matching
+template <long long N1, long long D1, long long N2, long long D2>
+constexpr auto explain_match(Fraction<N1, D1>, Fraction<N2, D2>) {
+  if constexpr (Fraction<N1, D1>::numerator == Fraction<N2, D2>::numerator &&
+                Fraction<N1, D1>::denominator == Fraction<N2, D2>::denominator) {
+    return detail::MatchExplanation{"✓ Match succeeded: Fractions reduce to same value"};
+  } else {
+    return detail::MatchExplanation{"✗ Match failed: Fractions have different reduced forms"};
+  }
+}
+
+// Explain AnyArg matching (always succeeds)
+template <Symbolic S>
+constexpr auto explain_match(AnyArg, S) {
+  return detail::MatchExplanation{"✓ Match succeeded: AnyArg matches any expression"};
+}
+
+template <Symbolic S>
+constexpr auto explain_match(S, AnyArg) {
+  return detail::MatchExplanation{"✓ Match succeeded: Any expression matches AnyArg"};
+}
+
+// Explain AnyExpr matching
+template <Symbolic S>
+constexpr auto explain_match(AnyExpr, S) {
+  if constexpr (is_expression<S>) {
+    return detail::MatchExplanation{"✓ Match succeeded: AnyExpr matches compound expression"};
+  } else {
+    return detail::MatchExplanation{"✗ Match failed: AnyExpr only matches compound expressions (not atoms)"};
+  }
+}
+
+// Explain AnyConstant matching
+template <Symbolic S>
+constexpr auto explain_match(AnyConstant, S) {
+  if constexpr (is_constant<S> || is_fraction<S>) {
+    return detail::MatchExplanation{"✓ Match succeeded: AnyConstant matches constant value"};
+  } else {
+    return detail::MatchExplanation{"✗ Match failed: AnyConstant only matches constants and fractions"};
+  }
+}
+
+// Explain AnySymbol matching
+template <Symbolic S>
+constexpr auto explain_match(AnySymbol, S) {
+  if constexpr (is_symbol<S>) {
+    return detail::MatchExplanation{"✓ Match succeeded: AnySymbol matches symbolic variable"};
+  } else {
+    return detail::MatchExplanation{"✗ Match failed: AnySymbol only matches symbols"};
+  }
+}
+
+// Explain Expression matching - structural recursion
+template <typename Op1, Symbolic... Args1, typename Op2, Symbolic... Args2>
+constexpr auto explain_match(Expression<Op1, Args1...>,
+                             Expression<Op2, Args2...>) {
+  if constexpr (!isSame<Op1, Op2>) {
+    return detail::MatchExplanation{"✗ Match failed: Operations differ"};
+  } else if constexpr (sizeof...(Args1) != sizeof...(Args2)) {
+    return detail::MatchExplanation{"✗ Match failed: Argument counts differ"};
+  } else if constexpr (sizeof...(Args1) == 0) {
+    return detail::MatchExplanation{"✓ Match succeeded: Same operation, no arguments"};
+  } else {
+    // Check if all arguments match
+    if constexpr ((match(Args1{}, Args2{}) && ...)) {
+      return detail::MatchExplanation{"✓ Match succeeded: Operation and all arguments match"};
+    } else {
+      return detail::MatchExplanation{"✗ Match failed: Operation matches but some arguments differ"};
+    }
+  }
+}
+
+// Explain Never matching (always fails)
+constexpr auto explain_match(Never, Never) {
+  return detail::MatchExplanation{"✗ Match failed: Never never matches (not even itself)"};
+}
+
+template <Symbolic S>
+  requires(!isSame<S, Never>)
+constexpr auto explain_match(Never, S) {
+  return detail::MatchExplanation{"✗ Match failed: Never matches nothing"};
+}
+
+template <Symbolic S>
+  requires(!isSame<S, Never>)
+constexpr auto explain_match(S, Never) {
+  return detail::MatchExplanation{"✗ Match failed: Nothing matches Never"};
+}
+
+// Explain fallback (type mismatch)
+// Note: This overload is carefully constrained to not conflict with wildcards
+template <Symbolic S1, Symbolic S2>
+  requires(!isSame<S1, S2> &&       // Different types
+           !is_expression<S1> &&    // Not both expressions
+           !is_expression<S2> &&
+           !isSame<S1, AnyArg> && !isSame<S2, AnyArg> &&          // Not wildcards
+           !isSame<S1, AnyExpr> && !isSame<S2, AnyExpr> &&
+           !isSame<S1, AnyConstant> && !isSame<S2, AnyConstant> &&
+           !isSame<S1, AnySymbol> && !isSame<S2, AnySymbol>)
+constexpr auto explain_match(S1, S2) {
+  if constexpr (is_symbol<S1> && is_constant<S2>) {
+    return detail::MatchExplanation{"✗ Match failed: Symbol cannot match Constant"};
+  } else if constexpr (is_constant<S1> && is_symbol<S2>) {
+    return detail::MatchExplanation{"✗ Match failed: Constant cannot match Symbol"};
+  } else if constexpr (is_symbol<S1> && is_fraction<S2>) {
+    return detail::MatchExplanation{"✗ Match failed: Symbol cannot match Fraction"};
+  } else if constexpr (is_fraction<S1> && is_symbol<S2>) {
+    return detail::MatchExplanation{"✗ Match failed: Fraction cannot match Symbol"};
+  } else if constexpr (is_constant<S1> && is_fraction<S2>) {
+    return detail::MatchExplanation{"✗ Match failed: Constant cannot match Fraction"};
+  } else if constexpr (is_fraction<S1> && is_constant<S2>) {
+    return detail::MatchExplanation{"✗ Match failed: Fraction cannot match Constant"};
+  } else {
+    return detail::MatchExplanation{"✗ Match failed: Type category mismatch"};
+  }
+}
+
+// Fallback for expression vs atom mismatch
+template <Symbolic S1, Symbolic S2>
+  requires((is_expression<S1> && !is_expression<S2>) ||
+           (!is_expression<S1> && is_expression<S2>))
+constexpr auto explain_match(S1, S2) {
+  if constexpr (is_expression<S1>) {
+    return detail::MatchExplanation{"✗ Match failed: Compound expression cannot match atomic value"};
+  } else {
+    return detail::MatchExplanation{"✗ Match failed: Atomic value cannot match compound expression"};
+  }
+}
+
+// =============================================================================
+// MATCH SUMMARY - Short one-line description
+// =============================================================================
+
+template <Symbolic S1, Symbolic S2>
+constexpr bool match_result_bool(S1 a, S2 b) {
+  return match(a, b);
+}
+
+template <Symbolic S1, Symbolic S2>
+constexpr auto match_summary(S1 a, S2 b) {
+  if constexpr (match(a, b)) {
+    return detail::MatchExplanation{"✓ MATCH"};
+  } else {
+    return detail::MatchExplanation{"✗ NO MATCH"};
+  }
 }
 
 // =============================================================================

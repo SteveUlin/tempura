@@ -161,5 +161,135 @@ auto main() -> int {
   };
   */
 
+  // =========================================================================
+  // MATCH EXPLANATION TESTS
+  // =========================================================================
+  // Tests for explain_match() utility - verify match explanations work
+
+  "Explain Symbol matching"_test = [] {
+    constexpr Symbol x;
+    constexpr Symbol y;
+
+    constexpr auto same_explanation = explain_match(x, x);
+    constexpr auto diff_explanation = explain_match(x, y);
+
+    // Verify explanation strings are compile-time constants
+    static_assert(same_explanation.size > 0, "Explanation has content");
+    static_assert(diff_explanation.size > 0, "Explanation has content");
+
+    // Runtime verification of content
+    assert(std::string(same_explanation.c_str()).find("succeeded") !=
+           std::string::npos);
+    assert(std::string(diff_explanation.c_str()).find("failed") !=
+           std::string::npos);
+  };
+
+  "Explain Constant matching"_test = [] {
+    constexpr auto c1 = Constant<5>{};
+    constexpr auto c2 = Constant<5>{};
+    constexpr auto c3 = Constant<3>{};
+
+    constexpr auto same_explanation = explain_match(c1, c2);
+    constexpr auto diff_explanation = explain_match(c1, c3);
+
+    static_assert(same_explanation.size > 0, "Explanation has content");
+    static_assert(diff_explanation.size > 0, "Explanation has content");
+
+    assert(std::string(same_explanation.c_str()).find("succeeded") !=
+           std::string::npos);
+    assert(std::string(diff_explanation.c_str()).find("failed") !=
+           std::string::npos);
+  };
+
+  "Explain Fraction matching"_test = [] {
+    constexpr auto f1 = Fraction<1, 2>{};
+    constexpr auto f2 = Fraction<2, 4>{};  // Reduces to 1/2
+    constexpr auto f3 = Fraction<1, 3>{};
+
+    constexpr auto same_explanation = explain_match(f1, f2);
+    constexpr auto diff_explanation = explain_match(f1, f3);
+
+    static_assert(same_explanation.size > 0, "Explanation has content");
+    static_assert(diff_explanation.size > 0, "Explanation has content");
+
+    assert(std::string(same_explanation.c_str()).find("succeeded") !=
+           std::string::npos);
+    assert(std::string(diff_explanation.c_str()).find("failed") !=
+           std::string::npos);
+  };
+
+  "Explain wildcard matching"_test = [] {
+    constexpr Symbol x;
+    constexpr auto expr = x + Constant<5>{};
+
+    constexpr auto any_explanation = explain_match(𝐚𝐧𝐲, x);
+    constexpr auto anyexpr_success = explain_match(𝐚𝐧𝐲𝐞𝐱𝐩𝐫, expr);
+    constexpr auto anyexpr_fail = explain_match(𝐚𝐧𝐲𝐞𝐱𝐩𝐫, x);
+
+    static_assert(any_explanation.size > 0, "Explanation has content");
+    static_assert(anyexpr_success.size > 0, "Explanation has content");
+    static_assert(anyexpr_fail.size > 0, "Explanation has content");
+
+    assert(std::string(any_explanation.c_str()).find("succeeded") !=
+           std::string::npos);
+    assert(std::string(anyexpr_success.c_str()).find("succeeded") !=
+           std::string::npos);
+    assert(std::string(anyexpr_fail.c_str()).find("failed") !=
+           std::string::npos);
+  };
+
+  "Explain Expression matching"_test = [] {
+    constexpr Symbol x;
+    constexpr auto expr1 = x + Constant<5>{};
+    constexpr auto expr2 = x + Constant<5>{};
+    constexpr auto expr3 = x + Constant<3>{};
+    constexpr auto expr4 = x * Constant<5>{};
+
+    constexpr auto same_explanation = explain_match(expr1, expr2);
+    constexpr auto diff_args_explanation = explain_match(expr1, expr3);
+    constexpr auto diff_op_explanation = explain_match(expr1, expr4);
+
+    static_assert(same_explanation.size > 0, "Explanation has content");
+    static_assert(diff_args_explanation.size > 0, "Explanation has content");
+    static_assert(diff_op_explanation.size > 0, "Explanation has content");
+
+    assert(std::string(same_explanation.c_str()).find("succeeded") !=
+           std::string::npos);
+    assert(std::string(diff_args_explanation.c_str()).find("arguments differ") !=
+           std::string::npos);
+    assert(std::string(diff_op_explanation.c_str()).find("Operations differ") !=
+           std::string::npos);
+  };
+
+  "Explain type mismatch"_test = [] {
+    constexpr Symbol x;
+    constexpr auto c = Constant<5>{};
+
+    constexpr auto mismatch_explanation = explain_match(x, c);
+
+    static_assert(mismatch_explanation.size > 0, "Explanation has content");
+
+    assert(std::string(mismatch_explanation.c_str()).find("failed") !=
+           std::string::npos);
+    assert(std::string(mismatch_explanation.c_str()).find("cannot match") !=
+           std::string::npos);
+  };
+
+  "Match summary utility"_test = [] {
+    constexpr Symbol x;
+    constexpr auto c = Constant<5>{};
+
+    constexpr auto match_summary_success = match_summary(x, x);
+    constexpr auto match_summary_fail = match_summary(x, c);
+
+    static_assert(match_summary_success.size > 0, "Summary has content");
+    static_assert(match_summary_fail.size > 0, "Summary has content");
+
+    assert(std::string(match_summary_success.c_str()).find("MATCH") !=
+           std::string::npos);
+    assert(std::string(match_summary_fail.c_str()).find("NO MATCH") !=
+           std::string::npos);
+  };
+
   return TestRegistry::result();
 }
