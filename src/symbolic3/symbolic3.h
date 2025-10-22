@@ -12,6 +12,7 @@
 #include "symbolic3/evaluate.h"
 #include "symbolic3/fraction.h"
 #include "symbolic3/matching.h"
+#include "symbolic3/operator_display.h"
 #include "symbolic3/operators.h"
 #include "symbolic3/pattern_matching.h"
 #include "symbolic3/simplify.h"

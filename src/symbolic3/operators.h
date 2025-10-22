@@ -3,187 +3,32 @@
 #include "meta/function_objects.h"
 #include "symbolic3/core.h"
 
-// Operations for building symbolic expressions
-// All operators have kSymbol and kDisplayMode for string conversion
-// Operators are callable for evaluation with values (see evaluate.h)
+// Symbolic expression builder functions and operator overloads
+// Operators themselves are defined in meta/function_objects.h
+// Display metadata is in operator_display.h
 
 namespace tempura::symbolic3 {
 
-// Operation tags - made callable for evaluation with metadata for display
-// AddOp is variadic and associative/commutative
-struct AddOp {
-  static constexpr StaticString kSymbol = "+";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
+// Import operator types from tempura namespace
+using tempura::AddOp;
+using tempura::SubOp;
+using tempura::MulOp;
+using tempura::DivOp;
+using tempura::PowOp;
+using tempura::NegOp;
+using tempura::SinOp;
+using tempura::CosOp;
+using tempura::TanOp;
+using tempura::SinhOp;
+using tempura::CoshOp;
+using tempura::TanhOp;
+using tempura::ExpOp;
+using tempura::LogOp;
+using tempura::SqrtOp;
+using tempura::PiOp;
+using tempura::EOp;
 
-  // Unary - identity
-  constexpr auto operator()(auto a) const { return a; }
-
-  // Binary
-  constexpr auto operator()(auto a, auto b) const { return a + b; }
-
-  // Variadic (3+ arguments) - left fold expansion builds left-associated tree
-  //
-  // FOLD EXPANSION SEMANTICS:
-  // The fold expression ((first + second) + ... + rest) is C++17 syntax for:
-  //
-  //   AddOp{}(1, 2, 3, 4)
-  //   = ((1 + 2) + ... + {3, 4})       [fold begins with first + second]
-  //   = (((1 + 2) + 3) + 4)            [left-associates remaining args]
-  //
-  // This creates Expression<AddOp, Expression<AddOp, ...>> structure
-  // Matches the canonical form expected by simplification rules
-  constexpr auto operator()(auto first, auto second, auto... rest) const {
-    return ((first + second) + ... + rest);
-  }
-};
-
-struct SubOp {
-  static constexpr StaticString kSymbol = "-";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
-  constexpr auto operator()(auto a, auto b) const { return a - b; }
-};
-
-// MulOp is variadic and associative/commutative
-struct MulOp {
-  static constexpr StaticString kSymbol = "*";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
-
-  // Unary - identity
-  constexpr auto operator()(auto a) const { return a; }
-
-  // Binary
-  constexpr auto operator()(auto a, auto b) const { return a * b; }
-
-  // Variadic (3+ arguments) - left fold expansion
-  // Similar to AddOp: MulOp{}(2, 3, 4, 5) = (((2 * 3) * 4) * 5)
-  // Example: MulOp{}(2, 3, 4) expands to (((2 * 3) * 4)
-  constexpr auto operator()(auto first, auto second, auto... rest) const {
-    return ((first * second) * ... * rest);
-  }
-};
-
-struct DivOp {
-  static constexpr StaticString kSymbol = "/";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
-  constexpr auto operator()(auto a, auto b) const { return a / b; }
-};
-
-struct PowOp {
-  static constexpr StaticString kSymbol = "^";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
-  constexpr auto operator()(auto a, auto b) const {
-    using namespace std;
-    return pow(a, b);
-  }
-};
-
-struct NegOp {
-  static constexpr StaticString kSymbol = "-";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
-  constexpr auto operator()(auto a) const { return -a; }
-};
-
-// Transcendental operations - all constexpr in C++26
-struct SinOp {
-  static constexpr StaticString kSymbol = "sin";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
-  constexpr auto operator()(auto a) const {
-    using namespace std;
-    return sin(a);
-  }
-};
-
-struct CosOp {
-  static constexpr StaticString kSymbol = "cos";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
-  constexpr auto operator()(auto a) const {
-    using namespace std;
-    return cos(a);
-  }
-};
-
-struct TanOp {
-  static constexpr StaticString kSymbol = "tan";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
-  constexpr auto operator()(auto a) const {
-    using namespace std;
-    return tan(a);
-  }
-};
-
-// Hyperbolic trigonometric functions
-struct SinhOp {
-  static constexpr StaticString kSymbol = "sinh";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
-  constexpr auto operator()(auto a) const {
-    using namespace std;
-    return sinh(a);
-  }
-};
-
-struct CoshOp {
-  static constexpr StaticString kSymbol = "cosh";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
-  constexpr auto operator()(auto a) const {
-    using namespace std;
-    return cosh(a);
-  }
-};
-
-struct TanhOp {
-  static constexpr StaticString kSymbol = "tanh";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
-  constexpr auto operator()(auto a) const {
-    using namespace std;
-    return tanh(a);
-  }
-};
-
-struct ExpOp {
-  static constexpr StaticString kSymbol = "exp";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
-  constexpr auto operator()(auto a) const {
-    using namespace std;
-    return exp(a);
-  }
-};
-
-struct LogOp {
-  static constexpr StaticString kSymbol = "log";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
-  constexpr auto operator()(auto a) const {
-    using namespace std;
-    return log(a);
-  }
-};
-
-struct SqrtOp {
-  static constexpr StaticString kSymbol = "√";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
-  constexpr auto operator()(auto a) const {
-    using namespace std;
-    return sqrt(a);
-  }
-};
-
-// Mathematical constants (zero-arg operations)
-struct PiOp {
-  static constexpr StaticString kSymbol = "π";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
-  constexpr auto operator()() const {
-    return 3.14159265358979323846264338327950288;
-  }
-};
-
-struct EOp {
-  static constexpr StaticString kSymbol = "e";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
-  constexpr auto operator()() const {
-    return 2.71828182845904523536028747135266250;
-  }
-};
-
-// Comparison operations
+// Comparison operations (empty placeholders for now)
 struct EqOp {};
 struct NeqOp {};
 struct LtOp {};
@@ -191,13 +36,13 @@ struct LeOp {};
 struct GtOp {};
 struct GeOp {};
 
-// Logical operations
+// Logical operations (empty placeholders for now)
 struct AndOp {};
 struct OrOp {};
 struct NotOp {};
 
 // ============================================================================
-// Binary Operations
+// Binary Operations - Operator Overloads for Symbolic Expressions
 // ============================================================================
 
 // Addition - binary operation (canonical form will be applied by strategies)

@@ -8,9 +8,10 @@
 #include "meta/function_objects.h"
 #include "symbolic3/core.h"
 #include "symbolic3/operators.h"
+#include "symbolic3/operator_display.h"
 
 // String conversion and debugging utilities for symbolic3 expressions
-// Migrated from symbolic2/to_string.h with symbolic3 adaptations
+// Uses DisplayTraits from operator_display.h for operator presentation
 
 namespace tempura::symbolic3 {
 
@@ -91,21 +92,46 @@ constexpr auto toString(Fraction<N, D>) {
 }
 
 // =============================================================================
-// EXPRESSION PRINTING - Uses operator metadata directly from operators
+// EXPRESSION PRINTING - Uses DisplayTraits for operator presentation
 // =============================================================================
-// All operators now have kSymbol and kDisplayMode built-in!
 
-// Expression conversion - supports both infix and prefix notation
-// Helper for infix printing
+// Helper to get precedence of any symbolic expression
 namespace detail {
+template <Symbolic S>
+constexpr int get_precedence() {
+  if constexpr (is_expression<S>) {
+    return DisplayTraits<get_op_t<S>>::precedence;
+  } else {
+    // Atoms (constants, symbols) have highest precedence
+    return Precedence::kAtomic;
+  }
+}
+
+// Wrap expression in parentheses if needed based on precedence
+// Only wrap if child has STRICTLY LOWER precedence
+template <int ParentPrec, Symbolic S>
+constexpr auto maybeWrap(S) {
+  constexpr int childPrec = get_precedence<S>();
+  // Only wrap if precedence is strictly lower
+  // Equal or higher precedence doesn't need wrapping
+  if constexpr (childPrec < ParentPrec) {
+    return StaticString("(") + toString(S{}) + StaticString(")");
+  } else {
+    return toString(S{});
+  }
+}
+
+// Helper for infix printing with precedence awareness
 template <typename Op, Symbolic First, Symbolic... Rest>
 constexpr auto toStringInfixImpl() {
-  constexpr auto sym = Op::kSymbol;
+  constexpr auto sym = DisplayTraits<Op>::symbol;
+  constexpr int prec = DisplayTraits<Op>::precedence;
+
   if constexpr (sizeof...(Rest) == 0) {
-    return toString(First{});
+    return maybeWrap<prec>(First{});
   } else {
-    return toString(First{}) +
-           ((StaticString(" ") + sym + StaticString(" ") + toString(Rest{})) +
+    return maybeWrap<prec>(First{}) +
+           ((StaticString(" ") + sym + StaticString(" ") + maybeWrap<prec>(Rest{})) +
             ...);
   }
 }
@@ -113,20 +139,20 @@ constexpr auto toStringInfixImpl() {
 
 template <typename Op, Symbolic... Args>
 constexpr auto toString(Expression<Op, Args...>) {
-  if constexpr (Op::kDisplayMode == DisplayMode::kPrefix) {
+  if constexpr (DisplayTraits<Op>::mode == DisplayMode::kPrefix) {
     // Prefix: op(arg1, arg2, ...)
-    return Op::kSymbol + StaticString("(") +
+    // Prefix operators always use parentheses for clarity
+    return DisplayTraits<Op>::symbol + StaticString("(") +
            ((StaticString(" ") + toString(Args{})) + ... + StaticString(")"));
   } else {
-    // Infix: (arg1 op arg2 op ...)
+    // Infix operators use precedence-aware parenthesization
     if constexpr (sizeof...(Args) == 1) {
       // Unary operator (like negation)
-      return Op::kSymbol + StaticString("(") + (toString(Args{}) + ...) +
-             StaticString(")");
+      constexpr int prec = DisplayTraits<Op>::precedence;
+      return DisplayTraits<Op>::symbol + detail::maybeWrap<prec>(Args{}...);
     } else {
-      // Binary/n-ary operator
-      return StaticString("(") + detail::toStringInfixImpl<Op, Args...>() +
-             StaticString(")");
+      // Binary/n-ary operator - no outer parentheses, precedence handles it
+      return detail::toStringInfixImpl<Op, Args...>();
     }
   }
 }
@@ -134,6 +160,28 @@ constexpr auto toString(Expression<Op, Args...>) {
 // =============================================================================
 // RUNTIME STRING CONVERSION (std::string-based for debugging)
 // =============================================================================
+
+// Runtime precedence helpers
+namespace detail {
+template <Symbolic S>
+inline int get_precedence_runtime() {
+  if constexpr (is_expression<S>) {
+    return DisplayTraits<get_op_t<S>>::precedence;
+  } else {
+    return Precedence::kAtomic;
+  }
+}
+
+template <Symbolic S>
+inline std::string maybeWrapRuntime(int parentPrec, S) {
+  int childPrec = get_precedence_runtime<S>();
+  if (childPrec < parentPrec) {
+    return "(" + toStringRuntime(S{}) + ")";
+  } else {
+    return toStringRuntime(S{});
+  }
+}
+}  // namespace detail
 
 // Runtime integer conversion
 inline std::string toStringRuntime(int val) { return std::format("{}", val); }
@@ -174,10 +222,11 @@ inline std::string toStringRuntime(Fraction<N, D>) {
 // Runtime expression conversion
 template <typename Op, Symbolic... Args>
 inline std::string toStringRuntime(Expression<Op, Args...>) {
-  // Use operator metadata directly
-  std::string opSymbol = std::string(Op::kSymbol.c_str());
+  // Use DisplayTraits for operator metadata
+  std::string opSymbol = std::string(DisplayTraits<Op>::symbol.c_str());
+  constexpr int prec = DisplayTraits<Op>::precedence;
 
-  if constexpr (Op::kDisplayMode == DisplayMode::kPrefix) {
+  if constexpr (DisplayTraits<Op>::mode == DisplayMode::kPrefix) {
     // Prefix: op(arg1, arg2, ...)
     std::string result = opSymbol + "(";
     bool first = true;
@@ -191,22 +240,21 @@ inline std::string toStringRuntime(Expression<Op, Args...>) {
     result += ")";
     return result;
   } else {
-    // Infix: (arg1 op arg2 op ...)
+    // Infix operators use precedence-aware parenthesization
     if constexpr (sizeof...(Args) == 1) {
       // Unary operator
-      return opSymbol + "(" + (toStringRuntime(Args{}) + ... + "") + ")";
+      return opSymbol + (detail::maybeWrapRuntime(prec, Args{}) + ... + "");
     } else {
-      // Binary/n-ary operator
-      std::string result = "(";
+      // Binary/n-ary operator - no outer parentheses
+      std::string result;
       bool first = true;
       (
           [&]() {
             if (!first) result += " " + opSymbol + " ";
-            result += toStringRuntime(Args{});
+            result += detail::maybeWrapRuntime(prec, Args{});
             first = false;
           }(),
           ...);
-      result += ")";
       return result;
     }
   }

@@ -135,4 +135,11 @@ target_link_libraries(debug_test PRIVATE symbolic3 unit)
 add_test(NAME symbolic3_debug COMMAND debug_test)
 set_tests_properties(symbolic3_debug PROPERTIES LABELS "symbolic3;utilities")
 
+# Operator Display Traits Test
+add_executable(operator_display_test test/operator_display_test.cpp)
+target_link_libraries(operator_display_test PRIVATE symbolic3 unit)
+add_test(NAME symbolic3_operator_display COMMAND operator_display_test)
+set_tests_properties(symbolic3_operator_display PROPERTIES LABELS "symbolic3;display")
+
+
 

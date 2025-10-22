@@ -1,5 +1,7 @@
 #include "symbolic3/debug.h"
 
+#include <cassert>
+
 #include "symbolic3/simplify.h"
 #include "symbolic3/symbolic3.h"
 #include "unit.h"
@@ -77,12 +79,12 @@ auto main() -> int {
                   "x + 0 is correctly detected as not simplified");
   };
 
-  "Compile-time string conversion verification"_test = [] {
+  "Runtime string conversion verification"_test = [] {
     constexpr Symbol x;
     constexpr auto expr = x + Constant<1>{};
-    constexpr auto str = toString(expr);
+    auto str = toString(expr);  // Now runtime due to DisplayTraits using const char*
 
-    static_assert(str.size() > 0, "Expression string is not empty");
+    assert(str.size() > 0);  // Runtime check instead of static_assert
   };
 
   "Compile-time simplification verification"_test = [] {

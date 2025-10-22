@@ -1,8 +1,120 @@
 # Symbolic3 Improvement Roadmap
 
 **Date:** October 20, 2025
-**Status:** ✅ RECOMMENDED - Evidence-Based, Low-Risk Improvements
+**Last Updated:** October 21, 2025
+**Status:** ✅ IN PROGRESS - Evidence-Based, Low-Risk Improvements
 **Goal:** Improve symbolic3 without radical redesign
+
+---
+
+## 🎉 Completed Work Summary
+
+### Phase 1.2: Operator Display Traits ✅ (Completed: Oct 21, 2025)
+
+**What was accomplished:**
+
+1. **Refactored `meta/function_objects.h`:**
+   - Removed all `kSymbol` and `kDisplayMode` static members from operators
+   - Made `AddOp` and `MulOp` variadic (unary, binary, n-ary support)
+   - Operators are now pure function objects (like `std::plus`)
+
+2. **Created `symbolic3/operator_display.h`:**
+   - New centralized location for all display metadata
+   - `DisplayTraits` template with specializations for all operators
+   - Includes symbol, display mode, and precedence information
+   - Precedence hierarchy: atomic (50) > unary (40) > power (30) > multiplication (20) > addition (10)
+
+3. **Refactored `symbolic3/operators.h`:**
+   - Now contains only symbolic-specific functionality
+   - Operator overloads for `Symbolic` concept
+   - Helper functions (sin, cos, exp, log, pow, etc.)
+   - Type predicates (is_add, is_mul, is_trig_function, is_transcendental)
+   - Constant helpers (zero_c, one_c, π, e)
+
+4. **Added `operator_display_test.cpp`:**
+   - Comprehensive compile-time tests for DisplayTraits
+   - Verifies all operators have correct symbols, modes, and precedence
+   - Tests precedence hierarchy ordering
+   - All tests passing
+
+**Architecture achieved:**
+- ✅ Clean separation: Pure operators (meta) ← Display traits (symbolic3) ← Symbolic operations (symbolic3)
+- ✅ Operators are extensible without modification
+- ✅ Foundation for multiple renderers (ASCII, LaTeX, MathML)
+- ✅ Precedence-aware parenthesization enabled
+- ✅ No dangerous static algebraic assumptions
+
+**Test results:**
+- All 20 symbolic3 tests passing (including new operator_display_test)
+- Precedence-aware output working correctly
+- Zero regressions
+
+**Files modified:**
+- `src/meta/function_objects.h` (cleaned operator definitions)
+- `src/symbolic3/operator_display.h` (new file with DisplayTraits)
+- `src/symbolic3/operators.h` (refactored to symbolic-specific code)
+- `src/symbolic3/test/operator_display_test.cpp` (new comprehensive test)
+- `src/symbolic3/CMakeLists.txt` (added operator_display_test)
+
+**Benefits realized:**
+- Operators are now pure function objects following single responsibility principle
+- Display concerns properly separated from evaluation logic
+- Type system supports precedence-aware formatting
+- Extensible design - can add new display modes without touching operators
+- Maintains theoretical soundness and zero-cost abstractions
+
+---
+
+## 🚀 Next Steps for Upcoming Sessions
+
+### Recommended: Phase 1.1 - Match Overload Deduplication
+
+**Why this next:**
+- Completes Phase 1 (Low-Hanging Fruit)
+- Low risk, high value
+- ~50 line reduction
+- Improves code clarity
+
+**Task breakdown:**
+1. Create `ExactMatchable` concept in `src/symbolic3/matching.h`
+2. Unify exact-match overloads using the concept
+3. Add tests to verify no behavioral changes
+4. Document the new pattern
+
+**Estimated time:** 2-3 days
+
+**Files to modify:**
+- `src/symbolic3/matching.h` (main refactoring)
+- `src/symbolic3/test/matching_test.cpp` (add concept coverage tests)
+
+### Alternative: Phase 1.3 - Documentation Improvements
+
+**Why this next:**
+- Zero code risk (documentation only)
+- High educational value
+- Prevents future "why two types?" questions
+- Good "light" task between heavier phases
+
+**Task breakdown:**
+1. Add "Design Rationale" section to README
+2. Create `DESIGN.md` with Symbol vs PatternVar explanation
+3. Add examples showing the distinction
+4. Link to term rewriting theory references
+
+**Estimated time:** 1-2 days
+
+**Files to create/modify:**
+- `src/symbolic3/README.md` (update)
+- `src/symbolic3/DESIGN.md` (new)
+
+### Phase 2 Preview: Debugging Infrastructure
+
+Once Phase 1 is complete, Phase 2 focuses on developer experience:
+- Compile-time pretty printing for better error messages
+- Expression tree visualization for debugging
+- Transformation tracing for understanding simplification
+
+These are additive improvements that don't risk breaking existing functionality.
 
 ---
 
@@ -51,6 +163,58 @@ Instead of the risky "core redesign" proposal, this document outlines **incremen
 
 ---
 
+## Design Principles: Separation of Concerns
+
+### Operators as Pure Function Objects
+
+**Decision:** Operators should be pure mathematical operations, like `std::plus`.
+
+**Rationale:**
+- Single Responsibility Principle: evaluation logic separate from display/algebraic properties
+- Extensibility: can add new trait systems without modifying operators
+- Flexibility: same operators work with different display systems (ASCII, LaTeX, MathML)
+- Testability: evaluation logic tested independently
+
+### Display Properties: Safe to Centralize
+
+**What belongs in DisplayTraits:**
+- ✅ `symbol` - textual representation ("+", "sin", etc.)
+- ✅ `mode` - infix vs prefix notation
+- ✅ `precedence` - for smart parenthesization
+
+**Why:** Display is a presentation concern, not a mathematical one. Safe to specify statically.
+
+### Algebraic Properties: Context-Dependent
+
+**What does NOT belong in static traits:**
+- ❌ `commutative` - depends on domain (matrices vs scalars)
+- ❌ `associative` - depends on domain
+- ❌ `identity_element` - domain-specific
+
+**Why:**
+1. **Commutativity is not inherent to operators** - it's a property of the algebraic structure
+   - Matrix multiplication: NOT commutative
+   - Scalar multiplication: commutative
+   - String concatenation: NOT commutative
+
+2. **Even when true, needs canonical ordering to prevent loops:**
+   ```cpp
+   // Without ordering: infinite loop!
+   x + y  →  y + x  (apply commutativity)
+   y + x  →  x + y  (apply again!)
+   ```
+
+3. **Solution:** Pass algebraic properties through the context system:
+   ```cpp
+   auto ctx = default_context()
+     .with(AlgebraicRules{
+       .canonical_ordering = lessThan,  // Prevents loops
+       .domain = RealNumbers{}
+     });
+   ```
+
+---
+
 ## Phase 1: Low-Hanging Fruit (2 weeks)
 
 ### 1.1 Reduce Match Overload Duplication (~50 line reduction)
@@ -90,56 +254,95 @@ concept ExactMatchable = is_symbol<T> || is_constant<T> || is_fraction<T>;
 - Time: 2-3 days
 - Risk: Low (internal refactoring)
 
-### 1.2 Add Operator Metadata (~100 line reduction, better maintainability)
+### 1.2 Separate Operator Display Traits (~100 line reduction, better maintainability)
 
 **Current problem:**
 
-- `to_string()` has hardcoded operator symbols
-- Precedence scattered across ordering functions
-- Commutativity checked in multiple places
+- Operators mix evaluation logic with display metadata (`kSymbol`, `kDisplayMode`)
+- Violates single responsibility principle
+- No precedence information for smart parenthesization
+- Display properties hardcoded in operator definitions
 
-**Solution:**
+**Solution - Layered Design:**
 
 ```cpp
-// In src/symbolic3/operators.h
+// LAYER 1: Pure Operations (in src/symbolic3/operators.h)
+// Remove kSymbol and kDisplayMode - operators become pure function objects
+struct AddOp {
+  constexpr auto operator()(auto a, auto b) const { return a + b; }
+  constexpr auto operator()(auto first, auto second, auto... rest) const {
+    return ((first + second) + ... + rest);
+  }
+};
+
+// LAYER 2: Display Traits (new file: src/symbolic3/operator_display.h)
+// Centralizes all display-related properties
 template<typename Op>
-struct OperatorTraits {
+struct DisplayTraits {
     static constexpr const char* symbol = "?";
-    static constexpr int precedence = 0;
-    static constexpr bool commutative = false;
-    static constexpr bool associative = false;
+    static constexpr DisplayMode mode = DisplayMode::kPrefix;
+    static constexpr int precedence = 0;  // Lower = binds less tightly
 };
 
-// Specializations
 template<>
-struct OperatorTraits<AddOp> {
+struct DisplayTraits<AddOp> {
     static constexpr const char* symbol = "+";
+    static constexpr DisplayMode mode = DisplayMode::kInfix;
     static constexpr int precedence = 10;
-    static constexpr bool commutative = true;
-    static constexpr bool associative = true;
 };
 
-// Usage in to_string.h
+template<>
+struct DisplayTraits<MulOp> {
+    static constexpr const char* symbol = "*";
+    static constexpr DisplayMode mode = DisplayMode::kInfix;
+    static constexpr int precedence = 20;  // Binds tighter than +
+};
+
+// Usage in to_string.h - precedence-aware parenthesization
 template<typename Op, Symbolic... Args>
-std::string to_string(Expression<Op, Args...>) {
-    return format_with_precedence(OperatorTraits<Op>::symbol,
-                                   OperatorTraits<Op>::precedence,
-                                   Args...);
+std::string toStringRuntime(Expression<Op, Args...>) {
+    return format_with_precedence(
+        DisplayTraits<Op>::symbol,
+        DisplayTraits<Op>::precedence,
+        DisplayTraits<Op>::mode,
+        Args...);
 }
 ```
 
+**Why NOT include commutativity/associativity here:**
+
+⚠️ **Mathematical properties are context-dependent, NOT inherent to operators!**
+
+- Matrix multiplication is NOT commutative, but scalar multiplication IS
+- String concatenation is NOT commutative, but addition IS
+- Commutativity depends on the algebraic structure (domain), not the operator
+- Even if commutative, you need canonical ordering to prevent simplification loops:
+  ```cpp
+  // Without ordering: infinite loop!
+  x + y  →  y + x  (apply commutativity)
+  y + x  →  x + y  (apply commutativity again!)
+  ```
+
+**Solution:** Algebraic properties belong in the **context system**, not static traits.
+Simplification rules should query context and use explicit canonical ordering.
+
 **Benefits:**
 
-- Single source of truth for operator properties
-- Simplifies to_string, ordering, simplification
-- Easier to add new operators
-- Self-documenting
+- ✅ Clean separation: evaluation (operators) vs display (DisplayTraits)
+- ✅ Operators become pure function objects (like `std::plus`)
+- ✅ Precedence enables smarter parenthesization
+- ✅ Foundation for multiple renderers (ASCII, LaTeX, MathML)
+- ✅ No dangerous static algebraic assumptions
+- ✅ Extensible without modifying operator definitions
 
 **Implementation:**
 
-- Files: `src/symbolic3/operators.h`, `src/symbolic3/to_string.h`
+- Files:
+  - `src/symbolic3/operators.h` (remove `kSymbol`, `kDisplayMode`)
+  - `src/symbolic3/operator_display.h` (new - all DisplayTraits)
+  - `src/symbolic3/to_string.h` (use DisplayTraits, precedence-aware printing)
 - Time: 3-4 days
-- Risk: Low (additive change, backward compatible)
+- Risk: Low (backward compatible - old metadata can be deprecated gradually)
 
 ### 1.3 Improve Documentation (~0 LOC change, huge clarity gain)
 
@@ -220,7 +423,7 @@ struct PrettyType {
             return format("Constant<{}>", T::value);
         } else if constexpr (is_expression<T>) {
             return format("{}({})",
-                         OperatorTraits<get_op_t<T>>::symbol,
+                         DisplayTraits<get_op_t<T>>::symbol,
                          format_args<get_args_t<T>>());
         }
     }
@@ -254,7 +457,7 @@ template<Symbolic T>
 void print_tree(std::ostream& os, int indent = 0) {
     if constexpr (is_expression<T>) {
         os << std::string(indent, ' ')
-           << OperatorTraits<get_op_t<T>>::symbol << "\n";
+           << DisplayTraits<get_op_t<T>>::symbol << "\n";
         ([&] {
             print_tree<Args>(os, indent + 2);
         }(), ...);
@@ -571,11 +774,12 @@ Likely candidates:
 - Refactor `src/symbolic3/matching.h`
 - Run tests, verify no regressions
 
-**Day 3-5:** Operator metadata
+**Day 3-5:** Operator display traits
 
-- Add `OperatorTraits` to `src/symbolic3/operators.h`
-- Specialize for all operators
-- Update `to_string.h` to use traits
+- Create `src/symbolic3/operator_display.h` with `DisplayTraits`
+- Remove `kSymbol` and `kDisplayMode` from operator definitions
+- Specialize `DisplayTraits` for all operators (add precedence)
+- Update `to_string.h` to use `DisplayTraits` with precedence-aware printing
 
 **Day 6-8:** Documentation improvements
 
@@ -594,7 +798,7 @@ Likely candidates:
 Create issues for each phase:
 
 - [ ] Phase 1.1: Match overload deduplication
-- [ ] Phase 1.2: Operator metadata
+- [x] **Phase 1.2: Operator display traits (separation of concerns)** ✅ **COMPLETED** (Oct 21, 2025)
 - [ ] Phase 1.3: Documentation improvements
 - [ ] Phase 2.1: Compile-time pretty printing
 - [ ] Phase 2.2: Expression visualization

@@ -35,6 +35,20 @@ struct StaticString {
   constexpr const char* c_str() const { return chars_; }
   constexpr size_t size() const { return N_; }
 
+  // Equality comparison - only compares with same-sized strings
+  template <size_t M>
+  constexpr bool operator==(const StaticString<M>& other) const {
+    if constexpr (N_ != M) {
+      return false;  // Different lengths, cannot be equal
+    } else {
+      // Same length, compare character by character
+      for (size_t i = 0; i < N_; ++i) {
+        if (chars_[i] != other.chars_[i]) return false;
+      }
+      return true;
+    }
+  }
+
   template <size_t M>
   constexpr auto operator+(const StaticString<M>& other) const
       -> StaticString<N_ + M> {
@@ -64,150 +78,117 @@ StaticString(const char (&str_literal)[LenWithNull])
 StaticString(char c) -> StaticString<1>;
 
 struct PiOp {
-  static constexpr StaticString kSymbol = "π";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
-
   constexpr auto operator()() const { return M_PI; }
 };
 
 struct EOp {
-  static constexpr StaticString kSymbol = "e";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
 
   constexpr auto operator()() const { return M_E; }
 };
 
 struct AddOp {
-  static constexpr StaticString kSymbol = "+";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
+  // Unary - identity
+  constexpr auto operator()(auto a) const { return a; }
 
+  // Binary
   constexpr auto operator()(auto a, auto b) const { return a + b; }
+
+  // Variadic (3+ arguments) - left fold expansion
+  constexpr auto operator()(auto first, auto second, auto... rest) const {
+    return ((first + second) + ... + rest);
+  }
 };
 struct SubOp {
-  static constexpr StaticString kSymbol = "-";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
 
   constexpr auto operator()(auto a, auto b) const { return a - b; }
 };
 struct NegOp {
-  static constexpr StaticString kSymbol = "-";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
 
   constexpr auto operator()(auto a) const { return -a; }
 };
 struct MulOp {
-  static constexpr StaticString kSymbol = "*";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
+  // Unary - identity
+  constexpr auto operator()(auto a) const { return a; }
 
+  // Binary
   constexpr auto operator()(auto a, auto b) const { return a * b; }
+
+  // Variadic (3+ arguments) - left fold expansion
+  constexpr auto operator()(auto first, auto second, auto... rest) const {
+    return ((first * second) * ... * rest);
+  }
 };
 struct DivOp {
-  static constexpr StaticString kSymbol = "/";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
 
   constexpr auto operator()(auto a, auto b) const { return a / b; }
 };
 struct ModOp {
-  static constexpr StaticString kSymbol = "%";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
 
   constexpr auto operator()(auto a, auto b) const { return a % b; }
 };
 struct EqOp {
-  static constexpr StaticString kSymbol = "==";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
 
   constexpr auto operator()(auto a, auto b) const { return a == b; }
 };
 struct NeqOp {
-  static constexpr StaticString kSymbol = "!=";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
 
   constexpr auto operator()(auto a, auto b) const { return a != b; }
 };
 struct LtOp {
-  static constexpr StaticString kSymbol = "<";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
 
   constexpr auto operator()(auto a, auto b) const { return a < b; }
 };
 struct LeqOp {
-  static constexpr StaticString kSymbol = "<=";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
 
   constexpr auto operator()(auto a, auto b) const { return a <= b; }
 };
 struct GtOp {
-  static constexpr StaticString kSymbol = ">";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
 
   constexpr auto operator()(auto a, auto b) const { return a > b; }
 };
 struct GeqOp {
-  static constexpr StaticString kSymbol = ">=";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
 
   constexpr auto operator()(auto a, auto b) const { return a >= b; }
 };
 struct AndOp {
-  static constexpr StaticString kSymbol = "&&";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
 
   constexpr auto operator()(auto a, auto b) const { return a && b; }
 };
 struct OrOp {
-  static constexpr StaticString kSymbol = "||";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
 
   constexpr auto operator()(auto a, auto b) const { return a || b; }
 };
 struct NotOp {
-  static constexpr StaticString kSymbol = "¬";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
 
   constexpr auto operator()(auto a) const { return !a; }
 };
 struct BitNotOp {
-  static constexpr StaticString kSymbol = "~";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
 
   constexpr auto operator()(auto a) const { return ~a; }
 };
 struct BitAndOp {
-  static constexpr StaticString kSymbol = "&";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
 
   constexpr auto operator()(auto a, auto b) const { return a & b; }
 };
 struct BitOrOp {
-  static constexpr StaticString kSymbol = "|";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
 
   constexpr auto operator()(auto a, auto b) const { return a | b; }
 };
 struct BitXorOp {
-  static constexpr StaticString kSymbol = "^";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
 
   constexpr auto operator()(auto a, auto b) const { return a ^ b; }
 };
 struct BitShiftLeftOp {
-  static constexpr StaticString kSymbol = "<<";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
 
   constexpr auto operator()(auto a, auto b) const { return a << b; }
 };
 struct BitShiftRightOp {
-  static constexpr StaticString kSymbol = ">>";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kInfix;
 
   constexpr auto operator()(auto a, auto b) const { return a >> b; }
 };
 
 // Math Ops
 struct SinOp {
-  static constexpr StaticString kSymbol = "sin";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
 
   constexpr auto operator()(auto a) const {
     using namespace std;
@@ -215,8 +196,6 @@ struct SinOp {
   }
 };
 struct CosOp {
-  static constexpr StaticString kSymbol = "cos";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
 
   constexpr auto operator()(auto a) const {
     using namespace std;
@@ -224,8 +203,6 @@ struct CosOp {
   }
 };
 struct TanOp {
-  static constexpr StaticString kSymbol = "tan";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
 
   constexpr auto operator()(auto a) const {
     using namespace std;
@@ -233,8 +210,6 @@ struct TanOp {
   }
 };
 struct AsinOp {
-  static constexpr StaticString kSymbol = "asin";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
 
   constexpr auto operator()(auto a) const {
     using namespace std;
@@ -242,8 +217,6 @@ struct AsinOp {
   }
 };
 struct AcosOp {
-  static constexpr StaticString kSymbol = "acos";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
 
   constexpr auto operator()(auto a) const {
     using namespace std;
@@ -251,8 +224,6 @@ struct AcosOp {
   }
 };
 struct AtanOp {
-  static constexpr StaticString kSymbol = "atan";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
 
   constexpr auto operator()(auto a) const {
     using namespace std;
@@ -260,8 +231,6 @@ struct AtanOp {
   }
 };
 struct Atan2Op {
-  static constexpr StaticString kSymbol = "atan2";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
 
   constexpr auto operator()(auto a, auto b) const {
     using namespace std;
@@ -269,8 +238,6 @@ struct Atan2Op {
   }
 };
 struct SinhOp {
-  static constexpr StaticString kSymbol = "sinh";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
 
   constexpr auto operator()(auto a) const {
     using namespace std;
@@ -278,8 +245,6 @@ struct SinhOp {
   }
 };
 struct CoshOp {
-  static constexpr StaticString kSymbol = "cosh";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
 
   constexpr auto operator()(auto a) const {
     using namespace std;
@@ -287,8 +252,6 @@ struct CoshOp {
   }
 };
 struct TanhOp {
-  static constexpr StaticString kSymbol = "tanh";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
 
   constexpr auto operator()(auto a) const {
     using namespace std;
@@ -296,8 +259,6 @@ struct TanhOp {
   }
 };
 struct ExpOp {
-  static constexpr StaticString kSymbol = "exp";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
 
   constexpr auto operator()(auto a) const {
     using namespace std;
@@ -305,8 +266,6 @@ struct ExpOp {
   }
 };
 struct LogOp {
-  static constexpr StaticString kSymbol = "log";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
 
   constexpr auto operator()(auto a) const {
     using namespace std;
@@ -314,8 +273,6 @@ struct LogOp {
   }
 };
 struct SqrtOp {
-  static constexpr StaticString kSymbol = "√";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
 
   constexpr auto operator()(auto a) const {
     using namespace std;
@@ -323,8 +280,6 @@ struct SqrtOp {
   }
 };
 struct PowOp {
-  static constexpr StaticString kSymbol = "pow";
-  static constexpr DisplayMode kDisplayMode = DisplayMode::kPrefix;
 
   constexpr auto operator()(auto a, auto b) const {
     using namespace std;
