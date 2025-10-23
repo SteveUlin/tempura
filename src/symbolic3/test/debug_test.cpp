@@ -1,7 +1,5 @@
 #include "symbolic3/debug.h"
 
-#include <cassert>
-
 #include "symbolic3/simplify.h"
 #include "symbolic3/symbolic3.h"
 #include "unit.h"
@@ -79,12 +77,14 @@ auto main() -> int {
                   "x + 0 is correctly detected as not simplified");
   };
 
-  "Runtime string conversion verification"_test = [] {
+  "Compile-time string conversion verification"_test = [] {
     constexpr Symbol x;
     constexpr auto expr = x + Constant<1>{};
-    auto str = toString(expr);  // Now runtime due to DisplayTraits using const char*
+    constexpr auto str = toString(expr);
 
-    assert(str.size() > 0);  // Runtime check instead of static_assert
+    // Compile-time verification - visually see what the output is
+    static_assert(str.size() > 0, "String conversion should produce non-empty result");
+    // The actual string will be something like "x0 + 1"
   };
 
   "Compile-time simplification verification"_test = [] {
@@ -173,15 +173,11 @@ auto main() -> int {
     constexpr auto same_explanation = explain_match(x, x);
     constexpr auto diff_explanation = explain_match(x, y);
 
-    // Verify explanation strings are compile-time constants
-    static_assert(same_explanation.size > 0, "Explanation has content");
-    static_assert(diff_explanation.size > 0, "Explanation has content");
-
-    // Runtime verification of content
-    assert(std::string(same_explanation.c_str()).find("succeeded") !=
-           std::string::npos);
-    assert(std::string(diff_explanation.c_str()).find("failed") !=
-           std::string::npos);
+    // Compile-time string comparison - visually see the expected output
+    static_assert(same_explanation == "✓ Match succeeded: Symbols have same type identity",
+                  "Same symbols should match with success message");
+    static_assert(diff_explanation == "✗ Match failed: Symbols have different type identities",
+                  "Different symbols should not match");
   };
 
   "Explain Constant matching"_test = [] {
@@ -192,13 +188,11 @@ auto main() -> int {
     constexpr auto same_explanation = explain_match(c1, c2);
     constexpr auto diff_explanation = explain_match(c1, c3);
 
-    static_assert(same_explanation.size > 0, "Explanation has content");
-    static_assert(diff_explanation.size > 0, "Explanation has content");
-
-    assert(std::string(same_explanation.c_str()).find("succeeded") !=
-           std::string::npos);
-    assert(std::string(diff_explanation.c_str()).find("failed") !=
-           std::string::npos);
+    // Compile-time string comparison - visually see the expected output
+    static_assert(same_explanation == "✓ Match succeeded: Constants have same value",
+                  "Same constants should match");
+    static_assert(diff_explanation == "✗ Match failed: Constants have different values",
+                  "Different constants should not match");
   };
 
   "Explain Fraction matching"_test = [] {
@@ -209,13 +203,11 @@ auto main() -> int {
     constexpr auto same_explanation = explain_match(f1, f2);
     constexpr auto diff_explanation = explain_match(f1, f3);
 
-    static_assert(same_explanation.size > 0, "Explanation has content");
-    static_assert(diff_explanation.size > 0, "Explanation has content");
-
-    assert(std::string(same_explanation.c_str()).find("succeeded") !=
-           std::string::npos);
-    assert(std::string(diff_explanation.c_str()).find("failed") !=
-           std::string::npos);
+    // Compile-time string comparison - visually see the expected output
+    static_assert(same_explanation == "✓ Match succeeded: Fractions reduce to same value",
+                  "Equivalent fractions should match");
+    static_assert(diff_explanation == "✗ Match failed: Fractions have different reduced forms",
+                  "Different fractions should not match");
   };
 
   "Explain wildcard matching"_test = [] {
@@ -226,16 +218,13 @@ auto main() -> int {
     constexpr auto anyexpr_success = explain_match(𝐚𝐧𝐲𝐞𝐱𝐩𝐫, expr);
     constexpr auto anyexpr_fail = explain_match(𝐚𝐧𝐲𝐞𝐱𝐩𝐫, x);
 
-    static_assert(any_explanation.size > 0, "Explanation has content");
-    static_assert(anyexpr_success.size > 0, "Explanation has content");
-    static_assert(anyexpr_fail.size > 0, "Explanation has content");
-
-    assert(std::string(any_explanation.c_str()).find("succeeded") !=
-           std::string::npos);
-    assert(std::string(anyexpr_success.c_str()).find("succeeded") !=
-           std::string::npos);
-    assert(std::string(anyexpr_fail.c_str()).find("failed") !=
-           std::string::npos);
+    // Compile-time string comparison - visually see the expected output
+    static_assert(any_explanation == "✓ Match succeeded: AnyArg matches any expression",
+                  "AnyArg should match any expression");
+    static_assert(anyexpr_success == "✓ Match succeeded: AnyExpr matches compound expression",
+                  "AnyExpr should match compound expressions");
+    static_assert(anyexpr_fail == "✗ Match failed: AnyExpr only matches compound expressions (not atoms)",
+                  "AnyExpr should not match atomic expressions");
   };
 
   "Explain Expression matching"_test = [] {
@@ -249,16 +238,13 @@ auto main() -> int {
     constexpr auto diff_args_explanation = explain_match(expr1, expr3);
     constexpr auto diff_op_explanation = explain_match(expr1, expr4);
 
-    static_assert(same_explanation.size > 0, "Explanation has content");
-    static_assert(diff_args_explanation.size > 0, "Explanation has content");
-    static_assert(diff_op_explanation.size > 0, "Explanation has content");
-
-    assert(std::string(same_explanation.c_str()).find("succeeded") !=
-           std::string::npos);
-    assert(std::string(diff_args_explanation.c_str()).find("arguments differ") !=
-           std::string::npos);
-    assert(std::string(diff_op_explanation.c_str()).find("Operations differ") !=
-           std::string::npos);
+    // Compile-time string comparison - visually see the expected output
+    static_assert(same_explanation == "✓ Match succeeded: Operation and all arguments match",
+                  "Same expressions should match");
+    static_assert(diff_args_explanation == "✗ Match failed: Operation matches but some arguments differ",
+                  "Expressions with different arguments should not match");
+    static_assert(diff_op_explanation == "✗ Match failed: Operations differ",
+                  "Expressions with different operations should not match");
   };
 
   "Explain type mismatch"_test = [] {
@@ -267,12 +253,9 @@ auto main() -> int {
 
     constexpr auto mismatch_explanation = explain_match(x, c);
 
-    static_assert(mismatch_explanation.size > 0, "Explanation has content");
-
-    assert(std::string(mismatch_explanation.c_str()).find("failed") !=
-           std::string::npos);
-    assert(std::string(mismatch_explanation.c_str()).find("cannot match") !=
-           std::string::npos);
+    // Compile-time string comparison - visually see the expected output
+    static_assert(mismatch_explanation == "✗ Match failed: Symbol cannot match Constant",
+                  "Symbol and Constant types should not match");
   };
 
   "Match summary utility"_test = [] {
@@ -282,13 +265,11 @@ auto main() -> int {
     constexpr auto match_summary_success = match_summary(x, x);
     constexpr auto match_summary_fail = match_summary(x, c);
 
-    static_assert(match_summary_success.size > 0, "Summary has content");
-    static_assert(match_summary_fail.size > 0, "Summary has content");
-
-    assert(std::string(match_summary_success.c_str()).find("MATCH") !=
-           std::string::npos);
-    assert(std::string(match_summary_fail.c_str()).find("NO MATCH") !=
-           std::string::npos);
+    // Compile-time string comparison - visually see the expected output
+    static_assert(match_summary_success == "✓ MATCH",
+                  "Matching expressions should show MATCH");
+    static_assert(match_summary_fail == "✗ NO MATCH",
+                  "Non-matching expressions should show NO MATCH");
   };
 
   return TestRegistry::result();

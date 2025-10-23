@@ -141,5 +141,11 @@ target_link_libraries(operator_display_test PRIVATE symbolic3 unit)
 add_test(NAME symbolic3_operator_display COMMAND operator_display_test)
 set_tests_properties(symbolic3_operator_display PROPERTIES LABELS "symbolic3;display")
 
+# String Conversion Test - compile-time and runtime string conversion with custom variable names
+add_executable(to_string_test test/to_string_test.cpp)
+target_link_libraries(to_string_test PRIVATE symbolic3 unit)
+add_test(NAME symbolic3_to_string COMMAND to_string_test)
+set_tests_properties(symbolic3_to_string PROPERTIES LABELS "symbolic3;string_conversion;utilities")
+
 
 

@@ -3,7 +3,10 @@
 #include <cmath>
 #include <cstdio>
 #include <format>
+#include <optional>
 #include <string>
+#include <tuple>
+#include <utility>
 
 #include "meta/function_objects.h"
 #include "symbolic3/core.h"
@@ -18,6 +21,43 @@ namespace tempura::symbolic3 {
 // =============================================================================
 // COMPILE-TIME STRING CONVERSION (StaticString-based)
 // =============================================================================
+
+// Symbol name mapping for custom variable names at compile-time
+// Usage: auto ctx = makeSymbolNames(x, "alpha", y, "beta");
+//        auto str = toString(expr, ctx);
+
+namespace detail {
+// Find the index where a symbol appears in the context (returns -1 if not found)
+template <typename SymbolTag, typename CtxTuple, size_t Idx = 0>
+constexpr int findSymbolIndex() {
+  if constexpr (Idx >= std::tuple_size_v<CtxTuple>) {
+    return -1;  // Not found
+  } else if constexpr (Idx + 1 < std::tuple_size_v<CtxTuple>) {
+    using KeyType = std::tuple_element_t<Idx, CtxTuple>;
+    if constexpr (std::same_as<KeyType, Symbol<SymbolTag>>) {
+      return static_cast<int>(Idx);  // Found at this index
+    } else {
+      // Try next pair
+      return findSymbolIndex<SymbolTag, CtxTuple, Idx + 2>();
+    }
+  } else {
+    return -1;  // Not enough elements
+  }
+}
+}  // namespace detail
+
+// Create a symbol name context from alternating symbol/name pairs
+template <typename... Args>
+constexpr auto makeSymbolNames(Args&&... args) {
+  static_assert(sizeof...(Args) % 2 == 0,
+                "makeSymbolNames requires an even number of arguments (symbol, name pairs)");
+  return std::tuple{std::forward<Args>(args)...};
+}
+
+// Empty context for default behavior
+constexpr auto emptySymbolNames() {
+  return std::tuple{};
+}
 
 // Integer constants - recursive implementation
 template <int N>
@@ -80,6 +120,19 @@ constexpr auto toString(Symbol<SymbolTag>) {
          toString(Constant<static_cast<int>(kMeta<Symbol<SymbolTag>>)>{});
 }
 
+// Symbol conversion with custom name context
+template <typename SymbolTag, typename... CtxPairs>
+constexpr auto toString(Symbol<SymbolTag> s, const std::tuple<CtxPairs...>& ctx) {
+  constexpr int idx = detail::findSymbolIndex<SymbolTag, std::tuple<CtxPairs...>>();
+  if constexpr (idx >= 0) {
+    // Found - return the name at idx+1
+    return std::get<idx + 1>(ctx);
+  } else {
+    // Not found - use default
+    return toString(s);
+  }
+}
+
 // Fraction conversion - show as "N/D"
 template <long long N, long long D>
 constexpr auto toString(Fraction<N, D>) {
@@ -89,6 +142,27 @@ constexpr auto toString(Fraction<N, D>) {
     return toString(Constant<N>{}) + StaticString("/") +
            toString(Constant<D>{});
   }
+}
+
+// Context-aware versions for constants and fractions (context unused but needed for uniform interface)
+template <int N, typename... CtxPairs>
+constexpr auto toString(Constant<N> c, const std::tuple<CtxPairs...>&) {
+  return toString(c);
+}
+
+template <double VALUE, typename... CtxPairs>
+constexpr auto toString(Constant<VALUE> c, const std::tuple<CtxPairs...>&) {
+  return toString(c);
+}
+
+template <auto VALUE, typename... CtxPairs>
+constexpr auto toString(Constant<VALUE> c, const std::tuple<CtxPairs...>&) {
+  return toString(c);
+}
+
+template <long long N, long long D, typename... CtxPairs>
+constexpr auto toString(Fraction<N, D> f, const std::tuple<CtxPairs...>&) {
+  return toString(f);
 }
 
 // =============================================================================
@@ -121,6 +195,17 @@ constexpr auto maybeWrap(S) {
   }
 }
 
+// Context-aware version
+template <int ParentPrec, Symbolic S, typename... CtxPairs>
+constexpr auto maybeWrap(S s, const std::tuple<CtxPairs...>& ctx) {
+  constexpr int childPrec = get_precedence<S>();
+  if constexpr (childPrec < ParentPrec) {
+    return StaticString("(") + toString(s, ctx) + StaticString(")");
+  } else {
+    return toString(s, ctx);
+  }
+}
+
 // Helper for infix printing with precedence awareness
 template <typename Op, Symbolic First, Symbolic... Rest>
 constexpr auto toStringInfixImpl() {
@@ -132,6 +217,21 @@ constexpr auto toStringInfixImpl() {
   } else {
     return maybeWrap<prec>(First{}) +
            ((StaticString(" ") + sym + StaticString(" ") + maybeWrap<prec>(Rest{})) +
+            ...);
+  }
+}
+
+// Context-aware version
+template <typename Op, typename CtxTuple, Symbolic First, Symbolic... Rest>
+constexpr auto toStringInfixImpl(const CtxTuple& ctx) {
+  constexpr auto sym = DisplayTraits<Op>::symbol;
+  constexpr int prec = DisplayTraits<Op>::precedence;
+
+  if constexpr (sizeof...(Rest) == 0) {
+    return maybeWrap<prec>(First{}, ctx);
+  } else {
+    return maybeWrap<prec>(First{}, ctx) +
+           ((StaticString(" ") + sym + StaticString(" ") + maybeWrap<prec>(Rest{}, ctx)) +
             ...);
   }
 }
@@ -153,6 +253,26 @@ constexpr auto toString(Expression<Op, Args...>) {
     } else {
       // Binary/n-ary operator - no outer parentheses, precedence handles it
       return detail::toStringInfixImpl<Op, Args...>();
+    }
+  }
+}
+
+// Context-aware expression conversion
+template <typename Op, Symbolic... Args, typename... CtxPairs>
+constexpr auto toString(Expression<Op, Args...> expr, const std::tuple<CtxPairs...>& ctx) {
+  if constexpr (DisplayTraits<Op>::mode == DisplayMode::kPrefix) {
+    // Prefix: op(arg1, arg2, ...)
+    return DisplayTraits<Op>::symbol + StaticString("(") +
+           ((StaticString(" ") + toString(Args{}, ctx)) + ... + StaticString(")"));
+  } else {
+    // Infix operators use precedence-aware parenthesization
+    if constexpr (sizeof...(Args) == 1) {
+      // Unary operator (like negation)
+      constexpr int prec = DisplayTraits<Op>::precedence;
+      return DisplayTraits<Op>::symbol + detail::maybeWrap<prec>(Args{}..., ctx);
+    } else {
+      // Binary/n-ary operator
+      return detail::toStringInfixImpl<Op, decltype(ctx), Args...>(ctx);
     }
   }
 }

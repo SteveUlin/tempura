@@ -35,15 +35,26 @@ struct StaticString {
   constexpr const char* c_str() const { return chars_; }
   constexpr size_t size() const { return N_; }
 
-  // Equality comparison - only compares with same-sized strings
   template <size_t M>
   constexpr bool operator==(const StaticString<M>& other) const {
     if constexpr (N_ != M) {
-      return false;  // Different lengths, cannot be equal
+      return false;
     } else {
-      // Same length, compare character by character
       for (size_t i = 0; i < N_; ++i) {
         if (chars_[i] != other.chars_[i]) return false;
+      }
+      return true;
+    }
+  }
+
+  // String literal comparison (M includes null terminator)
+  template <size_t M>
+  constexpr bool operator==(const char (&str_literal)[M]) const {
+    if constexpr (N_ != M - 1) {
+      return false;
+    } else {
+      for (size_t i = 0; i < N_; ++i) {
+        if (chars_[i] != str_literal[i]) return false;
       }
       return true;
     }
@@ -76,6 +87,13 @@ template <size_t LenWithNull>
 StaticString(const char (&str_literal)[LenWithNull])
     -> StaticString<LenWithNull - 1>;
 StaticString(char c) -> StaticString<1>;
+
+// User-defined literal for compile-time strings
+// Usage: "hello"_cts or "alpha + beta"_cts
+template <StaticString Str>
+constexpr auto operator""_cts() {
+  return Str;
+}
 
 struct PiOp {
   constexpr auto operator()() const { return M_PI; }

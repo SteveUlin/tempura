@@ -270,6 +270,43 @@ struct MatchExplanation {
   }
 
   constexpr const char* c_str() const { return data; }
+
+  // Compile-time equality comparison with another MatchExplanation
+  template <size_t M>
+  constexpr bool operator==(const MatchExplanation<M>& other) const {
+    if (size != other.size) return false;
+    for (size_t i = 0; i < size; ++i) {
+      if (data[i] != other.data[i]) return false;
+    }
+    return true;
+  }
+
+  // Compile-time comparison with string literal
+  template <size_t M>
+  constexpr bool operator==(const char (&str)[M]) const {
+    if (size != M - 1) return false;
+    for (size_t i = 0; i < size; ++i) {
+      if (data[i] != str[i]) return false;
+    }
+    return true;
+  }
+
+  // Check if string contains a substring at compile-time
+  template <size_t M>
+  constexpr bool contains(const char (&substr)[M]) const {
+    if (M - 1 > size) return false;
+    for (size_t i = 0; i <= size - (M - 1); ++i) {
+      bool match = true;
+      for (size_t j = 0; j < M - 1; ++j) {
+        if (data[i + j] != substr[j]) {
+          match = false;
+          break;
+        }
+      }
+      if (match) return true;
+    }
+    return false;
+  }
 };
 
 template <size_t N>
