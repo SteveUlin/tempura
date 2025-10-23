@@ -109,3 +109,24 @@
 // Indirection layer: enables recursive expansion by preventing self-reference
 // during macro substitution
 #define TEMPURA_FOR_EACH_AGAIN() TEMPURA_FOR_EACH_HELPER
+
+// ============================================================================
+// COMMA-SEPARATED FOR_EACH (for function arguments)
+// ============================================================================
+
+// FOR_EACH variant that separates with commas instead of semicolons
+// Useful for building function argument lists
+//
+// Example:
+//   #define MAKE_PAIR(x) x, #x
+//   TEMPURA_FOR_EACH_COMMA(MAKE_PAIR, a, b, c)
+//   // Expands to: a, "a", b, "b", c, "c"
+#define TEMPURA_FOR_EACH_COMMA(macro, ...) \
+  __VA_OPT__(TEMPURA_EXPAND(TEMPURA_FOR_EACH_COMMA_HELPER(macro, __VA_ARGS__)))
+
+// Helper for comma-separated iteration
+#define TEMPURA_FOR_EACH_COMMA_HELPER(macro, a1, ...) \
+  macro(a1) __VA_OPT__(, TEMPURA_FOR_EACH_COMMA_AGAIN TEMPURA_PARENS(macro, __VA_ARGS__))
+
+// Indirection for comma-separated recursion
+#define TEMPURA_FOR_EACH_COMMA_AGAIN() TEMPURA_FOR_EACH_COMMA_HELPER

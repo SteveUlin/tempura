@@ -147,5 +147,11 @@ target_link_libraries(to_string_test PRIVATE symbolic3 unit)
 add_test(NAME symbolic3_to_string COMMAND to_string_test)
 set_tests_properties(symbolic3_to_string PROPERTIES LABELS "symbolic3;string_conversion;utilities")
 
+# Pretty Print Test - PRETTY_PRINT macro with auto-generated symbol names
+add_executable(pretty_print_test test/pretty_print_test.cpp)
+target_link_libraries(pretty_print_test PRIVATE symbolic3 unit)
+add_test(NAME symbolic3_pretty_print COMMAND pretty_print_test)
+set_tests_properties(symbolic3_pretty_print PROPERTIES LABELS "symbolic3;printing;macros")
+
 
 
