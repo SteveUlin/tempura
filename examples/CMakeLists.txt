@@ -29,6 +29,8 @@ add_executable(fraction_demo fraction_demo.cpp)
 target_link_libraries(fraction_demo PRIVATE symbolic3)
 add_executable(pretty_print_demo pretty_print_demo.cpp)
 target_link_libraries(pretty_print_demo PRIVATE symbolic3)
+add_executable(string_display_debugging string_display_debugging.cpp)
+target_link_libraries(string_display_debugging PRIVATE symbolic3)
 # add_executable(constexpr_debugging_demo constexpr_debugging_demo.cpp)  # Disabled - has compilation errors
 # target_link_libraries(constexpr_debugging_demo PRIVATE symbolic3)
 # add_executable(simplify_demo simplify_demo.cpp)  # Disabled - needs StaticString formatter

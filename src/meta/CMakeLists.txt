@@ -12,3 +12,8 @@ add_test(NAME meta_type_sort COMMAND type_sort_test)
 add_executable(macro_utils_test test/macro_utils_test.cpp)
 target_link_libraries(macro_utils_test PRIVATE meta unit)
 add_test(NAME meta_macro_utils COMMAND macro_utils_test)
+
+add_executable(static_string_display_test test/static_string_display_test.cpp)
+target_link_libraries(static_string_display_test PRIVATE meta unit)
+add_test(NAME meta_static_string_display COMMAND static_string_display_test)
+set_tests_properties(meta_static_string_display PROPERTIES LABELS "meta;utilities;debugging")

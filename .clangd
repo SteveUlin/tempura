@@ -13,8 +13,17 @@ CompileFlags:
     - -Xcompiler*
 
 ---
+# Lighter restrictions for heavy template files - keep functionality
 If:
-  PathMatch: [.*\.h .*\.cpp]
+  PathMatch: [src/symbolic3/.*, src/meta/.*]
+Index:
+  Background: Skip
+Diagnostics:
+  UnusedIncludes: None
+  MissingIncludes: None
+---
+If:
+  PathMatch: [.*\.h, .*\.cpp]
 Diagnostics:
   UnusedIncludes: Strict
   MissingIncludes: Strict
@@ -23,12 +32,17 @@ CompileFlags:
   CompilationDatabase: build/
   Add:
     - -std=c++2c
+    - -ftemplate-depth=2048
+    - -fconstexpr-depth=2048
+Index:
+  Background: Build
+
 Diagnostics:
   ClangTidy:
     Add:
+      - performance-*
       - modernize-*
       - readability-*
-      - performance-*
       - bugprone-*
     Remove:
       - bugprone-easily-swappable-parameters

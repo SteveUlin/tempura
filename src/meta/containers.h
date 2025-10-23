@@ -1,7 +1,6 @@
 #pragma once
 
 #include "meta/utility.h"
-#include "tags.h"
 
 // Small utility containers to use in meta programming to avoid import times of
 // stl containers.
@@ -17,8 +16,8 @@ struct MinimalArray {
     }
   }
   template <typename... Ts>
+    requires(ConstructibleFrom<T, Ts> and ...)
   constexpr MinimalArray(const T& t, Ts... ts)
-    requires((requires { T(ts); }) and ...)
       : data{t, ts...} {
     static_assert(sizeof...(ts) + 1 == N);
   }
@@ -82,8 +81,9 @@ class MinimalVector {
 
   constexpr explicit MinimalVector(SizeT size) : size_(size) {}
 
-  constexpr explicit MinimalVector(const auto&... ts)
-    requires((requires { T(ts); }) and ...)
+  template <typename... Ts>
+    requires(ConstructibleFrom<T, Ts> and ...)
+  constexpr explicit MinimalVector(const Ts&... ts)
       : data_{ts...}, size_{sizeof...(ts)} {
     static_assert(sizeof...(ts) <= kCapacity);
   }

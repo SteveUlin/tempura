@@ -78,4 +78,9 @@ auto testIsBaseOf(...) -> FalseType;
 template<typename D, typename B>
 concept DerivedFrom = decltype(testIsBaseOf<B, D>(0))::value;
 
+template<typename T, typename U>
+concept ConstructibleFrom = requires {
+  { T{kDeclVal<U>()} };
+};
+
 }  // namespace tempura

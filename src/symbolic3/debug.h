@@ -2,6 +2,7 @@
 
 #include <type_traits>
 
+#include "meta/static_string_display.h"
 #include "meta/utility.h"
 #include "symbolic3/core.h"
 #include "symbolic3/matching.h"
@@ -46,6 +47,19 @@ constexpr void constexpr_print_type() {
                 "This static_assert always fails - check the compiler error "
                 "message to see the type T");
 }
+
+// =============================================================================
+// COMPILE-TIME STRING DISPLAY
+// =============================================================================
+// These utilities force the compiler to show StaticString contents in error messages
+// Useful for debugging symbolic expressions, custom names, and toString results
+//
+// Core utilities are in meta/static_string_display.h
+// Re-exported here for convenience in symbolic3 namespace
+
+// Import ShowStaticString from meta namespace
+using tempura::ShowStaticString;
+using tempura::show_string_in_error;
 
 // Alternative: Uses pretty function name to show type
 // This version can be called without template parameters
@@ -95,6 +109,19 @@ constexpr void constexpr_assert_match([[maybe_unused]] S1 actual,
 // Convenience macro for printing types during compilation
 // Usage: CONSTEXPR_PRINT_TYPE(decltype(expr))
 #define CONSTEXPR_PRINT_TYPE(T) ::tempura::symbolic3::constexpr_print_type<T>()
+
+// Convenience macro for showing StaticString content in compiler errors
+// Usage: SHOW_STATIC_STRING(toString(expr))
+//        SHOW_STATIC_STRING("debug message"_cts)
+// The error will display the actual string content
+// (Re-exported from meta/static_string_display.h)
+#ifndef SHOW_STATIC_STRING
+#define SHOW_STATIC_STRING(str_expr) \
+  do { \
+    constexpr auto _debug_str_ = (str_expr); \
+    ::tempura::ShowStaticString<_debug_str_> _show_; \
+  } while (0)
+#endif
 
 // Convenience macro for printing expression strings during compilation
 // Usage: CONSTEXPR_PRINT_EXPR(my_expr)

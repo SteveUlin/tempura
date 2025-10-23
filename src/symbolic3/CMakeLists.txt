@@ -154,4 +154,3 @@ add_test(NAME symbolic3_pretty_print COMMAND pretty_print_test)
 set_tests_properties(symbolic3_pretty_print PROPERTIES LABELS "symbolic3;printing;macros")
 
 
-
