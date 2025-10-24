@@ -34,9 +34,14 @@ if(BUILD_TESTING)
     # Random number generator tests
     add_bayes_test(random_test sampling)
     add_bayes_test(random_simd_test sampling)
+    add_bayes_test(rng_tests_test sampling quality)
 
     # Benchmark executable (not a CTest test)
     # Excluded from test runs to avoid slowing down CI
     add_executable(normal_bench normal_bench.cpp)
     target_link_libraries(normal_bench PRIVATE bayes benchmark unit)
+
+    # RNG quality report (standalone analysis tool)
+    add_executable(rng_quality_report rng_quality_report.cpp)
+    target_link_libraries(rng_quality_report PRIVATE bayes)
 endif()
