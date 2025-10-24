@@ -1,14 +1,18 @@
 #pragma once
 
+#include <array>
+#include <cstdint>
+#include <limits>
+
 namespace tempura {
 
 template <typename StateT, typename AlgoT>
-class RNG {
+class Generator {
 public:
-  constexpr RNG(StateT state, const AlgoT& algo)
+  constexpr Generator(StateT state, const AlgoT& algo)
       : state_(state), algo_(algo) {}
 
-  constexpr RNG(const AlgoT& algo)
+  constexpr Generator(const AlgoT& algo)
       : state_(StateT{}), algo_(algo) {}
 
   constexpr void seed(StateT state) {
@@ -24,6 +28,11 @@ public:
     return state_;
   }
 
+  static constexpr auto min() -> StateT { return 0; }
+  static constexpr auto max() -> StateT {
+    return std::numeric_limits<StateT>::max();
+  }
+
   private:
   StateT state_;
   AlgoT algo_;
@@ -35,7 +44,7 @@ enum class ShiftDirection : bool { Left, Right };
 // See Numerical Recipes in C++ 3rd Edition section 7.1
 //
 // Below each method is a set of known good parameters for the generator.
-// The naming is arbitrary and matches the tables in the book.
+// Parameter sets are from Numerical Recipes tables.
 
 // 64-bit Xorshift
 // state: x
@@ -49,21 +58,33 @@ enum class ShiftDirection : bool { Left, Right };
 // Should not be used by itself as numbers with a low number of on bits
 // tend to produce more number with low numbers of on bits.
 
-template <typename T>
 struct XorShiftOptions {
-  T a1;
-  T a2;
-  T a3;
+  uint64_t a1;
+  uint64_t a2;
+  uint64_t a3;
 };
 
-template <typename T, ShiftDirection dir>
-class XorShiftFn {
+// Known good parameter sets from Numerical Recipes
+struct XorShiftPresets {
+  static constexpr std::array kAll = {
+    XorShiftOptions{21, 35, 4},   // 0
+    XorShiftOptions{20, 41, 5},   // 1
+    XorShiftOptions{17, 31, 8},   // 2
+    XorShiftOptions{11, 29, 14},  // 3
+    XorShiftOptions{14, 29, 11},  // 4
+    XorShiftOptions{30, 35, 13},  // 5
+    XorShiftOptions{21, 37, 4},   // 6
+    XorShiftOptions{21, 43, 4},   // 7
+    XorShiftOptions{23, 41, 18},  // 8
+  };
+};
+
+template <ShiftDirection dir>
+class XorShift {
  public:
-  using Options = XorShiftOptions<T>;
+  constexpr XorShift(XorShiftOptions options) : options_{options} {}
 
-  constexpr XorShiftFn(Options options) : options_{options} {}
-
-  constexpr auto operator()(T x) const {
+  [[nodiscard]] constexpr auto operator()(uint64_t x) const -> uint64_t {
     if constexpr (dir == ShiftDirection::Left) {
       x ^= x >> options_.a1;
       x ^= x << options_.a2;
@@ -77,29 +98,8 @@ class XorShiftFn {
   }
 
  private:
-  Options options_;
+  XorShiftOptions options_;
 };
-
-// Known good parameters
-
-// constexpr XorShiftOptions<uint_fast64_t> A1 = {
-//     .a1 = 21, .a2 = 35, .a3 = 4};
-// constexpr XorShiftOptions<uint_fast64_t> A2 = {
-//     .a1 = 20, .a2 = 41, .a3 = 5};
-// constexpr XorShiftOptions<uint_fast64_t> A3 = {
-//     .a1 = 17, .a2 = 31, .a3 = 8};
-// constexpr XorShiftOptions<uint_fast64_t> A4 = {
-//     .a1 = 11, .a2 = 29, .a3 = 14};
-// constexpr XorShiftOptions<uint_fast64_t> A5 = {
-//     .a1 = 14, .a2 = 29, .a3 = 11};
-// constexpr XorShiftOptions<uint_fast64_t> A6 = {
-//     .a1 = 30, .a2 = 35, .a3 = 13};
-// constexpr XorShiftOptions<uint_fast64_t> A7 = {
-//     .a1 = 21, .a2 = 37, .a3 = 4};
-// constexpr XorShiftOptions<uint_fast64_t> A8 = {
-//     .a1 = 21, .a2 = 43, .a3 = 4};
-// constexpr XorShiftOptions<uint_fast64_t> A9 = {
-//     .a1 = 23, .a2 = 41, .a3 = 18};
 
 // Multiply With Carry
 // state: x
@@ -112,31 +112,33 @@ class XorShiftFn {
 // However the upper bits also contain a high degree of randomness and
 // could be used when combined with other generators.
 
-template <typename T>
-struct MultiplyWithCarryFn {
-  MultiplyWithCarryFn(T a) : a_{a} {}
-
-  constexpr auto operator()(T x) const -> T {
-    x = a_ * (x & T{0xFFFFFFFF}) + (x >> T{32});
-    return x;
+// Known good parameter sets from Numerical Recipes
+struct MultiplyWithCarryPresets {
+  static constexpr std::array kAll = {
+    uint64_t{4294957665},  // 0
+    uint64_t{4294963023},  // 1
+    uint64_t{4162943475},  // 2
+    uint64_t{3947008974},  // 3
+    uint64_t{3874257210},  // 4
+    uint64_t{2936881968},  // 5
+    uint64_t{2811536238},  // 6
+    uint64_t{2654432763},  // 7
+    uint64_t{1640531364},  // 8
   };
-
- private:
-  T a_;
 };
 
-// // Known good parameters
-//
-// constexpr MultiplyWithCarry::Options B1 = {.a = 4294957665};
-// constexpr MultiplyWithCarry::Options B2 = {.a = 4294963023};
-// constexpr MultiplyWithCarry::Options B3 = {.a = 4162943475};
-// constexpr MultiplyWithCarry::Options B4 = {.a = 3947008974};
-// constexpr MultiplyWithCarry::Options B5 = {.a = 3874257210};
-// constexpr MultiplyWithCarry::Options B6 = {.a = 2936881968};
-// constexpr MultiplyWithCarry::Options B7 = {.a = 2811536238};
-// constexpr MultiplyWithCarry::Options B8 = {.a = 2654432763};
-// constexpr MultiplyWithCarry::Options B9 = {.a = 1640531364};
-//
+class MultiplyWithCarry {
+ public:
+  constexpr MultiplyWithCarry(uint64_t a) : a_{a} {}
+
+  [[nodiscard]] constexpr auto operator()(uint64_t x) const -> uint64_t {
+    x = a_ * (x & uint64_t{0xFFFFFFFF}) + (x >> uint64_t{32});
+    return x;
+  }
+
+ private:
+  uint64_t a_;
+};
 // Linear Congruential Generator
 //
 // state: x
@@ -147,36 +149,62 @@ struct MultiplyWithCarryFn {
 // Not a great generator. The high 32 bits are mostly random
 // but the lower 32 bits are not.
 
-template <typename T>
 struct LinearCongruentialOptions {
-  T a;
-  T c;
+  uint64_t a;
+  uint64_t c;
 };
 
-template <typename T>
-struct LinearCongruentialFn {
-  constexpr LinearCongruentialFn(LinearCongruentialOptions<T> options)
+// Known good parameter sets from Numerical Recipes
+struct LinearCongruentialPresets {
+  static constexpr std::array kAll = {
+    LinearCongruentialOptions{3935559000370003845ULL, 2691343689449507681ULL},  // 0
+    LinearCongruentialOptions{3202034522624059733ULL, 4354685564936845319ULL},  // 1
+    LinearCongruentialOptions{2862933555777941757ULL, 7046029254386353087ULL},  // 2
+  };
+};
+
+class LinearCongruential {
+ public:
+  constexpr LinearCongruential(LinearCongruentialOptions options)
       : a_{options.a}, c_{options.c} {}
 
-  constexpr auto operator()(T x) const -> T {
+  [[nodiscard]] constexpr auto operator()(uint64_t x) const -> uint64_t {
     x = a_ * x + c_;
     return x;
   }
 
  private:
-  T a_;
-  T c_;
+  uint64_t a_;
+  uint64_t c_;
 };
 
+// Combined Generator
+//
+// Combines XorShift, MultiplyWithCarry, and LinearCongruential
+// for high-quality random numbers.
+//
+// Strategy from Numerical Recipes:
+// - XorShift (Left): Process the output of LinearCongruential
+// - XorShift (Right): Add another layer of scrambling
+// - MultiplyWithCarry: XOR to add randomness to lower bits
+// - LinearCongruential: Provides the base state evolution
+//
+// Period is the LCM of the individual generator periods.
 
-// constexpr LinearCongruential::Options C1 = {.a = 3935559000370003845,
-//                                             .c = 2691343689449507681};
-// constexpr LinearCongruential::Options C2 = {.a = 3202034522624059733,
-//                                             .c = 4354685564936845319};
-// constexpr LinearCongruential::Options C3 = {.a = 2862933555777941757,
-//                                             .c = 7046029254386353087};
+constexpr uint64_t kDefaultRandomSeed = 129348710293ULL;
 
-// Multiplicative Linear Congruential Generator
+inline auto makeRandom(uint64_t seed = kDefaultRandomSeed) {
+  auto left_shift = XorShift<ShiftDirection::Left>{XorShiftPresets::kAll[0]};
+  auto mwc_gen = Generator{seed, MultiplyWithCarry{MultiplyWithCarryPresets::kAll[0]}};
+  auto lcg_gen = Generator{seed, LinearCongruential{LinearCongruentialPresets::kAll[2]}};
+  auto right_shift_gen = Generator{seed, XorShift<ShiftDirection::Right>{XorShiftPresets::kAll[2]}};
+
+  return [=]() mutable -> uint64_t {
+    return (left_shift(lcg_gen()) + right_shift_gen()) ^ mwc_gen();
+  };
+}
+
+// Multiplicative Linear Congruential Generator (commented out - less useful)
 //
 // state: x
 // initialize: x ≠ 0
@@ -251,110 +279,12 @@ struct LinearCongruentialFn {
 // // good enough properties in the high bits to be used in a combined
 // // generator.
 // //
-// // don't use both a and ax. Pick one or the other. a can be accessed with
-// ::mul
+// // don't use both a and ax. Pick one or the other. a can be accessed with ::mul
 //
 // // Known good parameters
 //
 // using F1 = MultiplicativeLinearCongruential<3741260, 4930622455819>;
 // using F2 = MultiplicativeLinearCongruential<3397916, 5428838662153>;
 // using F3 = MultiplicativeLinearCongruential<2106408, 8757438316547>;
-//
-// }  // namespace detail
-//
-// // All of these implementations below are slower than std::mt19937_64
-// // when -O3 is enabled. Some are slightly faster than std::mt19937_64
-// // without optimizations.
-// //
-// // TLDR: Use std::mt19937_64
-//
-// // Personal Interpretation:
-// // A*: XorShift
-// //   Very Fast but the state can get stuck in low entropy modes. To
-// //   fix this we instead use the output of LinearCongruential as the
-// //   state. We then take this output and add another XorShift to
-// //   extend the period.
-// //
-// // B*: MultiplyWithCarry
-// //   As LinearCongruential has bad randomness in the low bits,
-// //   (and we can't trust XorShift to fix the lower bits), we can xor
-// //   the output with MultiplyWithCarry to add some randomness to the
-// //   low bits.
-// //
-// // The period of the final output is the LCM of the periods of
-// // A3, B1, and C3.
-// struct Rand {
-//   // The default seed is arbitrary
-//   constexpr Rand(uint_fast64_t seed = 129348710293) {
-//     a3_.seed(seed);
-//     b1_.seed(seed);
-//     c3_.seed(seed);
-//   }
-//
-//   Rand(const Rand &) = default;
-//   Rand(Rand &&) = default;
-//   auto operator=(const Rand &) -> Rand & = default;
-//   auto operator=(Rand &&) -> Rand & = default;
-//
-//   static constexpr auto min() -> uint_fast64_t { return 0; }
-//
-//   static constexpr auto max() -> uint_fast64_t {
-//     return std::numeric_limits<uint_fast64_t>::max();
-//   }
-//
-//   constexpr auto operator()() -> uint_fast64_t {
-//     return (a1_.step(c3_()) + a3_()) ^ b1_();
-//   }
-//
-//  private:
-//   detail::XorShift<uint_fast64_t> a1_ = [] {
-//     auto options = detail::A1;
-//     options.dir = detail::ShiftDirection::Left;
-//     return detail::XorShift<uint_fast64_t>{options};
-//   }();
-//   detail::XorShift<uint_fast64_t> a3_{detail::A3};
-//   detail::MultiplyWithCarry b1_{detail::B1};
-//   detail::LinearCongruential c3_{detail::C3};
-// };
-// //
-// // // Do not use for more than 10¹² calls
-// // struct QuickRand1 {
-// //   // The default seed is arbitrary
-// //   constexpr QuickRand1(uint_fast64_t seed = 129348710293) : a1_{seed} {}
-// //
-// //   static constexpr auto min() -> uint_fast64_t { return 0; }
-// //
-// //   static constexpr auto max() -> uint_fast64_t {
-// //     return std::numeric_limits<uint_fast64_t>::max();
-// //   }
-// //
-// //   constexpr auto operator()() -> uint_fast64_t {
-// //     return detail::D1::step(a1_());
-// //   }
-// //
-// //  private:
-// //   detail::A1<detail::ShiftDirection::Right> a1_;
-// // };
-// //
-// // // Do not use for more than 10³⁷ calls
-// // struct QuickRand2 {
-// //   // The default seed is arbitrary
-// //   constexpr QuickRand2(uint_fast64_t seed = 129348710293)
-// //       : a3_{seed}, b1_{seed} {}
-// //
-// //   static constexpr auto min() -> uint_fast64_t { return 0; }
-// //
-// //   static constexpr auto max() -> uint_fast64_t {
-// //     return std::numeric_limits<uint_fast64_t>::max();
-// //   }
-// //
-// //   constexpr auto operator()() -> uint_fast64_t {
-// //     return detail::A1<detail::ShiftDirection::Left>::step(b1_()) ^ a3_();
-// //   }
-// //
-// //  private:
-// //   detail::A3<detail::ShiftDirection::Right> a3_;
-// //   detail::B1 b1_;
-// // };
 
 }  // namespace tempura
