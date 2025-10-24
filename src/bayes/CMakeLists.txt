@@ -1,22 +1,39 @@
-# Create an interface library for all bayes components
+# ============================================================================
+# Bayes Library - Probability distributions and statistical inference
+# ============================================================================
+
 add_library(bayes INTERFACE)
-target_link_libraries(bayes INTERFACE normal beta bernoulli random random_simd)
 
-add_library(normal INTERFACE normal.h)
-add_executable(normal_test normal_test.cpp)
-target_link_libraries(normal_test normal unit)
+# Include path must expose src/ for two reasons:
+# 1. bayes headers use #include "bayes/normal.h" (self-reference pattern)
+# 2. integrators.h depends on broadcast_array.h (another tempura component)
+# Note: This gives bayes consumers access to all tempura headers (transitivity)
+target_include_directories(bayes INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
+    $<INSTALL_INTERFACE:include>
+)
 
-add_library(beta INTERFACE beta.h)
-add_executable(beta_test beta_test.cpp)
-target_link_libraries(beta_test beta unit)
+# ============================================================================
+# Tests - Only build when testing is enabled
+# ============================================================================
 
-add_library(bernoulli INTERFACE bernoulli.h)
-add_executable(bernoulli_test bernoulli_test.cpp)
-target_link_libraries(bernoulli_test bernoulli unit)
+if(BUILD_TESTING)
+    # Helper reduces boilerplate: 3 lines per test → 1 line
+    function(add_bayes_test TEST_NAME)
+        add_executable(bayes_${TEST_NAME} ${TEST_NAME}.cpp)
+        target_link_libraries(bayes_${TEST_NAME} PRIVATE bayes unit)
+        add_test(NAME bayes_${TEST_NAME} COMMAND bayes_${TEST_NAME})
+        set_tests_properties(bayes_${TEST_NAME} PROPERTIES LABELS "bayes;${ARGN}")
+    endfunction()
 
-add_library(random INTERFACE random.h)
+    # Distribution tests
+    add_bayes_test(normal_test distributions)
+    add_bayes_test(beta_test distributions)
+    add_bayes_test(bernoulli_test distributions)
+    add_bayes_test(random_simd_test sampling)
 
-add_library(random_simd INTERFACE random_simd.h)
-
-add_executable(random_simd_test random_simd_test.cpp)
-target_link_libraries(random_simd_test random_simd unit)
+    # Benchmark executable (not a CTest test)
+    # Excluded from test runs to avoid slowing down CI
+    add_executable(normal_bench normal_bench.cpp)
+    target_link_libraries(normal_bench PRIVATE bayes benchmark unit)
+endif()
