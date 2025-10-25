@@ -33,15 +33,20 @@ Read the distribution header file (e.g., `src/bayes/beta.h`, `src/bayes/binomial
 - Use ADL pattern for math functions: `using std::log; log(x);`
 - Use `numeric_infinity(T{})` from `bayes/numeric_traits.h` instead of `std::numeric_limits<T>::infinity()`
 - Ensure consistent type construction: prefer `T{0}`, `T{1}`, `T{2}` over raw literals
+- Use `std::numbers` constants (e.g., `T{std::numbers::pi}`, `T{std::numbers::sqrt2}`) instead of hardcoded values
 
 **Quality Improvements:**
 - Make all methods `constexpr` where possible
 - Add parameter validation in constructor (use `assert`)
 - Add standard methods if missing: `mean()`, `variance()`, parameter accessors
 - Add explicit return types: `-> T`
+- Extract complex algorithms into separate private helper functions (e.g., Box-Muller transform)
+- Use structured bindings for multi-value returns: `auto [x, y] = helper();`
 
 **Comments:**
 - Short and judicious - explain *why*, not *what*
+- **Always place comments above the code**, not inline (exception: very short clarifications)
+- Include Unicode math formulas for key algorithms (e.g., `p(x|μ,σ) = ...`)
 - Explain non-obvious design decisions (inverse transform, numerical stability, edge cases)
 - Highlight common pitfalls (integer division traps, underflow concerns)
 - Do NOT repeat what the code obviously does
@@ -176,6 +181,21 @@ auto logProb(T x) const {
   if (x < a_ or x > b_) return -std::numeric_limits<T>::infinity();
   return -log(b_ - a_);  // Missing std::
 }
+
+auto normalProb(T x) const {
+  return exp(-(x*x)/2.0) / (sigma * sqrt(2.0 * 3.14159));  // Hardcoded pi
+}
+
+template <typename Generator>
+auto sample(Generator& g) -> T {
+  // Box-Muller inline with caching mixed together
+  if (has_value_) return cached_value_;
+  T u1 = g() / double(Generator::max());
+  T u2 = g() / double(Generator::max());  // Integer division bug!
+  T r = sqrt(-2. * log(u1));  // Raw literals
+  cached_value_ = r * cos(2. * 3.14159 * u2);  // Inline comment on same line
+  return r * sin(2. * 3.14159 * u2);
+}
 ```
 
 **After:**
@@ -195,6 +215,66 @@ constexpr auto logProb(T x) const -> T {
   }
   return -log(b_ - a_);
 }
+
+// Probability density function (PDF)
+//
+// Formula: p(x|μ,σ) = (1 / (σ√(2π))) exp(-x² / 2σ²)
+constexpr auto normalProb(T x) const -> T {
+  using std::exp;
+  using std::sqrt;
+  const T two_pi = T{2} * T{std::numbers::pi};
+  return exp(-x * x / T{2}) / (sigma * sqrt(two_pi));
+}
+
+template <typename Generator>
+constexpr auto sample(Generator& g) -> T {
+  // Return cached value if available
+  if (has_value_) {
+    has_value_ = false;
+    return std::exchange(cached_value_, T{});
+  }
+
+  // Generate a pair of standard normal samples
+  auto [z0, z1] = boxMuller(g);
+
+  // Cache second sample
+  cached_value_ = z1;
+  has_value_ = true;
+
+  return z0;
+}
+
+private:
+  // Box-Muller transform: converts uniform samples to Gaussian samples
+  //
+  // Generates two independent N(0,1) samples from two uniform U(0,1) samples:
+  //   Z₀ = √(-2 ln U₁) cos(2π U₂)
+  //   Z₁ = √(-2 ln U₁) sin(2π U₂)
+  //
+  // Why it works: In 2D, independent normal variables X,Y have polar coordinates
+  // where R² ~ Exponential(1/2) and Θ ~ Uniform(0, 2π). The transform inverts
+  // this relationship to generate normals from uniforms.
+  template <typename Generator>
+  constexpr auto boxMuller(Generator& g) -> std::pair<T, T> {
+    // Avoid integer division - cast both terms to T
+    constexpr auto range = static_cast<T>(Generator::max() - Generator::min());
+    T u1 = static_cast<T>(g()) / range;
+    T u2 = static_cast<T>(g()) / range;
+
+    using std::cos;
+    using std::log;
+    using std::sin;
+    using std::sqrt;
+
+    // Radial component
+    const T r = sqrt(-T{2} * log(u1));
+
+    // Angular component
+    const T theta = T{2} * T{std::numbers::pi} * u2;
+
+    // Convert from polar to Cartesian
+    return {r * sin(theta), r * cos(theta)};
+  }
 ```
 
 ## Notes
