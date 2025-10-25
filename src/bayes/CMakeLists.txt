@@ -44,4 +44,8 @@ if(BUILD_TESTING)
     # RNG quality report (standalone analysis tool)
     add_executable(rng_quality_report rng_quality_report.cpp)
     target_link_libraries(rng_quality_report PRIVATE bayes)
+
+    # SIMD RNG quality report (standalone analysis tool)
+    add_executable(rng_simd_quality_report rng_simd_quality_report.cpp)
+    target_link_libraries(rng_simd_quality_report PRIVATE bayes simd)
 endif()

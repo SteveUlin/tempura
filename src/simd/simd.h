@@ -129,9 +129,30 @@ class Vec8i64 {
   // Precondition:
   //   - index must be in the range [0, 7]
   auto operator[](std::size_t index) const -> int64_t {
-    std::array<int64_t, 8> arr;
-    _mm512_storeu_si512(arr.data(), data_);
-    return arr[index];
+    // Optimized extraction using 256-bit sub-registers
+    // AVX-512 is composed of two 256-bit halves (lower and upper)
+    if (index < 4) {
+      // Extract lower 256 bits and use AVX2 extract
+      __m256i lower = _mm512_castsi512_si256(data_);
+      switch (index) {
+        case 0: return _mm256_extract_epi64(lower, 0);
+        case 1: return _mm256_extract_epi64(lower, 1);
+        case 2: return _mm256_extract_epi64(lower, 2);
+        case 3: return _mm256_extract_epi64(lower, 3);
+      }
+    } else {
+      // Extract upper 256 bits and use AVX2 extract
+      __m256i upper = _mm512_extracti64x4_epi64(data_, 1);
+      switch (index) {
+        case 4: return _mm256_extract_epi64(upper, 0);
+        case 5: return _mm256_extract_epi64(upper, 1);
+        case 6: return _mm256_extract_epi64(upper, 2);
+        case 7: return _mm256_extract_epi64(upper, 3);
+      }
+    }
+
+    // Unreachable, but keeps compiler happy
+    return 0;
   }
 
   auto operator==(const Vec8i64 other) const -> bool {

@@ -1,5 +1,9 @@
 #pragma once
 
+#include <array>
+#include <cmath>
+#include <utility>
+
 #include "bayes/random.h"
 #include "simd/simd.h"
 
@@ -7,6 +11,20 @@ namespace tempura {
 
 // SIMD versions of the random number generators that operate on 8 parallel
 // streams. Each lane uses different parameters to avoid correlations.
+//
+// Available functionality:
+// - XorShiftSimd, MultiplyWithCarrySimd, LinearCongruentialSimd: Basic RNG algorithms
+// - makeSimdRandom(): High-quality combined generator (returns Vec8i64)
+// - toUniform(Vec8i64): Convert to uniform [0, 1) doubles (returns Vec8d)
+// - toUniformRange(Vec8i64, a, b): Convert to uniform [a, b) doubles
+// - boxMuller(Vec8i64, Vec8i64): Box-Muller transform for N(0,1) normal distribution
+//   - Overloads for custom mean/stddev (scalar or per-lane)
+//
+// Example usage:
+//   auto rand = makeSimdRandom();
+//   auto uniform = toUniform(rand());                    // 8 uniform [0,1) values
+//   auto range = toUniformRange(rand(), -5.0, 5.0);      // 8 uniform [-5,5) values
+//   auto [z0, z1] = boxMuller(rand(), rand());           // 16 N(0,1) values
 
 // XorShift parameters for SIMD (8 different parameter sets)
 struct XorShiftSimdOptions {
@@ -150,6 +168,104 @@ inline auto makeSimdRandom(Vec8i64 seed = kDefaultSimdRandomSeed) {
   return [=]() mutable -> Vec8i64 {
     return (left_shift(lcg_gen()) + right_shift_gen()) ^ mwc_gen();
   };
+}
+
+// Convert Vec8i64 random integers to Vec8d uniform doubles in [0, 1)
+// Uses the upper 53 bits of the uint64_t values to create IEEE 754 doubles
+inline auto toUniform(Vec8i64 random_ints) -> Vec8d {
+  // Extract values as array
+  std::array<int64_t, 8> int_vals;
+  for (std::size_t i = 0; i < 8; ++i) {
+    int_vals[i] = random_ints[i];
+  }
+
+  // Convert to doubles in [0, 1)
+  // Use the full range of uint64_t and divide by 2^64
+  std::array<double, 8> double_vals;
+  constexpr double kScale = 1.0 / 18446744073709551616.0;  // 1.0 / 2^64
+
+  for (std::size_t i = 0; i < 8; ++i) {
+    // Reinterpret as unsigned to avoid negative values
+    uint64_t unsigned_val = static_cast<uint64_t>(int_vals[i]);
+    double_vals[i] = static_cast<double>(unsigned_val) * kScale;
+  }
+
+  return Vec8d{double_vals[0], double_vals[1], double_vals[2], double_vals[3],
+               double_vals[4], double_vals[5], double_vals[6], double_vals[7]};
+}
+
+// Convert Vec8i64 random integers to Vec8d uniform doubles in [a, b)
+inline auto toUniformRange(Vec8i64 random_ints, double a, double b) -> Vec8d {
+  Vec8d uniform_01 = toUniform(random_ints);
+  Vec8d range = Vec8d{b - a};
+  Vec8d offset = Vec8d{a};
+  return uniform_01 * range + offset;
+}
+
+// Convert Vec8i64 random integers to Vec8d uniform doubles in [a, b) with per-lane ranges
+inline auto toUniformRange(Vec8i64 random_ints, Vec8d a, Vec8d b) -> Vec8d {
+  Vec8d uniform_01 = toUniform(random_ints);
+  Vec8d range = b - a;
+  return uniform_01 * range + a;
+}
+
+// Box-Muller transform to generate SIMD normal (Gaussian) random numbers
+// Returns a pair of Vec8d with independent N(0,1) distributed values
+// Each call consumes two Vec8i64 random values and produces 16 normal variates (2 Vec8d)
+inline auto boxMuller(Vec8i64 rand1, Vec8i64 rand2)
+    -> std::pair<Vec8d, Vec8d> {
+  // Convert to uniform [0, 1)
+  Vec8d u1 = toUniform(rand1);
+  Vec8d u2 = toUniform(rand2);
+
+  // Extract values to arrays for scalar math operations
+  std::array<double, 8> u1_arr;
+  std::array<double, 8> u2_arr;
+  std::array<double, 8> z0_arr;
+  std::array<double, 8> z1_arr;
+
+  for (std::size_t i = 0; i < 8; ++i) {
+    u1_arr[i] = u1[i];
+    u2_arr[i] = u2[i];
+  }
+
+  // Apply Box-Muller transform
+  // z0 = sqrt(-2 * ln(u1)) * cos(2π * u2)
+  // z1 = sqrt(-2 * ln(u1)) * sin(2π * u2)
+  constexpr double kTwoPi = 6.283185307179586476925286766559;
+
+  for (std::size_t i = 0; i < 8; ++i) {
+    // Ensure u1 > 0 to avoid log(0)
+    double u1_safe = u1_arr[i] < 1e-10 ? 1e-10 : u1_arr[i];
+    double radius = std::sqrt(-2.0 * std::log(u1_safe));
+    double theta = kTwoPi * u2_arr[i];
+
+    z0_arr[i] = radius * std::cos(theta);
+    z1_arr[i] = radius * std::sin(theta);
+  }
+
+  Vec8d z0{z0_arr[0], z0_arr[1], z0_arr[2], z0_arr[3],
+           z0_arr[4], z0_arr[5], z0_arr[6], z0_arr[7]};
+  Vec8d z1{z1_arr[0], z1_arr[1], z1_arr[2], z1_arr[3],
+           z1_arr[4], z1_arr[5], z1_arr[6], z1_arr[7]};
+
+  return {z0, z1};
+}
+
+// Generate SIMD normal random numbers with custom mean and standard deviation
+inline auto boxMuller(Vec8i64 rand1, Vec8i64 rand2, double mean, double stddev)
+    -> std::pair<Vec8d, Vec8d> {
+  auto [z0, z1] = boxMuller(rand1, rand2);
+  Vec8d mean_vec{mean};
+  Vec8d stddev_vec{stddev};
+  return {z0 * stddev_vec + mean_vec, z1 * stddev_vec + mean_vec};
+}
+
+// Generate SIMD normal random numbers with per-lane mean and standard deviation
+inline auto boxMuller(Vec8i64 rand1, Vec8i64 rand2, Vec8d mean, Vec8d stddev)
+    -> std::pair<Vec8d, Vec8d> {
+  auto [z0, z1] = boxMuller(rand1, rand2);
+  return {z0 * stddev + mean, z1 * stddev + mean};
 }
 
 }  // namespace tempura
