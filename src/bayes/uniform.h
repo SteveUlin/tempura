@@ -1,44 +1,87 @@
 #pragma once
 
-#include <limits>
+#include <cassert>
+#include <cmath>
+#include <type_traits>
+
+#include "bayes/numeric_traits.h"
 
 namespace tempura::bayes {
 
+// Continuous uniform distribution U(a, b)
+//
+// Requirements for custom types T:
+//   - Arithmetic operators: +, -, *, / (both binary and unary +/-)
+//   - Comparison: <, >
+//   - Convertible from integer literals (0, 1, 2, 12)
+//
+// For logProb support, provide these extension points (found via ADL):
+//   namespace mylib {
+//     constexpr auto log(MyType x) -> MyType { ... }
+//     constexpr auto numeric_infinity(MyType) -> MyType { ... }
+//   }
+//
 template <typename T = double>
 class Uniform {
+  static_assert(
+      !std::is_integral_v<T>,
+      "Uniform is a continuous distribution - integer types are not supported. "
+      "Use a floating-point type (float, double, long double) or a custom "
+      "numeric type.");
+
  public:
-  Uniform(T a, T b) : a_{a}, b_{b} {}
+  constexpr Uniform(T a, T b) : a_{a}, b_{b} {
+    assert(a < b && "Uniform distribution requires a < b");
+  }
 
+  // Inverse transform sampling: map generator's discrete range to [0,1), then
+  // scale to [a,b)
   template <typename Generator>
-  auto sample(Generator& g) -> T {
-    constexpr auto delta = Generator::max() - Generator::min();
+  constexpr auto sample(Generator& g) -> T {
+    // Must avoid integer division - cast both numerator and denominator to T
+    constexpr auto range = static_cast<T>(Generator::max() - Generator::min());
+    auto normalized = static_cast<T>(g() - Generator::min()) / range;
 
-    return a_ + (b_ - a_) * (g() / delta);
+    return a_ + (b_ - a_) * normalized;
   }
 
-  constexpr auto prob(T x) const {
+  constexpr auto prob(T x) const -> T {
     if (x < a_ or x > b_) {
-      return T{0.};
+      return T{0};
     }
-    return 1. / (b_ - a_);
+    return T{1} / (b_ - a_);
   }
 
-  constexpr auto logProb(T x) const {
+  // Log-space avoids underflow for very small probabilities
+  constexpr auto logProb(T x) const -> T {
+    using std::log;
     if (x < a_ or x > b_) {
-      return -std::numeric_limits<T>::infinity();
+      return -numeric_infinity(T{});
     }
     return -log(b_ - a_);
   }
 
-  constexpr auto cdf(T x) const {
+  constexpr auto cdf(T x) const -> T {
     if (x < a_) {
-      return 0;
+      return T{0};
     }
     if (x > b_) {
-      return 1;
+      return T{1};
     }
-    retrun(x - a_) / (b_ - a_);
+    return (x - a_) / (b_ - a_);
   }
+
+  constexpr auto mean() const -> T { return (a_ + b_) / T{2}; }
+
+  // Variance = (b-a)²/12 is the standard result for continuous uniform
+  // distributions
+  constexpr auto variance() const -> T {
+    auto range = b_ - a_;
+    return range * range / T{12};
+  }
+
+  constexpr auto lower() const -> T { return a_; }
+  constexpr auto upper() const -> T { return b_; }
 
  private:
   T a_;
