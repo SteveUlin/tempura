@@ -46,6 +46,7 @@
             CUDA_HOME = pkgs.cudaPackages_12_1.cudatoolkit;
             CUDA_PATH = pkgs.cudaPackages_12_1.cudatoolkit;
             CMAKE_CUDA_COMPILER = "${pkgs.cudaPackages_12_1.cudatoolkit}/bin/nvcc";
+            NIX_ENFORCE_NO_NATIVE = "";  # Allow -march=native optimizations
           };
         };
       }
