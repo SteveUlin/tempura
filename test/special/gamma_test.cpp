@@ -45,11 +45,11 @@ auto main() -> int {
   };
 
   "incompleteGamma Continued Fraction"_test = [] {
-    std::println("{}", detail::incompleteGammaContinuedFaction(100.0, 95.0));
+    std::println("{}", detail::incompleteGammaContinuedFraction(100.0, 95.0));
     std::println("{}", detail::incompleteGammaSeries(100.0, 95.0));
     std::println("{}", detail::incompleteGammaGaussianQuadature(100.0, 95.0));
 
-    std::println("{}", detail::incompleteGammaContinuedFaction(100.0, 105.0));
+    std::println("{}", detail::incompleteGammaContinuedFraction(100.0, 105.0));
     std::println("{}", detail::incompleteGammaSeries(100.0, 105.0));
     std::println("{}", detail::incompleteGammaGaussianQuadature(100.0, 105.0));
   };
