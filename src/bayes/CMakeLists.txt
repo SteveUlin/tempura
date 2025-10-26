@@ -30,6 +30,7 @@ if(BUILD_TESTING)
     add_bayes_test(normal_test distributions)
     add_bayes_test(beta_test distributions)
     add_bayes_test(bernoulli_test distributions)
+    add_bayes_test(binomial_test distributions)
     add_bayes_test(uniform_test distributions)
     add_bayes_test(logistic_test distributions)
 

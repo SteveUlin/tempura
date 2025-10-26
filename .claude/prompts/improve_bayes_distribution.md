@@ -48,6 +48,17 @@ Read the distribution header file (e.g., `src/bayes/beta.h`, `src/bayes/binomial
 - Extract complex algorithms into separate private helper functions (e.g., Box-Muller transform)
 - Use structured bindings for multi-value returns: `auto [x, y] = helper();`
 
+**Sampling Implementation:**
+
+- **DO NOT use standard library distributions** (e.g., `std::normal_distribution`, `std::binomial_distribution`)
+- Implement sampling algorithms from scratch using the RNG directly
+- Common approaches:
+  - Inverse transform sampling (convert uniform samples to target distribution)
+  - Acceptance-rejection methods
+  - Direct simulation (e.g., Binomial as n Bernoulli trials)
+  - Special transforms (e.g., Box-Muller for Normal)
+- This ensures constexpr compatibility and full control over the implementation
+
 **Comments:**
 
 - Short and judicious - explain _why_, not _what_
