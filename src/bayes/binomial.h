@@ -49,11 +49,12 @@ class Binomial {
 
   // Sampling via n independent Bernoulli trials
   //
-  // For each of n trials, generate U ~ Uniform(0,1) and count successes (U < p).
-  // This is the most direct implementation of the binomial process.
+  // For each of n trials, generate U ~ Uniform(0,1) and count successes (U <
+  // p). This is the most direct implementation of the binomial process.
   //
-  // Alternative: For large n and moderate p, BTPE (Binomial, Triangle, Parallelogram, Exponential)
-  // algorithm would be more efficient, but the simple method is correct and constexpr-compatible.
+  // Alternative: For large n and moderate p, BTPE (Binomial, Triangle,
+  // Parallelogram, Exponential) algorithm would be more efficient, but the
+  // simple method is correct and constexpr-compatible.
   template <std::uniform_random_bit_generator Generator>
   constexpr auto sample(Generator& g) -> IntT {
     constexpr T scale =

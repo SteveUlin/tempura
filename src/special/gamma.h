@@ -76,55 +76,76 @@ constexpr auto beta(const double x, const double y) -> double {
   return std::exp(logGamma(x) + logGamma(y) - logGamma(x + y));
 }
 
-// Incomplete Gamma function
-// P(a, x) = γ(a, x) / Γ(a)
-//         =  1 ⌠∞
-//          ----⎮ t^(a-1) e^(-t) dt
-//          Γ(a)⌡x
-// P(x, 0) = 0 and P(x, ∞) = 1
+// Regularized lower incomplete gamma function: P(a, x) = γ(a, x) / Γ(a)
 //
-// The Incomplete Gamma fn is kinda like a sigmoid function:
-//  - transition centers ~ a - 1
-//  - the transition width is ~ sqrt(a)
+// Intuition:
+//   P(a, x) is the CDF of the Gamma(a, 1) distribution evaluated at x.
+//   Behaves like a sigmoid: transitions from 0 to 1 near x ≈ a-1 with
+//   width proportional to √a.
+//
+// Properties:
+//   P(a, 0) = 0, P(a, ∞) = 1
+//   Integral form: P(a, x) = (1/Γ(a)) ∫₀ˣ t^(a-1) e^(-t) dt
 
 namespace detail {
 
-// The Incomplete Gamma function as a series expansion:
-// Γ(a, x) = e⁻ˣxᵃ ∑ Γ(a) xⁿ / Γ(a + 1 + n)
+// Series expansion: γ(a, x) = e^(-x) x^a ∑_{n=0}^∞ x^n / Γ(a + n + 1)
 //
-// Converges quickly for x < (a + 1)
-constexpr auto incompleteGammaSeries(const double a, const double x) -> double {
-  double ap = a;
-  double sum = 1 / a;
-  double term = sum;
+// Converges rapidly for x < a + 1 (below the transition point)
+template <typename T>
+constexpr auto incompleteGammaSeries(T a, T x) -> T {
+  using std::abs;
+  using std::exp;
+  using std::lgamma;
+  using std::log;
+
+  T ap = a;
+  T sum = T{1} / a;
+  T term = sum;
+
+  // Iterate until convergence
   while (true) {
-    ap += 1.0;
+    ap += T{1};
     term *= x / ap;
     sum += term;
-    constexpr double ϵ = std::numeric_limits<double>::epsilon();
-    if (std::abs(term) < std::abs(sum) * ϵ) {
+
+    // Converged when term is negligible relative to sum
+    constexpr T ϵ = T{1e-10};
+    if (abs(term) < abs(sum) * ϵ) {
       break;
     }
   }
-  return std::exp(-x + (a * std::log(x)) - logGamma(a)) * sum;
+
+  return exp(-x + a * log(x) - lgamma(a)) * sum;
 }
 
+// Gauss-Legendre quadrature for incomplete gamma
+//
+// Used for large a (≥ 100) where series/continued fraction converge slowly
+// Integrates the gamma integrand directly using 18-point quadrature
 constexpr auto incompleteGammaGaussianQuadature(const double a, const double x)
     -> double {
+  using std::exp;
+  using std::log;
+  using std::max;
+  using std::min;
+  using std::sqrt;
+
   const double a1 = a - 1.0;
-  const double sqrta1 = std::sqrt(a1);
-  const double lna1 = std::log(a1);
+  const double sqrta1 = sqrt(a1);
+  const double lna1 = log(a1);
   const double gln = logGamma(a);
+
+  // Choose integration endpoint based on position relative to transition
   double xu;
   if (x > a1) {
-    // Above the transition midpoint
-    // Integrate from x to a point far to the right
-    xu = std::max(a1 + (11.5 * sqrta1), x + (6.0 * sqrta1));
+    // Above transition: integrate from x to far right
+    xu = max(a1 + 11.5 * sqrta1, x + 6.0 * sqrta1);
   } else {
-    // below the transition point
-    // Integrate from a point far to the left to x
-    xu = std::max(0.0, std::min(a1 - (7.5 * sqrta1), x - (5.0 * sqrta1)));
+    // Below transition: integrate from far left to x
+    xu = max(0.0, min(a1 - 7.5 * sqrta1, x - 5.0 * sqrta1));
   }
+
   constexpr static auto weights = [] consteval {
     constexpr int64_t N = 18;
     auto weights = quadature::gaussLegendre(0.0, 1.0, N);
@@ -132,51 +153,105 @@ constexpr auto incompleteGammaGaussianQuadature(const double a, const double x)
     std::ranges::copy(weights, w.begin());
     return w;
   }();
+
   double sum = 0.0;
   for (const auto& [t, w] : weights) {
-    const double z = x + ((xu - x) * t);
-    sum += w * std::exp(-(z - a1) + (a1 * (std::log(z) - lna1)));
+    const double z = x + (xu - x) * t;
+    sum += w * exp(-(z - a1) + a1 * (log(z) - lna1));
   }
-  double ans = sum * (xu - x) * std::exp((a1 * (lna1 - 1.0)) - gln);
-  if (x > a1) {
-    return 1.0 - ans;
-  }
-  return -ans;
+
+  double ans = sum * (xu - x) * exp(a1 * (lna1 - 1.0) - gln);
+  return x > a1 ? 1.0 - ans : -ans;
 }
 
-// The Incomplete Gamma function as a continued fraction
-// Γ(a, x) = e⁻ˣxᵃ / (x + 1 - a - (1 ⋅ (1 - a) / (x + 3 - a - (2 ⋅ (2 - a) / (x
-// + 5 - a - (3 ⋅ (3 - a) / ...))
+// Continued fraction: Q(a, x) = 1 - P(a, x)
 //
-// Converges quickly for x > (a + 1)
-constexpr auto incompleteGammaContinuedFaction(const double a,
-                                                      const double x)
-    -> double {
-  constexpr double ϵ = std::numeric_limits<double>::epsilon();
-  auto value = FnGenerator{[a, x, n = 0] mutable -> std::pair<double, double> {
-                 if (n == 0) {
-                   ++n;
-                   return {1.0, x + 1.0 - a};
-                 }
-                 std::pair ret{-n * (n - a), x + (2.0 * n + 1.0) - a};
-                 ++n;
-                 return ret;
-               }} |
-               continuants() | Converges{.epsilon = ϵ};
-  return 1.0 - (std::exp(-x + (a * std::log(x)) - logGamma(a)) * value);
+// Uses Lentz's algorithm to evaluate the continued fraction expansion
+// Converges rapidly for x > a + 1 (above the transition point)
+template <typename T>
+constexpr auto incompleteGammaContinuedFraction(T a, T x) -> T {
+  using std::exp;
+  using std::lgamma;
+  using std::log;
+
+  constexpr T ϵ = T{1e-10};
+  constexpr T tiny = T{1e-30};
+
+  T b = x + T{1} - a;
+  T c = T{1} / tiny;
+  T d = T{1} / b;
+  T h = d;
+
+  // Modified Lentz's algorithm for continued fraction evaluation
+  for (int i = 1; i < 100; ++i) {
+    T an = -static_cast<T>(i) * (static_cast<T>(i) - a);
+    b += T{2};
+
+    d = an * d + b;
+    if (d == T{0}) {
+      d = tiny;
+    }
+
+    c = b + an / c;
+    if (c == T{0}) {
+      c = tiny;
+    }
+
+    d = T{1} / d;
+    T del = d * c;
+    h *= del;
+
+    // Converged when del ≈ 1
+    T diff = del - T{1};
+    T abs_diff = diff < T{0} ? -diff : diff;
+    if (abs_diff < ϵ) {
+      break;
+    }
+  }
+
+  // Return complement: P(a, x) = 1 - Q(a, x)
+  return T{1} - exp(-x + a * log(x) - lgamma(a)) * h;
 }
 
 }  // namespace detail
 
-constexpr auto incompleteGamma(const double a, const double x) -> double {
+// Generic incomplete gamma for arbitrary floating-point types
+template <typename T>
+constexpr auto incompleteGamma(T a, T x) -> T {
+  assert(a > T{0} && x >= T{0});
+
+  if (x == T{0}) {
+    return T{0};
+  }
+
+  // Choose algorithm based on position relative to transition point
+  if (x < a + T{1}) {
+    // Series converges rapidly below transition
+    return detail::incompleteGammaSeries(a, x);
+  }
+
+  // Continued fraction converges rapidly above transition
+  return detail::incompleteGammaContinuedFraction(a, x);
+}
+
+// Specialized overload for double supporting large a via quadrature
+constexpr auto incompleteGamma(double a, double x) -> double {
   assert(a > 0.0 && x >= 0.0);
-  if (x == 0.0) return 0.0;
-  // a is too big for the other methods to converge quickly
-  if (a >= 100.) return detail::incompleteGammaGaussianQuadature(a, x);
-  // Series expansion converges quickly for x < (a + 1)
-  if (x < (a + 1)) return detail::incompleteGammaSeries(a, x);
-  // Continued fraction converges quickly for x > (a + 1)
-  return detail::incompleteGammaContinuedFaction(a, x);
+
+  if (x == 0.0) {
+    return 0.0;
+  }
+
+  // For very large a, quadrature is more stable than series/fraction
+  if (a >= 100.0) {
+    return detail::incompleteGammaGaussianQuadature(a, x);
+  }
+
+  if (x < a + 1.0) {
+    return detail::incompleteGammaSeries(a, x);
+  }
+
+  return detail::incompleteGammaContinuedFraction(a, x);
 }
 
 }  // namespace tempura::special
