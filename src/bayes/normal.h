@@ -14,20 +14,11 @@ namespace tempura::bayes {
 // Normal (Gaussian) distribution N(μ, σ)
 // p(x|μ, σ) = 1 / (σ√(2π)) exp(-((x - μ)² / (2σ²)))
 //
-// Requirements for custom types T:
-//   - Arithmetic operators: +, -, *, / (both binary and unary +/-)
-//   - Comparison: <
-//   - Convertible from integer and floating-point literals (0, 1, 2, 0.5, etc.)
-//
-// For full support, provide these extension points (found via ADL):
-//   namespace mylib {
-//     constexpr auto log(MyType x) -> MyType { ... }
-//     constexpr auto exp(MyType x) -> MyType { ... }
-//     constexpr auto sqrt(MyType x) -> MyType { ... }
-//     constexpr auto sin(MyType x) -> MyType { ... }
-//     constexpr auto cos(MyType x) -> MyType { ... }
-//     constexpr auto erf(MyType x) -> MyType { ... }
-//   }
+// Intuition:
+//   The bell curve - ubiquitous in nature due to the Central Limit Theorem.
+//   Models sums of many independent random effects: measurement errors,
+//   human heights, test scores, particle velocities. Characterized by its
+//   mean (peak location) and standard deviation (spread).
 //
 template <typename T = double>
 class Normal {

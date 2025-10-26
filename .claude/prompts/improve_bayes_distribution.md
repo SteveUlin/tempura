@@ -9,12 +9,14 @@ This prompt guides the process of reviewing and improving a probability distribu
 Read the distribution header file (e.g., `src/bayes/beta.h`, `src/bayes/binomial.h`) and identify:
 
 **Critical Issues:**
+
 - Compilation errors (typos, missing includes, syntax errors)
 - Logic bugs (integer division, incorrect formulas, off-by-one errors)
 - Missing `std::` qualifiers or ADL patterns for custom type support
 - Type safety issues
 
 **Quality Issues:**
+
 - Missing `constexpr` where possible
 - Inconsistent type usage (mixing `0`, `0.`, `T{0}`)
 - Missing standard distribution methods (`mean()`, `variance()`, accessors)
@@ -24,11 +26,13 @@ Read the distribution header file (e.g., `src/bayes/beta.h`, `src/bayes/binomial
 ### 2. Apply Fixes
 
 **Fix critical bugs first:**
+
 - Correct any typos, syntax errors, compilation issues
 - Fix algorithmic bugs (division, bounds, formula errors)
 - Add missing includes (`<cassert>`, `<cmath>`, `<type_traits>`)
 
 **Type Safety:**
+
 - Add `static_assert(!std::is_integral_v<T>, "...")` if it's a continuous distribution
 - Use ADL pattern for math functions: `using std::log; log(x);`
 - Use `numeric_infinity(T{})` from `bayes/numeric_traits.h` instead of `std::numeric_limits<T>::infinity()`
@@ -36,6 +40,7 @@ Read the distribution header file (e.g., `src/bayes/beta.h`, `src/bayes/binomial
 - Use `std::numbers` constants (e.g., `T{std::numbers::pi}`, `T{std::numbers::sqrt2}`) instead of hardcoded values
 
 **Quality Improvements:**
+
 - Make all methods `constexpr` where possible
 - Add parameter validation in constructor (use `assert`)
 - Add standard methods if missing: `mean()`, `variance()`, parameter accessors
@@ -44,7 +49,8 @@ Read the distribution header file (e.g., `src/bayes/beta.h`, `src/bayes/binomial
 - Use structured bindings for multi-value returns: `auto [x, y] = helper();`
 
 **Comments:**
-- Short and judicious - explain *why*, not *what*
+
+- Short and judicious - explain _why_, not _what_
 - **Always place comments above the code**, not inline (exception: very short clarifications)
 - Include Unicode math formulas for key algorithms (e.g., `p(x|μ,σ) = ...`)
 - Explain non-obvious design decisions (inverse transform, numerical stability, edge cases)
@@ -53,20 +59,13 @@ Read the distribution header file (e.g., `src/bayes/beta.h`, `src/bayes/binomial
 - Do NOT speak down to the reader
 
 **Documentation Header:**
+
 ```cpp
 // [Distribution Name] distribution [Mathematical notation]
 //
-// Requirements for custom types T:
-//   - Arithmetic operators: +, -, *, / (both binary and unary +/-)
-//   - Comparison: <, >, ==, != (as needed)
-//   - Convertible from integer literals (0, 1, 2, ...)
-//
-// For [special methods] support, provide these extension points (found via ADL):
-//   namespace mylib {
-//     constexpr auto log(MyType x) -> MyType { ... }
-//     constexpr auto numeric_infinity(MyType) -> MyType { ... }
-//     // ... other functions as needed
-//   }
+// Intuition:
+//   [Brief explanation of what the distribution models and when to use it]
+//   [Compare to similar distributions if helpful]
 //
 ```
 
@@ -97,6 +96,7 @@ auto main() -> int {
 ```
 
 **Test Coverage:**
+
 - Probability density/mass function (in range, out of range, edge cases)
 - Log probability (in range, out of range, -infinity cases)
 - CDF (lower bound, upper bound, mid-range)
@@ -108,6 +108,7 @@ auto main() -> int {
 - Custom type support (if applicable)
 
 **Register test in CMakeLists.txt:**
+
 ```cmake
 add_bayes_test([distribution]_test distributions)
 ```
@@ -115,6 +116,7 @@ add_bayes_test([distribution]_test distributions)
 ### 4. Verify
 
 Build and run tests:
+
 ```bash
 ninja -C build bayes_[distribution]_test
 ./build/src/bayes/bayes_[distribution]_test
@@ -123,28 +125,14 @@ ctest --test-dir build -L bayes --output-on-failure
 
 All tests must pass before proceeding.
 
-### 5. Check-in Before Commit
-
-**Present a summary:**
-- Critical bugs fixed (list them)
-- Quality improvements (list them)
-- Test coverage (number of tests, what they cover)
-- All tests passing ✓
-
-**Ask:** "Ready to commit these changes?"
-
-**If approved, commit:**
-```bash
-git add src/bayes/[distribution].h src/bayes/[distribution]_test.cpp src/bayes/CMakeLists.txt
-git commit -m "Fix [distribution] bugs, improve type safety and add comprehensive tests"
-```
-
 ## Extension Points Reference
 
 **numeric_traits.h already provides:**
+
 - `numeric_infinity(T)` - returns infinity for type T (default uses `std::numeric_limits`)
 
 **Common ADL extension points users may need:**
+
 - `log(T)`, `exp(T)`, `sqrt(T)`, `pow(T, T)`
 - `sin(T)`, `cos(T)`, `tan(T)`
 - `erf(T)`, `gamma(T)`, `lgamma(T)`
@@ -152,16 +140,19 @@ git commit -m "Fix [distribution] bugs, improve type safety and add comprehensiv
 ## Style Guidelines
 
 **Modern C++ preferences:**
+
 - Use `std::format` and `std::print` over `iostream`
 - Use structured bindings: `auto [x, y] = ...`
 - Trailing return types: `auto func() -> T`
 - `constexpr` by default
 
 **Naming:**
+
 - `k` prefix for constants: `kDefaultValue`
 - Trailing `_` for private members: `mu_`, `sigma_`
 
 **Do NOT:**
+
 - Create new files unless absolutely necessary
 - Add emojis unless explicitly requested
 - Write documentation files (code comments are sufficient)
@@ -171,6 +162,7 @@ git commit -m "Fix [distribution] bugs, improve type safety and add comprehensiv
 ## Example: Compare Before/After
 
 **Before:**
+
 ```cpp
 auto prob(T x) const {
   if (x < a_ or x > b_) return 0.;
@@ -199,6 +191,7 @@ auto sample(Generator& g) -> T {
 ```
 
 **After:**
+
 ```cpp
 constexpr auto prob(T x) const -> T {
   if (x < a_ or x > b_) {

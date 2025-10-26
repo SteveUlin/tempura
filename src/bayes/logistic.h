@@ -27,18 +27,6 @@ namespace tempura::bayes {
 //   - Variance = (π²s²)/3 vs. σ² for normal (use s = σ√3/π for same variance)
 //   - CDF has closed form (sigmoid) vs. requiring erf() for normal
 //
-// Requirements for custom types T:
-//   - Arithmetic operators: +, -, *, / (both binary and unary +/-)
-//   - Comparison: <, >, ==, !=
-//   - Convertible from integer and floating-point literals (0, 1, 2, 0.5, etc.)
-//
-// For full support, provide these extension points (found via ADL):
-//   namespace mylib {
-//     constexpr auto log(MyType x) -> MyType { ... }
-//     constexpr auto exp(MyType x) -> MyType { ... }
-//     constexpr auto numeric_infinity(MyType) -> MyType { ... }
-//   }
-//
 template <typename T = double>
 class Logistic {
   static_assert(

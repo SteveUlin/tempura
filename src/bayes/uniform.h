@@ -10,16 +10,10 @@ namespace tempura::bayes {
 
 // Continuous uniform distribution U(a, b)
 //
-// Requirements for custom types T:
-//   - Arithmetic operators: +, -, *, / (both binary and unary +/-)
-//   - Comparison: <, >
-//   - Convertible from integer literals (0, 1, 2, 12)
-//
-// For logProb support, provide these extension points (found via ADL):
-//   namespace mylib {
-//     constexpr auto log(MyType x) -> MyType { ... }
-//     constexpr auto numeric_infinity(MyType) -> MyType { ... }
-//   }
+// Intuition:
+//   Maximum entropy distribution for a bounded interval - every value in [a, b]
+//   is equally likely. Models complete uncertainty within known bounds: random
+//   arrival times, initial parameter values, unbiased selection from a range.
 //
 template <typename T = double>
 class Uniform {
