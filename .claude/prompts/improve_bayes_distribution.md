@@ -129,10 +129,17 @@ add_bayes_test([distribution]_test distributions)
 Build and run tests:
 
 ```bash
+# Build the test
 ninja -C build bayes_[distribution]_test
-./build/src/bayes/bayes_[distribution]_test
+
+# Run via ctest (auto-approved, preferred)
+ctest --test-dir build -R [distribution] --output-on-failure
+
+# Run all bayes tests to ensure no regressions
 ctest --test-dir build -L bayes --output-on-failure
 ```
+
+**Note:** Use `ctest` instead of running binaries directly (e.g., `./build/src/bayes/bayes_[distribution]_test`) as ctest commands are auto-approved and allow faster workflow.
 
 All tests must pass before proceeding.
 

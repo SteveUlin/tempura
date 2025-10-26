@@ -82,6 +82,23 @@ ninja -C build <test_name>
 ./build/test/polynomial_test
 ```
 
+### Command Auto-Approval Policy
+
+**For Claude Code:** The following commands are auto-approved and don't require user confirmation:
+
+**Build commands:**
+- `cmake` (all variants: `-B build`, `-B debug`, `-B release`)
+- `ninja -C build`, `ninja -C debug`, `ninja -C release`
+
+**Test commands:**
+- `ctest --test-dir build` (all variants with `-R`, `-L`, `--output-on-failure`, `--verbose`)
+
+**Commands requiring user approval:**
+- Running test binaries directly (e.g., `./build/src/bayes/bayes_exponential_test`)
+- This allows users to control when tests execute and review output
+
+**Recommendation:** Always prefer `ctest` over running binaries directly for faster workflow.
+
 ## Architecture
 
 ### Major Components

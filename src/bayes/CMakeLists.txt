@@ -34,6 +34,7 @@ if(BUILD_TESTING)
     add_bayes_test(uniform_test distributions)
     add_bayes_test(logistic_test distributions)
     add_bayes_test(cauchy_test distributions)
+    add_bayes_test(exponential_test distributions)
 
     # Random number generator tests
     add_bayes_test(random_test sampling)
