@@ -163,10 +163,10 @@ auto expectEq(const auto& lhs, const auto& rhs,
   if (lhs == rhs) {
     return true;
   }
-  std::cerr << "Error at" << location.file_name() << ":" << location.line()
-            << std::endl;
+  std::print(std::cerr, "Error at {}:{}\n", location.file_name(),
+             location.line());
   if constexpr (Ostreamable<decltype(lhs)> and Ostreamable<decltype(rhs)>) {
-    std::cerr << "Expected Equal: " << lhs << " got: " << rhs << std::endl;
+    std::print(std::cerr, "  Expected Equal: {} got: {}\n", lhs, rhs);
   }
 
   // Record in TestContext for better reporting
@@ -186,11 +186,19 @@ auto expectNeq(const auto& lhs, const auto& rhs,
   if (lhs != rhs) {
     return true;
   }
-  std::cerr << "Error at" << location.file_name() << ":" << location.line()
-            << std::endl;
+  std::print(std::cerr, "Error at {}:{}\n", location.file_name(),
+             location.line());
   if constexpr (Ostreamable<decltype(lhs)> and Ostreamable<decltype(rhs)>) {
-    std::cerr << "Expected Not Equal: " << lhs << " got: " << rhs << std::endl;
+    std::print(std::cerr, "  Expected Not Equal: {} got: {}\n", lhs, rhs);
   }
+
+  // Record in TestContext for better reporting
+  if (auto* ctx = TestContext::current()) {
+    std::string msg = std::string("expectNeq failed at ") + location.file_name() +
+                      ":" + std::to_string(location.line());
+    ctx->recordFailure(msg);
+  }
+
   TestRegistry::setFailure();
   return false;
 }
@@ -200,11 +208,19 @@ auto expectTrue(const auto& arg, const std::source_location location =
   if (arg) {
     return true;
   }
-  std::cerr << "Error at" << location.file_name() << ":" << location.line()
-            << std::endl;
+  std::print(std::cerr, "Error at {}:{}\n", location.file_name(),
+             location.line());
   if constexpr (Ostreamable<decltype(arg)>) {
-    std::cerr << "Expected true: " << arg << std::endl;
+    std::print(std::cerr, "  Expected true: {}\n", arg);
   }
+
+  // Record in TestContext for better reporting
+  if (auto* ctx = TestContext::current()) {
+    std::string msg = std::string("expectTrue failed at ") + location.file_name() +
+                      ":" + std::to_string(location.line());
+    ctx->recordFailure(msg);
+  }
+
   TestRegistry::setFailure();
   return false;
 }
@@ -214,11 +230,19 @@ auto expectFalse(const auto& arg, const std::source_location location =
   if (!arg) {
     return true;
   }
-  std::cerr << "Error at" << location.file_name() << ":" << location.line()
-            << std::endl;
+  std::print(std::cerr, "Error at {}:{}\n", location.file_name(),
+             location.line());
   if constexpr (Ostreamable<decltype(arg)>) {
-    std::cerr << "Expected false: " << arg << std::endl;
+    std::print(std::cerr, "  Expected false: {}\n", arg);
   }
+
+  // Record in TestContext for better reporting
+  if (auto* ctx = TestContext::current()) {
+    std::string msg = std::string("expectFalse failed at ") + location.file_name() +
+                      ":" + std::to_string(location.line());
+    ctx->recordFailure(msg);
+  }
+
   TestRegistry::setFailure();
   return false;
 }
@@ -229,11 +253,19 @@ auto expectLT(const auto& lhs, const auto& rhs,
   if (lhs < rhs) {
     return true;
   }
-  std::cerr << "Error at" << location.file_name() << ":" << location.line()
-            << std::endl;
+  std::print(std::cerr, "Error at {}:{}\n", location.file_name(),
+             location.line());
   if constexpr (Ostreamable<decltype(lhs)> and Ostreamable<decltype(rhs)>) {
-    std::cerr << "Expected: " << lhs << " < " << rhs << std::endl;
+    std::print(std::cerr, "  Expected: {} < {}\n", lhs, rhs);
   }
+
+  // Record in TestContext for better reporting
+  if (auto* ctx = TestContext::current()) {
+    std::string msg = std::string("expectLT failed at ") + location.file_name() +
+                      ":" + std::to_string(location.line());
+    ctx->recordFailure(msg);
+  }
+
   TestRegistry::setFailure();
   return false;
 }
@@ -244,11 +276,19 @@ auto expectLE(const auto& lhs, const auto& rhs,
   if (lhs <= rhs) {
     return true;
   }
-  std::cerr << "Error at" << location.file_name() << ":" << location.line()
-            << std::endl;
+  std::print(std::cerr, "Error at {}:{}\n", location.file_name(),
+             location.line());
   if constexpr (Ostreamable<decltype(lhs)> and Ostreamable<decltype(rhs)>) {
-    std::cerr << "Expected: " << lhs << " <= " << rhs << std::endl;
+    std::print(std::cerr, "  Expected: {} <= {}\n", lhs, rhs);
   }
+
+  // Record in TestContext for better reporting
+  if (auto* ctx = TestContext::current()) {
+    std::string msg = std::string("expectLE failed at ") + location.file_name() +
+                      ":" + std::to_string(location.line());
+    ctx->recordFailure(msg);
+  }
+
   TestRegistry::setFailure();
   return false;
 }
@@ -259,11 +299,19 @@ auto expectGT(const auto& lhs, const auto& rhs,
   if (lhs > rhs) {
     return true;
   }
-  std::cerr << "Error at" << location.file_name() << ":" << location.line()
-            << std::endl;
+  std::print(std::cerr, "Error at {}:{}\n", location.file_name(),
+             location.line());
   if constexpr (Ostreamable<decltype(lhs)> and Ostreamable<decltype(rhs)>) {
-    std::cerr << "Expected: " << lhs << " > " << rhs << std::endl;
+    std::print(std::cerr, "  Expected: {} > {}\n", lhs, rhs);
   }
+
+  // Record in TestContext for better reporting
+  if (auto* ctx = TestContext::current()) {
+    std::string msg = std::string("expectGT failed at ") + location.file_name() +
+                      ":" + std::to_string(location.line());
+    ctx->recordFailure(msg);
+  }
+
   TestRegistry::setFailure();
   return false;
 }
@@ -274,46 +322,67 @@ auto expectGE(const auto& lhs, const auto& rhs,
   if (lhs >= rhs) {
     return true;
   }
-  std::cerr << "Error at" << location.file_name() << ":" << location.line()
-            << std::endl;
+  std::print(std::cerr, "Error at {}:{}\n", location.file_name(),
+             location.line());
   if constexpr (Ostreamable<decltype(lhs)> and Ostreamable<decltype(rhs)>) {
-    std::cerr << "Expected: " << lhs << " >= " << rhs << std::endl;
+    std::print(std::cerr, "  Expected: {} >= {}\n", lhs, rhs);
   }
+
+  // Record in TestContext for better reporting
+  if (auto* ctx = TestContext::current()) {
+    std::string msg = std::string("expectGE failed at ") + location.file_name() +
+                      ":" + std::to_string(location.line());
+    ctx->recordFailure(msg);
+  }
+
   TestRegistry::setFailure();
   return false;
 }
 
 // Generic delta parameter (no template instantiation per delta value)
-constexpr auto expectNear(const auto& lhs, const auto& rhs,
-                          const auto& delta,
-                          const std::source_location location =
-                              std::source_location::current()) -> bool {
+auto expectNear(const auto& lhs, const auto& rhs, const auto& delta,
+                const std::source_location location =
+                    std::source_location::current()) -> bool {
   if (std::abs(lhs - rhs) < delta) {
     return true;
   }
-  std::cerr << "Error at" << location.file_name() << ":" << location.line()
-            << std::endl;
+  std::print(std::cerr, "Error at {}:{}\n", location.file_name(),
+             location.line());
   if constexpr (Ostreamable<decltype(lhs)> and Ostreamable<decltype(rhs)>) {
-    std::cerr << "Expected Near ±(" << delta << "): " << lhs << " got: " << rhs
-              << std::endl;
+    std::print(std::cerr, "  Expected Near ±({}): {} got: {}\n", delta, lhs,
+               rhs);
   }
+
+  // Record in TestContext for better reporting
+  if (auto* ctx = TestContext::current()) {
+    std::string msg = std::string("expectNear failed at ") + location.file_name() +
+                      ":" + std::to_string(location.line());
+    ctx->recordFailure(msg);
+  }
+
   TestRegistry::setFailure();
   return false;
 }
 
+namespace detail {
+// Default tolerance for floating-point comparisons.
+// Rationale: 1e-4 balances precision vs common rounding errors
+// in typical numerical algorithms. Adjust per use case.
+constexpr double kDefaultDelta = 1e-4;
+}  // namespace detail
+
 // Overload with default delta value
-constexpr auto expectNear(const auto& lhs, const auto& rhs,
-                          const std::source_location location =
-                              std::source_location::current()) -> bool {
-  return expectNear(lhs, rhs, 0.0001, location);
+auto expectNear(const auto& lhs, const auto& rhs,
+                const std::source_location location =
+                    std::source_location::current()) -> bool {
+  return expectNear(lhs, rhs, detail::kDefaultDelta, location);
 }
 
 // Generic delta parameter (no template instantiation per delta value)
-constexpr auto expectRangeNear(std::ranges::input_range auto&& lhs,
-                               std::ranges::input_range auto&& rhs,
-                               const auto& delta,
-                               const std::source_location location =
-                                   std::source_location::current()) -> bool {
+auto expectRangeNear(std::ranges::input_range auto&& lhs,
+                     std::ranges::input_range auto&& rhs, const auto& delta,
+                     const std::source_location location =
+                         std::source_location::current()) -> bool {
   // Check size mismatch first if both ranges are sized
   if constexpr (std::ranges::sized_range<decltype(lhs)> &&
                 std::ranges::sized_range<decltype(rhs)>) {
@@ -322,8 +391,17 @@ constexpr auto expectRangeNear(std::ranges::input_range auto&& lhs,
     if (size_lhs != size_rhs) {
       std::print(std::cerr, "Error at {}:{}\n", location.file_name(),
                  location.line());
-      std::print(std::cerr, "\tRange size mismatch: {} vs {}\n", size_lhs,
+      std::print(std::cerr, "  Range size mismatch: {} vs {}\n", size_lhs,
                  size_rhs);
+
+      // Record in TestContext for better reporting
+      if (auto* ctx = TestContext::current()) {
+        std::string msg = std::string("expectRangeNear failed at ") +
+                          location.file_name() + ":" +
+                          std::to_string(location.line()) + " (size mismatch)";
+        ctx->recordFailure(msg);
+      }
+
       TestRegistry::setFailure();
       return false;
     }
@@ -333,11 +411,20 @@ constexpr auto expectRangeNear(std::ranges::input_range auto&& lhs,
     if (std::abs(l - r) > delta) {
       std::print(std::cerr, "Error at {}:{}\n", location.file_name(),
                  location.line());
-      std::print(std::cerr, "\tError at index {} of range\n", idx);
+      std::print(std::cerr, "  Error at index {} of range\n", idx);
       if constexpr (Ostreamable<decltype(l)> and Ostreamable<decltype(r)>) {
-        std::print(std::cerr, "\tExpected Near ±({}): {} got: {}\n", delta, l,
+        std::print(std::cerr, "  Expected Near ±({}): {} got: {}\n", delta, l,
                    r);
       }
+
+      // Record in TestContext for better reporting
+      if (auto* ctx = TestContext::current()) {
+        std::string msg = std::string("expectRangeNear failed at ") +
+                          location.file_name() + ":" +
+                          std::to_string(location.line());
+        ctx->recordFailure(msg);
+      }
+
       TestRegistry::setFailure();
       return false;
     }
@@ -346,15 +433,15 @@ constexpr auto expectRangeNear(std::ranges::input_range auto&& lhs,
 }
 
 // Overload with default delta value
-constexpr auto expectRangeNear(std::ranges::input_range auto&& lhs,
-                               std::ranges::input_range auto&& rhs,
-                               const std::source_location location =
-                                   std::source_location::current()) -> bool {
+auto expectRangeNear(std::ranges::input_range auto&& lhs,
+                     std::ranges::input_range auto&& rhs,
+                     const std::source_location location =
+                         std::source_location::current()) -> bool {
   return expectRangeNear(std::forward<decltype(lhs)>(lhs),
                          std::forward<decltype(rhs)>(rhs),
-                         0.0001, location);
+                         detail::kDefaultDelta, location);
 }
-constexpr auto expectRangeEq(auto&& lhs, auto&& rhs,
+auto expectRangeEq(auto&& lhs, auto&& rhs,
                    const std::source_location location =
                        std::source_location::current()) -> bool {
   // Check size mismatch first if both ranges are sized
@@ -365,8 +452,17 @@ constexpr auto expectRangeEq(auto&& lhs, auto&& rhs,
     if (size_lhs != size_rhs) {
       std::print(std::cerr, "Error at {}:{}\n", location.file_name(),
                  location.line());
-      std::print(std::cerr, "\tRange size mismatch: {} vs {}\n", size_lhs,
+      std::print(std::cerr, "  Range size mismatch: {} vs {}\n", size_lhs,
                  size_rhs);
+
+      // Record in TestContext for better reporting
+      if (auto* ctx = TestContext::current()) {
+        std::string msg = std::string("expectRangeEq failed at ") +
+                          location.file_name() + ":" +
+                          std::to_string(location.line()) + " (size mismatch)";
+        ctx->recordFailure(msg);
+      }
+
       TestRegistry::setFailure();
       return false;
     }
@@ -376,10 +472,19 @@ constexpr auto expectRangeEq(auto&& lhs, auto&& rhs,
     if (l != r) {
       std::print(std::cerr, "Error at {}:{}\n", location.file_name(),
                  location.line());
-      std::print(std::cerr, "\tError at index {} of range\n", idx);
+      std::print(std::cerr, "  Error at index {} of range\n", idx);
       if constexpr (Ostreamable<decltype(l)> and Ostreamable<decltype(r)>) {
-        std::print(std::cerr, "\tExpected Equal: {} got: {}\n", l, r);
+        std::print(std::cerr, "  Expected Equal: {} got: {}\n", l, r);
       }
+
+      // Record in TestContext for better reporting
+      if (auto* ctx = TestContext::current()) {
+        std::string msg = std::string("expectRangeEq failed at ") +
+                          location.file_name() + ":" +
+                          std::to_string(location.line());
+        ctx->recordFailure(msg);
+      }
+
       TestRegistry::setFailure();
       return false;
     }
