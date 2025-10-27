@@ -1,0 +1,240 @@
+{
+  "version": "1.0",
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Add Gamma distribution to bayes/",
+      "description": "Implement Gamma(\u03b1, \u03b2) distribution:\n- PDF, CDF, quantile functions\n- Method of moments parameter estimation\n- Unit tests with reference values from NIST or Wikipedia\n- Integration with existing RNG infrastructure",
+      "component": "bayes",
+      "priority": "high",
+      "tags": [
+        "distribution",
+        "special-functions"
+      ],
+      "status": "pending",
+      "created": "2025-10-26",
+      "started": null,
+      "notes": "May require incomplete gamma function - assess if needed",
+      "acceptance": [
+        "Gamma distribution class with constexpr support",
+        "Unit tests with reference values (>95% coverage)",
+        "Documentation with mathematical definition and usage examples",
+        "Integration with SIMD RNG infrastructure"
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Add Beta distribution to bayes/",
+      "description": "Implement Beta(\u03b1, \u03b2) distribution following the pattern established by Gamma",
+      "component": "bayes",
+      "priority": "medium",
+      "tags": [
+        "distribution"
+      ],
+      "status": "pending",
+      "created": "2025-10-26",
+      "started": null,
+      "notes": "Depends on incomplete beta function",
+      "acceptance": [
+        "Beta distribution class matching existing patterns",
+        "Unit tests with reference values",
+        "constexpr support where possible"
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Add Weibull distribution to bayes/",
+      "description": "Implement Weibull(\u03bb, k) for reliability analysis",
+      "component": "bayes",
+      "priority": "medium",
+      "tags": [
+        "distribution",
+        "reliability"
+      ],
+      "status": "pending",
+      "created": "2025-10-26",
+      "started": null,
+      "notes": "",
+      "acceptance": [
+        "Weibull distribution class",
+        "Unit tests covering edge cases (k=1 \u2192 exponential, k=2 \u2192 Rayleigh)",
+        "Documentation of reliability analysis use cases"
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Add Chi-squared distribution to bayes/",
+      "description": "Implement Chi-squared(k) distribution:\n- PDF, CDF, quantile functions\n- Relationship to Gamma(k/2, 1/2) distribution\n- Unit tests with reference values from statistical tables\n- Integration with existing RNG infrastructure",
+      "component": "bayes",
+      "priority": "medium",
+      "tags": [
+        "distribution",
+        "statistics"
+      ],
+      "status": "pending",
+      "created": "2025-10-26",
+      "started": null,
+      "notes": "Special case of Gamma distribution - can leverage existing Gamma implementation",
+      "acceptance": [
+        "Chi-squared distribution class with constexpr support",
+        "Unit tests with reference values from statistical tables",
+        "Documentation explaining relationship to Gamma distribution",
+        "Support for degrees of freedom parameter validation"
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Add Student-t distribution to bayes/",
+      "description": "Implement Student-t(\u03bd) distribution:\n- PDF, CDF, quantile functions\n- Degrees of freedom parameter \u03bd\n- Unit tests with reference values\n- Integration with existing RNG infrastructure",
+      "component": "bayes",
+      "priority": "medium",
+      "tags": [
+        "distribution",
+        "statistics"
+      ],
+      "status": "pending",
+      "created": "2025-10-26",
+      "started": null,
+      "notes": "Commonly used in hypothesis testing and confidence intervals",
+      "acceptance": [
+        "Student-t distribution class with constexpr support",
+        "Unit tests covering edge cases (\u03bd=1 \u2192 Cauchy, \u03bd\u2192\u221e \u2192 Normal)",
+        "Documentation with mathematical definition",
+        "Accurate quantile function for confidence interval calculations"
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Add F-distribution to bayes/",
+      "description": "Implement F(d1, d2) distribution:\n- PDF, CDF, quantile functions\n- Two degrees of freedom parameters d1, d2\n- Unit tests with reference values from F-tables\n- Integration with existing RNG infrastructure",
+      "component": "bayes",
+      "priority": "medium",
+      "tags": [
+        "distribution",
+        "statistics",
+        "anova"
+      ],
+      "status": "pending",
+      "created": "2025-10-26",
+      "started": null,
+      "notes": "Used in ANOVA and regression analysis - requires incomplete beta function",
+      "acceptance": [
+        "F-distribution class with constexpr support",
+        "Unit tests with reference values from standard F-tables",
+        "Documentation explaining ANOVA applications",
+        "Support for both degrees of freedom parameters"
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Add Pareto distribution to bayes/",
+      "description": "Implement Pareto(x\u2098, \u03b1) distribution:\n- PDF, CDF, quantile functions\n- Scale parameter x\u2098 and shape parameter \u03b1\n- Unit tests with reference values\n- Integration with existing RNG infrastructure",
+      "component": "bayes",
+      "priority": "low",
+      "tags": [
+        "distribution",
+        "heavy-tailed"
+      ],
+      "status": "pending",
+      "created": "2025-10-26",
+      "started": null,
+      "notes": "Power law distribution - useful for modeling extreme events and heavy tails",
+      "acceptance": [
+        "Pareto distribution class with constexpr support",
+        "Unit tests covering parameter edge cases",
+        "Documentation explaining power law behavior",
+        "Verification of 80-20 rule properties"
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Add Lognormal distribution to bayes/",
+      "description": "Implement Lognormal(\u03bc, \u03c3) distribution:\n- PDF, CDF, quantile functions\n- Parameters \u03bc, \u03c3 (mean and std of underlying normal)\n- Unit tests with reference values\n- Integration with existing RNG infrastructure",
+      "component": "bayes",
+      "priority": "medium",
+      "tags": [
+        "distribution",
+        "finance"
+      ],
+      "status": "pending",
+      "created": "2025-10-26",
+      "started": null,
+      "notes": "Log of variable is normally distributed - common in finance and biology",
+      "acceptance": [
+        "Lognormal distribution class with constexpr support",
+        "Unit tests verifying relationship to Normal distribution",
+        "Documentation with financial modeling examples",
+        "Efficient sampling via normal distribution transformation"
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Add Laplace (Double Exponential) distribution to bayes/",
+      "description": "Implement Laplace(\u03bc, b) distribution:\n- PDF, CDF, quantile functions\n- Location parameter \u03bc and scale parameter b\n- Unit tests with reference values\n- Integration with existing RNG infrastructure",
+      "component": "bayes",
+      "priority": "low",
+      "tags": [
+        "distribution",
+        "robust"
+      ],
+      "status": "pending",
+      "created": "2025-10-26",
+      "started": null,
+      "notes": "Used in robust statistics and L1 regularization (Lasso)",
+      "acceptance": [
+        "Laplace distribution class with constexpr support",
+        "Unit tests covering symmetric properties",
+        "Documentation explaining L1 regularization connection",
+        "Efficient implementation of piecewise PDF/CDF"
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Add Poisson distribution to bayes/",
+      "description": "Implement Poisson(\u03bb) distribution:\n- PMF, CDF, quantile functions\n- Rate parameter \u03bb\n- Unit tests with reference values\n- Integration with existing RNG infrastructure",
+      "component": "bayes",
+      "priority": "medium",
+      "tags": [
+        "distribution",
+        "discrete",
+        "counting"
+      ],
+      "status": "pending",
+      "created": "2025-10-26",
+      "started": null,
+      "notes": "Discrete distribution for modeling count data - limit of Binomial as n\u2192\u221e",
+      "acceptance": [
+        "Poisson distribution class with constexpr support",
+        "Unit tests verifying relationship to Binomial distribution",
+        "Documentation with count data modeling examples",
+        "Efficient sampling algorithm (e.g., Knuth method for small \u03bb)"
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Implement test summary output for unit.h framework",
+      "description": "Add final summary report to unit.h testing framework:\n- Track total tests run (passed + failed)\n- Display summary after all tests complete\n- Show failed test names with error locations\n- Optional: execution time tracking\n\nFollow the design specified in docs/UNIT_H_GOALS.md:49-71.\n\nExample output format:\n========================================\nTest Summary\n========================================\nTotal:  42 tests\nPassed: 40 tests\nFailed:  2 tests\n\nFailed tests:\n  - test_name: expectNear failed at file.cpp:123\n\nExecution time: 0.342s (optional)\n========================================",
+      "component": "meta",
+      "priority": "medium",
+      "tags": [
+        "testing",
+        "infrastructure",
+        "enhancement"
+      ],
+      "status": "pending",
+      "created": "2025-10-26",
+      "started": null,
+      "notes": "Currently UNIT_H_GOALS.md marks this as \"\ud83d\udea7 Planned\" (line 49). Implementation should:\n- Add test counter to TestRegistry\n- Create printSummary() method\n- Call from TestRegistry::result() or provide separate summary() function\n- Maintain backward compatibility (return code still uses total_failures_)",
+      "acceptance": [
+        "TestRegistry tracks total tests run (not just failures)",
+        "Summary printed at end of test execution (before returning from main)",
+        "Summary includes: total/passed/failed counts",
+        "Failed tests listed with names and first failure location",
+        "Uses std::print for consistent formatting (per CLAUDE.md)",
+        "Summary only shown if tests were run (not for empty test binaries)",
+        "Unit tests verify summary output (check stdout)",
+        "Optional: Add UNIT_SHOW_TIMING env var for execution time"
+      ]
+    }
+  ]
+}
