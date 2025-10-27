@@ -1,0 +1,378 @@
+#!/usr/bin/env python3
+"""
+Task Manager CLI for Tempura Development
+
+Usage:
+    task add --title "..." --component "..." [options]    Add new task via args
+    task list                                             List all tasks
+    task show <id>                                        Show task details
+    task fetch [--priority]                               Fetch highest priority pending task
+    task fetch --component <name>                         Fetch tasks by component
+    task fetch --tag <tag>                                Fetch tasks by tag
+    task start <id>                                       Start working on task (creates branch)
+    task done <id> [commit-sha]                           Complete and remove task (archives to git)
+    task remove <id>                                      Remove task without completion (no git archive)
+
+Options for 'add':
+    --title TEXT            Task title (required)
+    --component TEXT        Component name (required): bayes, symbolic3, matrix2, etc.
+    --description TEXT      Task description (default: "")
+    --priority TEXT         Priority: low, medium, high, critical (default: medium)
+    --tags TEXT             Comma-separated tags (default: none)
+    --acceptance TEXT       Acceptance criterion (can be specified multiple times)
+    --notes TEXT            Optional notes (default: "")
+"""
+
+import sys
+import subprocess
+import json
+from pathlib import Path
+from datetime import date
+from typing import Optional, List
+
+# Import core functionality from library
+from task_lib import (
+    load_tasks, save_tasks, next_id, find_task,
+    add_task, update_task, remove_task, filter_tasks,
+    PRIORITY_ORDER, ROOT_DIR, TASKS_FILE
+)
+
+
+def parse_add_args(args: List[str]) -> dict:
+    """Parse command-line arguments for task add command"""
+    task_data = {
+        "title": None,
+        "component": None,
+        "description": "",
+        "priority": "medium",
+        "tags": [],
+        "acceptance": [],
+        "notes": ""
+    }
+
+    i = 0
+    while i < len(args):
+        arg = args[i]
+
+        if arg in ("--title", "--component", "--description", "--priority", "--notes"):
+            if i + 1 >= len(args):
+                print(f"Error: {arg} requires a value")
+                sys.exit(1)
+            key = arg[2:]  # Remove '--' prefix
+            task_data[key] = args[i + 1]
+            i += 2
+
+        elif arg == "--tags":
+            if i + 1 >= len(args):
+                print(f"Error: --tags requires a value")
+                sys.exit(1)
+            task_data["tags"] = [t.strip() for t in args[i + 1].split(",")]
+            i += 2
+
+        elif arg == "--acceptance":
+            if i + 1 >= len(args):
+                print(f"Error: --acceptance requires a value")
+                sys.exit(1)
+            task_data["acceptance"].append(args[i + 1])
+            i += 2
+
+        else:
+            print(f"Error: Unknown argument '{arg}'")
+            sys.exit(1)
+
+    # Validate required fields
+    if not task_data["title"]:
+        print("Error: --title is required")
+        sys.exit(1)
+
+    if not task_data["component"]:
+        print("Error: --component is required")
+        sys.exit(1)
+
+    # Validate priority
+    if task_data["priority"] not in PRIORITY_ORDER:
+        print(f"Error: Invalid priority '{task_data['priority']}'")
+        print(f"Valid priorities: {', '.join(PRIORITY_ORDER.keys())}")
+        sys.exit(1)
+
+    return task_data
+
+
+def cmd_add(args: List[str]):
+    """Add new task via command-line arguments"""
+    task_data = parse_add_args(args)
+
+    # Add the task using library function
+    task_id = add_task(task_data)
+
+    print(f"✓ Task #{task_id} created: {task_data['title']}")
+    print(f"  Component: {task_data['component']}")
+    print(f"  Priority: {task_data['priority']}")
+
+
+def cmd_list():
+    """List all tasks"""
+    data = load_tasks()
+
+    if not data["tasks"]:
+        print("No tasks found. Use 'task add' to create one.")
+        return
+
+    for task in data["tasks"]:
+        print(f"#{task['id']} [{task['priority'].upper()}] {task['title']}")
+        print(f"  Component: {task['component']} | Status: {task['status']} | Created: {task['created']}")
+        if task.get('tags'):
+            print(f"  Tags: {', '.join(task['tags'])}")
+        print()
+
+
+def cmd_show(task_id: int):
+    """Show task details"""
+    task = find_task(task_id)
+
+    if not task:
+        print(f"Error: Task #{task_id} not found")
+        sys.exit(1)
+
+    print(f"=== Task #{task['id']} ===")
+    print(f"Title: {task['title']}")
+    print(f"Component: {task['component']}")
+    print(f"Priority: {task['priority']}")
+    print(f"Status: {task['status']}")
+    print(f"Created: {task['created']}")
+    if task.get('started'):
+        print(f"Started: {task['started']}")
+    if task.get('tags'):
+        print(f"Tags: {', '.join(task['tags'])}")
+
+    print(f"\nDescription:\n{task['description']}")
+
+    if task.get('acceptance'):
+        print("\nAcceptance Criteria:")
+        for criterion in task['acceptance']:
+            print(f"  - {criterion}")
+
+    if task.get('notes'):
+        print(f"\nNotes:\n{task['notes']}")
+
+
+def cmd_fetch(args: List[str]):
+    """Fetch tasks by criteria"""
+    # Parse filter arguments
+    component = None
+    tag = None
+
+    if "--component" in args:
+        idx = args.index("--component")
+        if idx + 1 >= len(args):
+            print("Error: --component requires argument")
+            sys.exit(1)
+        component = args[idx + 1]
+
+    if "--tag" in args:
+        idx = args.index("--tag")
+        if idx + 1 >= len(args):
+            print("Error: --tag requires argument")
+            sys.exit(1)
+        tag = args[idx + 1]
+
+    # Fetch pending tasks with filters
+    tasks = filter_tasks(component=component, tag=tag, status="pending")
+
+    if not tasks:
+        print("No pending tasks found.")
+        return
+
+    for task in tasks:
+        print(f"#{task['id']} [{task['priority'].upper()}] {task['title']}")
+        print(f"  Component: {task['component']} | Created: {task['created']}")
+        if task.get('tags'):
+            print(f"  Tags: {', '.join(task['tags'])}")
+        print()
+
+
+def cmd_start(task_id: int):
+    """Start working on task"""
+    task = find_task(task_id)
+
+    if not task:
+        print(f"Error: Task #{task_id} not found")
+        sys.exit(1)
+
+    # Update task status
+    update_task(task_id, {
+        "status": "in_progress",
+        "started": str(date.today())
+    })
+
+    print(f"✓ Task #{task_id} started")
+
+    # Create feature branch
+    title_slug = task["title"].lower()
+    title_slug = "".join(c if c.isalnum() or c == " " else "-" for c in title_slug)
+    title_slug = "-".join(title_slug.split())
+    branch = f"feature/{task['component']}/{task_id}-{title_slug}"
+
+    try:
+        # Check if we're in a git repo
+        subprocess.run(["git", "rev-parse", "--git-dir"],
+                      check=True, capture_output=True, cwd=ROOT_DIR)
+
+        # Try to create branch
+        result = subprocess.run(["git", "checkout", "-b", branch],
+                               capture_output=True, text=True, cwd=ROOT_DIR)
+
+        if result.returncode == 0:
+            print(f"✓ Created branch: {branch}")
+        else:
+            # Branch might already exist, try to switch to it
+            result = subprocess.run(["git", "checkout", branch],
+                                   capture_output=True, text=True, cwd=ROOT_DIR)
+            if result.returncode == 0:
+                print(f"  Branch '{branch}' already exists, switched to it")
+            else:
+                print(f"  Warning: Could not create/switch to branch: {result.stderr.strip()}")
+
+    except subprocess.CalledProcessError:
+        print("  (Not in a git repository, skipping branch creation)")
+
+
+def cmd_done(task_id: int, commit_sha: Optional[str] = None):
+    """Complete and remove task"""
+    task = find_task(task_id)
+
+    if not task:
+        print(f"Error: Task #{task_id} not found")
+        sys.exit(1)
+
+    title = task["title"]
+    completed = str(date.today())
+    commit = commit_sha or "unknown"
+
+    # Add completion info for git commit
+    task_with_completion = task.copy()
+    task_with_completion["completed"] = completed
+    task_with_completion["commit"] = commit
+
+    # Remove from tasks using library
+    remove_task(task_id)
+
+    # Git commit the removal
+    try:
+        subprocess.run(["git", "rev-parse", "--git-dir"],
+                      check=True, capture_output=True, cwd=ROOT_DIR)
+
+        subprocess.run(["git", "add", str(TASKS_FILE.relative_to(ROOT_DIR))],
+                      check=True, cwd=ROOT_DIR)
+
+        commit_message = f"""task: complete #{task_id} - {title}
+
+Completed: {completed}
+Commit: {commit}
+
+Task details:
+{json.dumps(task_with_completion, indent=2)}"""
+
+        result = subprocess.run(["git", "commit", "-m", commit_message],
+                               capture_output=True, text=True, cwd=ROOT_DIR)
+
+        if result.returncode != 0:
+            print("  (No git commit created - possibly no changes)")
+
+    except subprocess.CalledProcessError:
+        print("  (Not in a git repository, skipping git commit)")
+
+    print(f"✓ Task #{task_id} completed and removed")
+    print(f"  Title: {title}")
+    if commit_sha:
+        print(f"  Commit: {commit_sha}")
+    print("  Git history preserved")
+
+
+def cmd_remove(task_id: int):
+    """Remove task without marking as complete"""
+    task = find_task(task_id)
+
+    if not task:
+        print(f"Error: Task #{task_id} not found")
+        sys.exit(1)
+
+    title = task["title"]
+
+    # Confirm removal
+    response = input(f"Remove task #{task_id} '{title}'? [y/N]: ").strip().lower()
+    if response not in ['y', 'yes']:
+        print("Cancelled.")
+        return
+
+    # Remove from tasks using library
+    remove_task(task_id)
+
+    print(f"✓ Task #{task_id} removed (not completed)")
+    print(f"  Title: {title}")
+    print("  No git archive created")
+
+
+def print_usage():
+    """Print usage information"""
+    print(__doc__)
+
+
+def main():
+    """Main entry point"""
+    if len(sys.argv) < 2:
+        print_usage()
+        sys.exit(1)
+
+    command = sys.argv[1]
+
+    try:
+        if command == "add":
+            cmd_add(sys.argv[2:])
+
+        elif command == "list":
+            cmd_list()
+
+        elif command == "show":
+            if len(sys.argv) < 3:
+                print("Usage: task show <id>")
+                sys.exit(1)
+            cmd_show(int(sys.argv[2]))
+
+        elif command == "fetch":
+            cmd_fetch(sys.argv[2:])
+
+        elif command == "start":
+            if len(sys.argv) < 3:
+                print("Usage: task start <id>")
+                sys.exit(1)
+            cmd_start(int(sys.argv[2]))
+
+        elif command == "done":
+            if len(sys.argv) < 3:
+                print("Usage: task done <id> [commit-sha]")
+                sys.exit(1)
+            commit = sys.argv[3] if len(sys.argv) > 3 else None
+            cmd_done(int(sys.argv[2]), commit)
+
+        elif command == "remove" or command == "rm":
+            if len(sys.argv) < 3:
+                print("Usage: task remove <id>")
+                sys.exit(1)
+            cmd_remove(int(sys.argv[2]))
+
+        else:
+            print(f"Unknown command: {command}")
+            print_usage()
+            sys.exit(1)
+
+    except KeyboardInterrupt:
+        print("\n\nCancelled.")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
