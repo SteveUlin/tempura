@@ -53,7 +53,7 @@ auto main() -> int {
 
     for (int i = 0; i < 10'000'000; ++i) {
       double x = dist(gen);
-      expectNear<1e-8>(std::cos(x), tempura::cos(x));
+      expectNear(std::cos(x), tempura::cos(x), 1e-8);
     }
   };
 

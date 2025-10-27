@@ -64,7 +64,7 @@ void fuzzTest(Args&&... args) {
         break;
       }
     }
-    expectLessThan(std::abs((result - ans) / ans), 1e-5);
+    expectLT(std::abs((result - ans) / ans), 1e-5);
   }
 };
 

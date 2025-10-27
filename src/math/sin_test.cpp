@@ -49,8 +49,8 @@ auto main() -> int {
 
     for (int i = 0; i < 10'000'000; ++i) {
       double x = dist(gen);
-      expectLessThan(std::abs((std::sin(x) - tempura::sin(x)) / std::sin(x)),
-                     1e-7);
+      expectLT(std::abs((std::sin(x) - tempura::sin(x)) / std::sin(x)),
+               1e-7);
     }
   };
 

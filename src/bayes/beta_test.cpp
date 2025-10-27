@@ -223,8 +223,8 @@ auto main() -> int {
     double sample_var = (sum_sq / N) - (sample_mean * sample_mean);
 
     // Check sample statistics match theoretical values
-    expectNear<0.01>(0.5, sample_mean);       // E[Uniform] = 0.5
-    expectNear<0.01>(1.0 / 12.0, sample_var);  // Var[Uniform] = 1/12
+    expectNear(0.5, sample_mean, 0.01);       // E[Uniform] = 0.5
+    expectNear(1.0 / 12.0, sample_var, 0.01);  // Var[Uniform] = 1/12
   };
 
   "Beta sample distribution statistics symmetric"_test = [] {
@@ -244,8 +244,8 @@ auto main() -> int {
     double sample_mean = sum / N;
     double sample_var = (sum_sq / N) - (sample_mean * sample_mean);
 
-    expectNear<0.02>(0.5, sample_mean);        // E[Beta(2,2)] = 0.5
-    expectNear<0.01>(0.05, sample_var);        // Var[Beta(2,2)] = 0.05
+    expectNear(0.5, sample_mean, 0.02);        // E[Beta(2,2)] = 0.5
+    expectNear(0.05, sample_var, 0.01);        // Var[Beta(2,2)] = 0.05
   };
 
   "Beta sample distribution statistics asymmetric"_test = [] {
@@ -268,8 +268,8 @@ auto main() -> int {
     const double expected_mean = 2.0 / 7.0;  // ≈ 0.286
     const double expected_var = 10.0 / 392.0; // ≈ 0.0255
 
-    expectNear<0.01>(expected_mean, sample_mean);
-    expectNear<0.01>(expected_var, sample_var);
+    expectNear(expected_mean, sample_mean, 0.01);
+    expectNear(expected_var, sample_var, 0.01);
   };
 
   "Beta sample different seeds produce different sequences"_test = [] {
@@ -340,7 +340,7 @@ auto main() -> int {
       integral += dist.prob(x) * dx;
     }
 
-    expectNear<0.01>(1.0, integral);
+    expectNear(1.0, integral, 0.01);
   };
 
   "Beta special case uniform distribution"_test = [] {

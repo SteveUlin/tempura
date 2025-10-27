@@ -133,8 +133,8 @@ auto main() -> int {
     double sample_var = (sum_sq / N) - (sample_mean * sample_mean);
 
     // Check sample statistics match theoretical values within tolerance
-    expectNear<0.1>(0.5, sample_mean);        // E[U(0,1)] = 0.5
-    expectNear<0.1>(1.0 / 12.0, sample_var);  // Var[U(0,1)] = 1/12
+    expectNear(0.5, sample_mean, 0.1);        // E[U(0,1)] = 0.5
+    expectNear(1.0 / 12.0, sample_var, 0.1);  // Var[U(0,1)] = 1/12
   };
 
   "Uniform constexpr construction"_test = [] {

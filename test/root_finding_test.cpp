@@ -17,8 +17,8 @@ auto main() -> int {
     expectEq(roots.size(), 1L);
     int64_t N;
     auto root = bisectRoot(func, roots[0], 1'000, &N);
-    expectLessThan(std::abs(root.a - std::numbers::sqrt2), 1e-12);
-    expectLessThan(std::abs(root.a - std::numbers::sqrt2), 1e-12);
+    expectLT(std::abs(root.a - std::numbers::sqrt2), 1e-12);
+    expectLT(std::abs(root.a - std::numbers::sqrt2), 1e-12);
     std::println("a: {}, b: {}", root.a, root.b);
     std::println("N: {}", N);
   };
@@ -32,8 +32,8 @@ auto main() -> int {
     expectEq(roots.size(), 1L);
     int64_t N;
     auto root = secantMethod(func, roots[0], 1'000, &N);
-    expectLessThan(std::abs(root.a - std::numbers::sqrt2), 1e-12);
-    expectLessThan(std::abs(root.a - std::numbers::sqrt2), 1e-12);
+    expectLT(std::abs(root.a - std::numbers::sqrt2), 1e-12);
+    expectLT(std::abs(root.a - std::numbers::sqrt2), 1e-12);
     std::println("a: {}, b: {}", root.a, root.b);
     std::println("N: {}", N);
   };
@@ -47,8 +47,8 @@ auto main() -> int {
     expectEq(roots.size(), 1L);
     int64_t N;
     auto root = falsePosition(func, roots[0], 1'000, &N);
-    expectLessThan(std::abs(root.a - std::numbers::sqrt2), 1e-12);
-    expectLessThan(std::abs(root.a - std::numbers::sqrt2), 1e-12);
+    expectLT(std::abs(root.a - std::numbers::sqrt2), 1e-12);
+    expectLT(std::abs(root.a - std::numbers::sqrt2), 1e-12);
     std::println("a: {}, b: {}", root.a, root.b);
     std::println("N: {}", N);
   };
@@ -62,8 +62,8 @@ auto main() -> int {
     expectEq(roots.size(), 1L);
     int64_t N;
     auto root = riddersMethod(func, roots[0], 1'000, &N);
-    expectLessThan(std::abs(root.a - std::numbers::sqrt2), 1e-12);
-    expectLessThan(std::abs(root.a - std::numbers::sqrt2), 1e-12);
+    expectLT(std::abs(root.a - std::numbers::sqrt2), 1e-12);
+    expectLT(std::abs(root.a - std::numbers::sqrt2), 1e-12);
     std::println("a: {}, b: {}", root.a, root.b);
     std::println("N: {}", N);
   };

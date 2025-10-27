@@ -6,14 +6,20 @@
 using namespace tempura;
 using namespace tempura::autodiff;
 
-template <double delta = 0.0001>
-auto expectApproxEq(const Dual<double>& lhs, const Dual<double>& rhs,
+auto expectDualNear(const Dual<double>& lhs, const Dual<double>& rhs,
+                    const auto& delta,
                     const std::source_location location =
                         std::source_location::current()) -> bool {
   // Print all errors by avoiding the early stopping behavior of "and".
-  bool v = expectApproxEq<delta>(lhs.value, rhs.value, location);
-  bool g = expectApproxEq<delta>(lhs.gradient, rhs.gradient, location);
+  bool v = expectNear(lhs.value, rhs.value, delta, location);
+  bool g = expectNear(lhs.gradient, rhs.gradient, delta, location);
   return v and g;
+}
+
+auto expectDualNear(const Dual<double>& lhs, const Dual<double>& rhs,
+                    const std::source_location location =
+                        std::source_location::current()) -> bool {
+  return expectDualNear(lhs, rhs, 0.0001, location);
 }
 
 constexpr auto dualEq(Dual<double> lhs, Dual<double> rhs) -> bool {
@@ -113,7 +119,7 @@ auto main() -> int {
 
   "sqrt"_test = [] {
     Dual<double> dual{4.0, 3.0};
-    expectApproxEq(Dual{2.0, 0.75}, sqrt(dual));
+    expectDualNear(Dual{2.0, 0.75}, sqrt(dual));
   };
 
   "exp"_test = [] {
@@ -123,56 +129,56 @@ auto main() -> int {
 
   "log"_test = [] {
     Dual<double> dual{1.0, 2.0};
-    expectApproxEq(Dual{0.0, 2.0}, log(dual));
+    expectDualNear(Dual{0.0, 2.0}, log(dual));
   };
 
   "pow"_test = [] {
     Dual<double> dual{2.0, 3.0};
-    expectApproxEq(Dual{8.0, 36.0}, pow(dual, 3.));
+    expectDualNear(Dual{8.0, 36.0}, pow(dual, 3.));
   };
 
   "pow2"_test = [] {
     Dual<double> base{2.0, 3.0};
     Dual<double> exponent{3.0, 0.0};
-    expectApproxEq(Dual{8.0, 36.0}, pow(base, exponent));
+    expectDualNear(Dual{8.0, 36.0}, pow(base, exponent));
   };
 
   "sin"_test = [] {
     Dual<double> dual{0.0, 3.0};
-    expectApproxEq(Dual{0.0, 3.0}, sin(dual));
+    expectDualNear(Dual{0.0, 3.0}, sin(dual));
   };
 
   "cos"_test = [] {
     Dual<double> dual{0.0, 3.0};
-    expectApproxEq(Dual{1.0, 0.0}, cos(dual));
+    expectDualNear(Dual{1.0, 0.0}, cos(dual));
   };
 
   "tan"_test = [] {
     Dual<double> dual{0.0, 3.0};
-    expectApproxEq(Dual{0.0, 3.0}, tan(dual));
+    expectDualNear(Dual{0.0, 3.0}, tan(dual));
   };
 
   "asin"_test = [] {
     Dual<double> dual{0.0, 3.0};
-    expectApproxEq(Dual{0.0, 3.0}, asin(dual));
+    expectDualNear(Dual{0.0, 3.0}, asin(dual));
   };
 
   "acos"_test = [] {
     Dual<double> dual{0.0, 3.0};
-    expectApproxEq(Dual{1.570796, -3.0}, acos(dual));
+    expectDualNear(Dual{1.570796, -3.0}, acos(dual));
   };
 
   "atan"_test = [] {
     Dual<double> dual{0.0, 3.0};
-    expectApproxEq(Dual{0.0, 3.0}, atan(dual));
+    expectDualNear(Dual{0.0, 3.0}, atan(dual));
   };
 
   "evalWrt"_test = [] {
-    expectApproxEq(Dual{12.0, 12.0}, evalWrt<0>(f, 2.0, 3.0));
-    expectApproxEq(Dual{12.0, 4.0}, evalWrt<1>(f, 2.0, 3.0));
+    expectDualNear(Dual{12.0, 12.0}, evalWrt<0>(f, 2.0, 3.0));
+    expectDualNear(Dual{12.0, 4.0}, evalWrt<1>(f, 2.0, 3.0));
     std::function g = f;
-    expectApproxEq(Dual{12.0, 4.0}, evalWrt<1>(g, 2.0, 3.0));
-    expectApproxEq(
+    expectDualNear(Dual{12.0, 4.0}, evalWrt<1>(g, 2.0, 3.0));
+    expectDualNear(
         Dual{12.0, 4.0},
         evalWrt<1>([](Dual<double> x, Dual<double> y) { return x * x * y; },
                    2.0, 3.0));

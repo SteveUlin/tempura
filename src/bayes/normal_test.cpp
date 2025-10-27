@@ -93,20 +93,20 @@ auto main() -> int {
   "Normal cdf lower tail"_test = [] {
     Normal n{0.0, 1.0};
     // CDF at -∞ approaches 0
-    expectNear<0.001>(0.0, n.cdf(-5.0));
+    expectNear(0.0, n.cdf(-5.0), 0.001);
   };
 
   "Normal cdf upper tail"_test = [] {
     Normal n{0.0, 1.0};
     // CDF at +∞ approaches 1
-    expectNear<0.001>(1.0, n.cdf(5.0));
+    expectNear(1.0, n.cdf(5.0), 0.001);
   };
 
   "Normal cdf one standard deviation"_test = [] {
     Normal n{0.0, 1.0};
     // CDF at μ+σ is approximately 0.8413 (68-95-99.7 rule)
-    expectNear<0.001>(0.8413, n.cdf(1.0));
-    expectNear<0.001>(0.1587, n.cdf(-1.0));
+    expectNear(0.8413, n.cdf(1.0), 0.001);
+    expectNear(0.1587, n.cdf(-1.0), 0.001);
   };
 
   "Normal mean"_test = [] {
@@ -162,8 +162,8 @@ auto main() -> int {
     double sample_var = (sum_sq / N) - (sample_mean * sample_mean);
 
     // Check sample statistics match theoretical values within tolerance
-    expectNear<0.1>(2.5, sample_mean);          // E[N(2.5, 1.5)] = 2.5
-    expectNear<0.2>(2.25, sample_var);          // Var[N(2.5, 1.5)] = 1.5² = 2.25
+    expectNear(2.5, sample_mean, 0.1);          // E[N(2.5, 1.5)] = 2.5
+    expectNear(2.25, sample_var, 0.2);          // Var[N(2.5, 1.5)] = 1.5² = 2.25
   };
 
   "Normal sample caching (Box-Muller)"_test = [] {

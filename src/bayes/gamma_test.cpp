@@ -232,7 +232,7 @@ auto main() -> int {
     double sample_mean = sum / N;
 
     // Sample mean should approximate theoretical mean (α/β = 2.0)
-    expectNear<0.1>(2.0, sample_mean);
+    expectNear(2.0, sample_mean, 0.1);
   };
 
   "Gamma sample variance approximation"_test = [] {
@@ -259,7 +259,7 @@ auto main() -> int {
     double sample_variance = sum_sq_diff / (N - 1);
 
     // Sample variance should approximate theoretical variance (α/β² = 2.0)
-    expectNear<0.2>(2.0, sample_variance);
+    expectNear(2.0, sample_variance, 0.2);
   };
 
   "Gamma sample with α < 1"_test = [] {
@@ -286,7 +286,7 @@ auto main() -> int {
     double sample_mean = sum / N;
 
     // Sample mean should approximate theoretical mean (α/β = 0.25)
-    expectNear<0.05>(0.25, sample_mean);
+    expectNear(0.25, sample_mean, 0.05);
   };
 
   "Gamma sample different parameters"_test = [] {
@@ -380,7 +380,7 @@ auto main() -> int {
       integral += dist.prob(x) * dx;
     }
 
-    expectNear<0.02>(1.0, integral);
+    expectNear(1.0, integral, 0.02);
   };
 
   "Gamma CDF derivative approximates PDF"_test = [] {
@@ -391,7 +391,7 @@ auto main() -> int {
     for (double x : {0.5, 1.0, 2.0, 3.0, 5.0}) {
       double numerical_deriv = (dist.cdf(x + h) - dist.cdf(x - h)) / (2.0 * h);
       double pdf = dist.prob(x);
-      expectNear<0.01>(pdf, numerical_deriv);
+      expectNear(pdf, numerical_deriv, 0.01);
     }
   };
 
@@ -445,7 +445,7 @@ auto main() -> int {
     auto x2 = dist2.sample(g2);
 
     // x2 should be approximately 2 * x1
-    expectNear<1.0>(2.0 * x1, x2);
+    expectNear(2.0 * x1, x2, 1.0);
   };
 
   "Gamma sum property"_test = [] {
@@ -468,7 +468,7 @@ auto main() -> int {
     }
 
     double sample_mean = sum_of_samples / N;
-    expectNear<0.1>(dist_sum.mean(), sample_mean);
+    expectNear(dist_sum.mean(), sample_mean, 0.1);
   };
 
   "Gamma mode formula for α ≥ 1"_test = [] {

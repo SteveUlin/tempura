@@ -283,40 +283,9 @@ auto expectGE(const auto& lhs, const auto& rhs,
   return false;
 }
 
-// Legacy names (deprecated, use expectLT/expectGT instead)
-auto expectLessThan(const auto& lhs, const auto& rhs,
-                    const std::source_location location =
-                        std::source_location::current()) -> bool {
-  if (lhs < rhs) {
-    return true;
-  }
-  std::cerr << "Error at" << location.file_name() << ":" << location.line()
-            << std::endl;
-  if constexpr (Ostreamable<decltype(lhs)> and Ostreamable<decltype(rhs)>) {
-    std::cerr << "Expected: " << lhs << " less than: " << rhs << std::endl;
-  }
-  TestRegistry::setFailure();
-  return false;
-}
-
-auto expectGreaterThan(const auto& lhs, const auto& rhs,
-                       const std::source_location location =
-                           std::source_location::current()) -> bool {
-  if (lhs > rhs) {
-    return true;
-  }
-  std::cerr << "Error at" << location.file_name() << ":" << location.line()
-            << std::endl;
-  if constexpr (Ostreamable<decltype(lhs)> and Ostreamable<decltype(rhs)>) {
-    std::cerr << "Expected: " << lhs << " greater than: " << rhs << std::endl;
-  }
-  TestRegistry::setFailure();
-  return false;
-}
-
-// Template version (backward compatible, default when delta not specified)
-template <double delta = 0.0001>
+// Generic delta parameter (no template instantiation per delta value)
 constexpr auto expectNear(const auto& lhs, const auto& rhs,
+                          const auto& delta,
                           const std::source_location location =
                               std::source_location::current()) -> bool {
   if (std::abs(lhs - rhs) < delta) {
@@ -332,37 +301,17 @@ constexpr auto expectNear(const auto& lhs, const auto& rhs,
   return false;
 }
 
-// Non-template version with delta as function parameter (use when delta is runtime value)
-// No default for delta to avoid ambiguity with template version
+// Overload with default delta value
 constexpr auto expectNear(const auto& lhs, const auto& rhs,
-                          double delta,
                           const std::source_location location =
                               std::source_location::current()) -> bool {
-  if (std::abs(lhs - rhs) < delta) {
-    return true;
-  }
-  std::cerr << "Error at" << location.file_name() << ":" << location.line()
-            << std::endl;
-  if constexpr (Ostreamable<decltype(lhs)> and Ostreamable<decltype(rhs)>) {
-    std::cerr << "Expected Near ±(" << delta << "): " << lhs << " got: " << rhs
-              << std::endl;
-  }
-  TestRegistry::setFailure();
-  return false;
+  return expectNear(lhs, rhs, 0.0001, location);
 }
 
-template <double delta = 0.0001>
-[[deprecated]] auto expectApproxEq(
-    const auto& lhs, const auto& rhs,
-    const std::source_location location = std::source_location::current())
-    -> bool {
-  return expectNear<delta>(lhs, rhs, location);
-}
-
-// Template version (backward compatible, default when delta not specified)
-template <double delta = 0.0001>
+// Generic delta parameter (no template instantiation per delta value)
 constexpr auto expectRangeNear(std::ranges::input_range auto&& lhs,
                                std::ranges::input_range auto&& rhs,
+                               const auto& delta,
                                const std::source_location location =
                                    std::source_location::current()) -> bool {
   // Check size mismatch first if both ranges are sized
@@ -396,42 +345,14 @@ constexpr auto expectRangeNear(std::ranges::input_range auto&& lhs,
   return true;
 }
 
-// Non-template version with delta as function parameter (use when delta is runtime value)
-// No default for delta to avoid ambiguity with template version
+// Overload with default delta value
 constexpr auto expectRangeNear(std::ranges::input_range auto&& lhs,
                                std::ranges::input_range auto&& rhs,
-                               double delta,
                                const std::source_location location =
                                    std::source_location::current()) -> bool {
-  // Check size mismatch first if both ranges are sized
-  if constexpr (std::ranges::sized_range<decltype(lhs)> &&
-                std::ranges::sized_range<decltype(rhs)>) {
-    auto size_lhs = std::ranges::size(lhs);
-    auto size_rhs = std::ranges::size(rhs);
-    if (size_lhs != size_rhs) {
-      std::print(std::cerr, "Error at {}:{}\n", location.file_name(),
-                 location.line());
-      std::print(std::cerr, "\tRange size mismatch: {} vs {}\n", size_lhs,
-                 size_rhs);
-      TestRegistry::setFailure();
-      return false;
-    }
-  }
-
-  for (auto [l, r, idx] : std::views::zip(lhs, rhs, std::views::iota(0))) {
-    if (std::abs(l - r) > delta) {
-      std::print(std::cerr, "Error at {}:{}\n", location.file_name(),
-                 location.line());
-      std::print(std::cerr, "\tError at index {} of range\n", idx);
-      if constexpr (Ostreamable<decltype(l)> and Ostreamable<decltype(r)>) {
-        std::print(std::cerr, "\tExpected Near ±({}): {} got: {}\n", delta, l,
-                   r);
-      }
-      TestRegistry::setFailure();
-      return false;
-    }
-  }
-  return true;
+  return expectRangeNear(std::forward<decltype(lhs)>(lhs),
+                         std::forward<decltype(rhs)>(rhs),
+                         0.0001, location);
 }
 constexpr auto expectRangeEq(auto&& lhs, auto&& rhs,
                    const std::source_location location =

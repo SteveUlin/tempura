@@ -83,7 +83,7 @@ auto main() -> int {
     expectTrue(p_at_10 > 0.0);
 
     // Compare to expected: p(x) ≈ σ/(πx²) for large |x|
-    expectNear<0.01>(1.0 / (std::numbers::pi * 100.0), p_at_10);
+    expectNear(1.0 / (std::numbers::pi * 100.0), p_at_10, 0.01);
   };
 
   "Cauchy prob at extreme values"_test = [] {
@@ -234,7 +234,7 @@ auto main() -> int {
 
     // Sample median should approximate theoretical median (= μ)
     // Tolerance is larger due to heavy tails
-    expectNear<0.5>(5.0, sample_median);
+    expectNear(5.0, sample_median, 0.5);
   };
 
   "Cauchy sample different parameters"_test = [] {
@@ -328,7 +328,7 @@ auto main() -> int {
       integral += dist.prob(x) * dx;
     }
 
-    expectNear<0.05>(1.0, integral);
+    expectNear(1.0, integral, 0.05);
   };
 
   "Cauchy CDF derivative equals PDF"_test = [] {
@@ -340,7 +340,7 @@ auto main() -> int {
       // Numerical derivative of CDF
       double numerical_deriv = (dist.cdf(x + h) - dist.cdf(x - h)) / (2.0 * h);
       double pdf = dist.prob(x);
-      expectNear<0.001>(pdf, numerical_deriv);
+      expectNear(pdf, numerical_deriv, 0.001);
     }
   };
 

@@ -173,7 +173,7 @@ auto main() -> int {
     }
 
     double empirical_p = static_cast<double>(count) / N;
-    expectNear<0.1>(0.7, empirical_p);
+    expectNear(0.7, empirical_p, 0.1);
   };
 
   "Bernoulli sample fair coin"_test = [] {
@@ -186,7 +186,7 @@ auto main() -> int {
         ++count;
       }
     }
-    expectNear<0.1>(0.5, static_cast<double>(count) / N);
+    expectNear(0.5, static_cast<double>(count), 0.1 / N);
   };
 
   "Bernoulli sample with std::mt19937_64"_test = [] {
@@ -202,7 +202,7 @@ auto main() -> int {
     }
 
     double empirical_p = static_cast<double>(count) / N;
-    expectNear<0.1>(0.2, empirical_p);
+    expectNear(0.2, empirical_p, 0.1);
   };
 
   "Bernoulli sample edge case p=0"_test = [] {

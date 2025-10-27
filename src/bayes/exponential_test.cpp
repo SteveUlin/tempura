@@ -230,7 +230,7 @@ auto main() -> int {
     double sample_mean = sum / N;
 
     // Sample mean should approximate theoretical mean (1/λ = 0.5)
-    expectNear<0.05>(0.5, sample_mean);
+    expectNear(0.5, sample_mean, 0.05);
   };
 
   "Exponential sample variance approximation"_test = [] {
@@ -257,7 +257,7 @@ auto main() -> int {
     double sample_variance = sum_sq_diff / (N - 1);
 
     // Sample variance should approximate theoretical variance (1/λ² = 1.0)
-    expectNear<0.1>(1.0, sample_variance);
+    expectNear(1.0, sample_variance, 0.1);
   };
 
   "Exponential sample different parameters"_test = [] {
@@ -354,7 +354,7 @@ auto main() -> int {
       integral += dist.prob(x) * dx;
     }
 
-    expectNear<0.01>(1.0, integral);
+    expectNear(1.0, integral, 0.01);
   };
 
   "Exponential CDF derivative equals PDF"_test = [] {
@@ -366,7 +366,7 @@ auto main() -> int {
       // Numerical derivative of CDF
       double numerical_deriv = (dist.cdf(x + h) - dist.cdf(x - h)) / (2.0 * h);
       double pdf = dist.prob(x);
-      expectNear<0.001>(pdf, numerical_deriv);
+      expectNear(pdf, numerical_deriv, 0.001);
     }
   };
 
@@ -413,6 +413,6 @@ auto main() -> int {
     auto x2 = dist2.sample(g2);
 
     // x2 should be approximately 2 * x1
-    expectNear<0.5>(2.0 * x1, x2);
+    expectNear(2.0 * x1, x2, 0.5);
   };
 }

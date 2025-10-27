@@ -125,7 +125,7 @@ auto main() -> int {
     for (int64_t k = 0; k <= 8; ++k) {
       double prob = dist.prob(k);
       if (prob > 0.0) {
-        expectNear<1e-9>(std::log(prob), dist.logProb(k));
+        expectNear(std::log(prob), dist.logProb(k), 1e-9);
       }
     }
   };
@@ -199,7 +199,7 @@ auto main() -> int {
     Binomial dist{5, 0.3};
     // CDF(2) = P(X=0) + P(X=1) + P(X=2)
     double expected = dist.prob(0) + dist.prob(1) + dist.prob(2);
-    expectNear<1e-9>(expected, dist.cdf(2));
+    expectNear(expected, dist.cdf(2), 1e-9);
   };
 
   "Binomial mean"_test = [] {
@@ -262,7 +262,7 @@ auto main() -> int {
 
     double empirical_mean = static_cast<double>(sum) / N_samples;
     // E[X] = np = 100 * 0.3 = 30
-    expectNear<1.0>(30.0, empirical_mean);
+    expectNear(30.0, empirical_mean, 1.0);
   };
 
   "Binomial sample fair coin"_test = [] {
@@ -279,7 +279,7 @@ auto main() -> int {
 
     double empirical_mean = static_cast<double>(sum) / N_samples;
     // E[X] = np = 50 * 0.5 = 25
-    expectNear<1.0>(25.0, empirical_mean);
+    expectNear(25.0, empirical_mean, 1.0);
   };
 
   "Binomial sample edge case p=0"_test = [] {
@@ -316,7 +316,7 @@ auto main() -> int {
 
     double empirical_mean = static_cast<double>(sum) / N_samples;
     // E[X] = np = 20 * 0.7 = 14
-    expectNear<1.0>(14.0, empirical_mean);
+    expectNear(14.0, empirical_mean, 1.0);
   };
 
   "Binomial sample different seeds produce different sequences"_test = [] {
@@ -379,7 +379,7 @@ auto main() -> int {
 
     // logProb uses log and lgamma extension points
     auto log_prob_2 = dist.logProb(2);
-    expectNear<1e-9>(std::log(prob_2.value), log_prob_2.value);
+    expectNear(std::log(prob_2.value), log_prob_2.value, 1e-9);
   };
 
   "Binomial PMF sums to 1"_test = [] {
@@ -388,7 +388,7 @@ auto main() -> int {
     for (int64_t k = 0; k <= 10; ++k) {
       sum += dist.prob(k);
     }
-    expectNear<1e-9>(1.0, sum);
+    expectNear(1.0, sum, 1e-9);
   };
 
   "Binomial expected value from PMF"_test = [] {
@@ -398,7 +398,7 @@ auto main() -> int {
     for (int64_t k = 0; k <= 8; ++k) {
       expected += k * dist.prob(k);
     }
-    expectNear<1e-9>(dist.mean(), expected);
+    expectNear(dist.mean(), expected, 1e-9);
   };
 
   "Binomial variance from PMF"_test = [] {
@@ -410,7 +410,7 @@ auto main() -> int {
     }
     // Var[X] = E[X�] - E[X]�
     double variance = e_x_sq - dist.mean() * dist.mean();
-    expectNear<1e-9>(dist.variance(), variance);
+    expectNear(dist.variance(), variance, 1e-9);
   };
 
   "Binomial large n with small p"_test = [] {

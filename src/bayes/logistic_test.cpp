@@ -188,8 +188,8 @@ auto main() -> int {
     const double pi_sq_over_3 = std::numbers::pi * std::numbers::pi / 3.0;
     const double expected_var = 4.0 * pi_sq_over_3;
 
-    expectNear<0.1>(expected_mean, sample_mean);
-    expectNear<0.3>(expected_var, sample_var);
+    expectNear(expected_mean, sample_mean, 0.1);
+    expectNear(expected_var, sample_var, 0.3);
   };
 
   "Logistic sample different seeds produce different sequences"_test = [] {
@@ -268,7 +268,7 @@ auto main() -> int {
       integral += dist.prob(x) * dx;
     }
 
-    expectNear<0.01>(1.0, integral);
+    expectNear(1.0, integral, 0.01);
   };
 
   "Logistic CDF derivative equals PDF"_test = [] {
@@ -280,7 +280,7 @@ auto main() -> int {
       // Numerical derivative of CDF
       double numerical_deriv = (dist.cdf(x + h) - dist.cdf(x - h)) / (2.0 * h);
       double pdf = dist.prob(x);
-      expectNear<0.001>(pdf, numerical_deriv);
+      expectNear(pdf, numerical_deriv, 0.001);
     }
   };
 }
