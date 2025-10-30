@@ -2,27 +2,6 @@
   "version": "1.0",
   "tasks": [
     {
-      "id": 1,
-      "title": "Add Gamma distribution to bayes/",
-      "description": "Implement Gamma(\u03b1, \u03b2) distribution:\n- PDF, CDF, quantile functions\n- Method of moments parameter estimation\n- Unit tests with reference values from NIST or Wikipedia\n- Integration with existing RNG infrastructure",
-      "component": "bayes",
-      "priority": "high",
-      "tags": [
-        "distribution",
-        "special-functions"
-      ],
-      "status": "pending",
-      "created": "2025-10-26",
-      "started": null,
-      "notes": "May require incomplete gamma function - assess if needed",
-      "acceptance": [
-        "Gamma distribution class with constexpr support",
-        "Unit tests with reference values (>95% coverage)",
-        "Documentation with mathematical definition and usage examples",
-        "Integration with SIMD RNG infrastructure"
-      ]
-    },
-    {
       "id": 2,
       "title": "Add Beta distribution to bayes/",
       "description": "Implement Beta(\u03b1, \u03b2) distribution following the pattern established by Gamma",
@@ -234,6 +213,196 @@
         "Summary only shown if tests were run (not for empty test binaries)",
         "Unit tests verify summary output (check stdout)",
         "Optional: Add UNIT_SHOW_TIMING env var for execution time"
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Create modern CMake foundation",
+      "description": "Establish modern CMake patterns as the foundation for all future changes:\n- Create tempura_compiler_flags INTERFACE target for compiler options\n- Create tempura_release_flags INTERFACE target for release-specific flags\n- Remove global CMAKE_CXX_FLAGS and move to target-based approach\n- Remove global INCLUDE_DIRECTORIES(\"${BASEPATH}\")\n- Add tempura:: namespace aliases for all existing libraries (symbolic3, bayes, matrix2, meta, etc.)\n- Add TEMPURA_BUILD_TESTS and TEMPURA_BUILD_EXAMPLES CMake options\n- Update root CMakeLists.txt to use modern CMake 3.28+ patterns",
+      "component": "build",
+      "priority": "high",
+      "tags": [
+        "cmake",
+        "modernization",
+        "foundation",
+        "build-system"
+      ],
+      "status": "pending",
+      "created": "2025-10-27",
+      "started": null,
+      "notes": "This is the foundation task that enables all other CMake modernization work. Eliminates global include pollution and establishes consistent patterns.",
+      "acceptance": [
+        "All libraries have tempura:: aliases via add_library(tempura::name ALIAS name)",
+        "No global INCLUDE_DIRECTORIES() calls anywhere",
+        "No global CMAKE_CXX_FLAGS setting (flags via interface targets)",
+        "Existing builds still work: ninja -C build && ctest --test-dir build passes",
+        "Can toggle tests/examples via -DTEMPURA_BUILD_TESTS=OFF"
+      ]
+    },
+    {
+      "id": 13,
+      "title": "Migrate symbolic3 tests to modern structure",
+      "description": "Migrate symbolic3 to the new structure as the reference implementation:\n- Move all tests from src/symbolic3/test/*.cpp to src/symbolic3/*_test.cpp (flatten structure)\n- Update src/symbolic3/CMakeLists.txt to explicitly list all tests (no GLOB)\n- Add explicit dependency tracking: target_link_libraries(symbolic3 INTERFACE tempura::meta)\n- Use helper function pattern for test boilerplate reduction\n- Remove test/ subdirectory after migration\n- Update include paths to use target-based approach",
+      "component": "symbolic3",
+      "priority": "high",
+      "tags": [
+        "cmake",
+        "modernization",
+        "testing",
+        "symbolic3"
+      ],
+      "status": "pending",
+      "created": "2025-10-27",
+      "started": null,
+      "notes": "symbolic3 will serve as the reference implementation for other components. This establishes the pattern for co-located tests.",
+      "acceptance": [
+        "All symbolic3 tests live directly in src/symbolic3/ (no test/ subdirectory)",
+        "src/symbolic3/CMakeLists.txt explicitly lists each test file",
+        "ctest --test-dir build -R symbolic3 runs all ~20 tests successfully",
+        "Dependencies explicit via target_link_libraries(symbolic3 INTERFACE tempura::meta)",
+        "All test labels preserved (base, calculus, simplification, etc.)"
+      ]
+    },
+    {
+      "id": 14,
+      "title": "Migrate bayes tests to modern structure",
+      "description": "Update bayes to match symbolic3 modern patterns:\n- Tests already in src/bayes/, verify no test/ subdirectory exists\n- Update CMakeLists.txt to explicitly list tests (replace helper function if using GLOB)\n- Add explicit dependencies: target_link_libraries(bayes INTERFACE tempura::broadcast_array tempura::meta)\n- Ensure test naming and label conventions match symbolic3\n- Fix include directories to use target-based approach (not global)",
+      "component": "bayes",
+      "priority": "medium",
+      "tags": [
+        "cmake",
+        "modernization",
+        "testing",
+        "bayes"
+      ],
+      "status": "pending",
+      "created": "2025-10-27",
+      "started": null,
+      "notes": "Fixes the hidden broadcast_array dependency identified during design phase. This is an important correctness fix.",
+      "acceptance": [
+        "All bayes tests explicitly listed in src/bayes/CMakeLists.txt",
+        "ctest --test-dir build -R bayes runs all distribution tests successfully",
+        "CMakeLists.txt declares dependency on broadcast_array (fixes hidden dependency)",
+        "Follows same CMake patterns as symbolic3 (consistency)",
+        "Test labels properly set (distributions, sampling, quality)"
+      ]
+    },
+    {
+      "id": 15,
+      "title": "Migrate matrix2 tests from test/ to src/matrix2/",
+      "description": "Consolidate matrix2 tests with their implementation code:\n- Move all files from test/matrix2/*.cpp to src/matrix2/*_test.cpp\n- Update src/matrix2/CMakeLists.txt with explicit test listing\n- Remove GLOB pattern from test/CMakeLists.txt (lines ~26-35)\n- Fix include paths to use explicit target dependencies\n- Add proper target_include_directories for matrix2 library\n- Update any relative includes in test files if needed",
+      "component": "matrix2",
+      "priority": "medium",
+      "tags": [
+        "cmake",
+        "modernization",
+        "testing",
+        "matrix2"
+      ],
+      "status": "pending",
+      "created": "2025-10-27",
+      "started": null,
+      "notes": "matrix2 is marked as CANONICAL in CLAUDE.md, so ensuring its build system is clean is important for the project.",
+      "acceptance": [
+        "All matrix2 tests live in src/matrix2/",
+        "No matrix2 entries remain in test/CMakeLists.txt",
+        "ctest --test-dir build -R matrix2 runs all tests successfully",
+        "Tests use target_link_libraries(... tempura::matrix2 tempura::unit)",
+        "Proper target-based include directories (no global includes)"
+      ]
+    },
+    {
+      "id": 16,
+      "title": "Migrate remaining component tests (quadrature, special, optimization, utility, meta)",
+      "description": "Complete the test migration for all remaining components:\n- Move test/quadrature/*.cpp \u2192 src/quadature/*_test.cpp (note: fix typo quadature\u2192quadrature?)\n- Move test/special/*.cpp \u2192 src/special/*_test.cpp\n- Move test/optimization/*.cpp \u2192 src/optimization/*_test.cpp\n- Move test/utility/*.cpp \u2192 src/utility/*_test.cpp\n- Move test/meta/*.cpp \u2192 src/meta/*_test.cpp\n- Update each component's CMakeLists.txt with explicit test listing\n- Remove all GLOB patterns from test/CMakeLists.txt (lines ~48-103)\n- Add explicit dependencies for each component",
+      "component": "multiple",
+      "priority": "medium",
+      "tags": [
+        "cmake",
+        "modernization",
+        "testing",
+        "migration"
+      ],
+      "status": "pending",
+      "created": "2025-10-27",
+      "started": null,
+      "notes": "This is a bulk migration task. Can be split into smaller tasks if needed. Note the quadature/quadrature typo should be investigated.",
+      "acceptance": [
+        "All component tests live in their respective src/ directories",
+        "Each component's CMakeLists.txt explicitly lists its tests",
+        "ctest --test-dir build runs complete suite successfully",
+        "No GLOB patterns remain in test infrastructure",
+        "Each component declares its dependencies explicitly"
+      ]
+    },
+    {
+      "id": 17,
+      "title": "Migrate top-level tests and remove test/ directory",
+      "description": "Complete the migration by handling remaining top-level tests:\n- Decide location for cross-cutting tests (polynomial, json, sequence, root_finding, chebyshev)\n- Option A: Move to src/ directly (alongside library definitions in src/CMakeLists.txt)\n- Option B: Create src/core/ for fundamental utilities\n- Migrate broadcast_array test to appropriate location\n- Remove test/CMakeLists.txt entirely\n- Remove add_subdirectory(test) from root CMakeLists.txt\n- Update documentation (CLAUDE.md, README) to reflect new test locations",
+      "component": "build",
+      "priority": "medium",
+      "tags": [
+        "cmake",
+        "modernization",
+        "cleanup"
+      ],
+      "status": "pending",
+      "created": "2025-10-27",
+      "started": null,
+      "notes": "This is the final cleanup task that removes the test/ directory entirely. Requires decision on where cross-cutting tests should live.",
+      "acceptance": [
+        "test/ directory no longer exists",
+        "All tests discoverable via ctest --test-dir build",
+        "ctest --test-dir build runs complete suite successfully (~50+ tests)",
+        "Documentation updated with new Running Tests instructions",
+        "Build instructions in CLAUDE.md reflect new structure"
+      ]
+    },
+    {
+      "id": 18,
+      "title": "Add explicit dependency tracking across all libraries",
+      "description": "Audit and document all library dependencies:\n- Audit all INTERFACE libraries for implicit dependencies (scan #include statements)\n- Add explicit target_link_libraries() for each dependency\n- Remove unintended transitive dependencies (e.g., bayes shouldn't expose symbolic3)\n- Document dependency graph in component CMakeLists.txt comments\n- Generate and commit dependency graph: cmake --graphviz=docs/dependencies.dot build\n- Create docs/DEPENDENCIES.md explaining the architecture",
+      "component": "build",
+      "priority": "medium",
+      "tags": [
+        "cmake",
+        "dependencies",
+        "architecture"
+      ],
+      "status": "pending",
+      "created": "2025-10-27",
+      "started": null,
+      "notes": "This makes the dependency graph explicit and visible. Helpful for understanding project architecture and preventing circular dependencies.",
+      "acceptance": [
+        "Each library explicitly declares dependencies via target_link_libraries()",
+        "No reliance on transitive include paths (users must link what they use)",
+        "Compile succeeds with explicit includes only (no hidden globals)",
+        "Dependency graph generated and documented",
+        "Can build individual components: ninja -C build tempura::bayes"
+      ]
+    },
+    {
+      "id": 19,
+      "title": "Add CMake export/install targets for packaging",
+      "description": "Make tempura installable and usable via find_package():\n- Add install(TARGETS ...) commands for all libraries\n- Create tempuraConfig.cmake.in for find_package support\n- Set up proper INSTALL_INTERFACE paths in target_include_directories\n- Add version configuration (tempuraConfigVersion.cmake)\n- Create installation instructions in docs/INSTALLATION.md\n- Test external project can use find_package(tempura COMPONENTS symbolic3 bayes)",
+      "component": "build",
+      "priority": "low",
+      "tags": [
+        "cmake",
+        "packaging",
+        "install",
+        "distribution"
+      ],
+      "status": "pending",
+      "created": "2025-10-27",
+      "started": null,
+      "notes": "This is a nice-to-have feature for making tempura usable as an external dependency. Low priority since this is a research project.",
+      "acceptance": [
+        "cmake --install build --prefix=/tmp/tempura-install succeeds",
+        "External projects can use find_package(tempura REQUIRED)",
+        "All public headers installed to <prefix>/include/tempura/",
+        "Version information accessible: find_package(tempura 1.0 REQUIRED)",
+        "Example external project compiles and links successfully"
       ]
     }
   ]
