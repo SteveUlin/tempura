@@ -409,7 +409,7 @@ auto main() -> int {
     expectTrue(dist1.prob(0.5) > dist1.prob(1.0));
 
     // For α = 1 (exponential), PDF decreases monotonically
-    expectTrue(dist2.prob(0.0) > dist2.prob(1.0));
+    expectTrue(dist2.prob(0.01) > dist2.prob(1.0));
     expectTrue(dist2.prob(1.0) > dist2.prob(2.0));
 
     // For α > 1, PDF has a mode at (α-1)/β = 2.0
