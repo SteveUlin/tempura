@@ -3,57 +3,117 @@
 # ============================================================================
 
 add_library(bayes INTERFACE)
-
-# Include path must expose src/ for two reasons:
-# 1. bayes headers use #include "bayes/normal.h" (self-reference pattern)
-# 2. integrators.h depends on broadcast_array.h (another tempura component)
-# Note: This gives bayes consumers access to all tempura headers (transitivity)
 target_include_directories(bayes INTERFACE
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
     $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(bayes INTERFACE tempura_flags)
+target_link_libraries(bayes INTERFACE
+    tempura::broadcast_array
+    tempura::meta
+    tempura_flags
+)
 add_library(tempura::bayes ALIAS bayes)
 
 # ============================================================================
-# Tests - Only build when testing is enabled
+# Tests
 # ============================================================================
 
-if(TEMPURA_BUILD_TESTS)
-    # Helper reduces boilerplate: 3 lines per test → 1 line
-    function(add_bayes_test TEST_NAME)
-        add_executable(bayes_${TEST_NAME} ${TEST_NAME}.cpp)
-        target_link_libraries(bayes_${TEST_NAME} PRIVATE bayes unit)
-        add_test(NAME bayes_${TEST_NAME} COMMAND bayes_${TEST_NAME})
-        set_tests_properties(bayes_${TEST_NAME} PROPERTIES LABELS "bayes;${ARGN}")
-    endfunction()
-
-    # Distribution tests
-    add_bayes_test(normal_test distributions)
-    add_bayes_test(beta_test distributions)
-    add_bayes_test(bernoulli_test distributions)
-    add_bayes_test(binomial_test distributions)
-    add_bayes_test(uniform_test distributions)
-    add_bayes_test(logistic_test distributions)
-    add_bayes_test(cauchy_test distributions)
-    add_bayes_test(exponential_test distributions)
-    add_bayes_test(gamma_test distributions)
-
-    # Random number generator tests
-    add_bayes_test(random_test sampling)
-    add_bayes_test(random_simd_test sampling)
-    add_bayes_test(rng_tests_test sampling quality)
-
-    # Benchmark executable (not a CTest test)
-    # Excluded from test runs to avoid slowing down CI
-    add_executable(normal_bench normal_bench.cpp)
-    target_link_libraries(normal_bench PRIVATE bayes benchmark unit)
-
-    # RNG quality report (standalone analysis tool)
-    add_executable(rng_quality_report rng_quality_report.cpp)
-    target_link_libraries(rng_quality_report PRIVATE bayes)
-
-    # SIMD RNG quality report (standalone analysis tool)
-    add_executable(rng_simd_quality_report rng_simd_quality_report.cpp)
-    target_link_libraries(rng_simd_quality_report PRIVATE bayes simd)
+if(NOT TEMPURA_BUILD_TESTS)
+  return()
 endif()
+
+# ============================================================================
+# Distribution Tests
+# ============================================================================
+
+# Normal (Gaussian) distribution
+add_executable(bayes_normal_test normal_test.cpp)
+target_link_libraries(bayes_normal_test PRIVATE bayes unit)
+add_test(NAME bayes_normal_test COMMAND bayes_normal_test)
+set_tests_properties(bayes_normal_test PROPERTIES LABELS "bayes;distributions")
+
+# Beta distribution
+add_executable(bayes_beta_test beta_test.cpp)
+target_link_libraries(bayes_beta_test PRIVATE bayes unit)
+add_test(NAME bayes_beta_test COMMAND bayes_beta_test)
+set_tests_properties(bayes_beta_test PROPERTIES LABELS "bayes;distributions")
+
+# Bernoulli distribution
+add_executable(bayes_bernoulli_test bernoulli_test.cpp)
+target_link_libraries(bayes_bernoulli_test PRIVATE bayes unit)
+add_test(NAME bayes_bernoulli_test COMMAND bayes_bernoulli_test)
+set_tests_properties(bayes_bernoulli_test PROPERTIES LABELS "bayes;distributions")
+
+# Binomial distribution
+add_executable(bayes_binomial_test binomial_test.cpp)
+target_link_libraries(bayes_binomial_test PRIVATE bayes unit)
+add_test(NAME bayes_binomial_test COMMAND bayes_binomial_test)
+set_tests_properties(bayes_binomial_test PROPERTIES LABELS "bayes;distributions")
+
+# Uniform distribution
+add_executable(bayes_uniform_test uniform_test.cpp)
+target_link_libraries(bayes_uniform_test PRIVATE bayes unit)
+add_test(NAME bayes_uniform_test COMMAND bayes_uniform_test)
+set_tests_properties(bayes_uniform_test PROPERTIES LABELS "bayes;distributions")
+
+# Logistic distribution
+add_executable(bayes_logistic_test logistic_test.cpp)
+target_link_libraries(bayes_logistic_test PRIVATE bayes unit)
+add_test(NAME bayes_logistic_test COMMAND bayes_logistic_test)
+set_tests_properties(bayes_logistic_test PROPERTIES LABELS "bayes;distributions")
+
+# Cauchy distribution
+add_executable(bayes_cauchy_test cauchy_test.cpp)
+target_link_libraries(bayes_cauchy_test PRIVATE bayes unit)
+add_test(NAME bayes_cauchy_test COMMAND bayes_cauchy_test)
+set_tests_properties(bayes_cauchy_test PROPERTIES LABELS "bayes;distributions")
+
+# Exponential distribution
+add_executable(bayes_exponential_test exponential_test.cpp)
+target_link_libraries(bayes_exponential_test PRIVATE bayes unit)
+add_test(NAME bayes_exponential_test COMMAND bayes_exponential_test)
+set_tests_properties(bayes_exponential_test PROPERTIES LABELS "bayes;distributions")
+
+# Gamma distribution
+add_executable(bayes_gamma_test gamma_test.cpp)
+target_link_libraries(bayes_gamma_test PRIVATE bayes unit)
+add_test(NAME bayes_gamma_test COMMAND bayes_gamma_test)
+set_tests_properties(bayes_gamma_test PROPERTIES LABELS "bayes;distributions")
+
+# ============================================================================
+# Random Number Generator Tests
+# ============================================================================
+
+# Basic random number generation tests
+add_executable(bayes_random_test random_test.cpp)
+target_link_libraries(bayes_random_test PRIVATE bayes unit)
+add_test(NAME bayes_random_test COMMAND bayes_random_test)
+set_tests_properties(bayes_random_test PROPERTIES LABELS "bayes;sampling")
+
+# SIMD random number generation tests
+add_executable(bayes_random_simd_test random_simd_test.cpp)
+target_link_libraries(bayes_random_simd_test PRIVATE bayes unit)
+add_test(NAME bayes_random_simd_test COMMAND bayes_random_simd_test)
+set_tests_properties(bayes_random_simd_test PROPERTIES LABELS "bayes;sampling")
+
+# RNG quality tests
+add_executable(bayes_rng_tests_test rng_tests_test.cpp)
+target_link_libraries(bayes_rng_tests_test PRIVATE bayes unit)
+add_test(NAME bayes_rng_tests_test COMMAND bayes_rng_tests_test)
+set_tests_properties(bayes_rng_tests_test PROPERTIES LABELS "bayes;sampling;quality")
+
+# ============================================================================
+# Benchmarks and Analysis Tools (not formal tests)
+# ============================================================================
+
+# Normal distribution benchmark (not a CTest test)
+add_executable(normal_bench normal_bench.cpp)
+target_link_libraries(normal_bench PRIVATE bayes benchmark unit)
+
+# RNG quality report (standalone analysis tool)
+add_executable(rng_quality_report rng_quality_report.cpp)
+target_link_libraries(rng_quality_report PRIVATE bayes)
+
+# SIMD RNG quality report (standalone analysis tool)
+add_executable(rng_simd_quality_report rng_simd_quality_report.cpp)
+target_link_libraries(rng_simd_quality_report PRIVATE bayes simd)

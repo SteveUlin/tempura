@@ -220,16 +220,16 @@
       "title": "Migrate bayes tests to modern structure",
       "description": "Update bayes to match symbolic3 modern patterns:\n- Tests already in src/bayes/, verify no test/ subdirectory exists\n- Update CMakeLists.txt to explicitly list tests (replace helper function if using GLOB)\n- Add explicit dependencies: target_link_libraries(bayes INTERFACE tempura::broadcast_array tempura::meta)\n- Ensure test naming and label conventions match symbolic3\n- Fix include directories to use target-based approach (not global)",
       "component": "bayes",
-      "priority": "medium",
+      "priority": "high",
       "tags": [
         "cmake",
         "modernization",
         "testing",
         "bayes"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "created": "2025-10-27",
-      "started": null,
+      "started": "2025-11-12",
       "notes": "Fixes the hidden broadcast_array dependency identified during design phase. This is an important correctness fix.",
       "acceptance": [
         "All bayes tests explicitly listed in src/bayes/CMakeLists.txt",
@@ -244,7 +244,7 @@
       "title": "Migrate matrix2 tests from test/ to src/matrix2/",
       "description": "Consolidate matrix2 tests with their implementation code:\n- Move all files from test/matrix2/*.cpp to src/matrix2/*_test.cpp\n- Update src/matrix2/CMakeLists.txt with explicit test listing\n- Remove GLOB pattern from test/CMakeLists.txt (lines ~26-35)\n- Fix include paths to use explicit target dependencies\n- Add proper target_include_directories for matrix2 library\n- Update any relative includes in test files if needed",
       "component": "matrix2",
-      "priority": "medium",
+      "priority": "high",
       "tags": [
         "cmake",
         "modernization",
@@ -268,7 +268,7 @@
       "title": "Migrate remaining component tests (quadrature, special, optimization, utility, meta)",
       "description": "Complete the test migration for all remaining components:\n- Move test/quadrature/*.cpp \u2192 src/quadature/*_test.cpp (note: fix typo quadature\u2192quadrature?)\n- Move test/special/*.cpp \u2192 src/special/*_test.cpp\n- Move test/optimization/*.cpp \u2192 src/optimization/*_test.cpp\n- Move test/utility/*.cpp \u2192 src/utility/*_test.cpp\n- Move test/meta/*.cpp \u2192 src/meta/*_test.cpp\n- Update each component's CMakeLists.txt with explicit test listing\n- Remove all GLOB patterns from test/CMakeLists.txt (lines ~48-103)\n- Add explicit dependencies for each component",
       "component": "multiple",
-      "priority": "medium",
+      "priority": "high",
       "tags": [
         "cmake",
         "modernization",
@@ -292,7 +292,7 @@
       "title": "Migrate top-level tests and remove test/ directory",
       "description": "Complete the migration by handling remaining top-level tests:\n- Decide location for cross-cutting tests (polynomial, json, sequence, root_finding, chebyshev)\n- Option A: Move to src/ directly (alongside library definitions in src/CMakeLists.txt)\n- Option B: Create src/core/ for fundamental utilities\n- Migrate broadcast_array test to appropriate location\n- Remove test/CMakeLists.txt entirely\n- Remove add_subdirectory(test) from root CMakeLists.txt\n- Update documentation (CLAUDE.md, README) to reflect new test locations",
       "component": "build",
-      "priority": "medium",
+      "priority": "high",
       "tags": [
         "cmake",
         "modernization",
@@ -315,7 +315,7 @@
       "title": "Add explicit dependency tracking across all libraries",
       "description": "Audit and document all library dependencies:\n- Audit all INTERFACE libraries for implicit dependencies (scan #include statements)\n- Add explicit target_link_libraries() for each dependency\n- Remove unintended transitive dependencies (e.g., bayes shouldn't expose symbolic3)\n- Document dependency graph in component CMakeLists.txt comments\n- Generate and commit dependency graph: cmake --graphviz=docs/dependencies.dot build\n- Create docs/DEPENDENCIES.md explaining the architecture",
       "component": "build",
-      "priority": "medium",
+      "priority": "high",
       "tags": [
         "cmake",
         "dependencies",
@@ -338,7 +338,7 @@
       "title": "Add CMake export/install targets for packaging",
       "description": "Make tempura installable and usable via find_package():\n- Add install(TARGETS ...) commands for all libraries\n- Create tempuraConfig.cmake.in for find_package support\n- Set up proper INSTALL_INTERFACE paths in target_include_directories\n- Add version configuration (tempuraConfigVersion.cmake)\n- Create installation instructions in docs/INSTALLATION.md\n- Test external project can use find_package(tempura COMPONENTS symbolic3 bayes)",
       "component": "build",
-      "priority": "low",
+      "priority": "high",
       "tags": [
         "cmake",
         "packaging",
