@@ -1,7 +1,23 @@
 add_library(meta INTERFACE)
-target_include_directories(meta INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(meta INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
+  $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(meta INTERFACE tempura_flags)
+add_library(tempura::meta ALIAS meta)
 
 add_library(vector_to_array INTERFACE vector_to_array.h)
+target_include_directories(vector_to_array INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
+  $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(vector_to_array INTERFACE tempura_flags)
+add_library(tempura::vector_to_array ALIAS vector_to_array)
+
+if(NOT TEMPURA_BUILD_TESTS)
+  return()
+endif()
+
 add_executable(vector_to_array_test vector_to_array_test.cpp)
 target_link_libraries(vector_to_array_test vector_to_array unit)
 

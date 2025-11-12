@@ -1,8 +1,20 @@
 # Symbolic3: Combinator-based symbolic computation system
 
 add_library(symbolic3 INTERFACE)
-target_include_directories(symbolic3 INTERFACE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(symbolic3 INTERFACE meta)
+target_include_directories(symbolic3 INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
+  $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(symbolic3 INTERFACE meta tempura_flags)
+add_library(tempura::symbolic3 ALIAS symbolic3)
+
+# ============================================================================
+# Tests
+# ============================================================================
+
+if(NOT TEMPURA_BUILD_TESTS)
+  return()
+endif()
 
 # ============================================================================
 # Core Tests

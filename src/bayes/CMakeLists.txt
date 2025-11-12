@@ -12,12 +12,14 @@ target_include_directories(bayes INTERFACE
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
     $<INSTALL_INTERFACE:include>
 )
+target_link_libraries(bayes INTERFACE tempura_flags)
+add_library(tempura::bayes ALIAS bayes)
 
 # ============================================================================
 # Tests - Only build when testing is enabled
 # ============================================================================
 
-if(BUILD_TESTING)
+if(TEMPURA_BUILD_TESTS)
     # Helper reduces boilerplate: 3 lines per test → 1 line
     function(add_bayes_test TEST_NAME)
         add_executable(bayes_${TEST_NAME} ${TEST_NAME}.cpp)

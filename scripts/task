@@ -9,7 +9,7 @@ Usage:
     task fetch [--priority]                               Fetch highest priority pending task
     task fetch --component <name>                         Fetch tasks by component
     task fetch --tag <tag>                                Fetch tasks by tag
-    task start <id>                                       Start working on task (creates branch)
+    task start <id>                                       Start working on task
     task done <id> [commit-sha]                           Complete and remove task (archives to git)
     task remove <id>                                      Remove task without completion (no git archive)
 
@@ -205,36 +205,7 @@ def cmd_start(task_id: int):
         "started": str(date.today())
     })
 
-    print(f"✓ Task #{task_id} started")
-
-    # Create feature branch
-    title_slug = task["title"].lower()
-    title_slug = "".join(c if c.isalnum() or c == " " else "-" for c in title_slug)
-    title_slug = "-".join(title_slug.split())
-    branch = f"feature/{task['component']}/{task_id}-{title_slug}"
-
-    try:
-        # Check if we're in a git repo
-        subprocess.run(["git", "rev-parse", "--git-dir"],
-                      check=True, capture_output=True, cwd=ROOT_DIR)
-
-        # Try to create branch
-        result = subprocess.run(["git", "checkout", "-b", branch],
-                               capture_output=True, text=True, cwd=ROOT_DIR)
-
-        if result.returncode == 0:
-            print(f"✓ Created branch: {branch}")
-        else:
-            # Branch might already exist, try to switch to it
-            result = subprocess.run(["git", "checkout", branch],
-                                   capture_output=True, text=True, cwd=ROOT_DIR)
-            if result.returncode == 0:
-                print(f"  Branch '{branch}' already exists, switched to it")
-            else:
-                print(f"  Warning: Could not create/switch to branch: {result.stderr.strip()}")
-
-    except subprocess.CalledProcessError:
-        print("  (Not in a git repository, skipping branch creation)")
+    print(f"✓ Task #{task_id} started: {task['title']}")
 
 
 def cmd_done(task_id: int, commit_sha: Optional[str] = None):

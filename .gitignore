@@ -3,6 +3,11 @@ debug/
 release/
 .direnv/
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
 # Profiling and temporary files
 perf.data
 perf.data.*

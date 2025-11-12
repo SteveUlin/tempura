@@ -1,18 +1,28 @@
 add_subdirectory(idioms)
 
+# Examples use target-based includes via target_link_libraries()
+# (Include paths come from the libraries they link to)
+
+# Apply compiler flags to all examples
+link_libraries(tempura_flags)
+
 add_executable(hello_world_main hello_world.cpp)
 
-add_executable(hessian_main hessian.cpp)
+# add_executable(hessian_main hessian.cpp)  # Disabled - autodiff has compilation issues
 
 add_executable(profile_main profile.cpp)
 target_link_libraries(profile_main PRIVATE profiler)
 
 add_executable(sample_normal_main sample_normal.cpp)
+target_link_libraries(sample_normal_main PRIVATE bayes)
 
-add_executable(normal_reverse_autodiff_main normal_reverse_autodiff.cpp)
+# add_executable(normal_reverse_autodiff_main normal_reverse_autodiff.cpp)  # Disabled - autodiff has compilation issues
 
 add_executable(histogram histogram_main.cpp)
+target_link_libraries(histogram PRIVATE bayes)
+
 add_executable(plot plot_main.cpp)
+target_link_libraries(plot PRIVATE bayes)
 add_executable(text_size text_size.cpp)
 # add_executable(symbols_main symbols.cpp)  # Disabled - uses old symbolic system
 add_executable(symbolic3_debug_demo symbolic3_debug_demo.cpp)
