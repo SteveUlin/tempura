@@ -216,30 +216,6 @@
       ]
     },
     {
-      "id": 14,
-      "title": "Migrate bayes tests to modern structure",
-      "description": "Update bayes to match symbolic3 modern patterns:\n- Tests already in src/bayes/, verify no test/ subdirectory exists\n- Update CMakeLists.txt to explicitly list tests (replace helper function if using GLOB)\n- Add explicit dependencies: target_link_libraries(bayes INTERFACE tempura::broadcast_array tempura::meta)\n- Ensure test naming and label conventions match symbolic3\n- Fix include directories to use target-based approach (not global)",
-      "component": "bayes",
-      "priority": "high",
-      "tags": [
-        "cmake",
-        "modernization",
-        "testing",
-        "bayes"
-      ],
-      "status": "in_progress",
-      "created": "2025-10-27",
-      "started": "2025-11-12",
-      "notes": "Fixes the hidden broadcast_array dependency identified during design phase. This is an important correctness fix.",
-      "acceptance": [
-        "All bayes tests explicitly listed in src/bayes/CMakeLists.txt",
-        "ctest --test-dir build -R bayes runs all distribution tests successfully",
-        "CMakeLists.txt declares dependency on broadcast_array (fixes hidden dependency)",
-        "Follows same CMake patterns as symbolic3 (consistency)",
-        "Test labels properly set (distributions, sampling, quality)"
-      ]
-    },
-    {
       "id": 15,
       "title": "Migrate matrix2 tests from test/ to src/matrix2/",
       "description": "Consolidate matrix2 tests with their implementation code:\n- Move all files from test/matrix2/*.cpp to src/matrix2/*_test.cpp\n- Update src/matrix2/CMakeLists.txt with explicit test listing\n- Remove GLOB pattern from test/CMakeLists.txt (lines ~26-35)\n- Fix include paths to use explicit target dependencies\n- Add proper target_include_directories for matrix2 library\n- Update any relative includes in test files if needed",
