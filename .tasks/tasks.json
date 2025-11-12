@@ -227,9 +227,9 @@
         "testing",
         "symbolic3"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "created": "2025-10-27",
-      "started": null,
+      "started": "2025-11-12",
       "notes": "symbolic3 will serve as the reference implementation for other components. This establishes the pattern for co-located tests.",
       "acceptance": [
         "All symbolic3 tests live directly in src/symbolic3/ (no test/ subdirectory)",
