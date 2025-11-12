@@ -216,30 +216,6 @@
       ]
     },
     {
-      "id": 12,
-      "title": "Create modern CMake foundation",
-      "description": "Establish modern CMake patterns as the foundation for all future changes:\n- Create tempura_compiler_flags INTERFACE target for compiler options\n- Create tempura_release_flags INTERFACE target for release-specific flags\n- Remove global CMAKE_CXX_FLAGS and move to target-based approach\n- Remove global INCLUDE_DIRECTORIES(\"${BASEPATH}\")\n- Add tempura:: namespace aliases for all existing libraries (symbolic3, bayes, matrix2, meta, etc.)\n- Add TEMPURA_BUILD_TESTS and TEMPURA_BUILD_EXAMPLES CMake options\n- Update root CMakeLists.txt to use modern CMake 3.28+ patterns",
-      "component": "build",
-      "priority": "high",
-      "tags": [
-        "cmake",
-        "modernization",
-        "foundation",
-        "build-system"
-      ],
-      "status": "pending",
-      "created": "2025-10-27",
-      "started": null,
-      "notes": "This is the foundation task that enables all other CMake modernization work. Eliminates global include pollution and establishes consistent patterns.",
-      "acceptance": [
-        "All libraries have tempura:: aliases via add_library(tempura::name ALIAS name)",
-        "No global INCLUDE_DIRECTORIES() calls anywhere",
-        "No global CMAKE_CXX_FLAGS setting (flags via interface targets)",
-        "Existing builds still work: ninja -C build && ctest --test-dir build passes",
-        "Can toggle tests/examples via -DTEMPURA_BUILD_TESTS=OFF"
-      ]
-    },
-    {
       "id": 13,
       "title": "Migrate symbolic3 tests to modern structure",
       "description": "Migrate symbolic3 to the new structure as the reference implementation:\n- Move all tests from src/symbolic3/test/*.cpp to src/symbolic3/*_test.cpp (flatten structure)\n- Update src/symbolic3/CMakeLists.txt to explicitly list all tests (no GLOB)\n- Add explicit dependency tracking: target_link_libraries(symbolic3 INTERFACE tempura::meta)\n- Use helper function pattern for test boilerplate reduction\n- Remove test/ subdirectory after migration\n- Update include paths to use target-based approach",
