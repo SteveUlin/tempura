@@ -227,9 +227,9 @@
         "testing",
         "matrix2"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "created": "2025-10-27",
-      "started": null,
+      "started": "2025-11-12",
       "notes": "matrix2 is marked as CANONICAL in CLAUDE.md, so ensuring its build system is clean is important for the project.",
       "acceptance": [
         "All matrix2 tests live in src/matrix2/",
