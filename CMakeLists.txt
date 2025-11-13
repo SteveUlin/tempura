@@ -95,10 +95,6 @@ endif()
 
 add_subdirectory(src)
 
-if(TEMPURA_BUILD_TESTS)
-  add_subdirectory(test)
-endif()
-
 if(TEMPURA_BUILD_EXAMPLES)
   add_subdirectory(examples)
 endif()

@@ -4,7 +4,6 @@
 #include <print>
 
 using namespace tempura;
-using namespace tempura::interpolate;
 
 auto main() -> int {
   "interpolate"_test = [] consteval {

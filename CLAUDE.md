@@ -57,7 +57,7 @@ ctest --test-dir build -R matrix2
 ctest --test-dir build -L base
 
 # Run single test directly (useful for debugging)
-./build/src/symbolic3/test/basic_test
+./build/src/symbolic3/symbolic3_basic_test
 ```
 
 **Test syntax:**
@@ -78,8 +78,8 @@ To run a specific test file directly (for debugging or focused testing):
 ninja -C build <test_name>
 
 # Run it directly
-./build/src/symbolic3/test/basic_test
-./build/test/polynomial_test
+./build/src/symbolic3/symbolic3_basic_test
+./build/src/polynomial_test
 ```
 
 ### Command Auto-Approval Policy
@@ -274,9 +274,9 @@ Interactive debugging tools (development-only, not formal tests):
 
 ```bash
 ninja -C build factoring_debug term_collecting_debug term_structure_debug
-./build/src/symbolic3/test/factoring_debug
-./build/src/symbolic3/test/term_collecting_debug
-./build/src/symbolic3/test/term_structure_debug
+./build/src/symbolic3/factoring_debug
+./build/src/symbolic3/term_collecting_debug
+./build/src/symbolic3/term_structure_debug
 ```
 
 ### Template Error Debugging
@@ -310,9 +310,9 @@ Key examples in `examples/`:
 
 ## Testing Organization
 
-Tests are organized by component:
+Tests are organized by component, co-located with their implementations:
 
-- `src/symbolic3/test/` - Symbolic computation tests
+- `src/symbolic3/` - Symbolic computation tests
   - `basic_test.cpp` - Core symbolic operations
   - `simplification_*_test.cpp` - Simplification rules and pipelines
   - `pattern_matching_test.cpp` - Pattern matching
@@ -321,8 +321,11 @@ Tests are organized by component:
   - `debug_test.cpp` - Debug utilities
   - `*_debug.cpp` - Interactive debug tools (NOT formal tests)
 
-- `src/matrix2/test/` - Matrix library tests
-- `test/` - Top-level component tests (polynomial, json, root finding, etc.)
+- `src/matrix2/` - Matrix library tests
+- `src/bayes/` - Bayes/probability distribution tests
+- `src/quadature/` - Numerical integration tests
+- `src/optimization/` - Optimization algorithm tests
+- `src/` - Top-level utility tests (polynomial, json, sequence, root_finding, interpolate, chebyshev, etc.)
 
 ## Documentation
 

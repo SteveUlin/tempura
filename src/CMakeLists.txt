@@ -132,9 +132,38 @@ if(TEMPURA_BUILD_TESTS)
 
   add_executable(broadcast_array_test broadcast_array_test.cpp)
   target_link_libraries(broadcast_array_test broadcast_array unit)
+  add_test(NAME broadcast_array_test COMMAND broadcast_array_test)
+  set_property(TEST broadcast_array_test PROPERTY LABELS base)
 
   add_executable(image_test image_test.cpp)
   target_link_libraries(image_test image unit)
+  add_test(NAME image_test COMMAND image_test)
+  set_property(TEST image_test PROPERTY LABELS base)
+
+  add_executable(polynomial_test polynomial_test.cpp)
+  target_link_libraries(polynomial_test unit polynomial)
+  add_test(NAME polynomial_test COMMAND polynomial_test)
+  set_property(TEST polynomial_test PROPERTY LABELS base)
+
+  add_executable(json_test json_test.cpp)
+  target_link_libraries(json_test unit json)
+  add_test(NAME json_test COMMAND json_test)
+  set_property(TEST json_test PROPERTY LABELS base)
+
+  add_executable(sequence_test sequence_test.cpp)
+  target_link_libraries(sequence_test unit sequence)
+  add_test(NAME sequence_test COMMAND sequence_test)
+  set_property(TEST sequence_test PROPERTY LABELS base)
+
+  add_executable(root_finding_test root_finding_test.cpp)
+  target_link_libraries(root_finding_test unit root_finding)
+  add_test(NAME root_finding_test COMMAND root_finding_test)
+  set_property(TEST root_finding_test PROPERTY LABELS base)
+
+  add_executable(interpolate_test interpolate_test.cpp)
+  target_link_libraries(interpolate_test unit interpolate)
+  add_test(NAME interpolate_test COMMAND interpolate_test)
+  set_property(TEST interpolate_test PROPERTY LABELS base)
 endif()
 
 
