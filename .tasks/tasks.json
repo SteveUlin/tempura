@@ -227,9 +227,9 @@
         "testing",
         "migration"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "created": "2025-10-27",
-      "started": null,
+      "started": "2025-11-12",
       "notes": "This is a bulk migration task. Can be split into smaller tasks if needed. Note the quadature/quadrature typo should be investigated.",
       "acceptance": [
         "All component tests live in their respective src/ directories",
