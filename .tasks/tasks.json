@@ -220,7 +220,7 @@
       "title": "Add CMake export/install targets for packaging",
       "description": "Make tempura installable and usable via find_package():\n- Add install(TARGETS ...) commands for all libraries\n- Create tempuraConfig.cmake.in for find_package support\n- Set up proper INSTALL_INTERFACE paths in target_include_directories\n- Add version configuration (tempuraConfigVersion.cmake)\n- Create installation instructions in docs/INSTALLATION.md\n- Test external project can use find_package(tempura COMPONENTS symbolic3 bayes)",
       "component": "build",
-      "priority": "high",
+      "priority": "low",
       "tags": [
         "cmake",
         "packaging",

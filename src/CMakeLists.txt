@@ -26,6 +26,7 @@
 #   - special → quadature, sequence
 #   - optimization → matrix2
 #   - bayes → broadcast_array, meta, simd, special
+#   - task → (async execution system, depends on synchronization)
 #
 # Note: All libraries implicitly depend on tempura_flags (compiler settings)
 # See docs/DEPENDENCIES.md for detailed dependency documentation
@@ -46,6 +47,7 @@ add_subdirectory(quadature)
 add_subdirectory(simd)
 add_subdirectory(special)
 add_subdirectory(synchronization)
+add_subdirectory(task)
 add_subdirectory(utility)
 
 # ============================================================================
