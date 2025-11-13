@@ -216,29 +216,6 @@
       ]
     },
     {
-      "id": 17,
-      "title": "Migrate top-level tests and remove test/ directory",
-      "description": "Complete the migration by handling remaining top-level tests:\n- Decide location for cross-cutting tests (polynomial, json, sequence, root_finding, chebyshev)\n- Option A: Move to src/ directly (alongside library definitions in src/CMakeLists.txt)\n- Option B: Create src/core/ for fundamental utilities\n- Migrate broadcast_array test to appropriate location\n- Remove test/CMakeLists.txt entirely\n- Remove add_subdirectory(test) from root CMakeLists.txt\n- Update documentation (CLAUDE.md, README) to reflect new test locations",
-      "component": "build",
-      "priority": "high",
-      "tags": [
-        "cmake",
-        "modernization",
-        "cleanup"
-      ],
-      "status": "pending",
-      "created": "2025-10-27",
-      "started": null,
-      "notes": "This is the final cleanup task that removes the test/ directory entirely. Requires decision on where cross-cutting tests should live.",
-      "acceptance": [
-        "test/ directory no longer exists",
-        "All tests discoverable via ctest --test-dir build",
-        "ctest --test-dir build runs complete suite successfully (~50+ tests)",
-        "Documentation updated with new Running Tests instructions",
-        "Build instructions in CLAUDE.md reflect new structure"
-      ]
-    },
-    {
       "id": 18,
       "title": "Add explicit dependency tracking across all libraries",
       "description": "Audit and document all library dependencies:\n- Audit all INTERFACE libraries for implicit dependencies (scan #include statements)\n- Add explicit target_link_libraries() for each dependency\n- Remove unintended transitive dependencies (e.g., bayes shouldn't expose symbolic3)\n- Document dependency graph in component CMakeLists.txt comments\n- Generate and commit dependency graph: cmake --graphviz=docs/dependencies.dot build\n- Create docs/DEPENDENCIES.md explaining the architecture",
