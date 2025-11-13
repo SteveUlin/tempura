@@ -1,9 +1,22 @@
+# ============================================================================
+# Optimization Library - Numerical optimization algorithms
+# ============================================================================
+#
+# Dependencies:
+#   - matrix2: Matrix operations for multi-dimensional optimization
+#   - tempura_flags: Compiler settings
+#
+# ============================================================================
+
 add_library(optimization INTERFACE)
 target_include_directories(optimization INTERFACE
   $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
   $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(optimization INTERFACE tempura_flags)
+target_link_libraries(optimization INTERFACE
+    tempura::matrix2
+    tempura_flags
+)
 add_library(tempura::optimization ALIAS optimization)
 
 # ============================================================================

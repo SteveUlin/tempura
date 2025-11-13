@@ -1,0 +1,367 @@
+digraph "tempura" {
+node [
+  fontsize = "12"
+];
+subgraph clusterLegend {
+  label = "Legend";
+  color = black;
+  edge [ style = invis ];
+  legendNode0 [ label = "Executable", shape = egg ];
+  legendNode1 [ label = "Static Library", shape = octagon ];
+  legendNode2 [ label = "Shared Library", shape = doubleoctagon ];
+  legendNode3 [ label = "Module Library", shape = tripleoctagon ];
+  legendNode4 [ label = "Interface Library", shape = pentagon ];
+  legendNode5 [ label = "Object Library", shape = hexagon ];
+  legendNode6 [ label = "Unknown Library", shape = septagon ];
+  legendNode7 [ label = "Custom Target", shape = box ];
+  legendNode0 -> legendNode1 [ style = solid ];
+  legendNode0 -> legendNode2 [ style = solid ];
+  legendNode0 -> legendNode3;
+  legendNode1 -> legendNode4 [ label = "Interface", style = dashed ];
+  legendNode2 -> legendNode5 [ label = "Private", style = dotted ];
+  legendNode3 -> legendNode6 [ style = solid ];
+  legendNode0 -> legendNode7;
+}
+    "node0" [ label = "bayes\n(tempura::bayes)", shape = pentagon ];
+    "node1" [ label = "broadcast_array\n(tempura::broadcast_array)", shape = pentagon ];
+    "node2" [ label = "tempura_flags", shape = pentagon ];
+    "node3" [ label = "tempura_compiler_flags", shape = pentagon ];
+    "node2" -> "node3" [ style = dashed ] // tempura_flags -> tempura_compiler_flags
+    "node4" [ label = "tempura_release_flags", shape = pentagon ];
+    "node2" -> "node4" [ style = dashed ] // tempura_flags -> tempura_release_flags
+    "node1" -> "node2" [ style = dashed ] // broadcast_array -> tempura_flags
+    "node0" -> "node1" [ style = dashed ] // bayes -> broadcast_array
+    "node5" [ label = "meta\n(tempura::meta)", shape = pentagon ];
+    "node5" -> "node2" [ style = dashed ] // meta -> tempura_flags
+    "node0" -> "node5" [ style = dashed ] // bayes -> meta
+    "node6" [ label = "simd\n(tempura::simd)", shape = pentagon ];
+    "node6" -> "node2" [ style = dashed ] // simd -> tempura_flags
+    "node0" -> "node6" [ style = dashed ] // bayes -> simd
+    "node7" [ label = "special\n(tempura::special)", shape = pentagon ];
+    "node8" [ label = "quadature\n(tempura::quadature)", shape = pentagon ];
+    "node8" -> "node1" [ style = dashed ] // quadature -> broadcast_array
+    "node9" [ label = "interpolate\n(tempura::interpolate)", shape = pentagon ];
+    "node9" -> "node2" [ style = dashed ] // interpolate -> tempura_flags
+    "node8" -> "node9" [ style = dashed ] // quadature -> interpolate
+    "node8" -> "node2" [ style = dashed ] // quadature -> tempura_flags
+    "node7" -> "node8" [ style = dashed ] // special -> quadature
+    "node10" [ label = "sequence\n(tempura::sequence)", shape = pentagon ];
+    "node10" -> "node2" [ style = dashed ] // sequence -> tempura_flags
+    "node7" -> "node10" [ style = dashed ] // special -> sequence
+    "node7" -> "node2" [ style = dashed ] // special -> tempura_flags
+    "node0" -> "node7" [ style = dashed ] // bayes -> special
+    "node0" -> "node2" [ style = dashed ] // bayes -> tempura_flags
+    "node11" [ label = "bayes_bernoulli_test", shape = egg ];
+    "node11" -> "node0" [ style = dotted ] // bayes_bernoulli_test -> bayes
+    "node12" [ label = "unit\n(tempura::unit)", shape = pentagon ];
+    "node12" -> "node2" [ style = dashed ] // unit -> tempura_flags
+    "node11" -> "node12" [ style = dotted ] // bayes_bernoulli_test -> unit
+    "node13" [ label = "bayes_beta_test", shape = egg ];
+    "node13" -> "node0" [ style = dotted ] // bayes_beta_test -> bayes
+    "node13" -> "node12" [ style = dotted ] // bayes_beta_test -> unit
+    "node14" [ label = "bayes_binomial_test", shape = egg ];
+    "node14" -> "node0" [ style = dotted ] // bayes_binomial_test -> bayes
+    "node14" -> "node12" [ style = dotted ] // bayes_binomial_test -> unit
+    "node15" [ label = "bayes_cauchy_test", shape = egg ];
+    "node15" -> "node0" [ style = dotted ] // bayes_cauchy_test -> bayes
+    "node15" -> "node12" [ style = dotted ] // bayes_cauchy_test -> unit
+    "node16" [ label = "bayes_exponential_test", shape = egg ];
+    "node16" -> "node0" [ style = dotted ] // bayes_exponential_test -> bayes
+    "node16" -> "node12" [ style = dotted ] // bayes_exponential_test -> unit
+    "node17" [ label = "bayes_gamma_test", shape = egg ];
+    "node17" -> "node0" [ style = dotted ] // bayes_gamma_test -> bayes
+    "node17" -> "node12" [ style = dotted ] // bayes_gamma_test -> unit
+    "node18" [ label = "bayes_logistic_test", shape = egg ];
+    "node18" -> "node0" [ style = dotted ] // bayes_logistic_test -> bayes
+    "node18" -> "node12" [ style = dotted ] // bayes_logistic_test -> unit
+    "node19" [ label = "bayes_normal_test", shape = egg ];
+    "node19" -> "node0" [ style = dotted ] // bayes_normal_test -> bayes
+    "node19" -> "node12" [ style = dotted ] // bayes_normal_test -> unit
+    "node20" [ label = "bayes_random_simd_test", shape = egg ];
+    "node20" -> "node0" [ style = dotted ] // bayes_random_simd_test -> bayes
+    "node20" -> "node12" [ style = dotted ] // bayes_random_simd_test -> unit
+    "node21" [ label = "bayes_random_test", shape = egg ];
+    "node21" -> "node0" [ style = dotted ] // bayes_random_test -> bayes
+    "node21" -> "node12" [ style = dotted ] // bayes_random_test -> unit
+    "node22" [ label = "bayes_rng_tests_test", shape = egg ];
+    "node22" -> "node0" [ style = dotted ] // bayes_rng_tests_test -> bayes
+    "node22" -> "node12" [ style = dotted ] // bayes_rng_tests_test -> unit
+    "node23" [ label = "bayes_uniform_test", shape = egg ];
+    "node23" -> "node0" [ style = dotted ] // bayes_uniform_test -> bayes
+    "node23" -> "node12" [ style = dotted ] // bayes_uniform_test -> unit
+    "node24" [ label = "benchmark\n(tempura::benchmark)", shape = pentagon ];
+    "node24" -> "node2" [ style = dashed ] // benchmark -> tempura_flags
+    "node25" [ label = "broadcast_array_test", shape = egg ];
+    "node25" -> "node1" [ style = dotted ] // broadcast_array_test -> broadcast_array
+    "node25" -> "node12" [ style = dotted ] // broadcast_array_test -> unit
+    "node26" [ label = "chebyshev\n(tempura::chebyshev)", shape = pentagon ];
+    "node26" -> "node2" [ style = dashed ] // chebyshev -> tempura_flags
+    "node27" [ label = "chebyshev_test", shape = egg ];
+    "node27" -> "node26" [ style = dotted ] // chebyshev_test -> chebyshev
+    "node27" -> "node12" [ style = dotted ] // chebyshev_test -> unit
+    "node28" [ label = "composable_predicates_test", shape = egg ];
+    "node29" [ label = "symbolic3\n(tempura::symbolic3)", shape = pentagon ];
+    "node29" -> "node5" [ style = dashed ] // symbolic3 -> meta
+    "node29" -> "node2" [ style = dashed ] // symbolic3 -> tempura_flags
+    "node28" -> "node29" [ style = dotted ] // composable_predicates_test -> symbolic3
+    "node28" -> "node12" [ style = dotted ] // composable_predicates_test -> unit
+    "node30" [ label = "cos\n(tempura::cos)", shape = pentagon ];
+    "node30" -> "node2" [ style = dashed ] // cos -> tempura_flags
+    "node31" [ label = "cos_test", shape = egg ];
+    "node31" -> "node30" [ style = dotted ] // cos_test -> cos
+    "node31" -> "node12" [ style = dotted ] // cos_test -> unit
+    "node32" [ label = "debug_test", shape = egg ];
+    "node32" -> "node29" [ style = dotted ] // debug_test -> symbolic3
+    "node32" -> "node12" [ style = dotted ] // debug_test -> unit
+    "node33" [ label = "derivative_test", shape = egg ];
+    "node33" -> "node29" [ style = dotted ] // derivative_test -> symbolic3
+    "node34" [ label = "evaluate_test", shape = egg ];
+    "node34" -> "node29" [ style = dotted ] // evaluate_test -> symbolic3
+    "node34" -> "node12" [ style = dotted ] // evaluate_test -> unit
+    "node35" [ label = "exact_division_test", shape = egg ];
+    "node35" -> "node29" [ style = dotted ] // exact_division_test -> symbolic3
+    "node35" -> "node12" [ style = dotted ] // exact_division_test -> unit
+    "node36" [ label = "exp\n(tempura::exp)", shape = pentagon ];
+    "node36" -> "node2" [ style = dashed ] // exp -> tempura_flags
+    "node37" [ label = "exp_test", shape = egg ];
+    "node37" -> "node36" [ style = dotted ] // exp_test -> exp
+    "node37" -> "node12" [ style = dotted ] // exp_test -> unit
+    "node38" [ label = "factoring_debug", shape = egg ];
+    "node38" -> "node29" [ style = dotted ] // factoring_debug -> symbolic3
+    "node38" -> "node12" [ style = dotted ] // factoring_debug -> unit
+    "node39" [ label = "fifo_queue\n(tempura::fifo_queue)", shape = pentagon ];
+    "node39" -> "node2" [ style = dashed ] // fifo_queue -> tempura_flags
+    "node40" [ label = "fifo_queue_test", shape = egg ];
+    "node40" -> "node24" [ style = dotted ] // fifo_queue_test -> benchmark
+    "node40" -> "node39" [ style = dotted ] // fifo_queue_test -> fifo_queue
+    "node41" [ label = "profiler\n(tempura::profiler)", shape = doubleoctagon ];
+    "node41" -> "node2"  // profiler -> tempura_flags
+    "node40" -> "node41" [ style = dotted ] // fifo_queue_test -> profiler
+    "node40" -> "node12" [ style = dotted ] // fifo_queue_test -> unit
+    "node42" [ label = "fraction_test", shape = egg ];
+    "node42" -> "node29" [ style = dotted ] // fraction_test -> symbolic3
+    "node42" -> "node12" [ style = dotted ] // fraction_test -> unit
+    "node43" [ label = "function_traits\n(tempura::function_traits)", shape = pentagon ];
+    "node43" -> "node2" [ style = dashed ] // function_traits -> tempura_flags
+    "node44" [ label = "guarded\n(tempura::guarded)", shape = pentagon ];
+    "node44" -> "node2" [ style = dashed ] // guarded -> tempura_flags
+    "node45" [ label = "guarded_test", shape = egg ];
+    "node45" -> "node44" [ style = dotted ] // guarded_test -> guarded
+    "node45" -> "node12" [ style = dotted ] // guarded_test -> unit
+    "node46" [ label = "hierarchical_mutex\n(tempura::hierarchical_mutex)", shape = pentagon ];
+    "node46" -> "node2" [ style = dashed ] // hierarchical_mutex -> tempura_flags
+    "node47" [ label = "hierarchical_mutex_test", shape = egg ];
+    "node47" -> "node46" [ style = dotted ] // hierarchical_mutex_test -> hierarchical_mutex
+    "node47" -> "node12" [ style = dotted ] // hierarchical_mutex_test -> unit
+    "node48" [ label = "hyperbolic_test", shape = egg ];
+    "node48" -> "node29" [ style = dotted ] // hyperbolic_test -> symbolic3
+    "node48" -> "node12" [ style = dotted ] // hyperbolic_test -> unit
+    "node49" [ label = "image\n(tempura::image)", shape = pentagon ];
+    "node49" -> "node2" [ style = dashed ] // image -> tempura_flags
+    "node50" [ label = "image_test", shape = egg ];
+    "node50" -> "node49" [ style = dotted ] // image_test -> image
+    "node50" -> "node12" [ style = dotted ] // image_test -> unit
+    "node51" [ label = "interpolate_test", shape = egg ];
+    "node51" -> "node9" [ style = dotted ] // interpolate_test -> interpolate
+    "node51" -> "node12" [ style = dotted ] // interpolate_test -> unit
+    "node52" [ label = "json\n(tempura::json)", shape = pentagon ];
+    "node52" -> "node2" [ style = dashed ] // json -> tempura_flags
+    "node53" [ label = "json_test", shape = egg ];
+    "node53" -> "node52" [ style = dotted ] // json_test -> json
+    "node53" -> "node12" [ style = dotted ] // json_test -> unit
+    "node54" [ label = "matching_test", shape = egg ];
+    "node54" -> "node29" [ style = dotted ] // matching_test -> symbolic3
+    "node54" -> "node12" [ style = dotted ] // matching_test -> unit
+    "node55" [ label = "matrix2\n(tempura::matrix2)", shape = pentagon ];
+    "node55" -> "node2" [ style = dashed ] // matrix2 -> tempura_flags
+    "node56" [ label = "matrix2_addition_test", shape = egg ];
+    "node56" -> "node55" [ style = dotted ] // matrix2_addition_test -> matrix2
+    "node56" -> "node12" [ style = dotted ] // matrix2_addition_test -> unit
+    "node57" [ label = "matrix2_banded_test", shape = egg ];
+    "node57" -> "node55" [ style = dotted ] // matrix2_banded_test -> matrix2
+    "node57" -> "node12" [ style = dotted ] // matrix2_banded_test -> unit
+    "node58" [ label = "matrix2_block_test", shape = egg ];
+    "node58" -> "node55" [ style = dotted ] // matrix2_block_test -> matrix2
+    "node58" -> "node12" [ style = dotted ] // matrix2_block_test -> unit
+    "node59" [ label = "matrix2_complex_test", shape = egg ];
+    "node59" -> "node55" [ style = dotted ] // matrix2_complex_test -> matrix2
+    "node59" -> "node12" [ style = dotted ] // matrix2_complex_test -> unit
+    "node60" [ label = "matrix2_dense_test", shape = egg ];
+    "node60" -> "node55" [ style = dotted ] // matrix2_dense_test -> matrix2
+    "node60" -> "node12" [ style = dotted ] // matrix2_dense_test -> unit
+    "node61" [ label = "matrix2_gauss_jordan_test", shape = egg ];
+    "node61" -> "node55" [ style = dotted ] // matrix2_gauss_jordan_test -> matrix2
+    "node61" -> "node12" [ style = dotted ] // matrix2_gauss_jordan_test -> unit
+    "node62" [ label = "matrix2_identity_test", shape = egg ];
+    "node62" -> "node55" [ style = dotted ] // matrix2_identity_test -> matrix2
+    "node62" -> "node12" [ style = dotted ] // matrix2_identity_test -> unit
+    "node63" [ label = "matrix2_inline_coordinate_list_test", shape = egg ];
+    "node63" -> "node55" [ style = dotted ] // matrix2_inline_coordinate_list_test -> matrix2
+    "node63" -> "node12" [ style = dotted ] // matrix2_inline_coordinate_list_test -> unit
+    "node64" [ label = "matrix2_inline_dense_test", shape = egg ];
+    "node64" -> "node55" [ style = dotted ] // matrix2_inline_dense_test -> matrix2
+    "node64" -> "node12" [ style = dotted ] // matrix2_inline_dense_test -> unit
+    "node65" [ label = "matrix2_lu_decomposition_test", shape = egg ];
+    "node65" -> "node55" [ style = dotted ] // matrix2_lu_decomposition_test -> matrix2
+    "node65" -> "node12" [ style = dotted ] // matrix2_lu_decomposition_test -> unit
+    "node66" [ label = "matrix2_matrix_test", shape = egg ];
+    "node66" -> "node55" [ style = dotted ] // matrix2_matrix_test -> matrix2
+    "node66" -> "node12" [ style = dotted ] // matrix2_matrix_test -> unit
+    "node67" [ label = "matrix2_multiplication_test", shape = egg ];
+    "node67" -> "node55" [ style = dotted ] // matrix2_multiplication_test -> matrix2
+    "node67" -> "node12" [ style = dotted ] // matrix2_multiplication_test -> unit
+    "node68" [ label = "matrix2_permutation_test", shape = egg ];
+    "node68" -> "node55" [ style = dotted ] // matrix2_permutation_test -> matrix2
+    "node68" -> "node12" [ style = dotted ] // matrix2_permutation_test -> unit
+    "node69" [ label = "matrix2_permuted_test", shape = egg ];
+    "node69" -> "node55" [ style = dotted ] // matrix2_permuted_test -> matrix2
+    "node69" -> "node12" [ style = dotted ] // matrix2_permuted_test -> unit
+    "node70" [ label = "matrix2_to_string_test", shape = egg ];
+    "node70" -> "node55" [ style = dotted ] // matrix2_to_string_test -> matrix2
+    "node70" -> "node12" [ style = dotted ] // matrix2_to_string_test -> unit
+    "node71" [ label = "matrix3\n(tempura::matrix3)", shape = pentagon ];
+    "node71" -> "node2" [ style = dashed ] // matrix3 -> tempura_flags
+    "node72" [ label = "matrix3_base_test", shape = egg ];
+    "node72" -> "node71" [ style = dotted ] // matrix3_base_test -> matrix3
+    "node72" -> "node12" [ style = dotted ] // matrix3_base_test -> unit
+    "node73" [ label = "meta_expression_test", shape = egg ];
+    "node73" -> "node5" [ style = dotted ] // meta_expression_test -> meta
+    "node73" -> "node12" [ style = dotted ] // meta_expression_test -> unit
+    "node74" [ label = "meta_macro_utils_test", shape = egg ];
+    "node74" -> "node5" [ style = dotted ] // meta_macro_utils_test -> meta
+    "node74" -> "node12" [ style = dotted ] // meta_macro_utils_test -> unit
+    "node75" [ label = "meta_meta_test", shape = egg ];
+    "node75" -> "node5" [ style = dotted ] // meta_meta_test -> meta
+    "node75" -> "node12" [ style = dotted ] // meta_meta_test -> unit
+    "node76" [ label = "meta_static_string_display_test", shape = egg ];
+    "node76" -> "node5" [ style = dotted ] // meta_static_string_display_test -> meta
+    "node76" -> "node12" [ style = dotted ] // meta_static_string_display_test -> unit
+    "node77" [ label = "meta_tuple_test", shape = egg ];
+    "node77" -> "node5" [ style = dotted ] // meta_tuple_test -> meta
+    "node77" -> "node12" [ style = dotted ] // meta_tuple_test -> unit
+    "node78" [ label = "meta_type_sort_test", shape = egg ];
+    "node78" -> "node5" [ style = dotted ] // meta_type_sort_test -> meta
+    "node78" -> "node12" [ style = dotted ] // meta_type_sort_test -> unit
+    "node79" [ label = "mult_ordering_test", shape = egg ];
+    "node79" -> "node29" [ style = dotted ] // mult_ordering_test -> symbolic3
+    "node79" -> "node12" [ style = dotted ] // mult_ordering_test -> unit
+    "node80" [ label = "normal_bench", shape = egg ];
+    "node80" -> "node0" [ style = dotted ] // normal_bench -> bayes
+    "node80" -> "node24" [ style = dotted ] // normal_bench -> benchmark
+    "node80" -> "node12" [ style = dotted ] // normal_bench -> unit
+    "node81" [ label = "operator_display_test", shape = egg ];
+    "node81" -> "node29" [ style = dotted ] // operator_display_test -> symbolic3
+    "node81" -> "node12" [ style = dotted ] // operator_display_test -> unit
+    "node82" [ label = "optimization\n(tempura::optimization)", shape = pentagon ];
+    "node82" -> "node55" [ style = dashed ] // optimization -> matrix2
+    "node82" -> "node2" [ style = dashed ] // optimization -> tempura_flags
+    "node83" [ label = "optimization_bracket_method_test", shape = egg ];
+    "node83" -> "node82" [ style = dotted ] // optimization_bracket_method_test -> optimization
+    "node83" -> "node12" [ style = dotted ] // optimization_bracket_method_test -> unit
+    "node84" [ label = "optimization_downhill_simplex_test", shape = egg ];
+    "node84" -> "node82" [ style = dotted ] // optimization_downhill_simplex_test -> optimization
+    "node84" -> "node12" [ style = dotted ] // optimization_downhill_simplex_test -> unit
+    "node85" [ label = "oscillation_prevention_test", shape = egg ];
+    "node85" -> "node29" [ style = dotted ] // oscillation_prevention_test -> symbolic3
+    "node85" -> "node12" [ style = dotted ] // oscillation_prevention_test -> unit
+    "node86" [ label = "pattern_binding_test", shape = egg ];
+    "node86" -> "node29" [ style = dotted ] // pattern_binding_test -> symbolic3
+    "node86" -> "node12" [ style = dotted ] // pattern_binding_test -> unit
+    "node87" [ label = "polynomial\n(tempura::polynomial)", shape = pentagon ];
+    "node87" -> "node2" [ style = dashed ] // polynomial -> tempura_flags
+    "node88" [ label = "polynomial_test", shape = egg ];
+    "node88" -> "node87" [ style = dotted ] // polynomial_test -> polynomial
+    "node88" -> "node12" [ style = dotted ] // polynomial_test -> unit
+    "node89" [ label = "pretty_print_test", shape = egg ];
+    "node89" -> "node29" [ style = dotted ] // pretty_print_test -> symbolic3
+    "node89" -> "node12" [ style = dotted ] // pretty_print_test -> unit
+    "node90" [ label = "quadature_gaussian_test", shape = egg ];
+    "node90" -> "node8" [ style = dotted ] // quadature_gaussian_test -> quadature
+    "node90" -> "node12" [ style = dotted ] // quadature_gaussian_test -> unit
+    "node91" [ label = "quadature_improper_test", shape = egg ];
+    "node91" -> "node8" [ style = dotted ] // quadature_improper_test -> quadature
+    "node91" -> "node12" [ style = dotted ] // quadature_improper_test -> unit
+    "node92" [ label = "quadature_monte_carlo_test", shape = egg ];
+    "node92" -> "node8" [ style = dotted ] // quadature_monte_carlo_test -> quadature
+    "node92" -> "node12" [ style = dotted ] // quadature_monte_carlo_test -> unit
+    "node93" [ label = "quadature_newton_cotes_test", shape = egg ];
+    "node93" -> "node8" [ style = dotted ] // quadature_newton_cotes_test -> quadature
+    "node93" -> "node12" [ style = dotted ] // quadature_newton_cotes_test -> unit
+    "node94" [ label = "rng_quality_report", shape = egg ];
+    "node94" -> "node0" [ style = dotted ] // rng_quality_report -> bayes
+    "node95" [ label = "rng_simd_quality_report", shape = egg ];
+    "node95" -> "node0" [ style = dotted ] // rng_simd_quality_report -> bayes
+    "node95" -> "node6" [ style = dotted ] // rng_simd_quality_report -> simd
+    "node96" [ label = "root_finding\n(tempura::root_finding)", shape = pentagon ];
+    "node96" -> "node2" [ style = dashed ] // root_finding -> tempura_flags
+    "node97" [ label = "root_finding_test", shape = egg ];
+    "node97" -> "node96" [ style = dotted ] // root_finding_test -> root_finding
+    "node97" -> "node12" [ style = dotted ] // root_finding_test -> unit
+    "node98" [ label = "sequence_test", shape = egg ];
+    "node98" -> "node10" [ style = dotted ] // sequence_test -> sequence
+    "node98" -> "node12" [ style = dotted ] // sequence_test -> unit
+    "node99" [ label = "simd_test", shape = egg ];
+    "node99" -> "node6" [ style = dotted ] // simd_test -> simd
+    "node99" -> "node12" [ style = dotted ] // simd_test -> unit
+    "node100" [ label = "simplification_advanced_test", shape = egg ];
+    "node100" -> "node29" [ style = dotted ] // simplification_advanced_test -> symbolic3
+    "node100" -> "node12" [ style = dotted ] // simplification_advanced_test -> unit
+    "node101" [ label = "simplification_basic_test", shape = egg ];
+    "node101" -> "node29" [ style = dotted ] // simplification_basic_test -> symbolic3
+    "node101" -> "node12" [ style = dotted ] // simplification_basic_test -> unit
+    "node102" [ label = "simplification_pipeline_test", shape = egg ];
+    "node102" -> "node29" [ style = dotted ] // simplification_pipeline_test -> symbolic3
+    "node102" -> "node12" [ style = dotted ] // simplification_pipeline_test -> unit
+    "node103" [ label = "sin\n(tempura::sin)", shape = pentagon ];
+    "node103" -> "node2" [ style = dashed ] // sin -> tempura_flags
+    "node104" [ label = "sin_test", shape = egg ];
+    "node104" -> "node103" [ style = dotted ] // sin_test -> sin
+    "node104" -> "node12" [ style = dotted ] // sin_test -> unit
+    "node105" [ label = "sophisticated_sorting_demo", shape = egg ];
+    "node105" -> "node29" [ style = dotted ] // sophisticated_sorting_demo -> symbolic3
+    "node105" -> "node12" [ style = dotted ] // sophisticated_sorting_demo -> unit
+    "node106" [ label = "symbolic3_basic_test", shape = egg ];
+    "node106" -> "node29" [ style = dotted ] // symbolic3_basic_test -> symbolic3
+    "node106" -> "node12" [ style = dotted ] // symbolic3_basic_test -> unit
+    "node107" [ label = "term_collecting_debug", shape = egg ];
+    "node107" -> "node29" [ style = dotted ] // term_collecting_debug -> symbolic3
+    "node107" -> "node12" [ style = dotted ] // term_collecting_debug -> unit
+    "node108" [ label = "term_ordering_test", shape = egg ];
+    "node108" -> "node29" [ style = dotted ] // term_ordering_test -> symbolic3
+    "node108" -> "node12" [ style = dotted ] // term_ordering_test -> unit
+    "node109" [ label = "term_structure_test", shape = egg ];
+    "node109" -> "node29" [ style = dotted ] // term_structure_test -> symbolic3
+    "node109" -> "node12" [ style = dotted ] // term_structure_test -> unit
+    "node110" [ label = "threadpool\n(tempura::threadpool)", shape = doubleoctagon ];
+    "node110" -> "node2"  // threadpool -> tempura_flags
+    "node111" [ label = "threadpool_test", shape = egg ];
+    "node111" -> "node41" [ style = dotted ] // threadpool_test -> profiler
+    "node111" -> "node110" [ style = dotted ] // threadpool_test -> threadpool
+    "node111" -> "node12" [ style = dotted ] // threadpool_test -> unit
+    "node112" [ label = "threadsafe_queue\n(tempura::threadsafe_queue)", shape = pentagon ];
+    "node112" -> "node2" [ style = dashed ] // threadsafe_queue -> tempura_flags
+    "node113" [ label = "threadsafe_queue_test", shape = egg ];
+    "node113" -> "node112" [ style = dotted ] // threadsafe_queue_test -> threadsafe_queue
+    "node113" -> "node12" [ style = dotted ] // threadsafe_queue_test -> unit
+    "node114" [ label = "threadsafe_stack\n(tempura::threadsafe_stack)", shape = pentagon ];
+    "node114" -> "node2" [ style = dashed ] // threadsafe_stack -> tempura_flags
+    "node115" [ label = "threadsafe_stack_test", shape = egg ];
+    "node115" -> "node114" [ style = dotted ] // threadsafe_stack_test -> threadsafe_stack
+    "node115" -> "node12" [ style = dotted ] // threadsafe_stack_test -> unit
+    "node116" [ label = "to_string_test", shape = egg ];
+    "node116" -> "node29" [ style = dotted ] // to_string_test -> symbolic3
+    "node116" -> "node12" [ style = dotted ] // to_string_test -> unit
+    "node117" [ label = "two_stage_simplify_test", shape = egg ];
+    "node117" -> "node29" [ style = dotted ] // two_stage_simplify_test -> symbolic3
+    "node117" -> "node12" [ style = dotted ] // two_stage_simplify_test -> unit
+    "node118" [ label = "utility\n(tempura::utility)", shape = pentagon ];
+    "node118" -> "node2" [ style = dashed ] // utility -> tempura_flags
+    "node119" [ label = "utility_overloaded_test", shape = egg ];
+    "node119" -> "node12" [ style = dotted ] // utility_overloaded_test -> unit
+    "node119" -> "node118" [ style = dotted ] // utility_overloaded_test -> utility
+    "node120" [ label = "vector_to_array\n(tempura::vector_to_array)", shape = pentagon ];
+    "node120" -> "node2" [ style = dashed ] // vector_to_array -> tempura_flags
+    "node121" [ label = "vector_to_array_test", shape = egg ];
+    "node121" -> "node12" [ style = dotted ] // vector_to_array_test -> unit
+    "node121" -> "node120" [ style = dotted ] // vector_to_array_test -> vector_to_array
+}

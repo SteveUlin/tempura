@@ -1,6 +1,36 @@
 # ============================================================================
 # Component Subdirectories
 # ============================================================================
+#
+# Dependency Graph (→ means "depends on"):
+#
+# Core Infrastructure (no dependencies):
+#   - meta: Template metaprogramming utilities
+#   - simd: SIMD vectorization primitives
+#   - utility: General utility functions
+#   - synchronization: Thread-safe data structures
+#   - matrix2: Constexpr-first matrix library
+#
+# Top-level Libraries (minimal dependencies):
+#   - broadcast_array → (none)
+#   - sequence → (none)
+#   - interpolate → (none)
+#   - polynomial, json, chebyshev, root_finding, image, unit → (none)
+#
+# Mid-level Libraries (depend on infrastructure):
+#   - symbolic3 → meta
+#   - quadature → broadcast_array, interpolate
+#   - math (sin, cos, exp) → (none)
+#
+# High-level Libraries (depend on mid-level):
+#   - special → quadature, sequence
+#   - optimization → matrix2
+#   - bayes → broadcast_array, meta, simd, special
+#
+# Note: All libraries implicitly depend on tempura_flags (compiler settings)
+# See docs/DEPENDENCIES.md for detailed dependency documentation
+# See docs/dependencies.dot for visual dependency graph
+# ============================================================================
 
 # add_subdirectory(autodiff)
 # add_subdirectory(cuda)

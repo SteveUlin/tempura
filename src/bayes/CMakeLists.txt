@@ -1,6 +1,15 @@
 # ============================================================================
 # Bayes Library - Probability distributions and statistical inference
 # ============================================================================
+#
+# Dependencies:
+#   - broadcast_array: Array broadcasting for vectorized operations
+#   - meta: Type metaprogramming for distribution traits
+#   - simd: SIMD vectorization for random number generation
+#   - special: Special functions (gamma, erf) for distributions
+#   - tempura_flags: Compiler settings
+#
+# ============================================================================
 
 add_library(bayes INTERFACE)
 target_include_directories(bayes INTERFACE
@@ -10,6 +19,8 @@ target_include_directories(bayes INTERFACE
 target_link_libraries(bayes INTERFACE
     tempura::broadcast_array
     tempura::meta
+    tempura::simd
+    tempura::special
     tempura_flags
 )
 add_library(tempura::bayes ALIAS bayes)

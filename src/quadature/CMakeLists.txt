@@ -1,9 +1,24 @@
+# ============================================================================
+# Quadrature Library - Numerical integration methods
+# ============================================================================
+#
+# Dependencies:
+#   - broadcast_array: Array operations for integration algorithms
+#   - interpolate: Polynomial interpolation for Gaussian quadrature
+#   - tempura_flags: Compiler settings
+#
+# ============================================================================
+
 add_library(quadature INTERFACE)
 target_include_directories(quadature INTERFACE
   $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
   $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(quadature INTERFACE tempura_flags)
+target_link_libraries(quadature INTERFACE
+    tempura::broadcast_array
+    tempura::interpolate
+    tempura_flags
+)
 add_library(tempura::quadature ALIAS quadature)
 
 # ============================================================================

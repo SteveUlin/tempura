@@ -1,4 +1,14 @@
+# ============================================================================
 # Symbolic3: Combinator-based symbolic computation system
+# ============================================================================
+#
+# Dependencies:
+#   - meta: Type metaprogramming for symbol identity and type manipulation
+#   - tempura_flags: Compiler settings
+#
+# Key Design: Uses stateless lambdas for unique type identity, enabling
+# compile-time symbolic computation with zero runtime overhead.
+# ============================================================================
 
 add_library(symbolic3 INTERFACE)
 target_include_directories(symbolic3 INTERFACE
