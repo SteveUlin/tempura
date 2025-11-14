@@ -17,6 +17,25 @@
 using namespace tempura;
 
 // ============================================================================
+// Concept Tests
+// ============================================================================
+
+// Verify that valid senders satisfy the Sender concept
+static_assert(Sender<JustSender<int>>);
+static_assert(Sender<decltype(just(42))>);
+static_assert(Sender<decltype(just(42) | then([](int x) { return x * 2; }))>);
+
+// Verify that SenderTo works correctly
+static_assert(SenderTo<JustSender<int>, ValueReceiver<int>>);
+static_assert(SenderTo<decltype(just(42)), PrintReceiver<int>>);
+
+// Types without ValueTypes should not satisfy Sender
+struct NotASender {
+  // Missing: using ValueTypes = ...;
+};
+static_assert(!Sender<NotASender>);
+
+// ============================================================================
 // Helper Types
 // ============================================================================
 
@@ -38,8 +57,22 @@ auto main() -> int {
     expectEq(std::make_tuple(42), *result);
   };
 
+  "just() helper - single value"_test = [] {
+    auto result = syncWait(just(42));
+    if (!expectTrue(result.has_value())) return;
+    expectEq(std::make_tuple(42), *result);
+  };
+
+  "just() helper - multiple values"_test = [] {
+    auto [num, str, pi] = syncWait(just(100, std::string{"hello"}, 3.14)).value();
+    expectEq(num, 100);
+    expectEq(str, std::string{"hello"});
+    expectEq(pi, 3.14);
+  };
+
   "JustSender - multiple values"_test = [] {
-    auto [num, str, pi] = syncWait(JustSender{100, std::string{"hello"}, 3.14}).value();
+    auto [num, str, pi] =
+        syncWait(JustSender{100, std::string{"hello"}, 3.14}).value();
     expectEq(num, 100);
     expectEq(str, std::string{"hello"});
     expectEq(pi, 3.14);
@@ -66,10 +99,10 @@ auto main() -> int {
     std::optional<std::tuple<int>> value;
     ValueReceiver<int> recv{value};
 
-    recv.SetValue(42);
+    recv.setValue(42);
     expectTrue(value.has_value());
 
-    recv.SetError(std::make_error_code(std::errc::invalid_argument));
+    recv.setError(std::make_error_code(std::errc::invalid_argument));
     expectFalse(value.has_value());
   };
 
@@ -78,19 +111,19 @@ auto main() -> int {
   };
 
   // ==========================================================================
-  // Then / Pipe Operators
+  // then / Pipe Operators
   // ==========================================================================
 
-  "Then - basic transformation"_test = [] {
-    auto sender = Then(JustSender{21}, [](int x) { return x * 2; });
+  "then - basic transformation"_test = [] {
+    auto sender = then(just(21), [](int x) { return x * 2; });
     auto result = syncWait(std::move(sender));
     if (expectTrue(result.has_value())) {
       expectEq(std::get<0>(*result), 42);
     }
   };
 
-  "Then - chained"_test = [] {
-    auto sender = Then(Then(JustSender{10}, [](int x) { return x + 5; }),
+  "then - chained"_test = [] {
+    auto sender = then(then(just(10), [](int x) { return x + 5; }),
                        [](int x) { return x * 2; });
     auto result = syncWait(std::move(sender));
     if (expectTrue(result.has_value())) {
@@ -99,9 +132,8 @@ auto main() -> int {
   };
 
   "Pipe operator - chained transformations"_test = [] {
-    auto sender = JustSender{2} |
-                  Then([](int x) { return x + 3; }) |
-                  Then([](int x) { return x * 4; });
+    auto sender = just(2) | then([](int x) { return x + 3; }) |
+                  then([](int x) { return x * 4; });
     auto result = syncWait(std::move(sender));
     if (expectTrue(result.has_value())) {
       expectEq(std::get<0>(*result), 20);  // (2 + 3) * 4

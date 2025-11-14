@@ -1,8 +1,9 @@
 // Async Task Execution System - Sender/Receiver Model
 //
 // This file provides a compile-time task expression system based on the P2300
-// sender/receiver model. Senders are types (not runtime objects) that describe
-// asynchronous work without executing it.
+// sender/receiver model. Senders are types that describe asynchronous work
+// without executing it. Each sender exposes its value types through a
+// `ValueTypes` alias for compile-time type deduction.
 
 #pragma once
 
@@ -17,36 +18,12 @@
 namespace tempura {
 
 // ============================================================================
-// Type Extraction Utilities
-// ============================================================================
-
-// Universal probe receiver - accepts any value types
-// Operation states can connect to this to expose their value types
-struct ProbeReceiver {
-  template <typename... Args>
-  void SetValue(Args&&...) noexcept {}
-
-  void SetError(std::error_code) noexcept {}
-  void SetStopped() noexcept {}
-};
-
-// Automatically extract value types from a sender by:
-// 1. Connecting it to ProbeReceiver to create an operation state
-// 2. Extracting the ValueTypes alias from that operation state
-//
-// This requires operation states to expose `using ValueTypes = ...;`
-// but senders don't need any type aliases - fully automatic deduction!
-template <typename S>
-using SenderValuesT =
-    typename decltype(std::declval<S>().connect(ProbeReceiver{}))::ValueTypes;
-
-// ============================================================================
 // Core Concepts
 // ============================================================================
 
 // A type that can can take in some task output and do something with it.
 //
-// All three completion channels (SetValue, SetError, SetStopped) must be
+// All three completion channels (setValue, setError, setStopped) must be
 // noexcept since operation states cannot provide exception safety in tempura's
 // no-exceptions environment.
 template <typename R, typename... Args>
@@ -54,10 +31,10 @@ concept ReceiverOf =
     std::move_constructible<R> &&
     requires(R&& r, Args&&... args, std::error_code ec) {
       {
-        std::forward<R>(r).SetValue(std::forward<Args>(args)...)
+        std::forward<R>(r).setValue(std::forward<Args>(args)...)
       } noexcept -> std::same_as<void>;
-      { std::forward<R>(r).SetError(ec) } noexcept -> std::same_as<void>;
-      { std::forward<R>(r).SetStopped() } noexcept -> std::same_as<void>;
+      { std::forward<R>(r).setError(ec) } noexcept -> std::same_as<void>;
+      { std::forward<R>(r).setStopped() } noexcept -> std::same_as<void>;
     };
 
 // Schedulers create senders that represent the scheduling of work.
@@ -76,14 +53,23 @@ concept Scheduler =
 template <typename O>
 concept OperationState = requires(O& o) { o.start(); };
 
-// Sender lazily describe a unit of asynchronous work.
+// Sender lazily describes a unit of asynchronous work.
+//
+// All senders must expose a `ValueTypes` alias (typically std::tuple<Args...>)
+// to enable compile-time type deduction of their output values.
+template <typename S>
+concept Sender = std::move_constructible<S> && requires {
+  typename std::remove_cvref_t<S>::ValueTypes;
+};
+
+// SenderTo checks that a sender can be connected to a specific receiver.
 //
 // Note: We don't check ReceiverOf here because we'd need to know the sender's
 // value types. The connect() requirement provides sufficient validation - if
 // the receiver can't accept the sender's values, connect() will fail to
 // compile.
 template <typename S, typename R>
-concept SenderTo = std::move_constructible<S> && std::move_constructible<R> &&
+concept SenderTo = Sender<S> && std::move_constructible<R> &&
                    requires(S&& s, R&& r) {
                      {
                        std::forward<S>(s).connect(std::forward<R>(r))
@@ -100,29 +86,21 @@ concept SenderTo = std::move_constructible<S> && std::move_constructible<R> &&
 template <typename T>
 class PrintReceiver {
  public:
-  void SetValue(const T& value) noexcept {
+  void setValue(const T& value) noexcept {
     std::println("Received value: {}", value);
   }
 
-  void SetError(std::error_code ec) noexcept {
+  void setError(std::error_code ec) noexcept {
     std::println("Error occurred: {}", ec.message());
   }
 
-  void SetStopped() noexcept { std::println("Operation was stopped."); }
+  void setStopped() noexcept { std::println("Operation was stopped."); }
 };
 static_assert(ReceiverOf<PrintReceiver<int>, int>);
 
 // A simple receiver that stores values in an optional tuple.
 //
 // If a stop or error is received, the optional is reset.
-//
-// Design note: This receiver takes a reference to external storage (the
-// optional) and stores it as a pointer. This pattern is necessary because
-// receivers must be move-constructible (they're moved into operation states).
-// If we stored a reference member and then moved the receiver, the reference
-// would dangle. By using a pointer, moves are shallow copies that preserve
-// the connection to the external storage. Use this pattern for receivers that
-// need to write to caller-owned storage.
 template <typename... Args>
 class ValueReceiver {
  public:
@@ -135,13 +113,13 @@ class ValueReceiver {
   ValueReceiver(ValueReceiver&&) = default;
   auto operator=(ValueReceiver&&) -> ValueReceiver& = default;
 
-  void SetValue(Args&&... args) noexcept {
+  void setValue(Args&&... args) noexcept {
     opt_->emplace(std::forward<Args>(args)...);
   }
 
-  void SetError(std::error_code ec) noexcept { opt_->reset(); }
+  void setError(std::error_code ec) noexcept { opt_->reset(); }
 
-  void SetStopped() noexcept { opt_->reset(); }
+  void setStopped() noexcept { opt_->reset(); }
 
  private:
   // Pointer (not reference) allows safe moves while preserving external storage
@@ -159,9 +137,6 @@ static_assert(ReceiverOf<ValueReceiver<int>, int>);
 template <typename R, typename... Args>
 class JustOperationState {
  public:
-  // Operation states expose their value types for automatic sender deduction
-  using ValueTypes = std::tuple<Args...>;
-
   JustOperationState(std::tuple<Args...> values, R r)
       : values_(std::move(values)), receiver_(std::move(r)) {}
 
@@ -172,10 +147,10 @@ class JustOperationState {
   auto operator=(JustOperationState&&) -> JustOperationState& = delete;
 
   void start() noexcept {
-    // Unpack tuple and call variadic SetValue
+    // Unpack tuple and call variadic setValue
     std::apply(
         [this](auto&&... args) {
-          std::forward<R>(receiver_).SetValue(
+          std::forward<R>(receiver_).setValue(
               std::forward<decltype(args)>(args)...);
         },
         std::move(values_));
@@ -190,6 +165,8 @@ template <typename... Args>
   requires(std::move_constructible<Args> && ...)
 class JustSender {
  public:
+  using ValueTypes = std::tuple<Args...>;
+
   JustSender(Args&&... args) : values_{std::forward<Args>(args)...} {}
 
   template <ReceiverOf<Args...> R>
@@ -205,28 +182,32 @@ class JustSender {
 template <typename... Args>
 JustSender(Args&&...) -> JustSender<std::decay_t<Args>...>;
 
+// Helper function to create a JustSender
+template <typename... Args>
+auto just(Args&&... args) {
+  return JustSender{std::forward<Args>(args)...};
+}
+
 // TODO: Implement Transfer sender
 
 // ============================================================================
 // Composition Senders
 // ============================================================================
 
-// Helper receiver for Then - must be defined outside ThenOperationState
-// to avoid circular dependencies when computing operation state types
 template <typename F, typename R>
-class ThenInnerReceiver {
+class ThenReceiver {
  public:
-  ThenInnerReceiver(F* func, R* receiver) : func_(func), receiver_(receiver) {}
+  ThenReceiver(F* func, R* receiver) : func_(func), receiver_(receiver) {}
 
   template <typename... Args>
-  void SetValue(Args&&... args) noexcept {
+  void setValue(Args&&... args) noexcept {
     auto result = (*func_)(std::forward<Args>(args)...);
-    receiver_->SetValue(std::move(result));
+    receiver_->setValue(std::move(result));
   }
 
-  void SetError(std::error_code ec) noexcept { receiver_->SetError(ec); }
+  void setError(std::error_code ec) noexcept { receiver_->setError(ec); }
 
-  void SetStopped() noexcept { receiver_->SetStopped(); }
+  void setStopped() noexcept { receiver_->setStopped(); }
 
  private:
   F* func_;
@@ -236,16 +217,9 @@ class ThenInnerReceiver {
 template <typename S, typename F, typename R>
 class ThenOperationState {
  public:
-  using InnerReceiver = ThenInnerReceiver<F, R>;
+  using InnerReceiver = ThenReceiver<F, R>;
   using InnerOpState =
       decltype(std::declval<S>().connect(std::declval<InnerReceiver>()));
-
-  // Operation states expose their value types for automatic sender deduction
-  // Compute by applying function F to input sender S's value types
-  using InputTypes = SenderValuesT<S>;
-  using ResultType =
-      decltype(std::apply(std::declval<F>(), std::declval<InputTypes>()));
-  using ValueTypes = std::tuple<ResultType>;
 
   ThenOperationState(S sender, F func, R receiver)
       : func_(std::move(func)),
@@ -270,6 +244,9 @@ class ThenOperationState {
 template <typename S, typename F>
 class ThenSender {
  public:
+  using ValueTypes = std::tuple<decltype(std::apply(
+      std::declval<F>(), std::declval<typename S::ValueTypes>()))>;
+
   ThenSender(S sender, F func)
       : sender_(std::move(sender)), func_(std::move(func)) {}
 
@@ -299,13 +276,13 @@ struct ThenAdaptor {
 };
 
 template <typename S, typename F>
-auto Then(S&& sender, F&& func) {
+auto then(S&& sender, F&& func) {
   return ThenSender{std::forward<S>(sender), std::forward<F>(func)};
 }
 
 // Helper to create a Then adaptor for use with operator|
 template <typename F>
-auto Then(F&& func) {
+auto then(F&& func) {
   return ThenAdaptor<std::decay_t<F>>{std::forward<F>(func)};
 }
 
@@ -318,19 +295,123 @@ auto operator|(S&& sender, const ThenAdaptor<F>& adaptor) {
   return adaptor(std::forward<S>(sender));
 }
 
-// TODO: Implement UponError sender
+template <typename F, typename R>
+class UponErrorReceiver {
+ public:
+  UponErrorReceiver(F* func, R* receiver) : func_(func), receiver_(receiver) {}
 
-// TODO: Implement UponStopped sender
+  template <typename... Args>
+  void setValue(Args&&... args) noexcept {
+    receiver_->setValue(std::forward<Args>(args)...);
+  }
 
-// TODO: Implement Let sender
+  void setError(std::error_code ec) noexcept {
+    auto result = (*func_)(ec);
+    receiver_->setValue(std::move(result));
+  }
+
+  void setStopped() noexcept { receiver_->setStopped(); }
+
+ private:
+  F* func_;
+  R* receiver_;
+};
+
+template <typename S, typename F, typename R>
+class UponErrorOperationState {
+ public:
+  using InnerReceiver = UponErrorReceiver<F, R>;
+  using InnerOpState =
+      decltype(std::declval<S>().connect(std::declval<InnerReceiver>()));
+
+  UponErrorOperationState(S sender, F func, R receiver)
+      : func_(std::move(func)),
+        receiver_(std::move(receiver)),
+        inner_op_(
+            std::move(sender).connect(InnerReceiver{&func_, &receiver_})) {}
+
+  // Operation States are not copyable nor movable
+  UponErrorOperationState(const UponErrorOperationState&) = delete;
+  auto operator=(const UponErrorOperationState&)
+      -> UponErrorOperationState& = delete;
+  UponErrorOperationState(UponErrorOperationState&&) = delete;
+  auto operator=(UponErrorOperationState&&)
+      -> UponErrorOperationState& = delete;
+
+  void start() noexcept { inner_op_.start(); }
+
+ private:
+  F func_;
+  R receiver_;
+  InnerOpState inner_op_;
+};
+
+template <typename S, typename F>
+class UponErrorSender {
+ public:
+  using ValueTypes =
+      std::tuple<decltype(std::declval<F>()(std::declval<std::error_code>()))>;
+
+  UponErrorSender(S sender, F func)
+      : sender_(std::move(sender)), func_(std::move(func)) {}
+
+  template <typename R>
+  auto connect(R&& receiver) && {
+    return UponErrorOperationState<S, F, std::remove_cvref_t<R>>{
+        std::move(sender_), std::move(func_), std::forward<R>(receiver)};
+  }
+
+ private:
+  S sender_;
+  F func_;
+};
+
+template <typename S, typename F>
+UponErrorSender(S, F)
+    -> UponErrorSender<std::remove_cvref_t<S>, std::remove_cvref_t<F>>;
+
+// Adaptor for pipe operator - wraps a transformation function
+template <typename F>
+struct UponErrorAdaptor {
+  F func;
+
+  template <typename S>
+  auto operator()(S&& sender) const {
+    return UponErrorSender{std::forward<S>(sender), func};
+  }
+};
+
+template <typename S, typename F>
+auto uponError(S&& sender, F&& func) {
+  return UponErrorSender{std::forward<S>(sender), std::forward<F>(func)};
+}
+
+// Helper to create a UponError adaptor for use with operator|
+template <typename F>
+auto uponError(F&& func) {
+  return UponErrorAdaptor<std::decay_t<F>>{std::forward<F>(func)};
+}
+
+// Pipe operator for sender | adaptor syntax
+template <typename S, typename F>
+  requires requires(S&& s, const UponErrorAdaptor<F>& adaptor) {
+    adaptor(std::forward<S>(s));
+  }
+auto operator|(S&& sender, const UponErrorAdaptor<F>& adaptor) {
+  return adaptor(std::forward<S>(sender));
+}
+
+// TODO: Implement uponStopped sender
+
+// TODO: Implement letValue/letError/letStopped senders
 
 // ============================================================================
 // Parallel Composition
 // ============================================================================
 
-// TODO: Implement WhenAll sender
+// TODO: Implement whenAll sender
 
-// TODO: Implement WhenAny sender
+// TODO: Implement whenAny sender
 
 // ============================================================================
 // Scheduler Implementations
@@ -357,24 +438,19 @@ auto operator|(S&& sender, const ThenAdaptor<F>& adaptor) {
 // Synchronously wait for a sender to complete and return its value.
 //
 // This function blocks until the sender completes, then returns an optional
-// containing the values produced by the sender. If the sender calls SetError()
-// or SetStopped(), the optional will be empty.
+// containing the values produced by the sender. If the sender calls setError()
+// or setStopped(), the optional will be empty.
 //
-// Template constraints:
-// - S must be a sender type that can be connected to a receiver
-// - Value types are extracted via the centralized SenderValues trait
-//
-// Returns: std::optional<std::tuple<Args...>> where Args... are the value types
+// Returns: std::optional<Sender::ValueTypes>
 //
 // Example:
-//   auto result = syncWait(JustSender{42, "hello"});
+//   auto result = syncWait(just(42, "hello"));
 //   if (result) {
 //     auto [num, str] = *result;  // num=42, str="hello"
 //   }
 template <typename S>
 auto syncWait(S&& sender) {
-  // Extract the value types from the sender via SenderValues trait
-  using ValueTuple = SenderValuesT<S>;
+  using ValueTuple = typename std::remove_cvref_t<S>::ValueTypes;
 
   // Create storage for the result
   std::optional<ValueTuple> result;
@@ -397,7 +473,7 @@ auto syncWait(S&& sender) {
   return result;
 }
 
-// TODO: Implement start_detached
+// TODO: Implement startDetached
 
 // TODO: Implement connect customization point
 
