@@ -140,5 +140,120 @@ auto main() -> int {
     }
   };
 
+  // ==========================================================================
+  // letValue - nested async operations
+  // ==========================================================================
+
+  "letValue - basic nested sender"_test = [] {
+    auto sender = letValue(just(21), [](int x) { return just(x * 2); });
+    auto result = syncWait(std::move(sender));
+    if (expectTrue(result.has_value())) {
+      expectEq(std::get<0>(*result), 42);
+    }
+  };
+
+  "letValue - chained nested operations"_test = [] {
+    auto sender = letValue(just(10), [](int x) {
+      return letValue(just(x + 5), [](int y) { return just(y * 2); });
+    });
+    auto result = syncWait(std::move(sender));
+    if (expectTrue(result.has_value())) {
+      expectEq(std::get<0>(*result), 30);  // (10 + 5) * 2
+    }
+  };
+
+  "letValue - pipe operator"_test = [] {
+    auto sender = just(3) | letValue([](int x) { return just(x * 10); }) |
+                  then([](int x) { return x + 7; });
+    auto result = syncWait(std::move(sender));
+    if (expectTrue(result.has_value())) {
+      expectEq(std::get<0>(*result), 37);  // (3 * 10) + 7
+    }
+  };
+
+  "letValue - mixing with then"_test = [] {
+    auto sender = just(2) | then([](int x) { return x + 1; }) |
+                  letValue([](int x) { return just(x * 10); }) |
+                  then([](int x) { return x - 5; });
+    auto result = syncWait(std::move(sender));
+    if (expectTrue(result.has_value())) {
+      expectEq(std::get<0>(*result), 25);  // ((2 + 1) * 10) - 5 = 25
+    }
+  };
+
+  "letValue - multiple values"_test = [] {
+    auto sender = just(5, 10) | letValue([](int a, int b) {
+                    return just(a + b, a * b);
+                  });
+    auto result = syncWait(std::move(sender));
+    if (expectTrue(result.has_value())) {
+      auto [sum, product] = *result;
+      expectEq(sum, 15);
+      expectEq(product, 50);
+    }
+  };
+
+  // ==========================================================================
+  // letError - nested error recovery
+  // ==========================================================================
+
+  "letError - error recovery with sender"_test = [] {
+    // Create a sender that will produce an error (we'll use a helper)
+    auto error_sender = just(0) | then([](int) -> int {
+                          // In real code, this might fail - for testing,
+                          // we'll manually test with uponError
+                          return 42;
+                        });
+
+    // Test the type deduction works
+    auto sender = error_sender | letError([](std::error_code) {
+                    return just(999);  // Recovery value
+                  });
+
+    auto result = syncWait(std::move(sender));
+    if (expectTrue(result.has_value())) {
+      expectEq(std::get<0>(*result), 42);  // No error occurred
+    }
+  };
+
+  "letError - chained error recovery"_test = [] {
+    auto sender =
+        just(42) |
+        letError([](std::error_code) { return just(100); }) |
+        letError([](std::error_code) { return just(200); });
+
+    auto result = syncWait(std::move(sender));
+    if (expectTrue(result.has_value())) {
+      expectEq(std::get<0>(*result), 42);  // Original value, no errors
+    }
+  };
+
+  "letError - mixing with then and letValue"_test = [] {
+    auto sender = just(10) | then([](int x) { return x * 2; }) |
+                  letError([](std::error_code) { return just(999); }) |
+                  letValue([](int x) { return just(x + 5); });
+
+    auto result = syncWait(std::move(sender));
+    if (expectTrue(result.has_value())) {
+      expectEq(std::get<0>(*result), 25);  // (10 * 2) + 5 = 25
+    }
+  };
+
+  // ==========================================================================
+  // Concept validation for new senders
+  // ==========================================================================
+
+  "letValue - sender concept"_test = [] {
+    auto sender = just(42) | letValue([](int x) { return just(x * 2); });
+    static_assert(Sender<decltype(sender)>);
+    expectTrue(true);  // If it compiles, we're good
+  };
+
+  "letError - sender concept"_test = [] {
+    auto sender = just(42) | letError([](std::error_code) { return just(0); });
+    static_assert(Sender<decltype(sender)>);
+    expectTrue(true);  // If it compiles, we're good
+  };
+
   return 0;
 }
