@@ -14,6 +14,14 @@ target_include_directories(vector_to_array INTERFACE
 target_link_libraries(vector_to_array INTERFACE tempura_flags)
 add_library(tempura::vector_to_array ALIAS vector_to_array)
 
+add_library(manual_lifetime INTERFACE manual_lifetime.h)
+target_include_directories(manual_lifetime INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
+  $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(manual_lifetime INTERFACE tempura_flags)
+add_library(tempura::manual_lifetime ALIAS manual_lifetime)
+
 if(NOT TEMPURA_BUILD_TESTS)
   return()
 endif()
@@ -25,6 +33,12 @@ endif()
 # Vector to array conversion test
 add_executable(vector_to_array_test vector_to_array_test.cpp)
 target_link_libraries(vector_to_array_test vector_to_array unit)
+
+# Manual lifetime management test
+add_executable(manual_lifetime_test manual_lifetime_test.cpp)
+target_link_libraries(manual_lifetime_test manual_lifetime unit)
+add_test(NAME manual_lifetime COMMAND manual_lifetime_test)
+set_tests_properties(manual_lifetime PROPERTIES LABELS "meta;utilities;memory")
 
 # Type sorting test
 add_executable(meta_type_sort_test test/type_sort_test.cpp)
