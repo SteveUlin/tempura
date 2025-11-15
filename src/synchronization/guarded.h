@@ -30,11 +30,8 @@ class GuardedHandle {
   auto operator=(GuardedHandle&& other) noexcept -> GuardedHandle& {
     value_ = other.value_;
     lock_ = std::move(other.lock_);
-  };
-
-  auto lock() const -> void { lock_.lock(); }
-  auto unlock() const -> void { lock_.unlock(); }
-  [[nodiscard]] auto try_lock() const -> bool { return lock_.try_lock(); }
+    return *this;
+  }
 
   auto get() -> T& { return *value_; }
   auto get() const -> const T& { return *value_; }
@@ -44,6 +41,9 @@ class GuardedHandle {
   auto operator->() -> T* { return value_; }
   auto operator->() const -> const T* { return value_; }
 
+  auto owns_lock() const -> bool { return lock_.owns_lock(); }
+  explicit operator bool() const { return lock_.owns_lock(); }
+
  private:
   T* value_;
   mutable std::unique_lock<Mutex> lock_;
@@ -52,32 +52,17 @@ class GuardedHandle {
 template <typename T, typename Mutex = std::mutex>
 class Guarded {
  public:
-  Guarded(const Guarded& other) : value_{*other.acquire()} {}
-  Guarded(Guarded&& other) noexcept : value_{std::move(*other.acquire())} {}
-  auto operator=(const Guarded& other) -> Guarded& {
-    if (this == &other) {
-      return *this;
-    }
-    value_ = *other.acquire();
-    return *this;
-  }
-  auto operator=(Guarded&& other) noexcept -> Guarded& {
-    if (this == &other) {
-      return *this;
-    }
-    value_ = std::move(*other.acquire());
-    return *this;
-  }
+  // Copy and move operations deleted.
+  // Copying/moving acquires locks, which can deadlock and introduces hidden
+  // blocking. Moving a shared synchronization point is almost always a bug.
+  // If you need to copy the value, use: T copy = *guarded.acquire();
+  Guarded(const Guarded&) = delete;
+  auto operator=(const Guarded&) -> Guarded& = delete;
+  Guarded(Guarded&&) = delete;
+  auto operator=(Guarded&&) -> Guarded& = delete;
 
   template <typename... Args>
   explicit Guarded(Args&&... args) : value_{std::forward<Args>(args)...} {}
-
-  auto operator=(const T& value) -> Guarded& { *acquire() = value; }
-  auto operator=(T&& value) -> Guarded& { *acquire() = value; }
-
-  auto lock() const -> void { mutex_.lock(); }
-  auto unlock() const -> void { mutex_.unlock(); }
-  [[nodiscard]] auto try_lock() const -> bool { return mutex_.try_lock(); }
 
   template <typename... Args>
   [[nodiscard]] auto acquire(Args... args) -> GuardedHandle<T, Mutex> {
@@ -90,12 +75,12 @@ class Guarded {
   }
 
   template <typename F>
-  auto withLock(F&& func) -> void {
+  auto withLock(F&& func) {
     return func(*acquire());
   }
 
   template <typename F>
-  auto withLock(F&& func) const -> void {
+  auto withLock(F&& func) const {
     return func(*acquire());
   }
 
@@ -103,21 +88,5 @@ class Guarded {
   mutable Mutex mutex_;
   T value_;
 };
-
-template <typename... Args, typename... Mutexes>
-[[nodiscard]] auto acquire(Guarded<Args, Mutexes>&... args)
-    -> std::tuple<GuardedHandle<Args, Mutexes>...> {
-  std::tuple<GuardedHandle<Args, Mutexes>...> out{
-      args.acquire(std::defer_lock)...};
-  std::apply([](auto&... handles) { std::lock(handles...); }, out);
-  return out;
-}
-
-template <typename... Args, typename... Mutexes, typename F>
-[[nodiscard]] auto withLocks(Guarded<Args, Mutexes>&... args, F func) {
-  auto handles = acquire(args...);
-  return std::apply([&func](auto&... handles) { return func(handles...); },
-                    handles);
-}
 
 }  // namespace tempura

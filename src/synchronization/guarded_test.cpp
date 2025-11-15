@@ -32,40 +32,34 @@ auto main() -> int {
   "RAII Locks"_test = [] {
     Guarded<int> guarded{0};
     {
-      GuardedHandle<int> handle = guarded.acquire();
-      expectEq(guarded.try_lock(), false);
+      auto handle1 = guarded.acquire();
+      auto handle2 = guarded.acquire(std::try_to_lock);
+      expectEq(handle2.owns_lock(), false);  // Can't acquire while held
     }
-    expectEq(guarded.try_lock(), true);
+    auto handle3 = guarded.acquire(std::try_to_lock);
+    expectEq(handle3.owns_lock(), true);  // Can acquire after release
   };
 
   "withLock Locks"_test = [] {
     Guarded<int> guarded{5};
     guarded.withLock([&guarded](int& value) {
-      expectEq(guarded.try_lock(), false);
+      auto handle = guarded.acquire(std::try_to_lock);
+      expectEq(handle.owns_lock(), false);  // Can't acquire while held
       expectEq(value, 5);
     });
-    expectEq(guarded.try_lock(), true);
+    auto handle = guarded.acquire(std::try_to_lock);
+    expectEq(handle.owns_lock(), true);  // Can acquire after release
   };
 
   "const withLock Locks"_test = [] {
     const Guarded<int> guarded{5};
     guarded.withLock([&guarded](const int& value) {
-      expectEq(guarded.try_lock(), false);
+      auto handle = guarded.acquire(std::try_to_lock);
+      expectEq(handle.owns_lock(), false);  // Can't acquire while held
       expectEq(value, 5);
     });
-    expectEq(guarded.try_lock(), true);
-  };
-
-  "lock multiple"_test = [] {
-    Guarded<int> a{5};
-    Guarded<int> b{6};
-    {
-      auto [handle_a, handle_b] = acquire(a, b);
-      expectEq(a.try_lock(), false);
-      expectEq(b.try_lock(), false);
-    }
-    expectEq(a.try_lock(), true);
-    expectEq(b.try_lock(), true);
+    auto handle = guarded.acquire(std::try_to_lock);
+    expectEq(handle.owns_lock(), true);  // Can acquire after release
   };
 
   return 0;
