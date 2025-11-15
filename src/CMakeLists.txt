@@ -49,6 +49,7 @@ add_subdirectory(special)
 add_subdirectory(synchronization)
 add_subdirectory(task)
 add_subdirectory(utility)
+add_subdirectory(games)
 
 # ============================================================================
 # Top-Level Library Targets

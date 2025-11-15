@@ -29,6 +29,13 @@
 - Use PRECONDITION/POSTCONDITION/DANGER as needed
 - No copyright statements
 
+## Testing
+
+- Use `unit.h` framework: `"test name"_test = [] { ... };`
+- Use `expect*` helpers (expectEq, expectTrue, etc.) not manual checks
+- Return `TestRegistry::result()` from main
+- Prefer `static_assert` for compile-time validation
+
 ## Development Guidelines
 
 - Do NOT use `/tmp` directory for test files or experiments
