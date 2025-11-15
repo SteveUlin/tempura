@@ -70,7 +70,6 @@ class ThenSender {
 
   // Validate that the function can be called with the sender's value types
   static_assert(
-      std::is_invocable_v<F, decltype(std::get<0>(std::declval<typename S::ValueTypes>()))> ||
       requires { std::apply(std::declval<F>(), std::declval<typename S::ValueTypes>()); },
       "The function passed to then must be callable with the sender's value types. "
       "Check that your lambda/function signature matches the values produced by the sender.");

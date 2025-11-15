@@ -40,6 +40,18 @@ class ThreadPool {
     return res;
   }
 
+  // Submit a task without a future (fire-and-forget)
+  // Useful for scheduler integration where results are handled via receivers
+  void submit(std::move_only_function<void()> task) {
+    assert(!stop_ && "Cannot submit tasks while the threadpool is stopped");
+
+    {
+      std::scoped_lock lock{mutex_};
+      tasks_.emplace(std::move(task));
+    }
+    condition_.notify_one();
+  }
+
   void mainThreadExecute();
 
   void stop();

@@ -20,6 +20,6 @@ add_test(NAME task_test COMMAND task_test)
 set_property(TEST task_test PROPERTY LABELS base)
 
 add_executable(schedulers_test schedulers_test.cpp)
-target_link_libraries(schedulers_test task unit event_loop)
+target_link_libraries(schedulers_test task unit event_loop threadpool)
 add_test(NAME schedulers_test COMMAND schedulers_test)
 set_property(TEST schedulers_test PROPERTY LABELS base)
