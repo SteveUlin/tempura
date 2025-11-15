@@ -2,13 +2,14 @@
 
 #pragma once
 
-#include "concepts.h"
-
+#include <latch>
 #include <optional>
 #include <print>
 #include <system_error>
 #include <tuple>
 #include <utility>
+
+#include "concepts.h"
 
 namespace tempura {
 
@@ -62,5 +63,40 @@ class ValueReceiver {
   std::optional<std::tuple<Args...>>* opt_;
 };
 static_assert(ReceiverOf<ValueReceiver<int>, int>);
+
+// Blocking receiver that signals completion via latch
+template <typename... Args>
+class BlockingReceiver {
+ public:
+  BlockingReceiver(std::optional<std::tuple<Args...>>& opt, std::latch& latch)
+      : opt_(&opt), latch_(&latch) {}
+
+  BlockingReceiver(const BlockingReceiver&) = delete;
+  auto operator=(const BlockingReceiver&) -> BlockingReceiver& = delete;
+
+  BlockingReceiver(BlockingReceiver&&) = default;
+  auto operator=(BlockingReceiver&&) -> BlockingReceiver& = default;
+
+  void setValue(Args&&... args) noexcept {
+    opt_->emplace(std::forward<Args>(args)...);
+    latch_->count_down();
+  }
+
+  void setError(std::error_code ec) noexcept {
+    opt_->reset();
+    latch_->count_down();
+  }
+
+  void setStopped() noexcept {
+    opt_->reset();
+    latch_->count_down();
+  }
+
+ private:
+  std::optional<std::tuple<Args...>>* opt_;
+  std::latch* latch_;
+};
+
+static_assert(ReceiverOf<BlockingReceiver<int>, int>);
 
 }  // namespace tempura

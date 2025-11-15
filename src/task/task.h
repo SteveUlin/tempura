@@ -25,6 +25,9 @@
 // Algorithms
 #include "algorithms.h"
 
+// Schedulers
+#include "schedulers.h"
+
 namespace tempura {
 
 // ============================================================================
@@ -36,14 +39,8 @@ namespace tempura {
 // TODO: Implement whenAny sender
 
 // ============================================================================
-// Scheduler Implementations
-// ============================================================================
-
-// TODO: Implement InlineScheduler
-
 // TODO: Implement ThreadPoolScheduler
-
-// TODO: Implement SingleThreadScheduler
+// ============================================================================
 
 // ============================================================================
 // Stop Token Support

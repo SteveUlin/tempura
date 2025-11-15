@@ -4,6 +4,7 @@
 
 #include "receivers.h"
 
+#include <latch>
 #include <optional>
 #include <type_traits>
 #include <utility>
@@ -34,19 +35,26 @@ auto syncWait(S&& sender) {
   // Create storage for the result
   std::optional<ValueTuple> result;
 
-  // Create a receiver that will store values into our optional
-  // Use type_identity to unpack tuple type into parameter pack
+  // One-shot synchronization for blocking until completion
+  std::latch latch{1};
+
+  // Create a blocking receiver
   auto receiver = []<typename... Args>(
                       std::type_identity<std::tuple<Args...>>,
-                      std::optional<std::tuple<Args...>>& opt) {
-    return ValueReceiver<Args...>{opt};
-  }(std::type_identity<ValueTuple>{}, result);
+                      std::optional<std::tuple<Args...>>& opt,
+                      std::latch& latch) {
+    return BlockingReceiver<Args...>{opt, latch};
+  }(std::type_identity<ValueTuple>{}, result, latch);
 
-  // Connect the sender to the receiver to create an operation state
+  // Connect the sender to the receiver to create an operation state.
+  // The receiver is moved into the operation state (P2300 pattern).
   auto op = std::forward<S>(sender).connect(std::move(receiver));
 
-  // Start the operation (this is synchronous for JustSender)
+  // Start the operation
   op.start();
+
+  // Wait for completion
+  latch.wait();
 
   // Return the result (will be empty if error or stopped)
   return result;
