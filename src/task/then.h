@@ -26,7 +26,10 @@ class ThenReceiver {
     receiver_->setValue(std::move(result));
   }
 
-  void setError(std::error_code ec) noexcept { receiver_->setError(ec); }
+  template <typename... ErrorArgs>
+  void setError(ErrorArgs&&... args) noexcept {
+    receiver_->setError(std::forward<ErrorArgs>(args)...);
+  }
 
   void setStopped() noexcept { receiver_->setStopped(); }
 
@@ -67,6 +70,7 @@ class ThenSender {
  public:
   using ValueTypes = std::tuple<decltype(std::apply(
       std::declval<F>(), std::declval<typename S::ValueTypes>()))>;
+  using ErrorTypes = typename S::ErrorTypes;  // Propagate error types
 
   // Validate that the function can be called with the sender's value types
   static_assert(

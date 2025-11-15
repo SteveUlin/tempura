@@ -29,8 +29,9 @@ class LetValueReceiver {
     outer_op_->transitionToInner(std::forward<Args>(args)...);
   }
 
-  void setError(std::error_code ec) noexcept {
-    outer_op_->forwardError(ec);
+  template <typename... ErrorArgs>
+  void setError(ErrorArgs&&... args) noexcept {
+    outer_op_->forwardError(std::forward<ErrorArgs>(args)...);
   }
 
   void setStopped() noexcept { outer_op_->forwardStopped(); }
@@ -108,8 +109,9 @@ class LetValueOperationState {
     storage_.inner_->start();
   }
 
-  void forwardError(std::error_code ec) noexcept {
-    receiver_.setError(ec);
+  template <typename... ErrorArgs>
+  void forwardError(ErrorArgs&&... args) noexcept {
+    receiver_.setError(std::forward<ErrorArgs>(args)...);
   }
 
   void forwardStopped() noexcept {
@@ -144,6 +146,7 @@ class LetValueSender {
                 "Ensure your lambda/function returns a sender (e.g., just(...)).");
 
   using ValueTypes = typename InnerSender::ValueTypes;
+  using ErrorTypes = typename InnerSender::ErrorTypes;  // Propagate from inner sender
 
   LetValueSender(S sender, F func)
       : sender_(std::move(sender)), func_(std::move(func)) {}

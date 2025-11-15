@@ -27,8 +27,16 @@ class PrintReceiver {
     std::println("Received value: {}", value);
   }
 
-  void setError(std::error_code ec) noexcept {
-    std::println("Error occurred: {}", ec.message());
+  template <typename... ErrorArgs>
+  void setError(ErrorArgs&&... args) noexcept {
+    // For backwards compatibility, print std::error_code if that's the only arg
+    if constexpr (sizeof...(ErrorArgs) == 1 &&
+                  (std::same_as<std::decay_t<ErrorArgs>, std::error_code> &&
+                   ...)) {
+      std::println("Error occurred: {}", std::forward<ErrorArgs>(args).message()...);
+    } else {
+      std::println("Error occurred with {} arguments", sizeof...(ErrorArgs));
+    }
   }
 
   void setStopped() noexcept { std::println("Operation was stopped."); }
@@ -54,7 +62,10 @@ class ValueReceiver {
     opt_->emplace(std::forward<Args>(args)...);
   }
 
-  void setError(std::error_code ec) noexcept { opt_->reset(); }
+  template <typename... ErrorArgs>
+  void setError(ErrorArgs&&... args) noexcept {
+    opt_->reset();
+  }
 
   void setStopped() noexcept { opt_->reset(); }
 
@@ -82,7 +93,8 @@ class BlockingReceiver {
     latch_->count_down();
   }
 
-  void setError(std::error_code ec) noexcept {
+  template <typename... ErrorArgs>
+  void setError(ErrorArgs&&... args) noexcept {
     opt_->reset();
     latch_->count_down();
   }

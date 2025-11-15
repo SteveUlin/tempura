@@ -17,14 +17,16 @@ namespace tempura {
 // All three completion channels (setValue, setError, setStopped) must be
 // noexcept since operation states cannot provide exception safety in tempura's
 // no-exceptions environment.
+//
+// Note: ReceiverOf checks only the value types. Error types are checked
+// separately via the setError method which accepts variadic arguments.
 template <typename R, typename... Args>
 concept ReceiverOf =
     std::move_constructible<R> &&
-    requires(R&& r, Args&&... args, std::error_code ec) {
+    requires(R&& r, Args&&... args) {
       {
         std::forward<R>(r).setValue(std::forward<Args>(args)...)
       } noexcept -> std::same_as<void>;
-      { std::forward<R>(r).setError(ec) } noexcept -> std::same_as<void>;
       { std::forward<R>(r).setStopped() } noexcept -> std::same_as<void>;
     };
 
@@ -46,11 +48,14 @@ concept OperationState = requires(O& o) { o.start(); };
 
 // Sender lazily describes a unit of asynchronous work.
 //
-// All senders must expose a `ValueTypes` alias (typically std::tuple<Args...>)
-// to enable compile-time type deduction of their output values.
+// All senders must expose:
+// - `ValueTypes` alias (typically std::tuple<Args...>) for value channel types
+// - `ErrorTypes` alias (typically std::tuple<Args...>) for error channel types
+// to enable compile-time type deduction of their completion signatures.
 template <typename S>
 concept Sender = std::move_constructible<S> && requires {
   typename std::remove_cvref_t<S>::ValueTypes;
+  typename std::remove_cvref_t<S>::ErrorTypes;
 };
 
 // SenderTo checks that a sender can be connected to a specific receiver.

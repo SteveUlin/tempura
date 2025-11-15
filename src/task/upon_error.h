@@ -21,8 +21,9 @@ class UponErrorReceiver {
     receiver_->setValue(std::forward<Args>(args)...);
   }
 
-  void setError(std::error_code ec) noexcept {
-    auto result = (*func_)(ec);
+  template <typename... ErrorArgs>
+  void setError(ErrorArgs&&... args) noexcept {
+    auto result = (*func_)(std::forward<ErrorArgs>(args)...);
     receiver_->setValue(std::move(result));
   }
 
@@ -65,8 +66,10 @@ class UponErrorOperationState {
 template <typename S, typename F>
 class UponErrorSender {
  public:
-  using ValueTypes =
-      std::tuple<decltype(std::declval<F>()(std::declval<std::error_code>()))>;
+  // Compute result type by unpacking error types (symmetric with then!)
+  using ValueTypes = std::tuple<decltype(std::apply(
+      std::declval<F>(), std::declval<typename S::ErrorTypes>()))>;
+  using ErrorTypes = typename S::ErrorTypes;  // Propagate error types
 
   UponErrorSender(S sender, F func)
       : sender_(std::move(sender)), func_(std::move(func)) {}

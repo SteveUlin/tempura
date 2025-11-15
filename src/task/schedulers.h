@@ -42,6 +42,7 @@ class InlineScheduleOperationState {
 class InlineScheduleSender {
  public:
   using ValueTypes = std::tuple<>;  // schedule() sends no values
+  using ErrorTypes = std::tuple<>;  // No errors by default
 
   template <ReceiverOf<> R>
   auto connect(R&& receiver) && {
@@ -92,6 +93,7 @@ class EventLoopScheduleOperationState {
 class EventLoopScheduleSender {
  public:
   using ValueTypes = std::tuple<>;  // schedule() sends no values
+  using ErrorTypes = std::tuple<>;  // No errors by default
 
   explicit EventLoopScheduleSender(EventLoop& loop) : loop_(&loop) {}
 
@@ -169,6 +171,7 @@ class ThreadPoolScheduleOperationState {
 class ThreadPoolScheduleSender {
  public:
   using ValueTypes = std::tuple<>;  // schedule() sends no values
+  using ErrorTypes = std::tuple<>;  // No errors by default
 
   explicit ThreadPoolScheduleSender(ThreadPool& pool) : pool_(&pool) {}
 
@@ -281,6 +284,7 @@ class NewThreadScheduleOperationState {
 class NewThreadScheduleSender {
  public:
   using ValueTypes = std::tuple<>;  // schedule() sends no values
+  using ErrorTypes = std::tuple<>;  // No errors by default
 
   explicit NewThreadScheduleSender(NewThreadContext& context)
       : context_(&context) {}
@@ -360,6 +364,7 @@ class TimerScheduleOperationState {
 class TimerScheduleSender {
  public:
   using ValueTypes = std::tuple<>;  // schedule() sends no values
+  using ErrorTypes = std::tuple<>;  // No errors by default
 
   TimerScheduleSender(TimerQueue& queue, TimerQueue::TimePoint when)
       : queue_(&queue), when_(when) {}

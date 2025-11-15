@@ -17,6 +17,65 @@
 using namespace tempura;
 
 // ============================================================================
+// Custom Error Sender Types (for testing variadic error types)
+// ============================================================================
+
+// Sender with custom error types (string, int)
+class CustomErrorSender1 {
+ public:
+  using ValueTypes = std::tuple<int>;
+  using ErrorTypes = std::tuple<std::string, int>;
+
+  template <typename R>
+  auto connect(R&& receiver) && {
+    class OpState {
+     public:
+      OpState(R r) : receiver_(std::move(r)) {}
+      void start() noexcept {
+        receiver_.setError(std::string{"error message"}, 404);
+      }
+     private:
+      R receiver_;
+    };
+    return OpState{std::forward<R>(receiver)};
+  }
+};
+
+// Sender with different custom error types (double, string)
+class CustomErrorSender2 {
+ public:
+  using ValueTypes = std::tuple<int>;
+  using ErrorTypes = std::tuple<double, std::string>;
+
+  template <typename R>
+  auto connect(R&& receiver) && {
+    class OpState {
+     public:
+      OpState(R r) : receiver_(std::move(r)) {}
+      void start() noexcept {
+        receiver_.setError(3.14, std::string{"pi error"});
+      }
+     private:
+      R receiver_;
+    };
+    return OpState{std::forward<R>(receiver)};
+  }
+};
+
+// Multi-error type sender (for static testing)
+class MultiErrorSender {
+ public:
+  using ValueTypes = std::tuple<>;
+  using ErrorTypes = std::tuple<int, double, std::string>;
+
+  template <typename R>
+  auto connect(R&&) && {
+    struct OpState { void start() noexcept {} };
+    return OpState{};
+  }
+};
+
+// ============================================================================
 // Concept Tests
 // ============================================================================
 
@@ -205,8 +264,8 @@ auto main() -> int {
                           return 42;
                         });
 
-    // Test the type deduction works
-    auto sender = error_sender | letError([](std::error_code) {
+    // Test the type deduction works (empty error types by default)
+    auto sender = error_sender | letError([]() {
                     return just(999);  // Recovery value
                   });
 
@@ -219,8 +278,8 @@ auto main() -> int {
   "letError - chained error recovery"_test = [] {
     auto sender =
         just(42) |
-        letError([](std::error_code) { return just(100); }) |
-        letError([](std::error_code) { return just(200); });
+        letError([]() { return just(100); }) |
+        letError([]() { return just(200); });
 
     auto result = syncWait(std::move(sender));
     if (expectTrue(result.has_value())) {
@@ -230,7 +289,7 @@ auto main() -> int {
 
   "letError - mixing with then and letValue"_test = [] {
     auto sender = just(10) | then([](int x) { return x * 2; }) |
-                  letError([](std::error_code) { return just(999); }) |
+                  letError([]() { return just(999); }) |
                   letValue([](int x) { return just(x + 5); });
 
     auto result = syncWait(std::move(sender));
@@ -250,9 +309,67 @@ auto main() -> int {
   };
 
   "letError - sender concept"_test = [] {
-    auto sender = just(42) | letError([](std::error_code) { return just(0); });
+    auto sender = just(42) | letError([]() { return just(0); });
     static_assert(Sender<decltype(sender)>);
     expectTrue(true);  // If it compiles, we're good
+  };
+
+  // ==========================================================================
+  // Variadic Error Types - P2300 Symmetry
+  // ==========================================================================
+
+  "ErrorTypes - custom error sender"_test = [] {
+    static_assert(Sender<CustomErrorSender1>);
+    static_assert(Sender<CustomErrorSender2>);
+    static_assert(Sender<MultiErrorSender>);
+    expectTrue(true);
+  };
+
+  "letError - variadic error types"_test = [] {
+    // letError should unpack the error types using std::apply
+    auto sender = CustomErrorSender1{} |
+                  letError([](std::string msg, int code) {
+                    // Verify we received both error arguments
+                    expectEq(msg, std::string{"error message"});
+                    expectEq(code, 404);
+                    return just(999);  // Recovery value
+                  });
+
+    auto result = syncWait(std::move(sender));
+    if (expectTrue(result.has_value())) {
+      expectEq(std::get<0>(*result), 999);
+    }
+  };
+
+  "uponError - variadic error types"_test = [] {
+    // uponError should unpack error types and convert to value
+    auto sender = CustomErrorSender2{} |
+                  uponError([](double val, std::string msg) {
+                    // Verify we received both error arguments
+                    expectEq(val, 3.14);
+                    expectEq(msg, std::string{"pi error"});
+                    return 42;  // Convert error to value
+                  });
+
+    auto result = syncWait(std::move(sender));
+    if (expectTrue(result.has_value())) {
+      expectEq(std::get<0>(*result), 42);
+    }
+  };
+
+  "ErrorTypes - symmetry with ValueTypes"_test = [] {
+    // Verify error types work just like value types
+    using ValueSender = decltype(just(1, 2, 3));
+    static_assert(std::same_as<
+        typename ValueSender::ValueTypes,
+        std::tuple<int, int, int>>);
+
+    // Custom error sender with multiple error types
+    static_assert(std::same_as<
+        typename MultiErrorSender::ErrorTypes,
+        std::tuple<int, double, std::string>>);
+
+    expectTrue(true);
   };
 
   return 0;

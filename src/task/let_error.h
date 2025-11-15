@@ -29,8 +29,9 @@ class LetErrorReceiver {
     outer_op_->forwardValue(std::forward<Args>(args)...);
   }
 
-  void setError(std::error_code ec) noexcept {
-    outer_op_->transitionToInner(ec);
+  template <typename... ErrorArgs>
+  void setError(ErrorArgs&&... args) noexcept {
+    outer_op_->transitionToInner(std::forward<ErrorArgs>(args)...);
   }
 
   void setStopped() noexcept { outer_op_->forwardStopped(); }
@@ -46,9 +47,10 @@ class LetErrorOperationState {
   using OuterOpState =
       decltype(std::declval<S>().connect(std::declval<InnerReceiver>()));
 
-  // Compute inner operation type at compile time
-  // InnerSender = return type of F when called with std::error_code
-  using InnerSender = decltype(std::declval<F&>()(std::declval<std::error_code>()));
+  // Compute inner operation type at compile time!
+  // InnerSender = return type of F when called with S's error types
+  using InnerSender = decltype(std::apply(
+      std::declval<F&>(), std::declval<typename S::ErrorTypes>()));
   // InnerOpState = connecting that sender to our receiver (moved)
   using InnerOpState = decltype(std::declval<InnerSender&&>().connect(std::declval<R&&>()));
 
@@ -88,13 +90,14 @@ class LetErrorOperationState {
 
   // Transition from outer to inner operation
   // Called by LetErrorReceiver::setError
-  void transitionToInner(std::error_code ec) noexcept {
+  template <typename... ErrorArgs>
+  void transitionToInner(ErrorArgs&&... args) noexcept {
     // Step 1: Destroy outer operation (frees union storage)
     storage_.outer_.destruct();
     state_ = State::kEmpty;
 
     // Step 2: Call function to get inner sender
-    auto inner_sender = func_(ec);
+    auto inner_sender = func_(std::forward<ErrorArgs>(args)...);
 
     // Step 3: Construct inner operation in the SAME memory (union reuse)
     storage_.inner_.constructWith([&] {
@@ -134,7 +137,9 @@ template <typename S, typename F>
 class LetErrorSender {
  public:
   // The result type is the ValueTypes of the sender returned by F
-  using InnerSender = decltype(std::declval<F>()(std::declval<std::error_code>()));
+  // Now unpacks error types using std::apply (symmetric with letValue!)
+  using InnerSender = decltype(std::apply(
+      std::declval<F>(), std::declval<typename S::ErrorTypes>()));
 
   // Validate that the function returns a valid Sender type
   static_assert(Sender<InnerSender>,
@@ -142,6 +147,7 @@ class LetErrorSender {
                 "Ensure your lambda/function returns a sender (e.g., just(...)).");
 
   using ValueTypes = typename InnerSender::ValueTypes;
+  using ErrorTypes = typename InnerSender::ErrorTypes;  // Propagate from inner sender
 
   LetErrorSender(S sender, F func)
       : sender_(std::move(sender)), func_(std::move(func)) {}
