@@ -135,6 +135,12 @@ class LetErrorSender {
  public:
   // The result type is the ValueTypes of the sender returned by F
   using InnerSender = decltype(std::declval<F>()(std::declval<std::error_code>()));
+
+  // Validate that the function returns a valid Sender type
+  static_assert(Sender<InnerSender>,
+                "The function passed to letError must return a Sender type. "
+                "Ensure your lambda/function returns a sender (e.g., just(...)).");
+
   using ValueTypes = typename InnerSender::ValueTypes;
 
   LetErrorSender(S sender, F func)

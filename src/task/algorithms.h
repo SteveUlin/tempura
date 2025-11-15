@@ -42,6 +42,13 @@ auto syncWait(S&& sender) {
     return BlockingReceiver<Args...>{opt, latch};
   }(std::type_identity<ValueTuple>{}, result, latch);
 
+  // Validate sender-receiver compatibility for better error messages
+  using ReceiverType = decltype(receiver);
+  static_assert(
+      SenderTo<std::remove_cvref_t<S>, ReceiverType>,
+      "The sender cannot be connected to the blocking receiver. "
+      "This typically means the sender's value types don't match what syncWait expects.");
+
   auto op = std::forward<S>(sender).connect(std::move(receiver));
 
   op.start();

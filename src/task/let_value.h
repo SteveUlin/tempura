@@ -137,6 +137,12 @@ class LetValueSender {
   // The result type is the ValueTypes of the sender returned by F
   using InnerSender = decltype(std::apply(
       std::declval<F>(), std::declval<typename S::ValueTypes>()));
+
+  // Validate that the function returns a valid Sender type
+  static_assert(Sender<InnerSender>,
+                "The function passed to letValue must return a Sender type. "
+                "Ensure your lambda/function returns a sender (e.g., just(...)).");
+
   using ValueTypes = typename InnerSender::ValueTypes;
 
   LetValueSender(S sender, F func)
