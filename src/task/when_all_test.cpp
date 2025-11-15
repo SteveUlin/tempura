@@ -238,13 +238,19 @@ auto main() -> int {
                                ExpectedValueTypes>);
   };
 
-  "whenAll - ErrorTypes merging"_test = [] {
+  "whenAll - ErrorTypes deduplication"_test = [] {
     auto sender = whenAll(CustomErrorSender1{}, CustomErrorSender2{});
     using SenderType = decltype(sender);
 
-    // Should merge error types from both senders
-    using ExpectedErrorTypes =
-        std::tuple<std::string, int, double, std::string>;
+    // Error type should be a variant of all unique error types (P2300 approach)
+    // CustomErrorSender1::ErrorTypes = tuple<string, int>
+    // CustomErrorSender2::ErrorTypes = tuple<double, string>
+    // Result: variant<string, int, double> (string deduplicated)
+    using ExpectedErrorTypes = std::tuple<std::variant<
+        std::string,  // From both senders (deduplicated)
+        int,          // From CustomErrorSender1
+        double        // From CustomErrorSender2
+        >>;
 
     static_assert(std::same_as<typename SenderType::ErrorTypes,
                                ExpectedErrorTypes>);

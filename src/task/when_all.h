@@ -8,10 +8,101 @@
 #include <tuple>
 #include <type_traits>
 #include <utility>
+#include <variant>
 
 #include "concepts.h"
 
 namespace tempura {
+
+// ============================================================================
+// Error Type Merging
+// ============================================================================
+//
+// whenAll merges error types from all senders into a single variant,
+// deduplicating identical types. Follows P2300/libunifex approach.
+//
+// Example: whenAll(sender1, sender2) where both have ErrorTypes = tuple<error_code>
+//   Result: variant<error_code> (deduplicated)
+
+// Helper to remove duplicates from a type list (keeps first occurrence)
+template <typename...>
+struct UniqueTypes;
+
+template <>
+struct UniqueTypes<> {
+  using type = std::tuple<>;
+};
+
+template <typename T, typename... Rest>
+struct UniqueTypes<T, Rest...> {
+ private:
+  // Remove all occurrences of T from Rest
+  template <typename U, typename... Ts>
+  struct RemoveAll;
+
+  template <typename U>
+  struct RemoveAll<U> {
+    using type = std::tuple<>;
+  };
+
+  template <typename U, typename First, typename... Ts>
+  struct RemoveAll<U, First, Ts...> {
+    using rest = typename RemoveAll<U, Ts...>::type;
+    using type = std::conditional_t<std::is_same_v<U, First>,
+                                     rest,
+                                     decltype(std::tuple_cat(std::declval<std::tuple<First>>(),
+                                                              std::declval<rest>()))>;
+  };
+
+  // Apply UniqueTypes to a tuple's contents
+  template <typename Tuple>
+  struct ApplyUnique;
+
+  template <typename... Ts>
+  struct ApplyUnique<std::tuple<Ts...>> {
+    using type = typename UniqueTypes<Ts...>::type;
+  };
+
+  // Remove T from Rest, then get unique types from the result
+  using rest_without_t = typename RemoveAll<T, Rest...>::type;
+  using rest_unique = typename ApplyUnique<rest_without_t>::type;
+
+ public:
+  // Prepend T to the unique rest
+  using type = decltype(std::tuple_cat(std::declval<std::tuple<T>>(),
+                                        std::declval<rest_unique>()));
+};
+
+// Convert tuple to variant
+template <typename Tuple>
+struct TupleToVariant;
+
+template <typename... Ts>
+struct TupleToVariant<std::tuple<Ts...>> {
+  using type = std::variant<Ts...>;
+};
+
+// Merge and deduplicate error types from all senders
+template <typename... Senders>
+struct MergeUniqueErrorTypes {
+ private:
+  // Concatenate all error type tuples
+  using concatenated = decltype(std::tuple_cat(std::declval<typename Senders::ErrorTypes>()...));
+
+  // Extract types from concatenated tuple and deduplicate
+  template <typename Tuple>
+  struct UniqueFromTuple;
+
+  template <typename... Es>
+  struct UniqueFromTuple<std::tuple<Es...>> {
+    using type = typename UniqueTypes<Es...>::type;
+  };
+
+ public:
+  using type = typename TupleToVariant<
+      typename UniqueFromTuple<concatenated>::type
+  >::type;
+};
 
 // ============================================================================
 // WhenAll - Parallel Composition
@@ -66,14 +157,16 @@ class WhenAllSharedState {
   }
 
   // Called when a child sender completes with error
-  template <typename... ErrorArgs>
-  void setError(ErrorArgs&&... args) noexcept {
+  template <typename Error>
+  void setError(Error&& error) noexcept {
     // Try to claim completion immediately (first error wins)
     // This happens BEFORE decrementing to prevent race with setValue
     bool expected = false;
     if (completed_.compare_exchange_strong(expected, true,
                                             std::memory_order_acq_rel)) {
-      receiver_.setError(std::forward<ErrorArgs>(args)...);
+      // Forward error as variant (P2300 approach: simple variant of unique types)
+      using ErrorVariant = typename MergeUniqueErrorTypes<Senders...>::type;
+      receiver_.setError(ErrorVariant{std::forward<Error>(error)});
     }
     // else: another error/stop already claimed completion
 
@@ -119,9 +212,9 @@ class WhenAllReceiver {
     state_->template setValue<Index>(std::forward<Args>(args)...);
   }
 
-  template <typename... ErrorArgs>
-  void setError(ErrorArgs&&... args) noexcept {
-    state_->setError(std::forward<ErrorArgs>(args)...);
+  template <typename Error>
+  void setError(Error&& error) noexcept {
+    state_->setError(std::forward<Error>(error));
   }
 
   void setStopped() noexcept { state_->setStopped(); }
@@ -210,22 +303,6 @@ class WhenAllOperationState {
   OperationTuple<0, SharedState, Senders...> inner_ops_;
 };
 
-// Helper to merge error types from multiple senders
-template <typename... Senders>
-struct MergeErrorTypes;
-
-template <typename Sender>
-struct MergeErrorTypes<Sender> {
-  using type = typename Sender::ErrorTypes;
-};
-
-template <typename Sender1, typename Sender2, typename... Rest>
-struct MergeErrorTypes<Sender1, Sender2, Rest...> {
-  using type = decltype(std::tuple_cat(
-      std::declval<typename Sender1::ErrorTypes>(),
-      std::declval<typename MergeErrorTypes<Sender2, Rest...>::type>()));
-};
-
 template <typename... Senders>
   requires(Sender<Senders> && ...)
 class WhenAllSender {
@@ -233,8 +310,8 @@ class WhenAllSender {
   // The result is a tuple of all the value tuples
   using ValueTypes = std::tuple<typename Senders::ValueTypes...>;
 
-  // Merge all error types from all senders
-  using ErrorTypes = typename MergeErrorTypes<Senders...>::type;
+  // Error is a variant of all unique error types from all senders (P2300 approach)
+  using ErrorTypes = std::tuple<typename MergeUniqueErrorTypes<Senders...>::type>;
 
   template <typename... Ss>
   explicit WhenAllSender(Ss&&... senders)

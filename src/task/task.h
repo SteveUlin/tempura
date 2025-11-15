@@ -28,13 +28,14 @@
 // Schedulers
 #include "schedulers.h"
 
+// Parallel composition
+#include "when_all.h"
+
 namespace tempura {
 
 // ============================================================================
 // Parallel Composition
 // ============================================================================
-
-// TODO: Implement whenAll sender
 
 // TODO: Implement whenAny sender
 
