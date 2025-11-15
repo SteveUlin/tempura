@@ -41,3 +41,10 @@
 - Do NOT use `/tmp` directory for test files or experiments
 - Create test files in project-local directories (e.g., `build/`, test subdirectories)
 - Keep all development artifacts within the project tree
+
+## Command Execution
+
+- AVOID using `$` variables in bash commands when possible
+- Commands with `$` trigger user approval prompts which slow down workflow
+- Use absolute paths or relative paths instead of environment variables
+- Example: use `cd build-asan && make` NOT `cd $BUILD_DIR && make`

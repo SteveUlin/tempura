@@ -33,3 +33,16 @@ add_executable(schedulers_test schedulers_test.cpp)
 target_link_libraries(schedulers_test task unit event_loop threadpool)
 add_test(NAME schedulers_test COMMAND schedulers_test)
 set_property(TEST schedulers_test PROPERTY LABELS base)
+
+add_executable(when_all_simple_test when_all_simple_test.cpp)
+target_link_libraries(when_all_simple_test task unit)
+add_test(NAME when_all_simple_test COMMAND when_all_simple_test)
+set_property(TEST when_all_simple_test PROPERTY LABELS base)
+
+# Comprehensive whenAll test - now enabled with recursive inheritance storage
+# Previously disabled because std::tuple required movable operation states.
+# Now uses OperationTuple (recursive template inheritance) for move-free storage.
+add_executable(when_all_test when_all_test.cpp)
+target_link_libraries(when_all_test task unit)
+add_test(NAME when_all_test COMMAND when_all_test)
+set_property(TEST when_all_test PROPERTY LABELS base)
