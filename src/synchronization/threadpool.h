@@ -32,7 +32,7 @@ class ThreadPool {
     std::future<ReturnType> res = task.get_future();
 
     {
-      std::lock_guard<std::mutex> lock(mutex_);
+      std::scoped_lock lock{mutex_};
       tasks_.emplace([task = std::move(task)] mutable { task(); });
     }
     condition_.notify_one();

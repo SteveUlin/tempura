@@ -39,7 +39,7 @@ void ThreadPool::mainThreadExecute() {
   std::move_only_function<void()> task;
 
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::scoped_lock lock{mutex_};
     // Run on the main thread until there are no tasks left.
     if (tasks_.empty()) {
       return;
@@ -54,7 +54,7 @@ void ThreadPool::mainThreadExecute() {
 
 void ThreadPool::stop() {
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::scoped_lock lock{mutex_};
     stop_ = true;
   }
   condition_.notify_all();

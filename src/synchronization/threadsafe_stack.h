@@ -24,12 +24,12 @@ class ThreadSafeStack {
   auto operator=(ThreadSafeStack&&) -> ThreadSafeStack& = delete;
 
   auto push(T value) -> void {
-    std::lock_guard<std::mutex> lock{mutex_};
+    std::scoped_lock lock{mutex_};
     stack_.push(std::move(value));
   }
 
   auto pop(T& value) -> bool {
-    std::lock_guard<std::mutex> lock{mutex_};
+    std::scoped_lock lock{mutex_};
     if (stack_.empty()) {
       return false;  // Stack is empty
     }
@@ -39,12 +39,12 @@ class ThreadSafeStack {
   }
 
   auto empty() const -> bool {
-    std::lock_guard<std::mutex> lock{mutex_};
+    std::scoped_lock lock{mutex_};
     return stack_.empty();
   }
 
   auto size() const -> std::size_t {
-    std::lock_guard<std::mutex> lock{mutex_};
+    std::scoped_lock lock{mutex_};
     return stack_.size();
   }
 

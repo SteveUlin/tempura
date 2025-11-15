@@ -1,11 +1,13 @@
 #include "synchronization/threadsafe_queue.h"
 
+#include <thread>
+
 #include "unit.h"
 
 using namespace tempura;
 
 auto main() -> int {
-  "ThreadSafeQueue"_test = [] {
+  "ThreadSafeQueue basic operations"_test = [] {
     ThreadSafeQueue<int> queue;
 
     // Test pushing and popping elements
@@ -21,8 +23,31 @@ auto main() -> int {
     queue.waitAndPop(value);
     expectEq(3, value);
 
-    // Test popping from an empty queue
-    expectTrue(!queue.tryPop(value));
+    // Test tryPop on empty queue
+    expectFalse(queue.tryPop(value));
+  };
+
+  "ThreadSafeQueue multi-threaded"_test = [] {
+    ThreadSafeQueue<int> queue;
+
+    // Producer thread
+    std::thread producer([&queue] {
+      for (int i = 0; i < 10; ++i) {
+        queue.push(i);
+      }
+    });
+
+    // Consumer thread
+    std::thread consumer([&queue] {
+      for (int i = 0; i < 10; ++i) {
+        int value;
+        queue.waitAndPop(value);
+        expectEq(i, value);
+      }
+    });
+
+    producer.join();
+    consumer.join();
   };
 
   return TestRegistry::result();

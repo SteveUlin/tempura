@@ -38,6 +38,14 @@ target_include_directories(threadsafe_stack INTERFACE
 target_link_libraries(threadsafe_stack INTERFACE tempura_flags)
 add_library(tempura::threadsafe_stack ALIAS threadsafe_stack)
 
+add_library(event_loop INTERFACE event_loop.h)
+target_include_directories(event_loop INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
+  $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(event_loop INTERFACE tempura_flags)
+add_library(tempura::event_loop ALIAS event_loop)
+
 add_library(threadpool SHARED)
 target_sources(threadpool PUBLIC threadpool.h threadpool.cpp)
 target_include_directories(threadpool PUBLIC
@@ -68,3 +76,6 @@ target_link_libraries(threadsafe_stack_test threadsafe_stack unit)
 
 add_executable(threadpool_test threadpool_test.cpp)
 target_link_libraries(threadpool_test threadpool unit profiler)
+
+add_executable(event_loop_test event_loop_test.cpp)
+target_link_libraries(event_loop_test event_loop unit)

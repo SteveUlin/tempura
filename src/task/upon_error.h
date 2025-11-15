@@ -2,12 +2,12 @@
 
 #pragma once
 
-#include "concepts.h"
-
 #include <system_error>
 #include <tuple>
 #include <type_traits>
 #include <utility>
+
+#include "concepts.h"
 
 namespace tempura {
 
@@ -110,9 +110,6 @@ auto uponError(F&& func) {
 
 // Pipe operator for sender | adaptor syntax
 template <typename S, typename F>
-  requires requires(S&& s, const UponErrorAdaptor<F>& adaptor) {
-    adaptor(std::forward<S>(s));
-  }
 auto operator|(S&& sender, const UponErrorAdaptor<F>& adaptor) {
   return adaptor(std::forward<S>(sender));
 }
