@@ -49,6 +49,8 @@ add_executable(image_main image_main.cpp)
 add_executable(simd_main simd_main.cpp)
 target_link_libraries(simd_main PRIVATE profiler)
 
+add_executable(scheduler_demo scheduler_demo.cpp)
+
 # add_executable(glfw_main glfw_main.cpp)  # Disabled - missing GL/gl.h
 # target_link_libraries(glfw_main PRIVATE glfw OpenGL::GL)
 # add_executable(hello_triangle_main hello_triangle.cpp)  # Disabled - missing GL/gl.h

@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "ask": ["Write(./.claude/**)", "Edit(./.claude/**)"],
+    "allow": [
+      "Bash(./build/**)",
+      "Bash(./debug/**)",
+      "Bash(./release/**)",
+      "Bash(ninja:*)",
+      "Bash(cmake:*)",
+      "Bash(ctest:*)"
+    ]
+  }
+}

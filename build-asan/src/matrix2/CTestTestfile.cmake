@@ -1,0 +1,36 @@
+# CMake generated Testfile for 
+# Source directory: /home/ulins/tempura/src/matrix2
+# Build directory: /home/ulins/tempura/build-asan/src/matrix2
+# 
+# This file includes the relevant testing commands required for 
+# testing this directory and lists subdirectories to be tested as well.
+add_test([=[matrix2_matrix_test]=] "/home/ulins/tempura/build-asan/src/matrix2/matrix2_matrix_test")
+set_tests_properties([=[matrix2_matrix_test]=] PROPERTIES  LABELS "matrix2;core" _BACKTRACE_TRIPLES "/home/ulins/tempura/src/matrix2/CMakeLists.txt;24;add_test;/home/ulins/tempura/src/matrix2/CMakeLists.txt;0;")
+add_test([=[matrix2_addition_test]=] "/home/ulins/tempura/build-asan/src/matrix2/matrix2_addition_test")
+set_tests_properties([=[matrix2_addition_test]=] PROPERTIES  LABELS "matrix2;core" _BACKTRACE_TRIPLES "/home/ulins/tempura/src/matrix2/CMakeLists.txt;30;add_test;/home/ulins/tempura/src/matrix2/CMakeLists.txt;0;")
+add_test([=[matrix2_multiplication_test]=] "/home/ulins/tempura/build-asan/src/matrix2/matrix2_multiplication_test")
+set_tests_properties([=[matrix2_multiplication_test]=] PROPERTIES  LABELS "matrix2;core" _BACKTRACE_TRIPLES "/home/ulins/tempura/src/matrix2/CMakeLists.txt;36;add_test;/home/ulins/tempura/src/matrix2/CMakeLists.txt;0;")
+add_test([=[matrix2_to_string_test]=] "/home/ulins/tempura/build-asan/src/matrix2/matrix2_to_string_test")
+set_tests_properties([=[matrix2_to_string_test]=] PROPERTIES  LABELS "matrix2;core" _BACKTRACE_TRIPLES "/home/ulins/tempura/src/matrix2/CMakeLists.txt;42;add_test;/home/ulins/tempura/src/matrix2/CMakeLists.txt;0;")
+add_test([=[matrix2_dense_test]=] "/home/ulins/tempura/build-asan/src/matrix2/matrix2_dense_test")
+set_tests_properties([=[matrix2_dense_test]=] PROPERTIES  LABELS "matrix2;storage" _BACKTRACE_TRIPLES "/home/ulins/tempura/src/matrix2/CMakeLists.txt;52;add_test;/home/ulins/tempura/src/matrix2/CMakeLists.txt;0;")
+add_test([=[matrix2_inline_dense_test]=] "/home/ulins/tempura/build-asan/src/matrix2/matrix2_inline_dense_test")
+set_tests_properties([=[matrix2_inline_dense_test]=] PROPERTIES  LABELS "matrix2;storage" _BACKTRACE_TRIPLES "/home/ulins/tempura/src/matrix2/CMakeLists.txt;58;add_test;/home/ulins/tempura/src/matrix2/CMakeLists.txt;0;")
+add_test([=[matrix2_banded_test]=] "/home/ulins/tempura/build-asan/src/matrix2/matrix2_banded_test")
+set_tests_properties([=[matrix2_banded_test]=] PROPERTIES  LABELS "matrix2;storage" _BACKTRACE_TRIPLES "/home/ulins/tempura/src/matrix2/CMakeLists.txt;64;add_test;/home/ulins/tempura/src/matrix2/CMakeLists.txt;0;")
+add_test([=[matrix2_block_test]=] "/home/ulins/tempura/build-asan/src/matrix2/matrix2_block_test")
+set_tests_properties([=[matrix2_block_test]=] PROPERTIES  LABELS "matrix2;storage" _BACKTRACE_TRIPLES "/home/ulins/tempura/src/matrix2/CMakeLists.txt;70;add_test;/home/ulins/tempura/src/matrix2/CMakeLists.txt;0;")
+add_test([=[matrix2_complex_test]=] "/home/ulins/tempura/build-asan/src/matrix2/matrix2_complex_test")
+set_tests_properties([=[matrix2_complex_test]=] PROPERTIES  LABELS "matrix2;storage" _BACKTRACE_TRIPLES "/home/ulins/tempura/src/matrix2/CMakeLists.txt;76;add_test;/home/ulins/tempura/src/matrix2/CMakeLists.txt;0;")
+add_test([=[matrix2_identity_test]=] "/home/ulins/tempura/build-asan/src/matrix2/matrix2_identity_test")
+set_tests_properties([=[matrix2_identity_test]=] PROPERTIES  LABELS "matrix2;storage" _BACKTRACE_TRIPLES "/home/ulins/tempura/src/matrix2/CMakeLists.txt;82;add_test;/home/ulins/tempura/src/matrix2/CMakeLists.txt;0;")
+add_test([=[matrix2_inline_coordinate_list_test]=] "/home/ulins/tempura/build-asan/src/matrix2/matrix2_inline_coordinate_list_test")
+set_tests_properties([=[matrix2_inline_coordinate_list_test]=] PROPERTIES  LABELS "matrix2;storage" _BACKTRACE_TRIPLES "/home/ulins/tempura/src/matrix2/CMakeLists.txt;88;add_test;/home/ulins/tempura/src/matrix2/CMakeLists.txt;0;")
+add_test([=[matrix2_permutation_test]=] "/home/ulins/tempura/build-asan/src/matrix2/matrix2_permutation_test")
+set_tests_properties([=[matrix2_permutation_test]=] PROPERTIES  LABELS "matrix2;storage" _BACKTRACE_TRIPLES "/home/ulins/tempura/src/matrix2/CMakeLists.txt;94;add_test;/home/ulins/tempura/src/matrix2/CMakeLists.txt;0;")
+add_test([=[matrix2_permuted_test]=] "/home/ulins/tempura/build-asan/src/matrix2/matrix2_permuted_test")
+set_tests_properties([=[matrix2_permuted_test]=] PROPERTIES  LABELS "matrix2;storage" _BACKTRACE_TRIPLES "/home/ulins/tempura/src/matrix2/CMakeLists.txt;100;add_test;/home/ulins/tempura/src/matrix2/CMakeLists.txt;0;")
+add_test([=[matrix2_lu_decomposition_test]=] "/home/ulins/tempura/build-asan/src/matrix2/matrix2_lu_decomposition_test")
+set_tests_properties([=[matrix2_lu_decomposition_test]=] PROPERTIES  LABELS "matrix2;algorithms" _BACKTRACE_TRIPLES "/home/ulins/tempura/src/matrix2/CMakeLists.txt;110;add_test;/home/ulins/tempura/src/matrix2/CMakeLists.txt;0;")
+add_test([=[matrix2_gauss_jordan_test]=] "/home/ulins/tempura/build-asan/src/matrix2/matrix2_gauss_jordan_test")
+set_tests_properties([=[matrix2_gauss_jordan_test]=] PROPERTIES  LABELS "matrix2;algorithms" _BACKTRACE_TRIPLES "/home/ulins/tempura/src/matrix2/CMakeLists.txt;116;add_test;/home/ulins/tempura/src/matrix2/CMakeLists.txt;0;")
