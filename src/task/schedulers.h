@@ -10,6 +10,7 @@
 #include "concepts.h"
 #include "synchronization/event_loop.h"
 #include "synchronization/threadpool.h"
+#include "synchronization/timer_queue.h"
 
 namespace tempura {
 
@@ -322,5 +323,142 @@ class NewThreadScheduler {
 };
 
 static_assert(Scheduler<NewThreadScheduler>);
+
+// ============================================================================
+// TimerScheduler - executes on a timer queue at scheduled times
+// ============================================================================
+
+// Operation state for timer schedule sender
+template <typename R>
+class TimerScheduleOperationState {
+ public:
+  TimerScheduleOperationState(TimerQueue& queue, TimerQueue::TimePoint when,
+                              R r)
+      : queue_(&queue), when_(when), receiver_(std::move(r)) {}
+
+  // Operation States are not copyable nor movable
+  TimerScheduleOperationState(const TimerScheduleOperationState&) = delete;
+  auto operator=(const TimerScheduleOperationState&)
+      -> TimerScheduleOperationState& = delete;
+  TimerScheduleOperationState(TimerScheduleOperationState&&) = delete;
+  auto operator=(TimerScheduleOperationState&&)
+      -> TimerScheduleOperationState& = delete;
+
+  void start() noexcept {
+    // Schedule task on timer queue. Operation state must remain valid until
+    // lambda executes and calls setValue() (P2300 requirement).
+    queue_->scheduleAt(when_, [this]() noexcept { receiver_.setValue(); });
+  }
+
+ private:
+  TimerQueue* queue_;
+  TimerQueue::TimePoint when_;
+  R receiver_;
+};
+
+// Sender returned by TimerScheduler methods and free functions
+class TimerScheduleSender {
+ public:
+  using ValueTypes = std::tuple<>;  // schedule() sends no values
+
+  TimerScheduleSender(TimerQueue& queue, TimerQueue::TimePoint when)
+      : queue_(&queue), when_(when) {}
+
+  template <ReceiverOf<> R>
+  auto connect(R&& receiver) && {
+    return TimerScheduleOperationState<R>{*queue_, when_,
+                                          std::forward<R>(receiver)};
+  }
+
+ private:
+  TimerQueue* queue_;
+  TimerQueue::TimePoint when_;
+};
+
+// Scheduler that executes work on a timer queue at scheduled times
+//
+// REQUIRES: The TimerQueue must outlive the scheduler and all work scheduled
+// through it. The scheduler does not take ownership of the TimerQueue.
+//
+// Example usage:
+//   TimerQueue queue;
+//   std::thread worker([&queue] { queue.run(); });
+//
+//   TimerScheduler scheduler{queue};
+//   auto when = TimerQueue::Clock::now() + std::chrono::seconds(2);
+//   auto work = scheduler.scheduleAt(when) | then([] { return 42; });
+//   auto result = syncWait(std::move(work));
+//
+//   queue.stop();
+//   worker.join();
+//
+class TimerScheduler {
+ public:
+  using Clock = TimerQueue::Clock;
+  using TimePoint = TimerQueue::TimePoint;
+
+  explicit TimerScheduler(TimerQueue& queue) : queue_(&queue) {}
+
+  // Schedule a sender to execute at a specific time point
+  auto scheduleAt(TimePoint when) const {
+    return TimerScheduleSender{*queue_, when};
+  }
+
+  // Schedule a sender to execute after a specific duration from now
+  template <typename Rep, typename Period>
+  auto scheduleAfter(std::chrono::duration<Rep, Period> delay) const {
+    return scheduleAt(Clock::now() + delay);
+  }
+
+ private:
+  TimerQueue* queue_;
+};
+
+// Note: TimerScheduler does not satisfy the Scheduler concept because
+// it requires timing information (scheduleAt/scheduleAfter), whereas
+// the Scheduler concept expects a parameterless schedule() method.
+// This is intentional - timers are fundamentally different from other schedulers.
+
+// Free function: Schedule a sender to execute at a specific time point
+//
+// REQUIRES: The TimerQueue must outlive all senders created by this function
+// and all work scheduled through them.
+//
+// Example usage:
+//   TimerQueue queue;
+//   std::thread worker([&queue] { queue.run(); });
+//
+//   auto when = TimerQueue::Clock::now() + std::chrono::seconds(2);
+//   auto work = scheduleAt(queue, when) | then([] { return 42; });
+//   auto result = syncWait(std::move(work));
+//
+//   queue.stop();
+//   worker.join();
+//
+inline auto scheduleAt(TimerQueue& queue, TimerQueue::TimePoint when) {
+  return TimerScheduleSender{queue, when};
+}
+
+// Free function: Schedule a sender to execute after a specific duration from now
+//
+// REQUIRES: The TimerQueue must outlive all senders created by this function
+// and all work scheduled through them.
+//
+// Example usage:
+//   TimerQueue queue;
+//   std::thread worker([&queue] { queue.run(); });
+//
+//   auto work = scheduleAfter(queue, std::chrono::seconds(2)) |
+//               then([] { return 42; });
+//   auto result = syncWait(std::move(work));
+//
+//   queue.stop();
+//   worker.join();
+//
+template <typename Rep, typename Period>
+inline auto scheduleAfter(TimerQueue& queue,
+                          std::chrono::duration<Rep, Period> delay) {
+  return TimerScheduleSender{queue, TimerQueue::Clock::now() + delay};
+}
 
 }  // namespace tempura

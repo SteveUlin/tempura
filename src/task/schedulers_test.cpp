@@ -542,5 +542,260 @@ auto main() -> int {
     expectTrue(task_completed.load());
   };
 
+  // ==========================================================================
+  // TimerQueue Tests
+  // ==========================================================================
+
+  "TimerQueue - scheduleAfter executes task"_test = [] {
+    TimerQueue queue;
+    std::thread worker([&queue] { queue.run(); });
+
+    std::atomic<bool> executed{false};
+
+    auto sender = scheduleAfter(queue, std::chrono::milliseconds(50)) |
+                  then([&] {
+                    executed.store(true);
+                    return 42;
+                  });
+
+    auto result = syncWait(std::move(sender));
+
+    queue.stop();
+    worker.join();
+
+    expectTrue(result.has_value());
+    expectEq(std::get<0>(*result), 42);
+    expectTrue(executed.load());
+  };
+
+  "TimerQueue - scheduleAfter respects delay"_test = [] {
+    TimerQueue queue;
+    std::thread worker([&queue] { queue.run(); });
+
+    auto start = std::chrono::steady_clock::now();
+    auto delay = std::chrono::milliseconds(100);
+
+    auto sender =
+        scheduleAfter(queue, delay) | then([] { return 42; });
+
+    auto result = syncWait(std::move(sender));
+    auto elapsed = std::chrono::steady_clock::now() - start;
+
+    queue.stop();
+    worker.join();
+
+    expectTrue(result.has_value());
+    expectEq(std::get<0>(*result), 42);
+
+    // Verify delay was respected (allow 10ms tolerance)
+    expectTrue(elapsed >= delay - std::chrono::milliseconds(10));
+  };
+
+  "TimerQueue - scheduleAt executes at correct time"_test = [] {
+    TimerQueue queue;
+    std::thread worker([&queue] { queue.run(); });
+
+    auto delay = std::chrono::milliseconds(100);
+    auto when = TimerQueue::Clock::now() + delay;
+    auto start = std::chrono::steady_clock::now();
+
+    auto sender = scheduleAt(queue, when) | then([] { return 42; });
+
+    auto result = syncWait(std::move(sender));
+    auto elapsed = std::chrono::steady_clock::now() - start;
+
+    queue.stop();
+    worker.join();
+
+    expectTrue(result.has_value());
+    expectEq(std::get<0>(*result), 42);
+
+    // Verify execution happened at approximately the right time
+    expectTrue(elapsed >= delay - std::chrono::milliseconds(10));
+  };
+
+  "TimerQueue - multiple tasks execute in order"_test = [] {
+    TimerQueue queue;
+    std::thread worker([&queue] { queue.run(); });
+
+    std::vector<int> execution_order;
+    std::mutex order_mutex;
+
+    // Schedule tasks with different delays (reverse order)
+    auto sender3 = scheduleAfter(queue, std::chrono::milliseconds(150)) |
+                   then([&] {
+                     std::scoped_lock lock{order_mutex};
+                     execution_order.push_back(3);
+                     return 3;
+                   });
+
+    auto sender2 = scheduleAfter(queue, std::chrono::milliseconds(100)) |
+                   then([&] {
+                     std::scoped_lock lock{order_mutex};
+                     execution_order.push_back(2);
+                     return 2;
+                   });
+
+    auto sender1 = scheduleAfter(queue, std::chrono::milliseconds(50)) |
+                   then([&] {
+                     std::scoped_lock lock{order_mutex};
+                     execution_order.push_back(1);
+                     return 1;
+                   });
+
+    auto result1 = syncWait(std::move(sender1));
+    auto result2 = syncWait(std::move(sender2));
+    auto result3 = syncWait(std::move(sender3));
+
+    queue.stop();
+    worker.join();
+
+    expectTrue(result1.has_value());
+    expectTrue(result2.has_value());
+    expectTrue(result3.has_value());
+
+    // Verify execution order matches schedule times (not submission order)
+    expectEq(execution_order.size(), 3);
+    expectEq(execution_order[0], 1);
+    expectEq(execution_order[1], 2);
+    expectEq(execution_order[2], 3);
+  };
+
+  "TimerQueue - chained operations"_test = [] {
+    TimerQueue queue;
+    std::thread worker([&queue] { queue.run(); });
+
+    auto sender = scheduleAfter(queue, std::chrono::milliseconds(50)) |
+                  then([] { return 10; }) | then([](int x) { return x * 2; }) |
+                  then([](int x) { return x + 5; });
+
+    auto result = syncWait(std::move(sender));
+
+    queue.stop();
+    worker.join();
+
+    expectTrue(result.has_value());
+    expectEq(std::get<0>(*result), 25);  // (10 * 2) + 5
+  };
+
+  "TimerQueue - letValue composition"_test = [] {
+    TimerQueue queue;
+    std::thread worker([&queue] { queue.run(); });
+
+    auto sender =
+        scheduleAfter(queue, std::chrono::milliseconds(50)) |
+        then([] { return 5; }) |
+        letValue([](int x) { return just(x * 3, x + 2); }) |
+        then([](int a, int b) { return a + b; });
+
+    auto result = syncWait(std::move(sender));
+
+    queue.stop();
+    worker.join();
+
+    expectTrue(result.has_value());
+    expectEq(std::get<0>(*result), 22);  // (5 * 3) + (5 + 2) = 15 + 7 = 22
+  };
+
+  "TimerQueue - immediate execution for past time"_test = [] {
+    TimerQueue queue;
+    std::thread worker([&queue] { queue.run(); });
+
+    // Schedule a task for a time in the past
+    auto when = TimerQueue::Clock::now() - std::chrono::seconds(1);
+    auto start = std::chrono::steady_clock::now();
+
+    auto sender = scheduleAt(queue, when) | then([] { return 42; });
+
+    auto result = syncWait(std::move(sender));
+    auto elapsed = std::chrono::steady_clock::now() - start;
+
+    queue.stop();
+    worker.join();
+
+    expectTrue(result.has_value());
+    expectEq(std::get<0>(*result), 42);
+
+    // Should execute immediately (within 50ms tolerance)
+    expectTrue(elapsed < std::chrono::milliseconds(50));
+  };
+
+  "TimerQueue - concurrent scheduling"_test = [] {
+    TimerQueue queue;
+    std::thread worker([&queue] { queue.run(); });
+
+    std::atomic<int> counter{0};
+
+    // Schedule multiple tasks concurrently from different threads
+    std::vector<std::thread> schedulers;
+    for (int i = 0; i < 10; ++i) {
+      schedulers.emplace_back([&queue, &counter, i] {
+        auto sender = scheduleAfter(
+                          queue, std::chrono::milliseconds(50 + i * 10)) |
+                      then([&counter] {
+                        ++counter;
+                        return 1;
+                      });
+        auto result = syncWait(std::move(sender));
+      });
+    }
+
+    for (auto& t : schedulers) {
+      t.join();
+    }
+
+    queue.stop();
+    worker.join();
+
+    expectEq(counter.load(), 10);
+  };
+
+  "TimerQueue - stop drains pending tasks"_test = [] {
+    TimerQueue queue;
+    std::thread worker([&queue] { queue.run(); });
+
+    std::atomic<int> executed_count{0};
+
+    // Schedule tasks with various delays
+    auto sender1 = scheduleAfter(queue, std::chrono::milliseconds(50)) |
+                   then([&executed_count] {
+                     ++executed_count;
+                     return 1;
+                   });
+
+    auto sender2 = scheduleAfter(queue, std::chrono::milliseconds(100)) |
+                   then([&executed_count] {
+                     ++executed_count;
+                     return 2;
+                   });
+
+    auto sender3 = scheduleAfter(queue, std::chrono::milliseconds(150)) |
+                   then([&executed_count] {
+                     ++executed_count;
+                     return 3;
+                   });
+
+    // Start all senders
+    std::thread t1([s = std::move(sender1)]() mutable {
+      auto result = syncWait(std::move(s));
+    });
+    std::thread t2([s = std::move(sender2)]() mutable {
+      auto result = syncWait(std::move(s));
+    });
+    std::thread t3([s = std::move(sender3)]() mutable {
+      auto result = syncWait(std::move(s));
+    });
+
+    t1.join();
+    t2.join();
+    t3.join();
+
+    queue.stop();
+    worker.join();
+
+    // All tasks should have executed
+    expectEq(executed_count.load(), 3);
+  };
+
   return 0;
 }
