@@ -41,3 +41,9 @@ add_executable(when_all_test when_all_test.cpp)
 target_link_libraries(when_all_test task unit)
 add_test(NAME when_all_test COMMAND when_all_test)
 set_property(TEST when_all_test PROPERTY LABELS base)
+
+# WhenAny race composition test
+add_executable(when_any_test when_any_test.cpp)
+target_link_libraries(when_any_test task unit)
+add_test(NAME when_any_test COMMAND when_any_test)
+set_property(TEST when_any_test PROPERTY LABELS base)
