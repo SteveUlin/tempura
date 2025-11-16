@@ -30,14 +30,13 @@
 
 // Parallel composition
 #include "when_all.h"
+#include "when_any.h"
 
 namespace tempura {
 
 // ============================================================================
 // Parallel Composition
 // ============================================================================
-
-// TODO: Implement whenAny sender
 
 // ============================================================================
 // TODO: Implement ThreadPoolScheduler
