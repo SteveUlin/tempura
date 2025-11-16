@@ -125,10 +125,10 @@ InlineDense(const Scalar (&fst)[First], const Scalar (&... rows)[Sizes])
 template <typename Scalar, std::size_t First, std::size_t... Ns>
   requires((First == Ns) && ...)
 class Identity : public GenericMatrix<Extents<std::size_t, First, Ns...>,
-                               LayoutPassthough, IdentityAccessor<Scalar>> {
+                               LayoutPassthrough, IdentityAccessor<Scalar>> {
 public:
   using ParentType = GenericMatrix<Extents<std::size_t, First, Ns...>,
-                                   LayoutPassthough, IdentityAccessor<Scalar>>;
+                                   LayoutPassthrough, IdentityAccessor<Scalar>>;
   using ParentType::ParentType;
 
   constexpr Identity() : ParentType({}, {}, {}) {};

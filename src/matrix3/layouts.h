@@ -6,7 +6,7 @@
 
 namespace tempura::matrix3 {
 
-struct LayoutPassthough {
+struct LayoutPassthrough {
   template <typename ExtentT, typename IndexT>
   class Mapping {
    public:
