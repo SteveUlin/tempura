@@ -43,11 +43,10 @@ namespace tempura {
 // ============================================================================
 
 // ============================================================================
-// Stop Token Support
+// Stop Token and Environment Support
 // ============================================================================
 
-// TODO: Implement StopToken
-
-// TODO: Implement StopSource
+#include "task/stop_token.h"
+#include "task/env.h"
 
 }  // namespace tempura
