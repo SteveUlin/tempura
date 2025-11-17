@@ -47,3 +47,9 @@ add_executable(when_any_test when_any_test.cpp)
 target_link_libraries(when_any_test task unit)
 add_test(NAME when_any_test COMMAND when_any_test)
 set_property(TEST when_any_test PROPERTY LABELS base)
+
+# Stop token infrastructure test
+add_executable(stop_token_test stop_token_test.cpp)
+target_link_libraries(stop_token_test task unit)
+add_test(NAME stop_token_test COMMAND stop_token_test)
+set_property(TEST stop_token_test PROPERTY LABELS base)

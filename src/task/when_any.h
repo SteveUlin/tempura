@@ -10,6 +10,8 @@
 #include <variant>
 
 #include "concepts.h"
+#include "env.h"
+#include "stop_token.h"
 #include "type_utils.h"
 
 namespace tempura {
@@ -79,7 +81,10 @@ class WhenAnySharedState {
     bool expected = false;
     if (completed_.compare_exchange_strong(expected, true,
                                             std::memory_order_acq_rel)) {
-      // We're first! Forward the value as a variant
+      // We're first! Request stop for all other senders
+      stop_source_.request_stop();
+
+      // Forward the value as a variant
       using ValueVariant = typename MergeValueTypes<Senders...>::type;
       using ThisValueTuple = typename std::tuple_element_t<Index, std::tuple<Senders...>>::ValueTypes;
 
@@ -96,6 +101,9 @@ class WhenAnySharedState {
     bool expected = false;
     if (completed_.compare_exchange_strong(expected, true,
                                             std::memory_order_acq_rel)) {
+      // Request stop for all other senders
+      stop_source_.request_stop();
+
       // Forward error as variant
       using ErrorVariant = typename MergeUniqueErrorTypes<Senders...>::type;
       receiver_.setError(ErrorVariant{std::forward<Error>(error)});
@@ -109,14 +117,23 @@ class WhenAnySharedState {
     bool expected = false;
     if (completed_.compare_exchange_strong(expected, true,
                                             std::memory_order_acq_rel)) {
+      // Request stop for all other senders
+      stop_source_.request_stop();
+
       receiver_.setStopped();
     }
     // else: another sender already completed, ignore this stop
   }
 
+  // Get stop token for child operations
+  [[nodiscard]] auto get_stop_token() noexcept {
+    return stop_source_.get_token();
+  }
+
  private:
   R receiver_;
-  std::atomic<bool> completed_;  // true if receiver has been called
+  std::atomic<bool> completed_;      // true if receiver has been called
+  InplaceStopSource stop_source_;    // Stop source for active cancellation
 };
 
 // Receiver for each individual sender in the whenAny
@@ -136,6 +153,11 @@ class WhenAnyReceiver {
   }
 
   void setStopped() noexcept { state_->setStopped(); }
+
+  // Provide environment with stop token
+  [[nodiscard]] auto get_env() const noexcept {
+    return EnvWithStopToken{state_->get_stop_token()};
+  }
 
  private:
   SharedState* state_;
