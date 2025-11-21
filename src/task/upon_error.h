@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <functional>
 #include <system_error>
 #include <tuple>
 #include <type_traits>
@@ -23,7 +24,7 @@ class UponErrorReceiver {
 
   template <typename... ErrorArgs>
   void setError(ErrorArgs&&... args) noexcept {
-    auto result = (*func_)(std::forward<ErrorArgs>(args)...);
+    auto result = std::invoke(*func_, std::forward<ErrorArgs>(args)...);
     receiver_->setValue(std::move(result));
   }
 
@@ -70,6 +71,12 @@ class UponErrorSender {
   using ValueTypes = std::tuple<decltype(std::apply(
       std::declval<F>(), std::declval<typename S::ErrorTypes>()))>;
   using ErrorTypes = typename S::ErrorTypes;  // Propagate error types
+
+  // Validate that the function can be called with the sender's error types
+  static_assert(
+      requires { std::apply(std::declval<F>(), std::declval<typename S::ErrorTypes>()); },
+      "The function passed to uponError must be callable with the sender's error types. "
+      "Check that your lambda/function signature matches the errors produced by the sender.");
 
   UponErrorSender(S sender, F func)
       : sender_(std::move(sender)), func_(std::move(func)) {}
