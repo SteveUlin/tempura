@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <functional>
 #include <system_error>
 #include <tuple>
 #include <type_traits>
@@ -22,7 +23,7 @@ class ThenReceiver {
 
   template <typename... Args>
   void setValue(Args&&... args) noexcept {
-    auto result = (*func_)(std::forward<Args>(args)...);
+    auto result = std::invoke(*func_, std::forward<Args>(args)...);
     receiver_->setValue(std::move(result));
   }
 

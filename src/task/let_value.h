@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <functional>
 #include <system_error>
 #include <tuple>
 #include <type_traits>
@@ -64,7 +65,7 @@ class LetValueOperationState {
       : func_(std::move(func)),
         receiver_(std::move(receiver)),
         state_(State::kOuter) {
-    // Construct outer operation in union storage using factory
+    // Construct outer operation in union storage (guaranteed copy elision via lambda)
     storage_.outer_.constructWith([&] {
       return std::move(sender).connect(InnerReceiver{this});
     });
@@ -97,9 +98,9 @@ class LetValueOperationState {
     state_ = State::kEmpty;
 
     // Step 2: Call function to get inner sender
-    auto inner_sender = func_(std::forward<Args>(args)...);
+    auto inner_sender = std::invoke(func_, std::forward<Args>(args)...);
 
-    // Step 3: Construct inner operation in the SAME memory (union reuse)
+    // Step 3: Construct inner operation in the SAME memory (union reuse, guaranteed copy elision via lambda)
     storage_.inner_.constructWith([&] {
       return std::move(inner_sender).connect(std::move(receiver_));
     });

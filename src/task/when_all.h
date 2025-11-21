@@ -249,16 +249,13 @@ class WhenAllSender {
 
   template <typename R>
   auto connect(R&& receiver) && {
-    return connectImpl(std::forward<R>(receiver),
-                       std::index_sequence_for<Senders...>{});
+    return [&]<std::size_t... Is>(std::index_sequence<Is...>) {
+      return WhenAllOperationState<std::remove_cvref_t<R>, Senders...>{
+          std::forward<R>(receiver), std::move(std::get<Is>(senders_))...};
+    }(std::index_sequence_for<Senders...>{});
   }
 
  private:
-  template <typename R, std::size_t... Is>
-  auto connectImpl(R&& receiver, std::index_sequence<Is...>) {
-    return WhenAllOperationState<std::remove_cvref_t<R>, Senders...>{
-        std::forward<R>(receiver), std::move(std::get<Is>(senders_))...};
-  }
 
   std::tuple<Senders...> senders_;
 };
