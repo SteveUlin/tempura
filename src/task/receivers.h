@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "concepts.h"
+#include "env.h"
 
 namespace tempura {
 
@@ -76,6 +77,9 @@ class ValueReceiver {
 static_assert(ReceiverOf<ValueReceiver<int>, int>);
 
 // Blocking receiver that signals completion via latch
+//
+// Provides InlineScheduler via environment since syncWait executes on the
+// calling thread. This allows child operations to query the scheduler if needed.
 template <typename... Args>
 class BlockingReceiver {
  public:
@@ -102,6 +106,11 @@ class BlockingReceiver {
   void setStopped() noexcept {
     opt_->reset();
     latch_->count_down();
+  }
+
+  // Provide environment with InlineScheduler for child operations
+  [[nodiscard]] constexpr auto get_env() const noexcept {
+    return EnvWithScheduler{InlineScheduler{}};
   }
 
  private:
