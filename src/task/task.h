@@ -21,6 +21,7 @@
 #include "upon_error.h"
 #include "let_value.h"
 #include "let_error.h"
+#include "on.h"
 
 // Algorithms
 #include "algorithms.h"

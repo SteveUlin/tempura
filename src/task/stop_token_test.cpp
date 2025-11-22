@@ -1,6 +1,7 @@
 #include "task/stop_token.h"
 #include "unit.h"
 
+#include <latch>
 #include <thread>
 
 using namespace tempura;
@@ -186,6 +187,239 @@ auto main() -> int {
 "compile time - NeverStopToken is trivial"_test = [] {
   static_assert(std::is_trivially_copyable_v<NeverStopToken>);
   static_assert(std::is_trivially_destructible_v<NeverStopToken>);
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// InplaceStopCallback tests
+// ═══════════════════════════════════════════════════════════════════════════
+
+"InplaceStopCallback - basic invocation"_test = [] {
+  InplaceStopSource source;
+  auto token = source.get_token();
+
+  bool callback_invoked = false;
+
+  {
+    InplaceStopCallback callback{token, [&] {
+      callback_invoked = true;
+    }};
+
+    expectFalse(callback_invoked);
+
+    source.request_stop();
+
+    expectTrue(callback_invoked);
+  }
+};
+
+"InplaceStopCallback - invoked immediately if already stopped"_test = [] {
+  InplaceStopSource source;
+  auto token = source.get_token();
+
+  source.request_stop();  // Stop first
+
+  bool callback_invoked = false;
+
+  {
+    InplaceStopCallback callback{token, [&] {
+      callback_invoked = true;
+    }};
+
+    // Should be invoked immediately in constructor
+    expectTrue(callback_invoked);
+  }
+};
+
+"InplaceStopCallback - multiple callbacks"_test = [] {
+  InplaceStopSource source;
+  auto token = source.get_token();
+
+  int invocation_count = 0;
+
+  {
+    InplaceStopCallback callback1{token, [&] { invocation_count++; }};
+    InplaceStopCallback callback2{token, [&] { invocation_count++; }};
+    InplaceStopCallback callback3{token, [&] { invocation_count++; }};
+
+    source.request_stop();
+
+    expectEq(invocation_count, 3);
+  }
+};
+
+"InplaceStopCallback - not invoked if destroyed before stop"_test = [] {
+  InplaceStopSource source;
+  auto token = source.get_token();
+
+  bool callback_invoked = false;
+
+  {
+    InplaceStopCallback callback{token, [&] {
+      callback_invoked = true;
+    }};
+  }  // Callback destroyed here
+
+  source.request_stop();
+
+  expectFalse(callback_invoked);  // Should not be invoked
+};
+
+"InplaceStopCallback - only invoked once"_test = [] {
+  InplaceStopSource source;
+  auto token = source.get_token();
+
+  int invocation_count = 0;
+
+  {
+    InplaceStopCallback callback{token, [&] { invocation_count++; }};
+
+    source.request_stop();
+    source.request_stop();  // Second call
+    source.request_stop();  // Third call
+
+    expectEq(invocation_count, 1);  // Only invoked once
+  }
+};
+
+"InplaceStopCallback - works with NeverStopToken"_test = [] {
+  NeverStopToken token;
+
+  bool callback_invoked = false;
+
+  // Should compile but never invoke callback
+  InplaceStopCallback callback{InplaceStopToken{}, [&] {
+    callback_invoked = true;
+  }};
+
+  expectFalse(callback_invoked);
+};
+
+"InplaceStopCallback - thread safe registration"_test = [] {
+  InplaceStopSource source;
+  auto token = source.get_token();
+
+  std::atomic<int> callback_count{0};
+  std::latch registered{2};
+  std::latch stop_done{1};
+
+  // Thread 1: Register callback, signal registration, wait for stop
+  std::thread registrar([&] {
+    InplaceStopCallback callback{token, [&] { callback_count++; }};
+    registered.count_down();
+    stop_done.wait();  // Wait for stop to complete
+  });
+
+  // Thread 2: Register callback, signal registration, wait for stop
+  std::thread registrar2([&] {
+    InplaceStopCallback callback{token, [&] { callback_count++; }};
+    registered.count_down();
+    stop_done.wait();  // Wait for stop to complete
+  });
+
+  // Wait for both callbacks to be registered
+  registered.wait();
+
+  // Now request stop while both callbacks are still registered
+  source.request_stop();
+
+  // Signal threads they can exit
+  stop_done.count_down();
+
+  registrar.join();
+  registrar2.join();
+
+  // Both callbacks should have been invoked
+  expectEq(callback_count.load(), 2);
+};
+
+"InplaceStopCallback - race between registration and stop"_test = [] {
+  InplaceStopSource source;
+  auto token = source.get_token();
+
+  std::atomic<int> callback_count{0};
+  std::atomic<bool> start{false};
+
+  // Thread 1: Register callback when start flag is set
+  std::thread registrar([&] {
+    while (!start.load(std::memory_order_acquire)) {
+      // Wait for start signal
+    }
+    InplaceStopCallback callback{token, [&] { callback_count++; }};
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  });
+
+  // Thread 2: Request stop when start flag is set
+  std::thread stopper([&] {
+    while (!start.load(std::memory_order_acquire)) {
+      // Wait for start signal
+    }
+    source.request_stop();
+  });
+
+  // Start both threads simultaneously
+  start.store(true, std::memory_order_release);
+
+  registrar.join();
+  stopper.join();
+
+  // Callback should be invoked exactly once (either during registration or during stop)
+  expectEq(callback_count.load(), 1);
+};
+
+"InplaceStopCallback - captures by value"_test = [] {
+  InplaceStopSource source;
+  auto token = source.get_token();
+
+  int value = 42;
+  bool callback_invoked = false;
+  int captured_value = 0;
+
+  {
+    InplaceStopCallback callback{token, [value, &callback_invoked, &captured_value] {
+      callback_invoked = true;
+      captured_value = value;
+    }};
+
+    value = 99;  // Change original
+
+    source.request_stop();
+
+    expectTrue(callback_invoked);
+    expectEq(captured_value, 42);  // Should have captured original value
+  }
+};
+
+"InplaceStopCallback - can modify captured references"_test = [] {
+  InplaceStopSource source;
+  auto token = source.get_token();
+
+  int counter = 0;
+
+  {
+    InplaceStopCallback callback{token, [&counter] {
+      counter++;
+    }};
+
+    source.request_stop();
+
+    expectEq(counter, 1);
+  }
+};
+
+"compile time - InplaceStopCallback is not copyable"_test = [] {
+  using CallbackType = InplaceStopCallback<decltype([]{}
+
+
+)>;
+  static_assert(!std::is_copy_constructible_v<CallbackType>);
+  static_assert(!std::is_copy_assignable_v<CallbackType>);
+};
+
+"compile time - InplaceStopCallback is not movable"_test = [] {
+  using CallbackType = InplaceStopCallback<decltype([]{}
+)>;
+  static_assert(!std::is_move_constructible_v<CallbackType>);
+  static_assert(!std::is_move_assignable_v<CallbackType>);
 };
 
   return TestRegistry::result();

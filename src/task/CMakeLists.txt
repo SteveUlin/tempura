@@ -53,3 +53,15 @@ add_executable(stop_token_test stop_token_test.cpp)
 target_link_libraries(stop_token_test task unit)
 add_test(NAME stop_token_test COMMAND stop_token_test)
 set_property(TEST stop_token_test PROPERTY LABELS base)
+
+# Environment and query infrastructure test
+add_executable(env_test env_test.cpp)
+target_link_libraries(env_test task unit event_loop threadpool)
+add_test(NAME env_test COMMAND env_test)
+set_property(TEST env_test PROPERTY LABELS base)
+
+# Scheduler transition algorithms test (on, etc.)
+add_executable(on_test on_test.cpp)
+target_link_libraries(on_test task unit)
+add_test(NAME on_test COMMAND on_test)
+set_property(TEST on_test PROPERTY LABELS base)
