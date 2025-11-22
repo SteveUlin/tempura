@@ -34,7 +34,8 @@ class PrintReceiver {
     if constexpr (sizeof...(ErrorArgs) == 1 &&
                   (std::same_as<std::decay_t<ErrorArgs>, std::error_code> &&
                    ...)) {
-      std::println("Error occurred: {}", std::forward<ErrorArgs>(args).message()...);
+      std::println("Error occurred: {}",
+                   std::forward<ErrorArgs>(args).message()...);
     } else {
       std::println("Error occurred with {} arguments", sizeof...(ErrorArgs));
     }
@@ -79,7 +80,8 @@ static_assert(ReceiverOf<ValueReceiver<int>, int>);
 // Blocking receiver that signals completion via latch
 //
 // Provides InlineScheduler via environment since syncWait executes on the
-// calling thread. This allows child operations to query the scheduler if needed.
+// calling thread. This allows child operations to query the scheduler if
+// needed.
 template <typename... Args>
 class BlockingReceiver {
  public:
@@ -109,8 +111,8 @@ class BlockingReceiver {
   }
 
   // Provide environment with InlineScheduler for child operations
-  [[nodiscard]] constexpr auto get_env() const noexcept {
-    return EnvWithScheduler{InlineScheduler{}};
+  constexpr auto get_env() const noexcept {
+    return withScheduler(InlineScheduler{});
   }
 
  private:

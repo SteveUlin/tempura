@@ -45,7 +45,7 @@ class OnReceiver {
   void setStopped() noexcept { op_state_->scheduleBackAndStop(); }
 
   // Provide target scheduler environment to inner sender
-  auto get_env() const noexcept { return EnvWithScheduler{*target_sched_}; }
+  auto get_env() const noexcept { return withScheduler(*target_sched_); }
 
  private:
   Sched* target_sched_;

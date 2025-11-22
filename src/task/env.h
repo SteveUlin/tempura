@@ -6,53 +6,93 @@
 namespace tempura {
 
 // ============================================================================
-// Environment - Query interface for receiver properties
+// Environment - Generic composable query interface
+// ============================================================================
+//
+// Environments are composable objects that hold properties (like schedulers,
+// stop tokens, allocators, etc.) and support querying via type tags.
+//
+// Design:
+//   • EmptyEnv provides defaults for all queries
+//   • Prop<Parent, Tag, Value> wraps a parent and adds/overrides one property
+//   • Query tags (GetStopTokenTag, etc.) identify properties
+//   • Environments compose via inheritance - queries fall through to parent
+//
+// Usage:
+//   auto env = withScheduler(withStopToken(token), sched);
+//   auto sched = get_scheduler(env);
+//   auto token = get_stop_token(env);
+//
 // ============================================================================
 
-// Empty environment (default)
+// Query type tags - identify what property is being queried
+struct GetStopTokenTag {};
+struct GetSchedulerTag {};
+
+// Empty environment - provides defaults for all queries
 struct EmptyEnv {
-  static constexpr auto get_stop_token() noexcept { return NeverStopToken{}; }
-  static constexpr auto get_scheduler() noexcept { return InlineScheduler{}; }
+  constexpr auto query(GetStopTokenTag) const noexcept {
+    return NeverStopToken{};
+  }
+  constexpr auto query(GetSchedulerTag) const noexcept {
+    return InlineScheduler{};
+  }
 };
 
-// Environment with stop token
-template <StopToken Token>
-class EnvWithStopToken {
-  Token token_;
+// Generic property wrapper - adds one property to an environment
+// Parent: the parent environment (supports composition via inheritance)
+// Tag: query tag that identifies this property
+// Value: the value to return for this query
+template <typename Parent, typename Tag, typename Value>
+class Prop : public Parent {
+  [[no_unique_address]] Value value_;
 
  public:
-  explicit constexpr EnvWithStopToken(Token token) noexcept : token_(token) {}
+  explicit constexpr Prop(Parent parent, Value v) noexcept
+      : Parent(static_cast<Parent&&>(parent)), value_(static_cast<Value&&>(v)) {}
 
-  constexpr auto get_stop_token() const noexcept { return token_; }
+  // Inherit parent's query() overloads (fall-through for unmatched queries)
+  using Parent::query;
+
+  // Override query for this tag - return by value to strip const/ref
+  constexpr Value query(Tag) const noexcept { return value_; }
 };
 
-// Environment with scheduler
-template <Scheduler Sched>
-class EnvWithScheduler {
-  Sched scheduler_;
+// ============================================================================
+// Builder functions - compose environments fluently
+// ============================================================================
 
- public:
-  explicit constexpr EnvWithScheduler(Sched sched) noexcept
-      : scheduler_(sched) {}
+// Add stop token to an environment
+template <typename Env, StopToken T>
+constexpr auto withStopToken(Env env, T token) noexcept {
+  return Prop<Env, GetStopTokenTag, T>{static_cast<Env&&>(env),
+                                       static_cast<T&&>(token)};
+}
 
-  constexpr auto get_scheduler() const noexcept { return scheduler_; }
-};
+// Add stop token to empty environment
+template <StopToken T>
+constexpr auto withStopToken(T token) noexcept {
+  return Prop<EmptyEnv, GetStopTokenTag, T>{EmptyEnv{},
+                                            static_cast<T&&>(token)};
+}
 
-// Environment with both stop token and scheduler
-template <StopToken Token, Scheduler Sched>
-class EnvWithStopTokenAndScheduler {
-  Token token_;
-  Sched scheduler_;
+// Add scheduler to an environment
+template <typename Env, Scheduler S>
+constexpr auto withScheduler(Env env, S sched) noexcept {
+  return Prop<Env, GetSchedulerTag, S>{static_cast<Env&&>(env),
+                                       static_cast<S&&>(sched)};
+}
 
- public:
-  constexpr EnvWithStopTokenAndScheduler(Token token, Sched sched) noexcept
-      : token_(token), scheduler_(sched) {}
+// Add scheduler to empty environment
+template <Scheduler S>
+constexpr auto withScheduler(S sched) noexcept {
+  return Prop<EmptyEnv, GetSchedulerTag, S>{EmptyEnv{}, static_cast<S&&>(sched)};
+}
 
-  constexpr auto get_stop_token() const noexcept { return token_; }
-  constexpr auto get_scheduler() const noexcept { return scheduler_; }
-};
+// ============================================================================
+// Customization point objects (CPOs)
+// ============================================================================
 
-// Customization point: get_env
 // Queries a receiver for its environment
 inline constexpr struct GetEnvFn {
   template <typename R>
@@ -65,26 +105,24 @@ inline constexpr struct GetEnvFn {
   }
 } get_env{};
 
-// Customization point: get_stop_token
 // Queries an environment for its stop token
 inline constexpr struct GetStopTokenFn {
   template <typename Env>
   constexpr auto operator()(const Env& env) const noexcept {
-    if constexpr (requires { env.get_stop_token(); }) {
-      return env.get_stop_token();
+    if constexpr (requires { env.query(GetStopTokenTag{}); }) {
+      return env.query(GetStopTokenTag{});
     } else {
       return NeverStopToken{};
     }
   }
 } get_stop_token{};
 
-// Customization point: get_scheduler
 // Queries an environment for its scheduler
 inline constexpr struct GetSchedulerFn {
   template <typename Env>
   constexpr auto operator()(const Env& env) const noexcept {
-    if constexpr (requires { env.get_scheduler(); }) {
-      return env.get_scheduler();
+    if constexpr (requires { env.query(GetSchedulerTag{}); }) {
+      return env.query(GetSchedulerTag{});
     } else {
       return InlineScheduler{};
     }

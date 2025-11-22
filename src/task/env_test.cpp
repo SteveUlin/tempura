@@ -10,9 +10,7 @@ using namespace tempura;
 struct ReceiverWithEnv {
   InplaceStopSource* source;
 
-  auto get_env() const noexcept {
-    return EnvWithStopToken{source->get_token()};
-  }
+  auto get_env() const noexcept { return withStopToken(source->get_token()); }
 
   void setValue() noexcept {}
   template <typename... ErrorArgs>
@@ -31,9 +29,7 @@ struct TestReceiver {
   InplaceStopSource* source;
   bool* stop_possible_result;
 
-  auto get_env() const noexcept {
-    return EnvWithStopToken{source->get_token()};
-  }
+  auto get_env() const noexcept { return withStopToken(source->get_token()); }
 
   void setValue(bool value) noexcept { *stop_possible_result = value; }
   template <typename... ErrorArgs>
@@ -46,7 +42,7 @@ struct ReceiverWithScheduler {
   EventLoopScheduler* retrieved;
 
   auto get_env() const noexcept {
-    return EnvWithScheduler{EventLoopScheduler{*loop}};
+    return withScheduler(EventLoopScheduler{*loop});
   }
 
   void setValue() noexcept {
@@ -68,7 +64,7 @@ auto main() -> int {
 
   "EmptyEnv - provides NeverStopToken"_test = [] {
     EmptyEnv env;
-    auto token = env.get_stop_token();
+    auto token = get_stop_token(env);
     static_assert(std::same_as<decltype(token), NeverStopToken>);
     expectFalse(token.stop_requested());
     expectFalse(token.stop_possible());
@@ -76,27 +72,27 @@ auto main() -> int {
 
   "EmptyEnv - provides InlineScheduler"_test = [] {
     EmptyEnv env;
-    auto sched = env.get_scheduler();
+    auto sched = get_scheduler(env);
     static_assert(std::same_as<decltype(sched), InlineScheduler>);
   };
 
   "EmptyEnv - is constexpr"_test = [] {
     constexpr EmptyEnv env;
-    constexpr auto token = env.get_stop_token();
-    constexpr auto sched = env.get_scheduler();
+    constexpr auto token = get_stop_token(env);
+    constexpr auto sched = get_scheduler(env);
     static_assert(!token.stop_requested());
   };
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // EnvWithStopToken tests
+  // withStopToken tests
   // ═══════════════════════════════════════════════════════════════════════════
 
-  "EnvWithStopToken - stores and returns stop token"_test = [] {
+  "withStopToken - stores and returns stop token"_test = [] {
     InplaceStopSource source;
     auto token = source.get_token();
-    EnvWithStopToken env{token};
+    auto env = withStopToken(token);
 
-    auto retrieved = env.get_stop_token();
+    auto retrieved = get_stop_token(env);
     expectTrue(retrieved.stop_possible());
     expectFalse(retrieved.stop_requested());
 
@@ -104,60 +100,60 @@ auto main() -> int {
     expectTrue(retrieved.stop_requested());
   };
 
-  "EnvWithStopToken - is constexpr with NeverStopToken"_test = [] {
-    constexpr EnvWithStopToken env{NeverStopToken{}};
-    constexpr auto token = env.get_stop_token();
+  "withStopToken - is constexpr with NeverStopToken"_test = [] {
+    constexpr auto env = withStopToken(NeverStopToken{});
+    constexpr auto token = get_stop_token(env);
     static_assert(!token.stop_requested());
   };
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // EnvWithScheduler tests
+  // withScheduler tests
   // ═══════════════════════════════════════════════════════════════════════════
 
-  "EnvWithScheduler - stores and returns scheduler"_test = [] {
+  "withScheduler - stores and returns scheduler"_test = [] {
     InlineScheduler sched;
-    EnvWithScheduler env{sched};
+    auto env = withScheduler(sched);
 
-    auto retrieved = env.get_scheduler();
+    auto retrieved = get_scheduler(env);
     static_assert(std::same_as<decltype(retrieved), InlineScheduler>);
   };
 
-  "EnvWithScheduler - works with EventLoopScheduler"_test = [] {
+  "withScheduler - works with EventLoopScheduler"_test = [] {
     EventLoop loop;
     EventLoopScheduler sched{loop};
-    EnvWithScheduler env{sched};
+    auto env = withScheduler(sched);
 
-    auto retrieved = env.get_scheduler();
+    auto retrieved = get_scheduler(env);
     static_assert(std::same_as<decltype(retrieved), EventLoopScheduler>);
   };
 
-  "EnvWithScheduler - works with ThreadPoolScheduler"_test = [] {
+  "withScheduler - works with ThreadPoolScheduler"_test = [] {
     ThreadPool pool{2};
     ThreadPoolScheduler sched{pool};
-    EnvWithScheduler env{sched};
+    auto env = withScheduler(sched);
 
-    auto retrieved = env.get_scheduler();
+    auto retrieved = get_scheduler(env);
     static_assert(std::same_as<decltype(retrieved), ThreadPoolScheduler>);
   };
 
-  "EnvWithScheduler - is constexpr with InlineScheduler"_test = [] {
-    constexpr EnvWithScheduler env{InlineScheduler{}};
-    constexpr auto sched = env.get_scheduler();
+  "withScheduler - is constexpr with InlineScheduler"_test = [] {
+    constexpr auto env = withScheduler(InlineScheduler{});
+    constexpr auto sched = get_scheduler(env);
     (void)sched;  // Suppress unused variable warning
   };
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // EnvWithStopTokenAndScheduler tests
+  // Composed environment tests (stop token + scheduler)
   // ═══════════════════════════════════════════════════════════════════════════
 
-  "EnvWithStopTokenAndScheduler - stores both token and scheduler"_test = [] {
+  "Composed - stores both token and scheduler"_test = [] {
     InplaceStopSource source;
     auto token = source.get_token();
     InlineScheduler sched;
-    EnvWithStopTokenAndScheduler env{token, sched};
+    auto env = withScheduler(withStopToken(token), sched);
 
-    auto retrieved_token = env.get_stop_token();
-    auto retrieved_sched = env.get_scheduler();
+    auto retrieved_token = get_stop_token(env);
+    auto retrieved_sched = get_scheduler(env);
 
     expectTrue(retrieved_token.stop_possible());
     expectFalse(retrieved_token.stop_requested());
@@ -167,23 +163,23 @@ auto main() -> int {
     expectTrue(retrieved_token.stop_requested());
   };
 
-  "EnvWithStopTokenAndScheduler - works with different schedulers"_test = [] {
+  "Composed - works with different schedulers"_test = [] {
     EventLoop loop;
     EventLoopScheduler sched{loop};
     InplaceStopSource source;
     auto token = source.get_token();
 
-    EnvWithStopTokenAndScheduler env{token, sched};
+    auto env = withScheduler(withStopToken(token), sched);
 
-    auto retrieved_sched = env.get_scheduler();
+    auto retrieved_sched = get_scheduler(env);
     static_assert(std::same_as<decltype(retrieved_sched), EventLoopScheduler>);
   };
 
-  "EnvWithStopTokenAndScheduler - is constexpr"_test = [] {
-    constexpr EnvWithStopTokenAndScheduler env{NeverStopToken{},
-                                               InlineScheduler{}};
-    constexpr auto token = env.get_stop_token();
-    constexpr auto sched = env.get_scheduler();
+  "Composed - is constexpr"_test = [] {
+    constexpr auto env =
+        withScheduler(withStopToken(NeverStopToken{}), InlineScheduler{});
+    constexpr auto token = get_stop_token(env);
+    constexpr auto sched = get_scheduler(env);
     static_assert(!token.stop_requested());
     (void)sched;  // Suppress unused variable warning
   };
@@ -197,7 +193,7 @@ auto main() -> int {
     ReceiverWithEnv receiver{&source};
 
     auto env = get_env(receiver);
-    auto token = env.get_stop_token();
+    auto token = get_stop_token(env);
     expectTrue(token.stop_possible());
   };
 
@@ -214,7 +210,7 @@ auto main() -> int {
   "get_stop_token - queries environment for stop token"_test = [] {
     InplaceStopSource source;
     auto token = source.get_token();
-    EnvWithStopToken env{token};
+    auto env = withStopToken(token);
 
     auto retrieved = get_stop_token(env);
     expectTrue(retrieved.stop_possible());
@@ -231,8 +227,8 @@ auto main() -> int {
     expectFalse(token.stop_possible());
   };
 
-  "get_stop_token - returns NeverStopToken for EnvWithScheduler"_test = [] {
-    EnvWithScheduler env{InlineScheduler{}};
+  "get_stop_token - returns NeverStopToken for scheduler-only env"_test = [] {
+    auto env = withScheduler(InlineScheduler{});
     auto token = get_stop_token(env);
     static_assert(std::same_as<decltype(token), NeverStopToken>);
     expectFalse(token.stop_possible());
@@ -240,7 +236,7 @@ auto main() -> int {
 
   "get_stop_token - works with combined environment"_test = [] {
     InplaceStopSource source;
-    EnvWithStopTokenAndScheduler env{source.get_token(), InlineScheduler{}};
+    auto env = withScheduler(withStopToken(source.get_token()), InlineScheduler{});
 
     auto token = get_stop_token(env);
     expectTrue(token.stop_possible());
@@ -256,7 +252,7 @@ auto main() -> int {
 
   "get_scheduler - queries environment for scheduler"_test = [] {
     InlineScheduler sched;
-    EnvWithScheduler env{sched};
+    auto env = withScheduler(sched);
 
     auto retrieved = get_scheduler(env);
     static_assert(std::same_as<decltype(retrieved), InlineScheduler>);
@@ -268,8 +264,8 @@ auto main() -> int {
     static_assert(std::same_as<decltype(sched), InlineScheduler>);
   };
 
-  "get_scheduler - returns InlineScheduler for EnvWithStopToken"_test = [] {
-    EnvWithStopToken env{NeverStopToken{}};
+  "get_scheduler - returns InlineScheduler for token-only env"_test = [] {
+    auto env = withStopToken(NeverStopToken{});
     auto sched = get_scheduler(env);
     static_assert(std::same_as<decltype(sched), InlineScheduler>);
   };
@@ -277,10 +273,105 @@ auto main() -> int {
   "get_scheduler - works with combined environment"_test = [] {
     EventLoop loop;
     EventLoopScheduler sched{loop};
-    EnvWithStopTokenAndScheduler env{NeverStopToken{}, sched};
+    auto env = withScheduler(withStopToken(NeverStopToken{}), sched);
 
     auto retrieved = get_scheduler(env);
     static_assert(std::same_as<decltype(retrieved), EventLoopScheduler>);
+  };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Advanced composition tests
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  "Composition - withScheduler(withStopToken(...))"_test = [] {
+    InplaceStopSource source;
+    EventLoop loop;
+    auto env = withScheduler(withStopToken(source.get_token()),
+                             EventLoopScheduler{loop});
+
+    auto token = get_stop_token(env);
+    auto sched = get_scheduler(env);
+
+    expectTrue(token.stop_possible());
+    expectFalse(token.stop_requested());
+    static_assert(std::same_as<decltype(sched), EventLoopScheduler>);
+
+    source.request_stop();
+    expectTrue(token.stop_requested());
+  };
+
+  "Composition - withStopToken(withScheduler(...))"_test = [] {
+    InplaceStopSource source;
+    ThreadPool pool{2};
+    auto env = withStopToken(withScheduler(ThreadPoolScheduler{pool}),
+                             source.get_token());
+
+    auto token = get_stop_token(env);
+    auto sched = get_scheduler(env);
+
+    expectTrue(token.stop_possible());
+    static_assert(std::same_as<decltype(sched), ThreadPoolScheduler>);
+  };
+
+  "Composition - order doesn't matter for queries"_test = [] {
+    InplaceStopSource source;
+    InlineScheduler sched;
+
+    // Build in different orders
+    auto env1 = withScheduler(withStopToken(source.get_token()), sched);
+    auto env2 = withStopToken(withScheduler(sched), source.get_token());
+
+    // Both should provide the same values
+    auto token1 = get_stop_token(env1);
+    auto token2 = get_stop_token(env2);
+    auto sched1 = get_scheduler(env1);
+    auto sched2 = get_scheduler(env2);
+
+    expectTrue(token1.stop_possible());
+    expectTrue(token2.stop_possible());
+    static_assert(std::same_as<decltype(sched1), InlineScheduler>);
+    static_assert(std::same_as<decltype(sched2), InlineScheduler>);
+  };
+
+  "Composition - EmptyEnv as base provides defaults"_test = [] {
+    // Query EmptyEnv directly
+    auto token = get_stop_token(EmptyEnv{});
+    auto sched = get_scheduler(EmptyEnv{});
+
+    static_assert(std::same_as<decltype(token), NeverStopToken>);
+    static_assert(std::same_as<decltype(sched), InlineScheduler>);
+    expectFalse(token.stop_possible());
+  };
+
+  "Composition - override works (last wins)"_test = [] {
+    InplaceStopSource source1;
+    InplaceStopSource source2;
+
+    // Add stop token twice - second one overrides
+    auto env = withStopToken(withStopToken(source1.get_token()),
+                             source2.get_token());
+
+    auto token = get_stop_token(env);
+    expectTrue(token.stop_possible());
+
+    // Should get source2's token (the override)
+    source1.request_stop();
+    expectFalse(token.stop_requested());  // source2 not stopped
+
+    source2.request_stop();
+    expectTrue(token.stop_requested());  // source2 stopped
+  };
+
+  "Composition - is constexpr"_test = [] {
+    constexpr auto env =
+        withScheduler(withStopToken(NeverStopToken{}), InlineScheduler{});
+    constexpr auto token = get_stop_token(env);
+    constexpr auto sched = get_scheduler(env);
+
+    static_assert(!token.stop_requested());
+    // Check the expression type, not the variable type (constexpr vars are const)
+    static_assert(std::same_as<decltype(get_scheduler(env)), InlineScheduler>);
+    (void)sched;  // Suppress unused warning
   };
 
   // ═══════════════════════════════════════════════════════════════════════════

@@ -146,7 +146,7 @@ class WhenAllReceiver {
 
   // Provide environment with stop token
   [[nodiscard]] auto get_env() const noexcept {
-    return EnvWithStopToken{state_->get_stop_token()};
+    return withStopToken(state_->get_stop_token());
   }
 
  private:
