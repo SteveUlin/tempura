@@ -16,6 +16,35 @@ namespace tempura {
 // Composition Senders
 // ============================================================================
 
+// Helper to transform completion signatures for then()
+// Transforms value signatures by applying function, passes through errors/stopped
+template <typename CompletionSigs, typename Fn>
+struct TransformThenSignaturesImpl;
+
+template <typename... Sigs, typename Fn>
+struct TransformThenSignaturesImpl<CompletionSignatures<Sigs...>, Fn> {
+  // Transform each signature
+  template <typename Sig>
+  struct TransformOne {
+    using Type = CompletionSignatures<Sig>;  // Default: pass through
+  };
+
+  // Specialize for value signatures - apply function
+  template <typename... Args>
+  struct TransformOne<SetValueTag(Args...)> {
+    using ResultType =
+        decltype(std::invoke(std::declval<Fn>(), std::declval<Args>()...));
+    using Type = CompletionSignatures<SetValueTag(ResultType)>;
+  };
+
+  using Type =
+      MergeCompletionSignaturesT<typename TransformOne<Sigs>::Type...>;
+};
+
+template <typename CompletionSigs, typename Fn>
+using TransformThenSignaturesT =
+    typename TransformThenSignaturesImpl<CompletionSigs, Fn>::Type;
+
 template <typename F, typename R>
 class ThenReceiver {
  public:
@@ -69,6 +98,7 @@ class ThenOperationState {
 template <typename S, typename F>
 class ThenSender {
  public:
+  // Legacy interface (for backward compatibility)
   using ValueTypes = std::tuple<decltype(std::apply(
       std::declval<F>(), std::declval<typename S::ValueTypes>()))>;
   using ErrorTypes = typename S::ErrorTypes;  // Propagate error types
@@ -78,6 +108,11 @@ class ThenSender {
       requires { std::apply(std::declval<F>(), std::declval<typename S::ValueTypes>()); },
       "The function passed to then must be callable with the sender's value types. "
       "Check that your lambda/function signature matches the values produced by the sender.");
+
+  // P2300 interface - transform value signatures, pass through errors/stopped
+  template <typename Env = EmptyEnv>
+  using CompletionSignatures = TransformThenSignaturesT<
+      GetCompletionSignaturesT<S, Env>, F>;
 
   ThenSender(S sender, F func)
       : sender_(std::move(sender)), func_(std::move(func)) {}

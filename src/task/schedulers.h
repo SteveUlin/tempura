@@ -44,6 +44,10 @@ class InlineScheduleSender {
   using ValueTypes = std::tuple<>;  // schedule() sends no values
   using ErrorTypes = std::tuple<>;  // No errors by default
 
+  template <typename Env = EmptyEnv>
+  using CompletionSignatures =
+      tempura::CompletionSignatures<SetValueTag(), SetStoppedTag()>;
+
   template <ReceiverOf<> R>
   auto connect(R&& receiver) && {
     return InlineScheduleOperationState<R>{std::forward<R>(receiver)};
@@ -94,6 +98,10 @@ class EventLoopScheduleSender {
  public:
   using ValueTypes = std::tuple<>;  // schedule() sends no values
   using ErrorTypes = std::tuple<>;  // No errors by default
+
+  template <typename Env = EmptyEnv>
+  using CompletionSignatures =
+      tempura::CompletionSignatures<SetValueTag(), SetStoppedTag()>;
 
   explicit EventLoopScheduleSender(EventLoop& loop) : loop_(&loop) {}
 
@@ -172,6 +180,10 @@ class ThreadPoolScheduleSender {
  public:
   using ValueTypes = std::tuple<>;  // schedule() sends no values
   using ErrorTypes = std::tuple<>;  // No errors by default
+
+  template <typename Env = EmptyEnv>
+  using CompletionSignatures =
+      tempura::CompletionSignatures<SetValueTag(), SetStoppedTag()>;
 
   explicit ThreadPoolScheduleSender(ThreadPool& pool) : pool_(&pool) {}
 
@@ -286,6 +298,10 @@ class NewThreadScheduleSender {
   using ValueTypes = std::tuple<>;  // schedule() sends no values
   using ErrorTypes = std::tuple<>;  // No errors by default
 
+  template <typename Env = EmptyEnv>
+  using CompletionSignatures =
+      tempura::CompletionSignatures<SetValueTag(), SetStoppedTag()>;
+
   explicit NewThreadScheduleSender(NewThreadContext& context)
       : context_(&context) {}
 
@@ -365,6 +381,10 @@ class TimerScheduleSender {
  public:
   using ValueTypes = std::tuple<>;  // schedule() sends no values
   using ErrorTypes = std::tuple<>;  // No errors by default
+
+  template <typename Env = EmptyEnv>
+  using CompletionSignatures =
+      tempura::CompletionSignatures<SetValueTag(), SetStoppedTag()>;
 
   TimerScheduleSender(TimerQueue& queue, TimerQueue::TimePoint when)
       : queue_(&queue), when_(when) {}
