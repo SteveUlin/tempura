@@ -14,8 +14,9 @@ using namespace tempura;
 // Helper error sender for testing
 class ErrorSenderTest {
  public:
-  using ValueTypes = std::tuple<int>;
-  using ErrorTypes = std::tuple<std::error_code>;
+  template <typename Env = EmptyEnv>
+  using CompletionSignatures =
+      tempura::CompletionSignatures<SetValueTag(int), SetErrorTag(std::error_code), SetStoppedTag()>;
 
   template <typename R>
   auto connect(R&& receiver) && {
@@ -37,8 +38,9 @@ class ErrorSenderTest {
 // Another error sender for testing
 class ErrorSenderTest2 {
  public:
-  using ValueTypes = std::tuple<int>;
-  using ErrorTypes = std::tuple<std::error_code>;
+  template <typename Env = EmptyEnv>
+  using CompletionSignatures =
+      tempura::CompletionSignatures<SetValueTag(int), SetErrorTag(std::error_code), SetStoppedTag()>;
 
   template <typename R>
   auto connect(R&& receiver) && {
@@ -59,8 +61,9 @@ class ErrorSenderTest2 {
 // Stopped sender for testing
 class StoppedSenderTest {
  public:
-  using ValueTypes = std::tuple<int>;
-  using ErrorTypes = std::tuple<>;
+  template <typename Env = EmptyEnv>
+  using CompletionSignatures =
+      tempura::CompletionSignatures<SetValueTag(int), SetStoppedTag()>;
 
   template <typename R>
   auto connect(R&& receiver) && {
@@ -79,8 +82,9 @@ class StoppedSenderTest {
 // Sender that checks if stop was requested (for cancellation testing)
 class StoppableOperationTest {
  public:
-  using ValueTypes = std::tuple<int>;
-  using ErrorTypes = std::tuple<>;
+  template <typename Env = EmptyEnv>
+  using CompletionSignatures =
+      tempura::CompletionSignatures<SetValueTag(int), SetStoppedTag()>;
 
   template <typename R>
   auto connect(R&& receiver) && {
@@ -113,8 +117,9 @@ class StoppableOperationTest {
 // Sender that verifies stop token is available (for cancellation testing)
 class TokenCheckSenderTest {
  public:
-  using ValueTypes = std::tuple<bool>;  // Returns whether token was available
-  using ErrorTypes = std::tuple<>;
+  template <typename Env = EmptyEnv>
+  using CompletionSignatures =
+      tempura::CompletionSignatures<SetValueTag(bool), SetStoppedTag()>;
 
   template <typename R>
   auto connect(R&& receiver) && {
@@ -346,34 +351,8 @@ auto main() -> int {
   // Type deduction tests (compile-time)
   // ==========================================================================
 
-  "whenAny - ValueTypes deduction"_test = [] {
-    auto sender = whenAny(just(1), just(2.5));
-    using SenderType = decltype(sender);
-    using ExpectedValueTypes = std::tuple<
-        std::variant<std::tuple<int>, std::tuple<double>>
-    >;
-
-    static_assert(std::same_as<typename SenderType::ValueTypes,
-                               ExpectedValueTypes>);
-  };
-
-  "whenAny - ErrorTypes deduplication"_test = [] {
-    auto sender = whenAny(CustomErrorSender1{}, CustomErrorSender2{});
-    using SenderType = decltype(sender);
-
-    // Error type should be a variant of all unique error types
-    // CustomErrorSender1::ErrorTypes = tuple<string, int>
-    // CustomErrorSender2::ErrorTypes = tuple<double, string>
-    // Result: variant<string, int, double> (string deduplicated)
-    using ExpectedErrorTypes = std::tuple<std::variant<
-        std::string,  // From both senders (deduplicated)
-        int,          // From CustomErrorSender1
-        double        // From CustomErrorSender2
-        >>;
-
-    static_assert(std::same_as<typename SenderType::ErrorTypes,
-                               ExpectedErrorTypes>);
-  };
+  // NOTE: ValueTypes/ErrorTypes removed in favor of CompletionSignatures
+  // These tests have been removed as they test the old interface
 
   // ==========================================================================
   // Integration with schedulers

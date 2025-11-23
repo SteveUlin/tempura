@@ -98,17 +98,6 @@ class ThenOperationState {
 template <typename S, typename F>
 class ThenSender {
  public:
-  // Legacy interface (for backward compatibility)
-  using ValueTypes = std::tuple<decltype(std::apply(
-      std::declval<F>(), std::declval<typename S::ValueTypes>()))>;
-  using ErrorTypes = typename S::ErrorTypes;  // Propagate error types
-
-  // Validate that the function can be called with the sender's value types
-  static_assert(
-      requires { std::apply(std::declval<F>(), std::declval<typename S::ValueTypes>()); },
-      "The function passed to then must be callable with the sender's value types. "
-      "Check that your lambda/function signature matches the values produced by the sender.");
-
   // P2300 interface - transform value signatures, pass through errors/stopped
   template <typename Env = EmptyEnv>
   using CompletionSignatures = TransformThenSignaturesT<

@@ -14,10 +14,28 @@
 #include <type_traits>
 #include <utility>
 
+#include "completion_signatures.h"
 #include "concepts.h"
 #include "env.h"
 
 namespace tempura {
+
+// Helper: Extract value tuple from sender (reuse from let_value.h logic)
+template <typename S, typename Env = EmptyEnv>
+struct GetOnValueTuple {
+  using CompletionSigs = GetCompletionSignaturesT<S, Env>;
+  using ValueSigs = ValueSignaturesT<CompletionSigs>;
+
+  static_assert(Size_v<ValueSigs> > 0,
+                "Sender must have at least one value signature for on()");
+
+  using FirstValueSig = Get_t<0, ValueSigs>;
+  using ValueArgs = SignatureArgsT<FirstValueSig>;
+  using Type = ListToTupleT<ValueArgs>;
+};
+
+template <typename S, typename Env = EmptyEnv>
+using GetOnValueTupleT = typename GetOnValueTuple<S, Env>::Type;
 
 // Forward declarations
 template <Scheduler Sched, Sender S, typename R>
@@ -143,7 +161,7 @@ class OnOperationState {
   InnerOpState inner_op_;
 
   // Result storage for round-trip
-  std::optional<typename S::ValueTypes> result_;
+  std::optional<GetOnValueTupleT<S>> result_;
   std::error_code error_code_;
   bool has_value_ = false;
   bool has_error_ = false;
@@ -154,8 +172,9 @@ class OnOperationState {
 template <Scheduler Sched, Sender S>
 class OnSender {
  public:
-  using ValueTypes = typename S::ValueTypes;
-  using ErrorTypes = typename S::ErrorTypes;
+  // Completion signatures are the same as the inner sender's
+  template <typename Env = EmptyEnv>
+  using CompletionSignatures = GetCompletionSignaturesT<S, Env>;
 
   OnSender(Sched sched, S sender)
       : target_sched_(sched), sender_(std::move(sender)) {}

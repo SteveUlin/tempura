@@ -9,6 +9,7 @@
 #include <utility>
 #include <variant>
 
+#include "completion_signatures.h"
 #include "concepts.h"
 #include "env.h"
 #include "stop_token.h"
@@ -21,12 +22,12 @@ namespace tempura {
 // ============================================================================
 
 // Merge all value types into a variant (deduplicated)
-// Each sender's ValueTypes is a tuple, so we create variant of all those tuples
+// Each sender's value tuple is extracted from completion signatures
 template <typename... Senders>
 struct MergeValueTypes {
  private:
-  // Collect all value types
-  using all_values = std::tuple<typename Senders::ValueTypes...>;
+  // Collect all value tuples
+  using all_values = std::tuple<ExtractValueTupleT<Senders>...>;
 
   // Deduplicate value types
   template <typename Tuple>
@@ -86,7 +87,8 @@ class WhenAnySharedState {
 
       // Forward the value as a variant
       using ValueVariant = typename MergeValueTypes<Senders...>::type;
-      using ThisValueTuple = typename std::tuple_element_t<Index, std::tuple<Senders...>>::ValueTypes;
+      using ThisSender = std::tuple_element_t<Index, std::tuple<Senders...>>;
+      using ThisValueTuple = ExtractValueTupleT<ThisSender>;
 
       receiver_.setValue(ValueVariant{std::in_place_type<ThisValueTuple>,
                                       std::forward<Args>(args)...});
@@ -235,11 +237,27 @@ template <typename... Senders>
   requires(Sender<Senders> && ...)
 class WhenAnySender {
  public:
-  // The result is a variant of all the value tuples
-  using ValueTypes = std::tuple<typename MergeValueTypes<Senders...>::type>;
+  // Completion signatures: SetValueTag(variant<tuple<Args1...>, tuple<Args2...>, ...>)
+  // Error signatures: collect all error sigs from all senders
+  // Stopped: SetStoppedTag()
+  template <typename Env = EmptyEnv>
+  struct CompletionSignaturesHelper {
+    // Value signature: SetValueTag(variant<ExtractValueTupleT<Sender1>, ...>)
+    using ValueVariant = typename MergeValueTypes<Senders...>::type;
+    using ValueSig = SetValueTag(ValueVariant);
 
-  // Error is a variant of all unique error types from all senders
-  using ErrorTypes = std::tuple<typename MergeUniqueErrorTypes<Senders...>::type>;
+    // Error signatures: collect all error sigs from all senders
+    using AllErrorSigs = Concat_t<
+        ErrorSignaturesT<GetCompletionSignaturesT<Senders, Env>>...>;
+
+    // Merge into final completion signatures
+    using Type = MergeCompletionSignaturesT<
+        tempura::CompletionSignatures<ValueSig, SetStoppedTag()>,
+        ListToCompletionSignaturesT<AllErrorSigs>>;
+  };
+
+  template <typename Env = EmptyEnv>
+  using CompletionSignatures = typename CompletionSignaturesHelper<Env>::Type;
 
   template <typename... Ss>
   explicit WhenAnySender(Ss&&... senders)

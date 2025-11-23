@@ -9,8 +9,35 @@
 #include <utility>
 
 #include "concepts.h"
+#include "completion_signatures.h"
 
 namespace tempura {
+
+// Helper: Transform error signatures by applying function F
+template <typename CompletionSigs, typename F>
+struct TransformUponErrorSignaturesImpl;
+
+template <typename... Sigs, typename F>
+struct TransformUponErrorSignaturesImpl<CompletionSignatures<Sigs...>, F> {
+  // Transform one signature at a time
+  template <typename Sig>
+  struct TransformOne {
+    using Type = CompletionSignatures<Sig>;  // Pass through non-error sigs
+  };
+
+  // Transform error signatures: SetErrorTag(Args...) -> SetValueTag(Result)
+  template <typename... Args>
+  struct TransformOne<SetErrorTag(Args...)> {
+    using ResultType = decltype(std::invoke(std::declval<F>(), std::declval<Args>()...));
+    using Type = CompletionSignatures<SetValueTag(ResultType)>;
+  };
+
+  using Type = MergeCompletionSignaturesT<typename TransformOne<Sigs>::Type...>;
+};
+
+template <typename CompletionSigs, typename F>
+using TransformUponErrorSignaturesT =
+    typename TransformUponErrorSignaturesImpl<CompletionSigs, F>::Type;
 
 template <typename F, typename R>
 class UponErrorReceiver {
@@ -67,16 +94,10 @@ class UponErrorOperationState {
 template <typename S, typename F>
 class UponErrorSender {
  public:
-  // Compute result type by unpacking error types (symmetric with then!)
-  using ValueTypes = std::tuple<decltype(std::apply(
-      std::declval<F>(), std::declval<typename S::ErrorTypes>()))>;
-  using ErrorTypes = typename S::ErrorTypes;  // Propagate error types
-
-  // Validate that the function can be called with the sender's error types
-  static_assert(
-      requires { std::apply(std::declval<F>(), std::declval<typename S::ErrorTypes>()); },
-      "The function passed to uponError must be callable with the sender's error types. "
-      "Check that your lambda/function signature matches the errors produced by the sender.");
+  // Transform error signatures, pass through value/stopped signatures
+  template <typename Env = EmptyEnv>
+  using CompletionSignatures = TransformUponErrorSignaturesT<
+      GetCompletionSignaturesT<S, Env>, F>;
 
   UponErrorSender(S sender, F func)
       : sender_(std::move(sender)), func_(std::move(func)) {}

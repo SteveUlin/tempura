@@ -12,6 +12,7 @@
 #include <type_traits>
 
 #include "meta/tags.h"
+#include "meta/type_list.h"
 #include "meta/type_list_ops.h"
 
 namespace tempura {
@@ -244,5 +245,21 @@ struct TransformSignatures<MetaFn, Sig, Rest...> {
 template <template <typename> class MetaFn, typename... Sigs>
 using TransformSignaturesT =
     typename TransformSignatures<MetaFn, Sigs...>::Type;
+
+// ============================================================================
+// TypeList to Tuple Conversion
+// ============================================================================
+
+// Convert TypeList<Args...> to std::tuple<Args...>
+template <typename List>
+struct ListToTuple;
+
+template <typename... Args>
+struct ListToTuple<TypeList<Args...>> {
+  using Type = std::tuple<Args...>;
+};
+
+template <typename List>
+using ListToTupleT = typename ListToTuple<List>::Type;
 
 }  // namespace tempura

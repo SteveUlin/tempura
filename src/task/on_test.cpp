@@ -5,8 +5,9 @@ using namespace tempura;
 
 // Test sender that checks if scheduler is available in environment
 struct SchedulerCheckSender {
-  using ValueTypes = std::tuple<bool>;
-  using ErrorTypes = std::tuple<>;
+  template <typename Env = EmptyEnv>
+  using CompletionSignatures =
+      tempura::CompletionSignatures<SetValueTag(bool), SetStoppedTag()>;
 
   template <typename R>
   auto connect(R&& receiver) && {

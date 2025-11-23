@@ -41,9 +41,6 @@ class InlineScheduleOperationState {
 // Sender returned by InlineScheduler::schedule()
 class InlineScheduleSender {
  public:
-  using ValueTypes = std::tuple<>;  // schedule() sends no values
-  using ErrorTypes = std::tuple<>;  // No errors by default
-
   template <typename Env = EmptyEnv>
   using CompletionSignatures =
       tempura::CompletionSignatures<SetValueTag(), SetStoppedTag()>;
@@ -96,9 +93,6 @@ class EventLoopScheduleOperationState {
 // Sender returned by EventLoopScheduler::schedule()
 class EventLoopScheduleSender {
  public:
-  using ValueTypes = std::tuple<>;  // schedule() sends no values
-  using ErrorTypes = std::tuple<>;  // No errors by default
-
   template <typename Env = EmptyEnv>
   using CompletionSignatures =
       tempura::CompletionSignatures<SetValueTag(), SetStoppedTag()>;
@@ -178,9 +172,6 @@ class ThreadPoolScheduleOperationState {
 // Sender returned by ThreadPoolScheduler::schedule()
 class ThreadPoolScheduleSender {
  public:
-  using ValueTypes = std::tuple<>;  // schedule() sends no values
-  using ErrorTypes = std::tuple<>;  // No errors by default
-
   template <typename Env = EmptyEnv>
   using CompletionSignatures =
       tempura::CompletionSignatures<SetValueTag(), SetStoppedTag()>;
@@ -295,9 +286,6 @@ class NewThreadScheduleOperationState {
 // Sender returned by NewThreadScheduler::schedule()
 class NewThreadScheduleSender {
  public:
-  using ValueTypes = std::tuple<>;  // schedule() sends no values
-  using ErrorTypes = std::tuple<>;  // No errors by default
-
   template <typename Env = EmptyEnv>
   using CompletionSignatures =
       tempura::CompletionSignatures<SetValueTag(), SetStoppedTag()>;
@@ -379,9 +367,6 @@ class TimerScheduleOperationState {
 // Sender returned by TimerScheduler methods and free functions
 class TimerScheduleSender {
  public:
-  using ValueTypes = std::tuple<>;  // schedule() sends no values
-  using ErrorTypes = std::tuple<>;  // No errors by default
-
   template <typename Env = EmptyEnv>
   using CompletionSignatures =
       tempura::CompletionSignatures<SetValueTag(), SetStoppedTag()>;

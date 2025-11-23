@@ -9,9 +9,27 @@
 #include <utility>
 
 #include "concepts.h"
+#include "completion_signatures.h"
 #include "meta/manual_lifetime.h"
 
 namespace tempura {
+
+// Helper: Extract value tuple from sender's first value signature
+template <typename S, typename Env = EmptyEnv>
+struct GetValueTuple {
+  using CompletionSigs = GetCompletionSignaturesT<S, Env>;
+  using ValueSigs = ValueSignaturesT<CompletionSigs>;
+
+  static_assert(Size_v<ValueSigs> > 0,
+                "Sender must have at least one value signature");
+
+  using FirstValueSig = Get_t<0, ValueSigs>;
+  using ValueArgs = SignatureArgsT<FirstValueSig>;
+  using Type = ListToTupleT<ValueArgs>;
+};
+
+template <typename S, typename Env = EmptyEnv>
+using GetValueTupleT = typename GetValueTuple<S, Env>::Type;
 
 // ============================================================================
 // letValue - chains asynchronous operations by returning new senders
@@ -49,9 +67,9 @@ class LetValueOperationState {
       decltype(std::declval<S>().connect(std::declval<InnerReceiver>()));
 
   // Compute inner operation type at compile time!
-  // InnerSender = return type of F when called with S's value types
-  using InnerSender = decltype(std::apply(
-      std::declval<F&>(), std::declval<typename S::ValueTypes>()));
+  // InnerSender = return type of F when called with S's value tuple
+  using ValueTuple = GetValueTupleT<S>;
+  using InnerSender = decltype(std::apply(std::declval<F&>(), std::declval<ValueTuple>()));
   // InnerOpState = connecting that sender to our receiver (moved)
   using InnerOpState = decltype(std::declval<InnerSender&&>().connect(std::declval<R&&>()));
 
@@ -137,17 +155,34 @@ class LetValueOperationState {
 template <typename S, typename F>
 class LetValueSender {
  public:
-  // The result type is the ValueTypes of the sender returned by F
-  using InnerSender = decltype(std::apply(
-      std::declval<F>(), std::declval<typename S::ValueTypes>()));
+  // Compute completion signatures from the inner sender returned by F
+  template <typename Env = EmptyEnv>
+  struct CompletionSignaturesHelper {
+    // Get the value tuple from outer sender's first value signature
+    using ValueTuple = GetValueTupleT<S, Env>;
 
-  // Validate that the function returns a valid Sender type
-  static_assert(Sender<InnerSender>,
-                "The function passed to letValue must return a Sender type. "
-                "Ensure your lambda/function returns a sender (e.g., just(...)).");
+    // Compute the inner sender type by applying F to the value tuple
+    using InnerSender = decltype(std::apply(std::declval<F>(), std::declval<ValueTuple>()));
 
-  using ValueTypes = typename InnerSender::ValueTypes;
-  using ErrorTypes = typename InnerSender::ErrorTypes;  // Propagate from inner sender
+    // Validate that F returns a Sender
+    static_assert(Sender<InnerSender>,
+                  "The function passed to letValue must return a Sender type. "
+                  "Ensure your lambda/function returns a sender (e.g., just(...)).");
+
+    // Get inner sender's completion signatures
+    using InnerCompletionSigs = GetCompletionSignaturesT<InnerSender, Env>;
+
+    // Get outer sender's error signatures (to propagate errors that bypass letValue)
+    using OuterCompletionSigs = GetCompletionSignaturesT<S, Env>;
+    using OuterErrorSigs = ErrorSignaturesT<OuterCompletionSigs>;
+
+    // Merge inner signatures with outer errors
+    using Type = MergeCompletionSignaturesT<InnerCompletionSigs,
+                                            ListToCompletionSignaturesT<OuterErrorSigs>>;
+  };
+
+  template <typename Env = EmptyEnv>
+  using CompletionSignatures = typename CompletionSignaturesHelper<Env>::Type;
 
   LetValueSender(S sender, F func)
       : sender_(std::move(sender)), func_(std::move(func)) {}
