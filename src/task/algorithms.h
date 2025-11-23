@@ -21,7 +21,8 @@ namespace tempura {
 // containing the values produced by the sender. If the sender calls setError()
 // or setStopped(), the optional will be empty.
 //
-// Returns: std::optional<Sender::ValueTypes>
+// Returns: std::optional<std::tuple<Args...>> where Args... are extracted from
+//          the first SetValueTag signature in the sender's CompletionSignatures
 //
 // Example:
 //   auto result = syncWait(just(42, "hello"));
@@ -30,9 +31,22 @@ namespace tempura {
 //   }
 template <typename S>
 auto syncWait(S&& sender) {
-  using ValueTuple = typename std::remove_cvref_t<S>::ValueTypes;
+  // Extract value types from CompletionSignatures
+  using CompletionSigs = typename std::remove_cvref_t<S>::template CompletionSignatures<EmptyEnv>;
+  using ValueSigs = ValueSignaturesT<CompletionSigs>;
 
-  std::optional<ValueTuple> result;
+  // Get the first value signature's arguments
+  // For now, assume single value signature (most common case)
+  static_assert(Size_v<ValueSigs> > 0,
+                "syncWait requires sender to have at least one value signature");
+
+  using FirstValueSig = Get_t<0, ValueSigs>;
+  using ValueTuple = SignatureArgsT<FirstValueSig>;
+
+  // Convert TypeList<Args...> to std::tuple<Args...>
+  using ResultTuple = ListToTupleT<ValueTuple>;
+
+  std::optional<ResultTuple> result;
 
   std::latch latch{1};
 
@@ -40,7 +54,7 @@ auto syncWait(S&& sender) {
                                        std::optional<std::tuple<Args...>>& opt,
                                        std::latch& latch) {
     return BlockingReceiver<Args...>{opt, latch};
-  }(std::type_identity<ValueTuple>{}, result, latch);
+  }(std::type_identity<ResultTuple>{}, result, latch);
 
   // Validate sender-receiver compatibility for better error messages
   using ReceiverType = decltype(receiver);

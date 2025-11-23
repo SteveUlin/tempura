@@ -48,10 +48,6 @@ template <typename... Args>
   requires(std::move_constructible<Args> && ...)
 class JustSender {
  public:
-  // Legacy interface (for backward compatibility)
-  using ValueTypes = std::tuple<Args...>;
-  using ErrorTypes = std::tuple<>;  // No errors by default
-
   // P2300 interface - CompletionSignatures
   // just() always succeeds with Args, never errors, can be stopped
   template <typename Env = EmptyEnv>

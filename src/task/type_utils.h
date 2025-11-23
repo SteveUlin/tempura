@@ -7,6 +7,8 @@
 #include <utility>
 #include <variant>
 
+#include "completion_signatures.h"
+
 namespace tempura {
 
 // ============================================================================
@@ -75,8 +77,35 @@ struct TupleToVariant<std::tuple<Ts...>> {
 template <typename... Senders>
 struct MergeUniqueErrorTypes {
  private:
+  // Extract error signatures from each sender's CompletionSignatures
+  // Then collect all error types from those signatures
+  template <typename S>
+  struct ExtractErrorArgs {
+    using CompletionSigs = GetCompletionSignaturesT<S, EmptyEnv>;
+    using ErrorSigs = ErrorSignaturesT<CompletionSigs>;
+
+    // Convert TypeList of SetErrorTag(T) to tuple of T
+    template <typename List>
+    struct SigsToArgs;
+
+    template <typename... Sigs>
+    struct SigsToArgs<TypeList<Sigs...>> {
+      template <typename Sig>
+      struct GetArg;
+
+      template <typename T>
+      struct GetArg<SetErrorTag(T)> {
+        using Type = T;
+      };
+
+      using Type = std::tuple<typename GetArg<Sigs>::Type...>;
+    };
+
+    using Type = typename SigsToArgs<ErrorSigs>::Type;
+  };
+
   // Concatenate all error type tuples
-  using concatenated = decltype(std::tuple_cat(std::declval<typename Senders::ErrorTypes>()...));
+  using concatenated = decltype(std::tuple_cat(std::declval<typename ExtractErrorArgs<Senders>::Type>()...));
 
   // Extract types from concatenated tuple and deduplicate
   template <typename Tuple>
