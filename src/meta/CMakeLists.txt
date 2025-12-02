@@ -22,6 +22,14 @@ target_include_directories(manual_lifetime INTERFACE
 target_link_libraries(manual_lifetime INTERFACE tempura_flags)
 add_library(tempura::manual_lifetime ALIAS manual_lifetime)
 
+add_library(fixed_string INTERFACE fixed_string.h)
+target_include_directories(fixed_string INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
+  $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(fixed_string INTERFACE tempura_flags)
+add_library(tempura::fixed_string ALIAS fixed_string)
+
 if(NOT TEMPURA_BUILD_TESTS)
   return()
 endif()
@@ -45,6 +53,12 @@ add_executable(meta_type_sort_test test/type_sort_test.cpp)
 target_link_libraries(meta_type_sort_test PRIVATE meta unit)
 add_test(NAME meta_type_sort COMMAND meta_type_sort_test)
 set_tests_properties(meta_type_sort PROPERTIES LABELS "meta;type_manipulation")
+
+# FixedString test
+add_executable(fixed_string_test fixed_string_test.cpp)
+target_link_libraries(fixed_string_test PRIVATE fixed_string unit)
+add_test(NAME fixed_string COMMAND fixed_string_test)
+set_tests_properties(fixed_string PROPERTIES LABELS "meta;utilities;string")
 
 # Macro utilities test
 add_executable(meta_macro_utils_test test/macro_utils_test.cpp)

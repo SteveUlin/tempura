@@ -36,6 +36,9 @@ inline constexpr bool isSame = false;
 template <typename T>
 inline constexpr bool isSame<T, T> = true;
 
+template <typename T, typename U>
+concept SameAs = isSame<T, U>;
+
 // --- Swap ---
 template <typename T>
 constexpr void swap(T& a, T& b) noexcept {
@@ -66,19 +69,20 @@ concept Invocable = requires(Func func, Args... args) {
   { func(args...) };
 };
 
-template<typename B>
+template <typename B>
 auto testPointerConversion(const volatile B*) -> TrueType;
-template<typename>
+template <typename>
 auto testPointerConversion(const volatile void*) -> FalseType;
-template<typename B, typename D>
-auto testIsBaseOf(int) -> decltype(testPointerConversion<B>(static_cast<D*>(nullptr)));
-template<typename, typename>
+template <typename B, typename D>
+auto testIsBaseOf(int)
+    -> decltype(testPointerConversion<B>(static_cast<D*>(nullptr)));
+template <typename, typename>
 auto testIsBaseOf(...) -> FalseType;
 
-template<typename D, typename B>
+template <typename D, typename B>
 concept DerivedFrom = decltype(testIsBaseOf<B, D>(0))::value;
 
-template<typename T, typename U>
+template <typename T, typename U>
 concept ConstructibleFrom = requires {
   { T{kDeclVal<U>()} };
 };
