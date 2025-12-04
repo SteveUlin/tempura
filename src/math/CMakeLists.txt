@@ -22,6 +22,14 @@ target_include_directories(exp INTERFACE
 target_link_libraries(exp INTERFACE tempura_flags)
 add_library(tempura::exp ALIAS exp)
 
+add_library(ratio INTERFACE ratio.h)
+target_include_directories(ratio INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
+  $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(ratio INTERFACE tempura_flags modular)
+add_library(tempura::ratio ALIAS ratio)
+
 if(NOT TEMPURA_BUILD_TESTS)
   return()
 endif()
@@ -34,3 +42,6 @@ target_link_libraries(cos_test cos unit)
 
 add_executable(exp_test exp_test.cpp)
 target_link_libraries(exp_test exp unit)
+
+add_executable(math_ratio_test ratio_test.cpp)
+target_link_libraries(math_ratio_test ratio unit)
