@@ -24,6 +24,8 @@
 
 - Single namespace `tempura` (no `::internal` or `::detail`)
 - Classes: `public` before `private`
+- Prefer `{}` over `()` for initialization (including ctor init lists)
+- `static_assert` tests belong in test files, not headers
 - Unicode/emojis encouraged (α, β, ∂, ∑, ✓, ✗, ⚠️)
 - Comments: minimal, timeless, design-focused
 - Use PRECONDITION/POSTCONDITION/DANGER as needed
