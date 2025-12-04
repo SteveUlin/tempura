@@ -36,6 +36,8 @@
 # add_subdirectory(autodiff)
 # add_subdirectory(cuda)
 # add_subdirectory(matrix)
+add_subdirectory(bigint)
+add_subdirectory(modular)
 add_subdirectory(symbolic3)  # Combinator-based symbolic system (canonical)
 add_subdirectory(bayes)
 add_subdirectory(matrix2)
