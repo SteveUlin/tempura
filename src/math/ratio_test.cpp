@@ -4,6 +4,23 @@
 
 using namespace tempura;
 
+// Compile-time tests
+static_assert(Ratio{1, 2}.num == 1);
+static_assert(Ratio{1, 2}.den == 2);
+static_assert(Ratio{2, 4}.num == 1);  // Auto-reduces
+static_assert(Ratio{2, 4}.den == 2);
+static_assert(Ratio{-1, 2}.num == -1);
+static_assert(Ratio{1, -2}.num == -1);  // Sign normalization
+static_assert(Ratio{1, -2}.den == 2);
+static_assert(Ratio{-1, -2}.num == 1);  // Double negative
+static_assert(Ratio{6, 9} == Ratio{2, 3});
+static_assert(Ratio{1, 2} + Ratio{1, 3} == Ratio{5, 6});
+static_assert(Ratio{1, 2} - Ratio{1, 3} == Ratio{1, 6});
+static_assert(Ratio{2, 3} * Ratio{3, 4} == Ratio{1, 2});
+static_assert(Ratio{1, 2} / Ratio{1, 4} == Ratio{2, 1});
+static_assert(Ratio{1, 2} < Ratio{2, 3});
+static_assert(Ratio{3, 4} > Ratio{1, 2});
+
 auto main() -> int {
   // ===========================================================================
   // Construction and Reduction
