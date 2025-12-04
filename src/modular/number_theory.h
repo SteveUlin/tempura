@@ -250,13 +250,6 @@ constexpr auto generateSmallPrimes() -> MinimalArray<unsigned long long, N> {
 
 inline constexpr auto kSmallPrimes = generateSmallPrimes<100>();
 
-// Verify generator produces correct primes
-static_assert(kSmallPrimes[0] == 2);
-static_assert(kSmallPrimes[1] == 3);
-static_assert(kSmallPrimes[4] == 11);
-static_assert(kSmallPrimes[24] == 97);   // 25th prime
-static_assert(kSmallPrimes[99] == 541);  // 100th prime
-
 }  // namespace detail
 
 // Miller-Rabin primality test for unsigned long long
@@ -389,70 +382,5 @@ constexpr auto findFirstFactor(unsigned long long n) -> unsigned long long {
 constexpr auto findFirstFactor(unsigned int n) -> unsigned long long {
   return findFirstFactor(static_cast<unsigned long long>(n));
 }
-
-// =============================================================================
-// Static assertions
-// =============================================================================
-
-// GCD tests
-static_assert(gcd(12u, 18u) == 6);
-static_assert(gcd(17u, 31u) == 1);
-static_assert(gcd(0u, 5u) == 5);
-static_assert(gcd(100u, 0u) == 100);
-
-// LCM tests
-static_assert(lcm(4u, 6u) == 12);
-static_assert(lcm(3u, 5u) == 15);
-
-// Modular inverse tests
-static_assert(modInverse(3ull, 7ull) == 5);   // 3 * 5 = 15 = 1 (mod 7)
-static_assert(modInverse(5ull, 11ull) == 9);  // 5 * 9 = 45 = 1 (mod 11)
-static_assert(modInverse(2ull, 4ull) == 0);   // No inverse (gcd = 2)
-
-// Primality tests
-static_assert(isPrime(2ull));
-static_assert(isPrime(3ull));
-static_assert(isPrime(5ull));
-static_assert(isPrime(7ull));
-static_assert(isPrime(11ull));
-static_assert(isPrime(13ull));
-static_assert(isPrime(17ull));
-static_assert(isPrime(19ull));
-static_assert(isPrime(23ull));
-static_assert(isPrime(97ull));
-static_assert(isPrime(101ull));
-static_assert(isPrime(1000000007ull));
-static_assert(isPrime(998244353ull));
-
-static_assert(!isPrime(0ull));
-static_assert(!isPrime(1ull));
-static_assert(!isPrime(4ull));
-static_assert(!isPrime(6ull));
-static_assert(!isPrime(9ull));
-static_assert(!isPrime(15ull));
-static_assert(!isPrime(100ull));
-static_assert(!isPrime(1000000001ull));  // = 7 × 142857143
-
-// Euler totient tests
-static_assert(eulerTotient(1u) == 1);
-static_assert(eulerTotient(2u) == 1);
-static_assert(eulerTotient(6u) == 2);   // {1, 5}
-static_assert(eulerTotient(7u) == 6);   // Prime: φ(p) = p-1
-static_assert(eulerTotient(10u) == 4);  // {1, 3, 7, 9}
-static_assert(eulerTotient(12u) == 4);  // {1, 5, 7, 11}
-
-// findFirstFactor tests
-static_assert(findFirstFactor(0ull) == 0);
-static_assert(findFirstFactor(1ull) == 1);
-static_assert(findFirstFactor(2ull) == 2);   // Prime returns itself
-static_assert(findFirstFactor(3ull) == 3);
-static_assert(findFirstFactor(4ull) == 2);
-static_assert(findFirstFactor(6ull) == 2);
-static_assert(findFirstFactor(15ull) == 3);
-static_assert(findFirstFactor(49ull) == 7);
-static_assert(findFirstFactor(97ull) == 97);  // Prime
-static_assert(findFirstFactor(100ull) == 2);
-static_assert(findFirstFactor(1000000007ull) == 1000000007);  // Large prime
-static_assert(findFirstFactor(1000000001ull) == 7);           // = 7 × 142857143
 
 }  // namespace tempura

@@ -4,6 +4,37 @@
 
 using namespace tempura;
 
+// Compile-time tests
+static_assert(ModInt<unsigned long long, 7>::kMod == 7);
+static_assert(ModInt<unsigned long long, 7>(10).value == 3);  // 10 mod 7 = 3
+static_assert(ModInt<unsigned long long, 7>::raw(3).value == 3);
+
+// Arithmetic
+static_assert(
+    (ModInt<unsigned long long, 7>(3) + ModInt<unsigned long long, 7>(5))
+        .value == 1);  // 8 mod 7
+static_assert(
+    (ModInt<unsigned long long, 7>(3) - ModInt<unsigned long long, 7>(5))
+        .value == 5);  // -2 mod 7
+static_assert(
+    (ModInt<unsigned long long, 7>(3) * ModInt<unsigned long long, 7>(4))
+        .value == 5);                                            // 12 mod 7
+static_assert((-ModInt<unsigned long long, 7>(3)).value == 4);  // -3 mod 7
+
+// Exponentiation
+static_assert(ModInt<unsigned long long, 7>(3).pow(0).value == 1);
+static_assert(ModInt<unsigned long long, 7>(3).pow(1).value == 3);
+static_assert(ModInt<unsigned long long, 7>(3).pow(2).value == 2);  // 9 mod 7
+static_assert(
+    ModInt<unsigned long long, 7>(3).pow(6).value == 1);  // Fermat: 3^6=1 mod 7
+
+// Inverse (7 is prime, so Fermat works)
+static_assert(
+    ModInt<unsigned long long, 7>(3).inv().value == 5);  // 3*5 = 15 = 1 mod 7
+static_assert((ModInt<unsigned long long, 7>(3) *
+               ModInt<unsigned long long, 7>(3).inv())
+                  .value == 1);
+
 auto main() -> int {
   // ===========================================================================
   // Basic Construction and Properties

@@ -256,7 +256,7 @@ class DynamicMontgomery {
 
   // PRECONDITION: n is odd and n > 1
   explicit DynamicMontgomery(const DynamicUInt& n)
-      : mod(n), bits(computeBits(n)) {
+      : mod{n}, bits{computeBits(n)} {
     r = computeRModN(n, bits);
     r2 = (r * r) % n;
     n_inv = computeNegInvModR(n, bits);

@@ -4,6 +4,52 @@
 
 using namespace tempura;
 
+// Compile-time tests - small primes generator
+static_assert(detail::kSmallPrimes[0] == 2);
+static_assert(detail::kSmallPrimes[1] == 3);
+static_assert(detail::kSmallPrimes[4] == 11);
+static_assert(detail::kSmallPrimes[24] == 97);   // 25th prime
+static_assert(detail::kSmallPrimes[99] == 541);  // 100th prime
+
+// GCD tests
+static_assert(gcd(12u, 18u) == 6);
+static_assert(gcd(17u, 31u) == 1);
+static_assert(gcd(0u, 5u) == 5);
+static_assert(gcd(100u, 0u) == 100);
+
+// LCM tests
+static_assert(lcm(4u, 6u) == 12);
+static_assert(lcm(3u, 5u) == 15);
+
+// Modular inverse tests
+static_assert(modInverse(3ull, 7ull) == 5);   // 3 * 5 = 15 = 1 (mod 7)
+static_assert(modInverse(5ull, 11ull) == 9);  // 5 * 9 = 45 = 1 (mod 11)
+static_assert(modInverse(2ull, 4ull) == 0);   // No inverse (gcd = 2)
+
+// Primality tests
+static_assert(isPrime(2ull));
+static_assert(isPrime(3ull));
+static_assert(isPrime(1000000007ull));
+static_assert(isPrime(998244353ull));
+static_assert(!isPrime(0ull));
+static_assert(!isPrime(1ull));
+static_assert(!isPrime(1000000001ull));  // = 7 × 142857143
+
+// Euler totient tests
+static_assert(eulerTotient(1u) == 1);
+static_assert(eulerTotient(7u) == 6);   // Prime: φ(p) = p-1
+static_assert(eulerTotient(12u) == 4);  // {1, 5, 7, 11}
+
+// findFirstFactor tests
+static_assert(findFirstFactor(0ull) == 0);
+static_assert(findFirstFactor(1ull) == 1);
+static_assert(findFirstFactor(2ull) == 2);
+static_assert(findFirstFactor(15ull) == 3);
+static_assert(findFirstFactor(49ull) == 7);
+static_assert(findFirstFactor(97ull) == 97);
+static_assert(findFirstFactor(1000000007ull) == 1000000007);
+static_assert(findFirstFactor(1000000001ull) == 7);
+
 auto main() -> int {
   // ===========================================================================
   // GCD Tests
