@@ -68,6 +68,12 @@ struct Conditional<false, T, F> {
   using Type = F;
 };
 
+// --- TypeIdentity ---
+template <typename T>
+struct TypeIdentity {
+  using Type = T;
+};
+
 // --- Concepts ---
 
 template <typename RangeT>
@@ -98,5 +104,57 @@ template <typename T, typename U>
 concept ConstructibleFrom = requires {
   { T{kDeclVal<U>()} };
 };
+
+// --- Type Traits (using compiler intrinsics) ---
+
+template <typename T>
+inline constexpr bool isConst = false;
+
+template <typename T>
+inline constexpr bool isConst<const T> = true;
+
+template <typename T>
+inline constexpr bool isReference = false;
+
+template <typename T>
+inline constexpr bool isReference<T&&> = true;
+
+template <typename T>
+inline constexpr bool isEmpty = __is_empty(T);
+
+template <typename T>
+inline constexpr bool isFinal = __is_final(T);
+
+template <typename T>
+inline constexpr bool isTriviallyDefaultConstructible =
+    __is_trivially_constructible(T);
+
+template <typename T>
+inline constexpr bool isTriviallyCopyConstructible =
+    __is_trivially_constructible(T, const T&);
+
+template <typename T>
+inline constexpr bool isTriviallyMoveConstructible =
+    __is_trivially_constructible(T, T&&);
+
+template <typename T>
+inline constexpr bool isTriviallyDestructible = __has_trivial_destructor(T);
+
+// --- Type Concepts ---
+
+// Canonical type form: not const, not reference
+// Required for type equality to work correctly in type-level computation
+template <typename T>
+concept CanonicalType = !isConst<T> && !isReference<T>;
+
+// Stateless tag type suitable for compile-time computation
+// - Empty: pure type-level tag with no data members
+// - Final: prevents inheritance issues with type identity
+// - Trivially constructible/destructible: works freely in consteval contexts
+template <typename T>
+concept TagType =
+    CanonicalType<T> && isEmpty<T> && isFinal<T> &&
+    isTriviallyDefaultConstructible<T> && isTriviallyCopyConstructible<T> &&
+    isTriviallyMoveConstructible<T> && isTriviallyDestructible<T>;
 
 }  // namespace tempura

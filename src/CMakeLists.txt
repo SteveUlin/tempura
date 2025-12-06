@@ -50,6 +50,7 @@ add_subdirectory(simd)
 add_subdirectory(special)
 add_subdirectory(synchronization)
 add_subdirectory(task)
+add_subdirectory(units)
 add_subdirectory(utility)
 add_subdirectory(games)
 

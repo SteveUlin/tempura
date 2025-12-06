@@ -90,6 +90,12 @@ target_link_libraries(meta_expression_test PRIVATE meta unit)
 add_test(NAME meta_expression_test COMMAND meta_expression_test)
 set_tests_properties(meta_expression_test PROPERTIES LABELS "meta;expressions")
 
+# Utility test (type traits and concepts)
+add_executable(meta_utility_test utility_test.cpp)
+target_link_libraries(meta_utility_test PRIVATE meta unit)
+add_test(NAME meta_utility_test COMMAND meta_utility_test)
+set_tests_properties(meta_utility_test PROPERTIES LABELS "meta;utility;concepts")
+
 # Containers test (currently broken - pre-existing issue)
 # TODO: Fix and re-enable
 # add_executable(meta_containers_test test/containers_test.cpp)
