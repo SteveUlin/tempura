@@ -254,4 +254,108 @@ constexpr auto incompleteGamma(double a, double x) -> double {
   return detail::incompleteGammaContinuedFraction(a, x);
 }
 
+// Regularized incomplete beta function: I_x(a, b) = B_x(a, b) / B(a, b)
+//
+// Intuition:
+//   I_x(a, b) is the CDF of the Beta(a, b) distribution evaluated at x.
+//   Essential for computing CDFs of Beta, Binomial, Student's t, and F
+//   distributions.
+//
+// Properties:
+//   I_0(a, b) = 0, I_1(a, b) = 1
+//   I_x(a, b) = 1 - I_{1-x}(b, a)  (symmetry)
+//   Integral form: I_x(a, b) = (1/B(a,b)) ∫₀ˣ t^(a-1) (1-t)^(b-1) dt
+
+namespace detail {
+
+// Continued fraction for incomplete beta: I_x(a, b)
+//
+// Uses Lentz's algorithm to evaluate the continued fraction representation.
+// Converges rapidly when x < (a + 1) / (a + b + 2).
+template <typename T>
+constexpr auto incompleteBetaContinuedFraction(T a, T b, T x) -> T {
+  using std::abs;
+  using std::exp;
+  using std::lgamma;
+  using std::log;
+
+  constexpr T ϵ = T{1e-10};
+  constexpr T tiny = T{1e-30};
+
+  const T qab = a + b;
+  const T qap = a + T{1};
+  const T qam = a - T{1};
+
+  // First step of Lentz's algorithm
+  T c = T{1};
+  T d = T{1} - qab * x / qap;
+  if (abs(d) < tiny) {
+    d = tiny;
+  }
+  d = T{1} / d;
+  T h = d;
+
+  // Continued fraction iteration
+  for (int m = 1; m <= 100; ++m) {
+    T m_t = static_cast<T>(m);
+    T m2 = T{2} * m_t;
+
+    // Even step (d_{2m})
+    T aa = m_t * (b - m_t) * x / ((qam + m2) * (a + m2));
+    d = T{1} + aa * d;
+    if (abs(d) < tiny) d = tiny;
+    c = T{1} + aa / c;
+    if (abs(c) < tiny) c = tiny;
+    d = T{1} / d;
+    h *= d * c;
+
+    // Odd step (d_{2m+1})
+    aa = -(a + m_t) * (qab + m_t) * x / ((a + m2) * (qap + m2));
+    d = T{1} + aa * d;
+    if (abs(d) < tiny) d = tiny;
+    c = T{1} + aa / c;
+    if (abs(c) < tiny) c = tiny;
+    d = T{1} / d;
+    T del = d * c;
+    h *= del;
+
+    // Converged when del ≈ 1
+    if (abs(del - T{1}) < ϵ) {
+      break;
+    }
+  }
+
+  // Multiply by prefactor: x^a (1-x)^b / (a B(a,b))
+  T log_prefactor = a * log(x) + b * log(T{1} - x) - log(a) + lgamma(a + b) -
+                    lgamma(a) - lgamma(b);
+  return exp(log_prefactor) * h;
+}
+
+}  // namespace detail
+
+// Regularized incomplete beta function
+//
+// Uses continued fraction with symmetry for optimal convergence:
+// When x > (a + 1) / (a + b + 2), use I_x(a,b) = 1 - I_{1-x}(b,a)
+template <typename T>
+constexpr auto incompleteBeta(T a, T b, T x) -> T {
+  assert(a > T{0} && b > T{0});
+  assert(x >= T{0} && x <= T{1});
+
+  if (x == T{0}) {
+    return T{0};
+  }
+  if (x == T{1}) {
+    return T{1};
+  }
+
+  // Use symmetry for better convergence
+  // Continued fraction converges faster when x < (a+1)/(a+b+2)
+  if (x > (a + T{1}) / (a + b + T{2})) {
+    return T{1} - detail::incompleteBetaContinuedFraction(b, a, T{1} - x);
+  }
+
+  return detail::incompleteBetaContinuedFraction(a, b, x);
+}
+
 }  // namespace tempura::special

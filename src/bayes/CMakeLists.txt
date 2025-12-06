@@ -91,6 +91,18 @@ target_link_libraries(bayes_gamma_test PRIVATE bayes unit)
 add_test(NAME bayes_gamma_test COMMAND bayes_gamma_test)
 set_tests_properties(bayes_gamma_test PROPERTIES LABELS "bayes;distributions")
 
+# Poisson distribution
+add_executable(bayes_poisson_test poisson_test.cpp)
+target_link_libraries(bayes_poisson_test PRIVATE bayes unit)
+add_test(NAME bayes_poisson_test COMMAND bayes_poisson_test)
+set_tests_properties(bayes_poisson_test PROPERTIES LABELS "bayes;distributions")
+
+# Student's t distribution
+add_executable(bayes_student_t_test student_t_test.cpp)
+target_link_libraries(bayes_student_t_test PRIVATE bayes unit)
+add_test(NAME bayes_student_t_test COMMAND bayes_student_t_test)
+set_tests_properties(bayes_student_t_test PROPERTIES LABELS "bayes;distributions")
+
 # ============================================================================
 # Random Number Generator Tests
 # ============================================================================
