@@ -29,7 +29,7 @@ auto main() -> int {
   "Sender concept - composed senders"_test = [] {
     static_assert(Sender<decltype(just(42) | then([](int x) { return x * 2; }))>);
     static_assert(Sender<decltype(just(42) | letValue([](int x) { return just(x * 2); }))>);
-    static_assert(Sender<decltype(just(42) | letError([]() { return just(0); }))>);
+    static_assert(Sender<decltype(CustomErrorSender1{} | letError([](std::tuple<std::string, int> err) { return just(0); }))>);
   };
 
   "SenderTo concept - basic validation"_test = [] {
@@ -51,17 +51,13 @@ auto main() -> int {
     static_assert(Sender<MultiErrorSender>);
   };
 
-  "ErrorTypes - symmetry with ValueTypes"_test = [] {
-    // Verify error types work just like value types
-    using ValueSender = decltype(just(1, 2, 3));
-    static_assert(std::same_as<
-        typename ValueSender::ValueTypes,
-        std::tuple<int, int, int>>);
+  "CompletionSignatures - multiple error signatures"_test = [] {
+    // Custom error sender with multiple error signatures
+    using MultiSigs = MultiErrorSender::CompletionSignatures<>;
+    using ErrorSigs = ErrorSignaturesT<MultiSigs>;
 
-    // Custom error sender with multiple error types
-    static_assert(std::same_as<
-        typename MultiErrorSender::ErrorTypes,
-        std::tuple<int, double, std::string>>);
+    // Verify we have 3 error signatures
+    static_assert(Size_v<ErrorSigs> == 3);
   };
 
   return 0;

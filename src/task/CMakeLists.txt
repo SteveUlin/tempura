@@ -38,13 +38,13 @@ set_property(TEST schedulers_test PROPERTY LABELS base)
 # Previously disabled because std::tuple required movable operation states.
 # Now uses OperationTuple (recursive template inheritance) for move-free storage.
 add_executable(when_all_test when_all_test.cpp)
-target_link_libraries(when_all_test task unit)
+target_link_libraries(when_all_test task unit threadpool)
 add_test(NAME when_all_test COMMAND when_all_test)
 set_property(TEST when_all_test PROPERTY LABELS base)
 
 # WhenAny race composition test
 add_executable(when_any_test when_any_test.cpp)
-target_link_libraries(when_any_test task unit)
+target_link_libraries(when_any_test task unit threadpool)
 add_test(NAME when_any_test COMMAND when_any_test)
 set_property(TEST when_any_test PROPERTY LABELS base)
 
@@ -62,6 +62,12 @@ set_property(TEST env_test PROPERTY LABELS base)
 
 # Scheduler transition algorithms test (on, etc.)
 add_executable(on_test on_test.cpp)
-target_link_libraries(on_test task unit)
+target_link_libraries(on_test task unit threadpool)
 add_test(NAME on_test COMMAND on_test)
 set_property(TEST on_test PROPERTY LABELS base)
+
+# Repeat algorithms test
+add_executable(repeat_effect_test repeat_effect_test.cpp)
+target_link_libraries(repeat_effect_test task unit)
+add_test(NAME repeat_effect_test COMMAND repeat_effect_test)
+set_property(TEST repeat_effect_test PROPERTY LABELS base)

@@ -336,6 +336,64 @@ static_assert(Scheduler<NewThreadScheduler>);
 // TimerScheduler - executes on a timer queue at scheduled times
 // ============================================================================
 
+// Operation state for delay sender - computes time at start(), not creation
+template <typename R, typename Duration>
+class DelayScheduleOperationState {
+ public:
+  DelayScheduleOperationState(TimerQueue& queue, Duration delay, R r)
+      : queue_(&queue), delay_(delay), receiver_(std::move(r)) {}
+
+  // Operation States are not copyable nor movable
+  DelayScheduleOperationState(const DelayScheduleOperationState&) = delete;
+  auto operator=(const DelayScheduleOperationState&)
+      -> DelayScheduleOperationState& = delete;
+  DelayScheduleOperationState(DelayScheduleOperationState&&) = delete;
+  auto operator=(DelayScheduleOperationState&&)
+      -> DelayScheduleOperationState& = delete;
+
+  void start() noexcept {
+    // Compute target time NOW at start, not at sender creation
+    auto when = TimerQueue::Clock::now() + delay_;
+    queue_->scheduleAt(when, [this]() noexcept { receiver_.setValue(); });
+  }
+
+ private:
+  TimerQueue* queue_;
+  Duration delay_;
+  R receiver_;
+};
+
+// Sender that delays by a duration, computing the target time at start()
+// This is suitable for use with repeat algorithms where each iteration
+// should wait the full delay from when it starts.
+template <typename Duration>
+class DelaySender {
+ public:
+  template <typename Env = EmptyEnv>
+  using CompletionSignatures =
+      tempura::CompletionSignatures<SetValueTag(), SetStoppedTag()>;
+
+  DelaySender(TimerQueue& queue, Duration delay)
+      : queue_(&queue), delay_(delay) {}
+
+  template <ReceiverOf<> R>
+  auto connect(R&& receiver) && {
+    return DelayScheduleOperationState<R, Duration>{
+        *queue_, delay_, std::forward<R>(receiver)};
+  }
+
+ private:
+  TimerQueue* queue_;
+  Duration delay_;
+};
+
+// Free function to create a delay sender
+template <typename Rep, typename Period>
+inline auto delay(TimerQueue& queue,
+                  std::chrono::duration<Rep, Period> duration) {
+  return DelaySender<std::chrono::duration<Rep, Period>>{queue, duration};
+}
+
 // Operation state for timer schedule sender
 template <typename R>
 class TimerScheduleOperationState {
@@ -415,9 +473,19 @@ class TimerScheduler {
   }
 
   // Schedule a sender to execute after a specific duration from now
+  // NOTE: Time is computed at sender CREATION, not start. For repeat algorithms,
+  // use delay() instead which computes time at start().
   template <typename Rep, typename Period>
-  auto scheduleAfter(std::chrono::duration<Rep, Period> delay) const {
-    return scheduleAt(Clock::now() + delay);
+  auto scheduleAfter(std::chrono::duration<Rep, Period> d) const {
+    return scheduleAt(Clock::now() + d);
+  }
+
+  // Create a delay sender that waits for the specified duration from start()
+  // Unlike scheduleAfter(), the time is computed when the sender starts,
+  // making this suitable for use with repeat algorithms.
+  template <typename Rep, typename Period>
+  auto delay(std::chrono::duration<Rep, Period> duration) const {
+    return DelaySender<std::chrono::duration<Rep, Period>>{*queue_, duration};
   }
 
  private:

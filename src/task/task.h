@@ -22,6 +22,7 @@
 #include "let_value.h"
 #include "let_error.h"
 #include "on.h"
+#include "repeat_effect.h"
 
 // Algorithms
 #include "algorithms.h"

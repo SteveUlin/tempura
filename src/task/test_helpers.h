@@ -12,11 +12,14 @@ namespace tempura {
 // Custom Error Sender Types (for testing variadic error types)
 // ============================================================================
 
-// Sender with custom error types (string, int)
+// Sender with custom error types (tuple of string and int)
 class CustomErrorSender1 {
  public:
-  using ValueTypes = std::tuple<int>;
-  using ErrorTypes = std::tuple<std::string, int>;
+  template <typename Env = EmptyEnv>
+  using CompletionSignatures = tempura::CompletionSignatures<
+      SetValueTag(int),
+      SetErrorTag(std::tuple<std::string, int>),
+      SetStoppedTag()>;
 
   template <typename R>
   auto connect(R&& receiver) && {
@@ -24,7 +27,7 @@ class CustomErrorSender1 {
      public:
       OpState(R r) : receiver_(std::move(r)) {}
       void start() noexcept {
-        receiver_.setError(std::string{"error message"}, 404);
+        receiver_.setError(std::make_tuple(std::string{"error message"}, 404));
       }
      private:
       R receiver_;
@@ -33,11 +36,14 @@ class CustomErrorSender1 {
   }
 };
 
-// Sender with different custom error types (double, string)
+// Sender with different custom error types (tuple of double and string)
 class CustomErrorSender2 {
  public:
-  using ValueTypes = std::tuple<int>;
-  using ErrorTypes = std::tuple<double, std::string>;
+  template <typename Env = EmptyEnv>
+  using CompletionSignatures = tempura::CompletionSignatures<
+      SetValueTag(int),
+      SetErrorTag(std::tuple<double, std::string>),
+      SetStoppedTag()>;
 
   template <typename R>
   auto connect(R&& receiver) && {
@@ -45,7 +51,7 @@ class CustomErrorSender2 {
      public:
       OpState(R r) : receiver_(std::move(r)) {}
       void start() noexcept {
-        receiver_.setError(3.14, std::string{"pi error"});
+        receiver_.setError(std::make_tuple(3.14, std::string{"pi error"}));
       }
      private:
       R receiver_;
@@ -57,8 +63,12 @@ class CustomErrorSender2 {
 // Multi-error type sender (for static testing)
 class MultiErrorSender {
  public:
-  using ValueTypes = std::tuple<>;
-  using ErrorTypes = std::tuple<int, double, std::string>;
+  template <typename Env = EmptyEnv>
+  using CompletionSignatures = tempura::CompletionSignatures<
+      SetErrorTag(int),
+      SetErrorTag(double),
+      SetErrorTag(std::string),
+      SetStoppedTag()>;
 
   template <typename R>
   auto connect(R&&) && {

@@ -67,6 +67,8 @@ class TimerQueue {
   friend auto scheduleAt(TimerQueue& queue, TimePoint when);
   template <typename R>
   friend class TimerScheduleOperationState;
+  template <typename R, typename Duration>
+  friend class DelayScheduleOperationState;
 
   // Schedule a task to execute at a specific time point
   // Returns false if the queue has been stopped (rejects the task)

@@ -14,6 +14,16 @@
 
 namespace tempura {
 
+// ============================================================================
+// Concept: Check if sender has error signatures
+// ============================================================================
+
+template <typename S, typename Env = EmptyEnv>
+concept HasErrorSignature = requires {
+  typename GetCompletionSignaturesT<S, Env>;
+  requires Size_v<ErrorSignaturesT<GetCompletionSignaturesT<S, Env>>> > 0;
+};
+
 // Helper: Extract error tuple from sender's first error signature
 template <typename S, typename Env = EmptyEnv>
 struct GetErrorTuple {
@@ -208,12 +218,14 @@ struct LetErrorAdaptor {
   F func;
 
   template <typename S>
+    requires HasErrorSignature<S>
   auto operator()(S&& sender) const {
     return LetErrorSender{std::forward<S>(sender), func};
   }
 };
 
 template <typename S, typename F>
+  requires HasErrorSignature<S>
 auto letError(S&& sender, F&& func) {
   return LetErrorSender{std::forward<S>(sender), std::forward<F>(func)};
 }

@@ -70,39 +70,38 @@ auto main() -> int {
   // ==========================================================================
 
   "letError - error recovery with sender"_test = [] {
-    // Create a sender that will produce an error (we'll use a helper)
-    auto error_sender = just(0) | then([](int) -> int {
-                          // In real code, this might fail - for testing,
-                          // we'll manually test with uponError
-                          return 42;
-                        });
-
-    // Test the type deduction works (empty error types by default)
-    auto sender = error_sender | letError([]() {
+    // Use a sender that actually has error signatures
+    auto sender = CustomErrorSender1{} | letError([](std::tuple<std::string, int> err) {
                     return just(999);  // Recovery value
                   });
 
     auto result = syncWait(std::move(sender));
     if (expectTrue(result.has_value())) {
-      expectEq(std::get<0>(*result), 42);  // No error occurred
+      expectEq(std::get<0>(*result), 999);  // Error was recovered
     }
   };
 
   "letError - chained error recovery"_test = [] {
-    auto sender =
-        just(42) |
-        letError([]() { return just(100); }) |
-        letError([]() { return just(200); });
+    // Chain letError on a sender with error signatures
+    auto sender = CustomErrorSender1{} |
+                  letError([](std::tuple<std::string, int> err) {
+                    return CustomErrorSender2{};  // Returns another error sender
+                  }) |
+                  letError([](std::tuple<double, std::string> err) {
+                    return just(200);  // Final recovery
+                  });
 
     auto result = syncWait(std::move(sender));
     if (expectTrue(result.has_value())) {
-      expectEq(std::get<0>(*result), 42);  // Original value, no errors
+      expectEq(std::get<0>(*result), 200);  // Recovered from second error
     }
   };
 
   "letError - mixing with then and letValue"_test = [] {
-    auto sender = just(10) | then([](int x) { return x * 2; }) |
-                  letError([]() { return just(999); }) |
+    // Start with error sender, recover, then process with then and letValue
+    auto sender = CustomErrorSender1{} |
+                  letError([](std::tuple<std::string, int> err) { return just(10); }) |
+                  then([](int x) { return x * 2; }) |
                   letValue([](int x) { return just(x + 5); });
 
     auto result = syncWait(std::move(sender));
@@ -112,10 +111,11 @@ auto main() -> int {
   };
 
   "letError - variadic error types"_test = [] {
-    // letError should unpack the error types using std::apply
+    // letError should unpack the error tuple using std::apply
     auto sender = CustomErrorSender1{} |
-                  letError([](std::string msg, int code) {
-                    // Verify we received both error arguments
+                  letError([](std::tuple<std::string, int> err) {
+                    // Verify we received both error arguments in the tuple
+                    auto [msg, code] = err;
                     expectEq(msg, std::string{"error message"});
                     expectEq(code, 404);
                     return just(999);  // Recovery value
@@ -132,10 +132,11 @@ auto main() -> int {
   // ==========================================================================
 
   "uponError - variadic error types"_test = [] {
-    // uponError should unpack error types and convert to value
+    // uponError should unpack error tuple and convert to value
     auto sender = CustomErrorSender2{} |
-                  uponError([](double val, std::string msg) {
-                    // Verify we received both error arguments
+                  uponError([](std::tuple<double, std::string> err) {
+                    // Verify we received both error arguments in the tuple
+                    auto [val, msg] = err;
                     expectEq(val, 3.14);
                     expectEq(msg, std::string{"pi error"});
                     return 42;  // Convert error to value

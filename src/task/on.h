@@ -17,6 +17,7 @@
 #include "completion_signatures.h"
 #include "concepts.h"
 #include "env.h"
+#include "meta/manual_lifetime.h"
 
 namespace tempura {
 
@@ -71,6 +72,10 @@ class OnReceiver {
   OpState* op_state_;
 };
 
+// Forward declaration for schedule receiver wrapper
+template <Scheduler Sched, Sender S, typename R>
+struct ScheduleReceiver;
+
 // Operation state for on() - manages scheduler transitions and inner sender
 template <Scheduler Sched, Sender S, typename R>
 class OnOperationState {
@@ -78,6 +83,13 @@ class OnOperationState {
   using InnerReceiver = OnReceiver<Sched, S, R>;
   using InnerOpState =
       decltype(std::declval<S>().connect(std::declval<InnerReceiver>()));
+  using TargetScheduleOpState = decltype(std::declval<Sched>()
+                                             .schedule()
+                                             .connect(std::declval<ScheduleReceiver<Sched, S, R>>()));
+  using OriginalScheduleOpState =
+      decltype(std::declval<decltype(get_scheduler(get_env(std::declval<R>())))>()
+                   .schedule()
+                   .connect(std::declval<ScheduleReceiver<Sched, S, R>>()));
 
   OnOperationState(Sched target_sched, S sender, auto original_sched,
                    R receiver)
@@ -85,7 +97,7 @@ class OnOperationState {
         original_sched_(std::move(original_sched)),
         receiver_(std::move(receiver)),
         inner_receiver_(InnerReceiver{&target_sched_, &receiver_, this}),
-        inner_op_(std::move(sender).connect(inner_receiver_)) {}
+        inner_op_(std::move(sender).connect(std::move(inner_receiver_))) {}
 
   // Operation States are not copyable nor movable
   OnOperationState(const OnOperationState&) = delete;
@@ -95,27 +107,59 @@ class OnOperationState {
 
   void start() noexcept {
     // Schedule to target scheduler, then start inner operation
-    auto schedule_sender = target_sched_.schedule();
-    auto start_op = std::move(schedule_sender).connect(*this);
-    start_op.start();
+    target_schedule_op_.constructWith([this]() {
+      return target_sched_.schedule().connect(ScheduleReceiver<Sched, S, R>{this});
+    });
+    target_schedule_op_.get().start();
   }
 
   // Called by scheduler when we've transitioned to target scheduler
   void setValue() noexcept {
-    // Now we're on target scheduler - start the inner operation
-    inner_op_.start();
+    if (!scheduled_to_target_) {
+      // First setValue: we've reached target scheduler
+      scheduled_to_target_ = true;
+      target_schedule_op_.destruct();
+      // Now we're on target scheduler - start the inner operation
+      inner_op_.start();
+    } else {
+      // Second setValue: we've returned to original scheduler
+      original_schedule_op_.destruct();
+      // Deliver result to final receiver
+      if (has_value_) {
+        std::apply([this](auto&&... args) { receiver_.setValue(std::forward<decltype(args)>(args)...); },
+                   std::move(*result_));
+      } else if (has_error_) {
+        receiver_.setError(error_code_);
+      } else if (has_stopped_) {
+        receiver_.setStopped();
+      }
+    }
   }
 
   template <typename... ErrorArgs>
   void setError(ErrorArgs&&...) noexcept {
-    // Scheduling to target failed - forward error
-    receiver_.setError(
-        std::make_error_code(std::errc::resource_unavailable_try_again));
+    if (!scheduled_to_target_) {
+      // Scheduling to target failed - forward error
+      target_schedule_op_.destruct();
+      receiver_.setError(
+          std::make_error_code(std::errc::resource_unavailable_try_again));
+    } else {
+      // Return scheduling failed
+      original_schedule_op_.destruct();
+      receiver_.setError(error_code_);
+    }
   }
 
   void setStopped() noexcept {
-    // Scheduling to target was stopped
-    receiver_.setStopped();
+    if (!scheduled_to_target_) {
+      // Scheduling to target was stopped
+      target_schedule_op_.destruct();
+      receiver_.setStopped();
+    } else {
+      // Return scheduling was stopped
+      original_schedule_op_.destruct();
+      receiver_.setStopped();
+    }
   }
 
   // Schedule back to original scheduler and complete with value
@@ -126,9 +170,10 @@ class OnOperationState {
     has_value_ = true;
 
     // Schedule back to original scheduler
-    auto schedule_sender = original_sched_.schedule();
-    auto return_op = std::move(schedule_sender).connect(*this);
-    return_op.start();
+    original_schedule_op_.constructWith([this]() {
+      return original_sched_.schedule().connect(ScheduleReceiver<Sched, S, R>{this});
+    });
+    original_schedule_op_.get().start();
   }
 
   // Schedule back to original scheduler and complete with error
@@ -138,9 +183,10 @@ class OnOperationState {
     error_code_ = std::make_error_code(std::errc::io_error);
 
     // Schedule back to original scheduler
-    auto schedule_sender = original_sched_.schedule();
-    auto return_op = std::move(schedule_sender).connect(*this);
-    return_op.start();
+    original_schedule_op_.constructWith([this]() {
+      return original_sched_.schedule().connect(ScheduleReceiver<Sched, S, R>{this});
+    });
+    original_schedule_op_.get().start();
   }
 
   // Schedule back to original scheduler and complete with stopped
@@ -148,9 +194,10 @@ class OnOperationState {
     has_stopped_ = true;
 
     // Schedule back to original scheduler
-    auto schedule_sender = original_sched_.schedule();
-    auto return_op = std::move(schedule_sender).connect(*this);
-    return_op.start();
+    original_schedule_op_.constructWith([this]() {
+      return original_sched_.schedule().connect(ScheduleReceiver<Sched, S, R>{this});
+    });
+    original_schedule_op_.get().start();
   }
 
  private:
@@ -160,12 +207,36 @@ class OnOperationState {
   InnerReceiver inner_receiver_;
   InnerOpState inner_op_;
 
+  // Schedule operation states stored as members to avoid UAF
+  ManualLifetime<TargetScheduleOpState> target_schedule_op_;
+  ManualLifetime<OriginalScheduleOpState> original_schedule_op_;
+
+  // State tracking
+  bool scheduled_to_target_ = false;
+
   // Result storage for round-trip
   std::optional<GetOnValueTupleT<S>> result_;
   std::error_code error_code_;
   bool has_value_ = false;
   bool has_error_ = false;
   bool has_stopped_ = false;
+};
+
+// Receiver wrapper for schedule operations - forwards to OnOperationState
+template <Scheduler Sched, Sender S, typename R>
+struct ScheduleReceiver {
+  OnOperationState<Sched, S, R>* op_state_;
+
+  void setValue() noexcept { op_state_->setValue(); }
+
+  template <typename... ErrorArgs>
+  void setError(ErrorArgs&&... args) noexcept {
+    op_state_->setError(std::forward<ErrorArgs>(args)...);
+  }
+
+  void setStopped() noexcept { op_state_->setStopped(); }
+
+  auto get_env() const noexcept { return EmptyEnv{}; }
 };
 
 // OnSender - adaptor that runs sender on target scheduler
