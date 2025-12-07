@@ -62,7 +62,9 @@ void unitConversions() {
   auto duration = 2.5_h;
   auto duration_min = duration.in<DefaultRef<Minute>>();
   auto duration_s = duration.in<DefaultRef<Second>>();
-  std::cout << "\n" << duration << " = " << duration_min << " = " << duration_s << "\n\n";
+  std::cout << "\n"
+            << duration << " = " << duration_min << " = " << duration_s
+            << "\n\n";
 }
 
 // ============================================================================
@@ -234,8 +236,10 @@ void approximateEquality() {
   auto b = 1000.0_m;
   auto c = 1000.001_m;
 
-  std::cout << "1 km == 1000 m (exact): " << (a == b ? "true" : "false") << "\n";
-  std::cout << "1 km == 1000.001 m (exact): " << (a == c ? "true" : "false") << "\n";
+  std::cout << "1 km == 1000 m (exact): " << (a == b ? "true" : "false")
+            << "\n";
+  std::cout << "1 km == 1000.001 m (exact): " << (a == c ? "true" : "false")
+            << "\n";
   std::cout << "approximateEqual(1 km, 1000.001 m, 1e-5): "
             << (approximateEqual(a, c, 1e-5) ? "true" : "false") << "\n\n";
 }
