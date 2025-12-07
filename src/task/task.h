@@ -19,8 +19,10 @@
 // Sender adaptors
 #include "then.h"
 #include "upon_error.h"
+#include "upon_stopped.h"
 #include "let_value.h"
 #include "let_error.h"
+#include "let_stopped.h"
 #include "on.h"
 #include "repeat_effect.h"
 

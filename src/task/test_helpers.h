@@ -85,4 +85,29 @@ struct MoveOnly {
   int value;
 };
 
+// ============================================================================
+// Stopped Sender (for testing stopped channel handling)
+// ============================================================================
+
+// Sender that always completes with stopped
+class StoppedSender {
+ public:
+  template <typename Env = EmptyEnv>
+  using CompletionSignatures = tempura::CompletionSignatures<
+      SetValueTag(int),
+      SetStoppedTag()>;
+
+  template <typename R>
+  auto connect(R&& receiver) && {
+    class OpState {
+     public:
+      OpState(R r) : receiver_(std::move(r)) {}
+      void start() noexcept { receiver_.setStopped(); }
+     private:
+      R receiver_;
+    };
+    return OpState{std::forward<R>(receiver)};
+  }
+};
+
 }  // namespace tempura

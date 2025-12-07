@@ -145,6 +145,4 @@ auto operator|(S&& sender, const UponErrorAdaptor<F>& adaptor) {
   return adaptor(std::forward<S>(sender));
 }
 
-// TODO: Implement uponStopped sender
-
 }  // namespace tempura
