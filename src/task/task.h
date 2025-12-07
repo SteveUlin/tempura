@@ -36,6 +36,10 @@
 #include "when_all.h"
 #include "when_any.h"
 
+// Multi-shot and bulk operations
+#include "split.h"
+#include "bulk.h"
+
 namespace tempura {
 
 // ============================================================================
