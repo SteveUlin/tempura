@@ -797,5 +797,56 @@ auto main() -> int {
     expectEq(executed_count.load(), 3);
   };
 
+  // ==========================================================================
+  // Scheduler Equality Tests
+  // ==========================================================================
+
+  "InlineScheduler - equality"_test = [] {
+    InlineScheduler s1;
+    InlineScheduler s2;
+    // All InlineSchedulers are equivalent
+    expectTrue(s1 == s2);
+    expectTrue(!(s1 != s2));
+  };
+
+  "EventLoopScheduler - equality"_test = [] {
+    EventLoop loop1;
+    EventLoop loop2;
+    EventLoopScheduler s1{loop1};
+    EventLoopScheduler s2{loop1};  // Same loop
+    EventLoopScheduler s3{loop2};  // Different loop
+
+    expectTrue(s1 == s2);   // Same underlying EventLoop
+    expectTrue(!(s1 != s2));
+    expectTrue(s1 != s3);   // Different underlying EventLoops
+    expectTrue(!(s1 == s3));
+  };
+
+  "ThreadPoolScheduler - equality"_test = [] {
+    ThreadPool pool1{1};
+    ThreadPool pool2{1};
+    ThreadPoolScheduler s1{pool1};
+    ThreadPoolScheduler s2{pool1};  // Same pool
+    ThreadPoolScheduler s3{pool2};  // Different pool
+
+    expectTrue(s1 == s2);   // Same underlying ThreadPool
+    expectTrue(!(s1 != s2));
+    expectTrue(s1 != s3);   // Different underlying ThreadPools
+    expectTrue(!(s1 == s3));
+  };
+
+  "NewThreadScheduler - equality"_test = [] {
+    NewThreadContext ctx1;
+    NewThreadContext ctx2;
+    NewThreadScheduler s1{ctx1};
+    NewThreadScheduler s2{ctx1};  // Same context
+    NewThreadScheduler s3{ctx2};  // Different context
+
+    expectTrue(s1 == s2);   // Same underlying context
+    expectTrue(!(s1 != s2));
+    expectTrue(s1 != s3);   // Different underlying contexts
+    expectTrue(!(s1 == s3));
+  };
+
   return 0;
 }

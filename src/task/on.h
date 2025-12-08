@@ -97,7 +97,22 @@ class OnOperationState {
         original_sched_(std::move(original_sched)),
         receiver_(std::move(receiver)),
         inner_receiver_(InnerReceiver{&target_sched_, &receiver_, this}),
-        inner_op_(std::move(sender).connect(std::move(inner_receiver_))) {}
+        inner_op_(std::move(sender).connect(std::move(inner_receiver_))),
+        same_scheduler_(areSchedulersEqual(target_sched_, original_sched_)) {}
+
+ private:
+  // Helper to compare schedulers - only equal if same type and equal
+  template <typename S1, typename S2>
+  static constexpr auto areSchedulersEqual(const S1&, const S2&) -> bool {
+    return false;  // Different types are never equal
+  }
+
+  template <typename S1>
+  static constexpr auto areSchedulersEqual(const S1& a, const S1& b) -> bool {
+    return a == b;  // Same type - use equality comparison
+  }
+
+ public:
 
   // Operation States are not copyable nor movable
   OnOperationState(const OnOperationState&) = delete;
@@ -106,6 +121,13 @@ class OnOperationState {
   auto operator=(OnOperationState&&) -> OnOperationState& = delete;
 
   void start() noexcept {
+    if (same_scheduler_) {
+      // Optimization: skip scheduler transition when already on target
+      scheduled_to_target_ = true;
+      inner_op_.start();
+      return;
+    }
+
     // Schedule to target scheduler, then start inner operation
     target_schedule_op_.constructWith([this]() {
       return target_sched_.schedule().connect(ScheduleReceiver<Sched, S, R>{this});
@@ -165,6 +187,12 @@ class OnOperationState {
   // Schedule back to original scheduler and complete with value
   template <typename... Args>
   void scheduleBackAndComplete(Args&&... args) noexcept {
+    if (same_scheduler_) {
+      // Optimization: skip return transition when already on correct scheduler
+      receiver_.setValue(std::forward<Args>(args)...);
+      return;
+    }
+
     // Store args in tuple for later
     result_.emplace(std::forward<Args>(args)...);
     has_value_ = true;
@@ -179,6 +207,12 @@ class OnOperationState {
   // Schedule back to original scheduler and complete with error
   template <typename... ErrorArgs>
   void scheduleBackAndError(ErrorArgs&&... args) noexcept {
+    if (same_scheduler_) {
+      // Optimization: skip return transition when already on correct scheduler
+      receiver_.setError(std::forward<ErrorArgs>(args)...);
+      return;
+    }
+
     has_error_ = true;
     error_code_ = std::make_error_code(std::errc::io_error);
 
@@ -191,6 +225,12 @@ class OnOperationState {
 
   // Schedule back to original scheduler and complete with stopped
   void scheduleBackAndStop() noexcept {
+    if (same_scheduler_) {
+      // Optimization: skip return transition when already on correct scheduler
+      receiver_.setStopped();
+      return;
+    }
+
     has_stopped_ = true;
 
     // Schedule back to original scheduler
@@ -213,6 +253,7 @@ class OnOperationState {
 
   // State tracking
   bool scheduled_to_target_ = false;
+  bool same_scheduler_ = false;  // Optimization: skip transitions if schedulers equal
 
   // Result storage for round-trip
   std::optional<GetOnValueTupleT<S>> result_;

@@ -51,8 +51,8 @@ target_link_libraries(simd_main PRIVATE profiler)
 
 add_executable(scheduler_demo scheduler_demo.cpp)
 
-add_executable(factorial_demo factorial_demo.cpp)
-target_link_libraries(factorial_demo PRIVATE dynamic_bigint)
+# add_executable(factorial_demo factorial_demo.cpp)
+# target_link_libraries(factorial_demo PRIVATE dynamic_bigint)
 
 add_executable(task_timer_demo task_timer_demo.cpp)
 target_link_libraries(task_timer_demo PRIVATE task)

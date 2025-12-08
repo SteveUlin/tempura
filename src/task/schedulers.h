@@ -55,6 +55,10 @@ class InlineScheduleSender {
 class InlineScheduler {
  public:
   auto schedule() const { return InlineScheduleSender{}; }
+
+  friend constexpr auto operator==(InlineScheduler, InlineScheduler) -> bool {
+    return true;  // All InlineSchedulers are equivalent
+  }
 };
 
 static_assert(Scheduler<InlineScheduler>);
@@ -131,6 +135,11 @@ class EventLoopScheduler {
 
   auto schedule() const { return EventLoopScheduleSender{*loop_}; }
 
+  friend constexpr auto operator==(EventLoopScheduler lhs,
+                                   EventLoopScheduler rhs) -> bool {
+    return lhs.loop_ == rhs.loop_;
+  }
+
  private:
   EventLoop* loop_;
 };
@@ -205,6 +214,11 @@ class ThreadPoolScheduler {
   explicit ThreadPoolScheduler(ThreadPool& pool) : pool_(&pool) {}
 
   auto schedule() const { return ThreadPoolScheduleSender{*pool_}; }
+
+  friend constexpr auto operator==(ThreadPoolScheduler lhs,
+                                   ThreadPoolScheduler rhs) -> bool {
+    return lhs.pool_ == rhs.pool_;
+  }
 
  private:
   ThreadPool* pool_;
@@ -325,6 +339,11 @@ class NewThreadScheduler {
       : context_(&context) {}
 
   auto schedule() const { return NewThreadScheduleSender{*context_}; }
+
+  friend constexpr auto operator==(NewThreadScheduler lhs,
+                                   NewThreadScheduler rhs) -> bool {
+    return lhs.context_ == rhs.context_;
+  }
 
  private:
   NewThreadContext* context_;

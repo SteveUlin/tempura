@@ -34,12 +34,12 @@ concept ReceiverOf =
 
 // Schedulers create senders that represent the scheduling of work.
 //
-// Note: Equality comparison is not required in this simplified Phase 1
-// implementation. P2300 requires it for scheduler optimization, but we defer
-// that complexity to Phase 4.
+// P2300 requires equality comparison to enable scheduler optimizations,
+// such as eliding transitions when source and target schedulers are the same.
 template <typename S>
 concept Scheduler =
-    std::copy_constructible<std::remove_cvref_t<S>> && requires(const S& s) {
+    std::copy_constructible<std::remove_cvref_t<S>> &&
+    std::equality_comparable<std::remove_cvref_t<S>> && requires(const S& s) {
       { s.schedule() };  // Returns a sender
     };
 

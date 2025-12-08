@@ -264,5 +264,53 @@ auto main() -> int {
 
 #endif  // Disabled async tests
 
+  // ==========================================================================
+  // Scheduler Equality Optimization Tests
+  // ==========================================================================
+
+  "on() - same scheduler optimization (InlineScheduler)"_test = [] {
+    // When target scheduler equals original scheduler, transitions are skipped
+    InlineScheduler scheduler;
+    int execution_count = 0;
+
+    auto sender = on(scheduler, just(42) | then([&](int x) {
+                       ++execution_count;
+                       return x * 2;
+                     }));
+
+    auto result = syncWait(std::move(sender));
+
+    expectTrue(result.has_value());
+    expectEq(std::get<0>(*result), 84);
+    expectEq(execution_count, 1);  // Should still execute once
+  };
+
+  "on() - same scheduler optimization (ThreadPoolScheduler)"_test = [] {
+    ThreadPool pool{2};
+    ThreadPoolScheduler scheduler{pool};
+    std::atomic<int> execution_count{0};
+    std::atomic<std::thread::id> exec_thread{};
+
+    // Use on() with scheduler from environment that matches target
+    auto sender = scheduler.schedule() | then([&]() {
+                    // Now we're on the pool thread, use on() with same scheduler
+                    auto inner_sender =
+                        on(scheduler, just(42) | then([&](int x) {
+                             ++execution_count;
+                             exec_thread.store(std::this_thread::get_id());
+                             return x * 2;
+                           }));
+                    return syncWait(std::move(inner_sender));
+                  });
+
+    auto result = syncWait(std::move(sender));
+
+    expectTrue(result.has_value());
+    auto& inner_result = std::get<0>(*result);
+    expectTrue(inner_result.has_value());
+    expectEq(std::get<0>(*inner_result), 84);
+    expectEq(execution_count.load(), 1);
+  };
+
   return TestRegistry::result();
 }
