@@ -57,6 +57,9 @@ add_executable(scheduler_demo scheduler_demo.cpp)
 add_executable(task_timer_demo task_timer_demo.cpp)
 target_link_libraries(task_timer_demo PRIVATE task)
 
+add_executable(sudoku_parallel sudoku_parallel.cpp)
+target_link_libraries(sudoku_parallel PRIVATE task sudoku threadpool)
+
 # add_executable(glfw_main glfw_main.cpp)  # Disabled - missing GL/gl.h
 # target_link_libraries(glfw_main PRIVATE glfw OpenGL::GL)
 # add_executable(hello_triangle_main hello_triangle.cpp)  # Disabled - missing GL/gl.h
