@@ -10,43 +10,21 @@
 
 namespace tempura::bayes {
 
-// Logistic distribution Logistic(μ, s)
-// p(x|μ, s) = exp(-z) / (s(1 + exp(-z))²) where z = (x - μ) / s
+// Logistic distribution: p(x|μ,s) = exp(-z) / (s(1+exp(-z))²) where z = (x-μ)/s
 //
-// Intuition:
-//   Similar to the normal distribution but with heavier tails (more probability
-//   in extreme values). The CDF is the famous logistic sigmoid function used
-//   extensively in machine learning and logistic regression. Models scenarios
-//   where growth or change follows an S-curve: slow at extremes, rapid near the
-//   center. Examples include population growth with limited resources, disease
-//   spread, technology adoption, and binary classification probabilities.
-//
-// Compared to Normal(μ, σ):
-//   - Same mean and median (μ), symmetric around μ
-//   - Heavier tails: P(|X - μ| > k) decays exponentially vs. Gaussian (quadratic)
-//   - Variance = (π²s²)/3 vs. σ² for normal (use s = σ√3/π for same variance)
-//   - CDF has closed form (sigmoid) vs. requiring erf() for normal
-//
+// Like normal but with heavier tails. CDF is the sigmoid function.
+// Variance = (π²s²)/3
 template <typename T = double>
 class Logistic {
-  static_assert(
-      !std::is_integral_v<T>,
-      "Logistic is a continuous distribution - integer types are not "
-      "supported. "
-      "Use a floating-point type (float, double, long double) or a custom "
-      "numeric type.");
+  static_assert(!std::is_integral_v<T>, "Logistic requires a floating-point type");
 
  public:
-  constexpr Logistic(T mu, T sigma) : mu_{mu}, sigma_{sigma} {
-    assert(sigma > T{0} && "Logistic distribution requires sigma > 0");
+  constexpr Logistic(T μ, T s) : μ_{μ}, s_{s} {
+    assert(s > T{0} && "requires s > 0");
   }
 
-  // Inverse transform sampling using logistic quantile function
-  //
-  // Formula: Q(u) = μ + s·log(u/(1-u))
-  //
-  // This transforms a uniform U(0,1) sample into a logistic sample.
-  // Reject u = 0 or u = 1 to avoid log(0) and division by zero.
+  // Inverse transform: Q(u) = μ + s·log(u/(1-u))
+  // Reject u=0 or u=1 to avoid log(0) and division by zero
   template <std::uniform_random_bit_generator Generator>
   constexpr auto sample(Generator& g) -> T {
     constexpr T scale =
@@ -57,87 +35,56 @@ class Logistic {
     }
 
     using std::log;
-    return mu_ + sigma_ * log(u / (T{1} - u));
+    return μ_ + s_ * log(u / (T{1} - u));
   }
 
-  // Probability density function (PDF)
-  //
-  // Formula: p(x|μ,s) = exp(-z) / (s(1 + exp(-z))²) where z = (x - μ) / s
-  //
-  // Numerically stable form that avoids overflow:
-  //   If z ≥ 0: exp(-z) / (s(1 + exp(-z))²)
-  //   If z < 0: exp(z) / (s(exp(z) + 1)²)
+  // Numerically stable: use exp(-z) if z≥0, else exp(z)
   constexpr auto prob(T x) const -> T {
     using std::exp;
-    const T z = (x - mu_) / sigma_;
+    const T z = (x - μ_) / s_;
 
-    // Use numerically stable form based on sign of z
     if (z >= T{0}) {
       const T exp_neg_z = exp(-z);
       const T denom = T{1} + exp_neg_z;
-      return exp_neg_z / (sigma_ * denom * denom);
+      return exp_neg_z / (s_ * denom * denom);
     } else {
       const T exp_z = exp(z);
       const T denom = exp_z + T{1};
-      return exp_z / (sigma_ * denom * denom);
+      return exp_z / (s_ * denom * denom);
     }
   }
 
-  // Log probability density (log PDF)
-  //
-  // Formula: log p(x|μ,s) = -z - log(s) - 2·log(1 + exp(-|z|))
-  // where z = (x - μ) / s
-  //
-  // Computing in log-space avoids underflow for very small probabilities.
-  // Uses the stable form: log(1 + exp(-|z|)) which avoids overflow.
+  // Log-space avoids underflow: log p(x) = -|z| - log(s) - 2·log(1 + exp(-|z|))
   constexpr auto logProb(T x) const -> T {
     using std::exp;
     using std::log;
 
-    const T z = (x - mu_) / sigma_;
+    const T z = (x - μ_) / s_;
     const T abs_z = (z >= T{0}) ? z : -z;
 
-    // log p(x) = -z - log(s) - 2·log(1 + exp(-|z|))
-    // For z ≥ 0: -z - log(s) - 2·log(1 + exp(-z))
-    // For z < 0: z - log(s) - 2·log(1 + exp(z))
     const T log_sum_exp = log(T{1} + exp(-abs_z));
-    return -abs_z - log(sigma_) - T{2} * log_sum_exp;
+    return -abs_z - log(s_) - T{2} * log_sum_exp;
   }
 
-  // Cumulative distribution function (CDF)
-  //
-  // Formula: F(x|μ,s) = 1 / (1 + exp(-(x - μ) / s))
-  //
-  // This is the logistic sigmoid function. It represents the probability
-  // that a sample from this distribution is ≤ x.
   constexpr auto cdf(T x) const -> T {
     using std::exp;
-    const T z = (x - mu_) / sigma_;
+    const T z = (x - μ_) / s_;
     return T{1} / (T{1} + exp(-z));
   }
 
-  // Statistical properties
+  constexpr auto mean() const -> T { return μ_; }
 
-  // E[X] = μ
-  constexpr auto mean() const -> T { return mu_; }
-
-  // Var[X] = (π²s²)/3
   constexpr auto variance() const -> T {
-    const T pi = T{std::numbers::pi};
-    return (pi * pi * sigma_ * sigma_) / T{3};
+    const T π = T{std::numbers::pi};
+    return (π * π * s_ * s_) / T{3};
   }
 
-  // Parameter accessors
-
-  // Location parameter
-  constexpr auto mu() const -> T { return mu_; }
-
-  // Scale parameter
-  constexpr auto sigma() const -> T { return sigma_; }
+  constexpr auto mu() const -> T { return μ_; }
+  constexpr auto s() const -> T { return s_; }
 
  private:
-  T mu_;
-  T sigma_;
+  T μ_;
+  T s_;
 };
 
 }  // namespace tempura::bayes

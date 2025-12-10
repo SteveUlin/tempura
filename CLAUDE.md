@@ -27,9 +27,17 @@
 - Prefer `{}` over `()` for initialization (including ctor init lists)
 - `static_assert` tests belong in test files, not headers
 - Unicode/emojis encouraged (α, β, ∂, ∑, ✓, ✗, ⚠️)
-- Comments: minimal, timeless, design-focused
 - Use PRECONDITION/POSTCONDITION/DANGER as needed
 - No copyright statements
+
+**Comments:**
+
+- Explain *why*, not *what* - the code shows what, comments provide context
+- Add comments where logic is non-obvious (e.g., algorithmic tricks, edge cases)
+- Keep comments concise - one line when possible
+- Good: `// Impossible events have log-probability -∞`
+- Good: `// Variance = p(1-p), maximized at p=0.5`
+- Bad: `// This function returns the probability` (obvious from signature)
 
 ## Testing
 
@@ -37,6 +45,19 @@
 - Use `expect*` helpers (expectEq, expectTrue, etc.) not manual checks
 - Return `TestRegistry::result()` from main
 - Prefer `static_assert` for compile-time validation
+
+**Test simplification:**
+
+- Group related assertions in one test (e.g., test `prob` for true/false together)
+- Don't test math identities (e.g., "PMF sums to 1" tests math, not code)
+- Don't create custom types just to test genericity unless truly needed
+- Include edge cases inline with normal cases, not as separate tests
+- For statistical tests, document the tolerance derivation:
+  ```cpp
+  // Standard error = √(p(1-p)/N) ≈ 0.0046 for p=0.7, N=10k
+  // Tolerance of 0.1 is ~20 standard errors (effectively never fails)
+  expectNear(0.7, empirical_p, 0.1);
+  ```
 
 ## Development Guidelines
 
