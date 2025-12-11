@@ -72,11 +72,11 @@ Target: `src/matrix3/` - New mdspan-inspired implementation
   - Expression template support
 
 ### 3.2 Decompositions
-- [~] Gauss-Jordan elimination - from `matrix2/algorithms/gauss_jordan.h`
+- [x] Gauss-Jordan elimination - from `matrix2/algorithms/gauss_jordan.h`
   - In-place row reduction
   - Pivoting strategies
 
-- [ ] LU Decomposition - from `matrix2/algorithms/lu_decomposition.h`
+- [~] LU Decomposition - from `matrix2/algorithms/lu_decomposition.h`
   - Doolittle/Crout methods
   - Partial pivoting support
 

@@ -5,7 +5,7 @@ Last updated: 2024-12-10T23:30:00Z
 ## Current State
 
 **Phase**: 3 - Algorithms
-**Active Task**: None (waiting for review)
+**Active Task**: LU Decomposition
 **Blocking Issues**: None
 
 ---
@@ -18,16 +18,16 @@ _None_
 ### In Progress
 | Task | Assignee | Started |
 |------|----------|---------|
+| LU Decomposition | Implementer Agent | 2024-12-10T23:45:00Z |
 
 ### Pending Review
 | Priority | Task | Assignee | Completed |
 |----------|------|----------|-----------|
-| 1 | Gauss-Jordan elimination | Implementer | 2024-12-10T23:30:00Z |
 
 ### Recently Completed
 | Task | Completed | Commits | Review Decision |
 |------|-----------|---------|-----------------|
-| Gauss-Jordan elimination | 2024-12-10T23:30:00Z | 1a323799 | Pending |
+| Gauss-Jordan elimination | 2024-12-10T23:30:00Z | 1a323799 | APPROVE (Iteration 1/3) |
 | Multiplication | 2024-12-10T22:00:00Z | 9ae59930 | APPROVE (Iteration 1/3) |
 | Addition | 2024-12-10T20:30:00Z | 9d5bcfe8 | APPROVE (Iteration 1/3) |
 | Permuted | 2024-12-10T19:30:00Z | 0721c352 | APPROVE (Iteration 1/3) |
@@ -2551,3 +2551,146 @@ Checkpoint reached (6 commits). Starting Phase 3.2 decomposition algorithms with
    - Ensure permutation swap operations are compatible
 
 ---
+
+### 2024-12-10T23:45:00Z - Task Assignment: LU Decomposition
+**Assigned by**: Director Agent
+**Assigned to**: Implementer Agent
+
+Starting next task in Phase 3.2 decomposition algorithms: LU Decomposition.
+
+**Source Analysis** (`matrix2/algorithms/lu_decomposition.h`):
+- Two main classes:
+  1. `LU<M>` (lines 40-138): General LU decomposition with partial pivoting
+  2. `BandedLU<M, AdditionalBands>` (lines 140-250): Optimized version for banded matrices
+- Core algorithm in `LU::init()` (lines 76-114):
+  - Scale-invariant pivoting: tracks row scaling factors (lines 82-92) for numerical stability
+  - Pivot selection (lines 96-104): finds largest scaled element in column
+  - Row permutation via `RowPermuted` wrapper (line 105: `matrix_.swap(i, pivot_row)`)
+  - In-place decomposition (lines 107-112): stores L and U in same matrix
+  - L has implicit 1s on diagonal (not stored)
+  - U contains the upper triangular part
+- Solver `LU::solve()` (lines 118-138):
+  - Forward substitution for Ly=b (lines 121-127)
+  - Backward substitution for Ux=y (lines 128-137)
+  - Modifies RHS matrix b in-place
+- Determinant calculation (lines 52-58): product of diagonal elements
+- Helper function `safeDivide` (lines 33-38): avoids division by zero with small epsilon
+- Template parameters:
+  - `MatrixT M`: Input matrix type
+  - CTAD deduction guides (lines 68-72)
+- BandedLU optimization:
+  - Adds extra bands for fill-in during decomposition
+  - Restricts operations to band structure for efficiency
+  - Similar algorithm but with band-aware loop bounds
+
+**Handoff Notes for Implementer**:
+
+1. **Dependencies**:
+   - Requires `RowPermuted` wrapper (from matrix2/storage/permuted.h) - already migrated to matrix3
+   - Requires `Permutation` storage - already migrated to matrix3
+   - Uses `MatrixT` concept for generic matrix operations
+   - Needs `CHECK` macro or equivalent assertions
+   - Requires `std::abs`, `std::max`, `std::min`, `std::move` from standard library
+
+2. **Implementation Strategy**:
+   - Create `src/matrix3/algorithms/lu_decomposition.h`
+   - Start with general `LU<M>` class (lines 40-138)
+   - Port `safeDivide` helper first (lines 33-38)
+   - Implement `LU::init()` method with pivoting (lines 76-114)
+   - Implement `LU::solve()` for forward/backward substitution (lines 118-138)
+   - Implement `LU::determinant()` (lines 52-58)
+   - Add CTAD deduction guides (lines 68-72)
+   - Consider `BandedLU` as optional (can defer if complex)
+   - Maintain exact algorithm structure for correctness
+
+3. **Testing Requirements**:
+   - Create `src/matrix3/algorithms/lu_decomposition_test.cc`
+   - Test cases needed:
+     - Solving linear systems Ax=b (single and multiple RHS)
+     - Matrix inversion via solve(I) where I is identity
+     - Determinant calculation (verify against known values)
+     - Pivot selection correctness (matrices requiring pivoting)
+     - Numerical stability with poorly conditioned matrices
+     - constexpr evaluation where possible
+     - Edge cases: 1x1, 2x2, larger matrices
+   - Verify decomposition: reconstruct M from L and U (with permutation)
+   - Compare solutions to known exact solutions
+
+4. **Key Differences from matrix2**:
+   - Use matrix3's `GenericMatrix` instead of matrix2's `MatrixT` concept
+   - Access elements via `[i, j]` syntax (should be compatible)
+   - `RowPermuted` wrapper is already migrated, use matrix3 version
+   - Shape access: use `extent().extent(0/1)` instead of `shape().row/col`
+   - May need to adapt permutation interface if different
+
+5. **Algorithm Notes**:
+   - Lines 82-92: Scale vector initialization is crucial for numerical stability
+   - Lines 96-104: Pivot selection uses scaled values, not raw values
+   - Lines 107-112: Doolittle decomposition (L has 1s on diagonal)
+   - Line 108: Division by pivot stored in L's lower triangle
+   - Lines 109-111: Standard Gaussian elimination update
+   - Forward/backward substitution must respect permutation (line 120)
+   - `safeDivide` with eps=1e-30 prevents division by exact zero
+   - L and U stored in single matrix: strict lower triangle = L (without diagonal), diagonal + upper = U
+
+6. **Potential Issues**:
+   - constexpr evaluation may be limited by dynamic allocation in permutation
+   - `std::move` in constructor (line 47) may affect constexpr
+   - Shape queries need to work with matrix3's extent system
+   - Ensure `RowPermuted` swap operations are compatible
+   - Scale vector uses `InlineDense` storage - verify compatibility with matrix3
+   - BandedLU is complex - consider deferring or implementing separately
+
+---
+
+### 2025-12-10 - Review: Gauss-Jordan elimination
+**Reviewer**: Reviewer Agent
+**Decision**: APPROVE
+
+**Implementation Review**:
+
+1. **Correctness - PASS**
+   - Pivot reduction (`gaussJordanReduce`): Correctly scales pivot row (line 27-32) and eliminates all other rows (lines 43-59)
+   - Row pivoting (`Pivot::kRow`): Properly finds max absolute value in column (lines 119-124), swaps rows physically (lines 128-138)
+   - Column unscrambling: Correctly applies inverse permutation to columns in reverse order (lines 148-156)
+   - Singularity detection: Returns false when pivot element < eps (lines 23-25)
+   - Variadic template support: Correctly transforms additional matrices B alongside A
+
+2. **Code Quality - PASS**
+   - Naming follows conventions: `camelCase` for functions, `snake_case` for variables
+   - Comments explain algorithm steps adequately (lines 66-81)
+   - Proper use of `[[unlikely]]` for singularity detection
+   - No assert() needed - returns bool for error handling
+   - Clean separation: `internal::` namespace for helper function
+
+3. **Algorithm Preservation - PASS**
+   - Core algorithm structure matches matrix2 exactly
+   - Pivot row scaling: identical (matrix2 lines 18-22, matrix3 lines 27-32)
+   - Row reduction: identical (matrix2 lines 32-47, matrix3 lines 43-59)
+   - Column unscrambling: identical logic (matrix2 lines 136-145, matrix3 lines 148-156)
+   - Variadic template pattern preserved for solving Ax=B systems
+
+4. **Test Coverage - EXCELLENT**
+   - Both Pivot::kNone and Pivot::kRow tested extensively
+   - Singular matrix detection: tested for both strategies (tests on lines 97-112)
+   - Linear system solving: single RHS (lines 114-126), multiple RHS (lines 128-142)
+   - Matrix inversion verification: A * A^-1 = I checked (lines 24-49, 51-77, 160-191)
+   - Edge cases: identity matrix (lines 79-95), custom epsilon (lines 193-205), non-square (lines 207-222)
+   - CTAD verification (lines 224-236)
+   - All 13 tests pass
+
+5. **Key Adaptations for matrix3**:
+   - Shape access: `A.extent().extent(0/1)` instead of `A.shape().row/col` - correct
+   - Element access: `[i, j]` syntax - compatible
+   - Permutation: uses matrix3's `Permutation` class - correct
+   - No CHECK macro dependency - properly removed (matrix2 had runtime checks)
+   - Static extent handling: proper conditional with `kDynamic` (lines 110-114)
+
+**Files**:
+- Implementation: `/home/ulins/workspace/tempura/src/matrix3/gauss_jordan.h`
+- Tests: `/home/ulins/workspace/tempura/src/matrix3/gauss_jordan_test.cpp`
+
+**Test Results**: All 13 tests pass
+
+**Recommendation**: APPROVE - implementation is correct, well-tested, and faithful to the original algorithm.
+
