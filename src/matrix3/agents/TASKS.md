@@ -45,12 +45,12 @@ Target: `src/matrix3/` - New mdspan-inspired implementation
   - Efficient storage for banded matrices
   - Parameterized by upper/lower bandwidth
 
-- [~] Block - from `matrix2/storage/block.h`
+- [x] Block - from `matrix2/storage/block.h`
   - Block-structured matrices
   - Useful for partitioned algorithms
 
 ### 2.3 Permutation Support
-- [ ] Permutation - from `matrix2/storage/permutation.h`
+- [~] Permutation - from `matrix2/storage/permutation.h`
   - Represents row/column permutations
   - Used by LU decomposition with pivoting
 

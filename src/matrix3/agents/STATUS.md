@@ -1,11 +1,11 @@
 # Migration Status
 
-Last updated: 2024-12-10T15:30:00Z
+Last updated: 2024-12-10T17:00:00Z
 
 ## Current State
 
 **Phase**: 2 - Storage Types
-**Active Task**: Block storage
+**Active Task**: Permutation
 **Blocking Issues**: None
 
 ---
@@ -16,16 +16,18 @@ Last updated: 2024-12-10T15:30:00Z
 _None_
 
 ### In Progress
-| Priority | Task | Assignee | Started |
-|----------|------|----------|---------|
-| 4 | Block storage | Implementer | 2024-12-10T15:30:00Z |
+| Task | Assignee | Started |
+|------|----------|---------|
+| Permutation | Implementer | 2024-12-10T17:00:00Z |
 
 ### Pending Review
-_None_
+| Priority | Task | Assignee | Completed |
+|----------|------|----------|-----------|
 
 ### Recently Completed
 | Task | Completed | Commits | Review Decision |
 |------|-----------|---------|-----------------|
+| Block storage | 2024-12-10T16:15:00Z | 6145360f | APPROVE (Iteration 1/3) |
 | Banded storage | 2024-12-10T15:30:00Z | 2c389b6b | APPROVE (Iteration 1/3) |
 | Complex wrapper | 2024-12-10T13:30:00Z | c7aeee1a | APPROVE (Iteration 1/3) |
 | InlineCoordinateList | 2024-12-10T12:00:00Z | 661b7b5e, 8683b794 | APPROVE (Iteration 2/3) |
@@ -42,11 +44,149 @@ _None_
 ### Review Iteration Counter
 | Task | Iteration | Max |
 |------|-----------|-----|
+| Block storage | 1 | 3 |
 | Banded storage | 1 | 3 |
 | Complex wrapper | 1 | 3 |
 | InlineCoordinateList | 2 | 3 |
 
 ### Addressed
+
+#### Block storage Review - Iteration 1
+**Decision**: APPROVE
+**Reviewer**: Reviewer Agent
+**Date**: 2024-12-10T16:30:00Z
+
+**Correctness Verification**:
+
+1. **Column Offset Calculation** ✓ VERIFIED
+   - Line 75: `int64_t offset = 0;` initialization
+   - Line 81-83: Fold expression correctly checks `j < offset + MatrixCols`
+   - Line 82: Accesses `mats[i, j - offset]` with correct offset subtraction
+   - Line 83: Updates `offset += MatrixCols` for next block
+   - Test lines 31-42: Left block (cols 0-2) verified
+   - Test lines 39-42: Right block (cols 3-4) verified with offset
+   - Test lines 179-188: Boundary access extensively tested
+
+2. **Short-Circuit Fold Expression** ✓ VERIFIED
+   - Line 81-84: `((condition ? action : offset_update) or ...)` pattern
+   - Returns `true` when block found, `false` when skipping
+   - `or` operator ensures short-circuit evaluation
+   - Line 85: Assert verifies result found (safety check)
+   - Test lines 249-269: Large composition (5 blocks) tests short-circuit efficiency
+   - Correctly stops at first matching block
+
+3. **Block Boundary Handling** ✓ VERIFIED
+   - Test lines 157-189: Comprehensive boundary test with 3 blocks of 2 columns each
+   - Line 180: Last column of first block (col 1)
+   - Line 182: First column of second block (col 2)
+   - Line 184: Last column of second block (col 3)
+   - Line 186: First column of third block (col 4)
+   - Line 188: Last column of third block (col 5)
+   - No off-by-one errors at boundaries
+
+4. **Const/Mutable Access** ✓ VERIFIED
+   - Lines 76-78: `std::conditional_t` based on constness of `self`
+   - Line 77: Returns `const ValueType*` for const self
+   - Line 78: Returns `ValueType*` for mutable self
+   - Test lines 108-124: Const access tested
+   - Test lines 126-155: Mutable access with modification tested
+   - Lines 138-144: Writes to both left and right blocks verified
+
+**Code Quality (per CLAUDE.md)**:
+
+1. **Naming Conventions** ✓ COMPLIANT
+   - Type: `BlockRow`, `MatrixTraits` (PascalCase)
+   - Class members: `data_` (snake_case with trailing underscore)
+   - Methods: `operator[]`, `rows()`, `cols()` (camelCase)
+   - Constants: `kRows`, `kCols` (kPascalCase)
+   - Template params: `First`, `Rest`, `Indices` (PascalCase)
+
+2. **constexpr-by-default** ✓ COMPLIANT
+   - Line 59: Constructor is constexpr
+   - Lines 64-89: operator[] is constexpr
+   - Lines 91-92: Accessors are constexpr
+   - Test lines 231-247: Comprehensive constexpr test with static_assert
+   - All 6 elements computed at compile-time and verified
+
+3. **Comments Explain "Why" Not "What"** ✓ EXCELLENT
+   - Lines 34-42: Excellent visual diagram showing horizontal concatenation
+   - Lines 40-44: Clear explanation of constraints (ValueType, same rows)
+   - Line 44: Explains short-circuit fold routing mechanism
+   - Line 62: Explains routing behavior
+   - Line 63: Clarifies short-circuit fold usage
+   - Line 80: Explains short-circuit fold pattern
+   - All comments provide context and design rationale
+
+**Test Coverage** ✓ COMPREHENSIVE:
+
+1. **Multiple Block Configurations**:
+   - Lines 10-43: Two blocks ([2x3] + [2x2] = [2x5])
+   - Lines 45-84: Three blocks ([2x2] + [2x3] + [2x1] = [2x6])
+   - Lines 249-269: Five blocks (many blocks edge case)
+   - Lines 191-206: Single block edge case
+
+2. **Block Boundary Access** ✓ EXTENSIVE:
+   - Lines 157-189: Dedicated boundary test
+   - Tests all boundaries between three consecutive blocks
+   - Verifies no off-by-one errors at transitions
+
+3. **Read and Write Operations**:
+   - Lines 108-124: Const (read-only) access
+   - Lines 126-155: Mutable access with writes to both blocks
+   - Lines 146-154: Verification of modifications and preservation of unmodified elements
+
+4. **constexpr Tests** ✓ VERIFIED:
+   - Lines 231-247: Full compile-time construction and access
+   - Static assertion on sum of all elements
+   - Demonstrates complete constexpr compatibility
+
+5. **Additional Coverage**:
+   - Lines 24-28: Static extent verification
+   - Lines 86-106: Deduction guide
+   - Lines 208-229: Multiple value types (int, float, double)
+
+All 10 tests pass successfully.
+
+**Comparison with matrix2** ✓ PRESERVED:
+
+1. **Core Features Preserved**:
+   - Same variadic template design
+   - Same short-circuit fold expression for routing
+   - Same perfect forwarding constructor
+   - Same const correctness via `std::conditional_t`
+   - Same deduction guide pattern
+   - Same constexpr support throughout
+   - Same tuple-based storage
+
+2. **Appropriate Changes for matrix3**:
+   - Added `MatrixTraits` helper (necessary for InlineDense compatibility)
+   - `kRow`/`kCol` → `kRows`/`kCols` (consistency with matrix3)
+   - Added `rows()`/`cols()` methods (compatibility)
+   - `shape()` removed (not needed in matrix3)
+   - `CHECK()` → `assert()` with `std::is_constant_evaluated()` (matrix3 pattern)
+   - Namespace: `tempura::matrix` → `tempura::matrix3`
+   - Uses C++23 variadic operator[] with "deducing this"
+   - Variadic indices with tuple unpacking instead of direct parameters
+
+3. **No Missing Features**: All essential functionality preserved
+
+**Test Results**: All 10 tests pass:
+- block_two_blocks
+- block_three_blocks
+- block_deduction_guide
+- block_const_access
+- block_mutable_access
+- block_boundary_access
+- block_single_block
+- block_value_types
+- block_constexpr
+- block_large_composition
+
+**Final Assessment**: APPROVE - Block storage is correct, well-tested, and ready to merge.
+
+The implementation correctly handles column offset calculation, short-circuit fold expression routing, block boundaries, and const/mutable access. The MatrixTraits helper is well-integrated from the Banded storage pattern. Tests are comprehensive and all pass. No changes required.
+
+**CHECKPOINT TRIGGERED**: This is the 5th commit since the last checkpoint. The system should create a checkpoint commit after this approval.
 
 #### Banded storage Review - Iteration 1
 **Decision**: APPROVE
@@ -359,13 +499,132 @@ Format: `[TIMESTAMP] AGENT: Action`
 [2024-12-10T14:45:00Z] IMPLEMENTER: Completed Banded storage, ready for review
 [2024-12-10T15:30:00Z] REVIEWER: Reviewed Banded storage - APPROVE
 [2024-12-10T15:30:00Z] DIRECTOR: Assigned Block storage to Implementer
+[2024-12-10T16:15:00Z] IMPLEMENTER: Completed Block storage, ready for review
+[2024-12-10T16:30:00Z] REVIEWER: Reviewed Block storage - APPROVE (CHECKPOINT TRIGGERED)
+[2024-12-10T17:00:00Z] MEMORY_CURATOR: Consolidated memories after 4 tasks
+[2024-12-10T17:00:00Z] DIRECTOR: Assigned Permutation to Implementer
 ```
 
 ---
 
 ## Handoff Notes
 
-### To: Implementer (Block storage)
+### To: Implementer (Permutation)
+**From**: Director
+**Date**: 2024-12-10T17:00:00Z
+
+**Task**: Migrate Permutation storage from matrix2 to matrix3 architecture
+
+**Source File**: `/home/ulins/workspace/tempura/src/matrix2/storage/permutation.h`
+
+**Implementation Notes**:
+
+1. **Source Analysis**:
+   - 116-line implementation representing permutation matrices
+   - Template class `Permutation<N>` where N is kDynamic or compile-time size
+   - Stores permutation as array/vector of indices (order_)
+   - Tracks parity (sign of permutation) for determinant calculations
+   - Provides matrix-like access via `operator[](row, col)` returning bool
+   - Supports row permutation of other matrices via `permuteRows()`
+   - constexpr-friendly throughout
+
+2. **Key Features**:
+   - **Template parameter**: `Extent N` (kDynamic or positive integer)
+   - **Storage**:
+     - Dynamic: `std::vector<int64_t> order_`
+     - Static: `std::array<int64_t, N> order_`
+   - **Constructors**:
+     - Default: identity permutation (0, 1, 2, ...)
+     - From size (dynamic only)
+     - From initializer_list (explicit)
+   - **Matrix representation**: `operator[](row, col)` returns `row == order_[col]`
+     - This means permutation matrix has 1 at position [order_[j], j], 0 elsewhere
+   - **Parity tracking**: Boolean `parity_` computed from cycle structure
+   - **Mutation**: `swap(i, j)` to swap two elements, updates parity
+   - **Row permutation**: `permuteRows(MatT& other)` applies permutation to another matrix
+
+3. **Mathematical Background**:
+   - Permutation matrix P has exactly one 1 per row and column, rest zeros
+   - Represented compactly as array: `order_[j] = i` means P[i,j] = 1
+   - Parity is sign of permutation: even (+1) or odd (-1)
+   - Parity determines contribution to determinant
+   - Row permutation: `P * M` reorders rows of M
+   - Implemented via cycle-following algorithm to avoid temporary storage
+
+4. **Validation Logic** (lines 87-105):
+   - Ensures each element in [0, size) appears exactly once
+   - Computes parity by counting cycle structure
+   - Each cycle of length k contributes (k-1) transpositions to parity
+   - Uses `visited` array to track which elements have been processed
+
+5. **permuteRows Algorithm** (lines 65-84):
+   - Cycle-following approach: processes each cycle of permutation
+   - For cycle (i → j → k → ... → i), rotates row values in place
+   - Avoids allocating temporary row storage
+   - Uses `visited` array to ensure each element processed once
+   - Works in-place on the other matrix
+
+6. **Migration Strategy**:
+   - This is a STORAGE type representing a special matrix structure
+   - Could inherit from GenericMatrix, but specialized enough to stay standalone
+   - Similar to InlineCoordinateList - provides matrix interface but with unique semantics
+   - Should remain standalone (not inherit from GenericMatrix)
+   - Update namespace to `tempura::matrix3`
+   - Adapt to matrix3's operator[] syntax and patterns
+
+7. **Important Design Details**:
+   - **ValueType is bool**: permutation matrices have 0/1 entries
+   - **Shape**: Always square (kRow == kCol == kDynamic or N)
+   - **Const correctness**: operator[] is const (read-only matrix view)
+   - **Mutation**: via `swap()` method, not via operator[]
+   - **Data accessor**: `data()` returns const reference to order_ array
+   - **Parity accessor**: `parity()` returns bool
+   - **Type constraint**: `permuteRows()` requires `MatT::kRow == N`
+   - **Bounds checking**: Uses `CHECK()` macro in operator[] (lines 50-52)
+
+8. **Testing Requirements**:
+   - Construction: default (identity), from size, from initializer_list
+   - Matrix representation: verify operator[] returns correct bool values
+   - Parity calculation: even and odd permutations
+   - Validation: reject invalid permutations (duplicates, out-of-range)
+   - swap() operation and parity updates
+   - permuteRows() on various matrix types
+   - Shape/extents accessors
+   - Both static (N > 0) and dynamic (N == kDynamic) versions
+   - constexpr compatibility where possible
+   - Edge cases: size 1, size 2, large permutations
+
+9. **Differences from matrix2**:
+   - matrix2 uses `CHECK()` macro, matrix3 should use `assert()`
+   - Update namespace from `tempura::matrix` to `tempura::matrix3`
+   - matrix2 uses `RowCol` struct for shape(), matrix3 may use different pattern
+   - May need to adapt `MatrixT` concept for `permuteRows()` constraint
+   - Uses C++23 variadic operator[] with "deducing this"
+   - std::iota may not be constexpr until C++26 - handle appropriately
+
+10. **Potential Challenges**:
+    - std::vector not fully constexpr (C++20 has limited support)
+    - std::iota not constexpr until C++26 - may need manual loop
+    - Validation logic is complex - careful with parity calculation
+    - permuteRows algorithm uses cycle-following - ensure correctness
+    - Type constraint on permuteRows (MatT::kRow == N) may need adjustment
+    - Balancing constexpr with std::vector usage
+
+**Expected Deliverables**:
+- `/home/ulins/workspace/tempura/src/matrix3/permutation.h`
+- `/home/ulins/workspace/tempura/src/matrix3/permutation_test.cpp`
+- Updated `/home/ulins/workspace/tempura/src/matrix3/CMakeLists.txt`
+
+**Notes**:
+- More algorithmically complex than previous storage types
+- Parity calculation and validation are mathematically subtle
+- permuteRows is an advanced feature - needs careful testing
+- Consider whether swap() is the right mutation API or if we need more
+- Estimated effort: 3-4 hours due to algorithmic complexity
+
+---
+
+### To: Implementer (Block storage - COMPLETED)
 **From**: Director
 **Date**: 2024-12-10T15:30:00Z
 
@@ -455,7 +714,99 @@ Format: `[TIMESTAMP] AGENT: Action`
 
 ---
 
-### From: Implementer (Banded storage)
+### From: Implementer (Block storage)
+**To**: Reviewer
+**Date**: 2024-12-10T16:15:00Z
+**Commit**: 6145360f
+
+**Implementation Summary:**
+Successfully migrated BlockRow storage from matrix2 to matrix3 architecture as a standalone compositional type.
+
+**Files Created:**
+- `/home/ulins/workspace/tempura/src/matrix3/block.h` - Implementation
+- `/home/ulins/workspace/tempura/src/matrix3/block_test.cpp` - Comprehensive tests
+
+**Files Modified:**
+- `/home/ulins/workspace/tempura/src/matrix3/CMakeLists.txt` - Added test target
+
+**Design Decisions:**
+
+1. **MatrixTraits Helper**:
+   - Reused the MatrixTraits pattern from Banded storage
+   - Extracts ValueType, kRows, kCols from InlineDense template parameters
+   - Required for accessing matrix dimensions in fold expressions
+
+2. **Standalone Compositional Design**:
+   - Kept as compositional class, not inheriting from GenericMatrix
+   - Combines multiple matrices horizontally into a single logical matrix
+   - Similar to Banded wrapper philosophy but composes instead of wraps
+
+3. **C++23 operator[] with "deducing this"**:
+   - Used variadic `operator[](this auto&& self, Indices... indices)`
+   - Return type `decltype(auto)` to preserve reference types
+   - Matches matrix3's multi-index syntax: `mat[i, j]`
+
+4. **Short-Circuit Fold Expression**:
+   - Uses `std::apply` to iterate through tuple of matrices
+   - Fold expression: `((condition ? action : offset_update) or ...)`
+   - Finds correct block by accumulating column offsets
+   - Short-circuits on first matching block
+
+5. **Const Correctness**:
+   - Uses `std::conditional_t` to return `const ValueType*` or `ValueType*`
+   - Based on constness of `self` parameter
+   - Supports both mutable and const access patterns
+
+6. **Type Constraints**:
+   - Requires all blocks have same ValueType (fold expression in requires clause)
+   - Requires all blocks have same row count (compile-time verification)
+   - Column count computed as sum: `(First::kCols + ... + Rest::kCols)`
+
+7. **Namespace and Naming**:
+   - Changed from `tempura::matrix` to `tempura::matrix3`
+   - Updated to use `kRows`/`kCols` for consistency
+   - Added `rows()`/`cols()` static methods for compatibility
+   - Used `assert()` with `std::is_constant_evaluated()` for bounds checking
+
+**Key Features Preserved:**
+- Variadic template design for arbitrary number of blocks
+- Perfect forwarding constructor
+- Short-circuit fold expression for efficient indexing
+- constexpr-friendly throughout
+- Deduction guide
+- Both const and mutable access
+
+**Testing:**
+Comprehensive test suite covering:
+- Two-block composition (basic case)
+- Three-block composition
+- Five-block composition (many blocks)
+- Deduction guide
+- Const access
+- Mutable access (modifying elements)
+- Block boundary access (edges between blocks)
+- Single block edge case
+- Multiple value types (int, float, double)
+- constexpr compatibility with static_assert
+- Extent accessors (rows(), cols())
+
+All 10 tests pass successfully.
+
+**Implementation Notes:**
+- MatrixTraits uses `std::remove_cvref_t` to handle const/ref in fold expressions
+- BlockRow stores matrices by value (no reference semantics)
+- Short-circuit fold stops at first matching block (efficient for many blocks)
+- Bounds checking only active during constexpr evaluation
+
+**Notes for Reviewer:**
+- The short-circuit fold expression is elegant and efficient
+- All constexpr features work at compile-time
+- Follows established matrix3 patterns from previous wrappers
+- Type constraints ensure compile-time safety
+
+---
+
+### From: Implementer (Banded storage - COMPLETED)
 **To**: Reviewer
 **Date**: 2024-12-10T14:45:00Z
 **Commit**: 2c389b6b
@@ -837,10 +1188,10 @@ _Completed - see handoff note above_
 
 | Metric | Value |
 |--------|-------|
-| Tasks Completed | 3 |
-| Tasks In Progress | 1 |
+| Tasks Completed | 4 |
+| Tasks In Progress | 0 |
 | Tasks Remaining | 10 |
-| Review Cycles | 3 |
-| Avg Reviews/Task | 1.33 |
-| Commits Since Checkpoint | 4 |
+| Review Cycles | 4 |
+| Avg Reviews/Task | 1.25 |
+| Commits Since Checkpoint | 0 |
 | Checkpoint Target | 5 |
