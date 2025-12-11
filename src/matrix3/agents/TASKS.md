@@ -86,11 +86,11 @@ Target: `src/matrix3/` - New mdspan-inspired implementation
 
 ### 4.1 Views & Slicing
 - [x] Transpose view
-- [~] Submatrix view (slicing)
+- [x] Submatrix view (slicing)
 - [ ] Row/Column iteration
 
 ### 4.2 Output
-- [ ] to_string - from `matrix2/to_string.h`
+- [~] to_string - from `matrix2/to_string.h`
   - Pretty printing
   - Configurable formatting
 

@@ -1,11 +1,11 @@
 # Migration Status
 
-Last updated: 2024-12-11T02:00:00Z
+Last updated: 2024-12-11T02:30:00Z
 
 ## Current State
 
 **Phase**: 4 - Utilities
-**Active Task**: Submatrix view (slicing)
+**Active Task**: to_string
 **Blocking Issues**: None
 
 ---
@@ -18,7 +18,7 @@ _None_
 ### In Progress
 | Task | Assignee | Started |
 |------|----------|---------|
-| Submatrix view (slicing) | Implementer | 2024-12-10T22:00:00Z |
+| to_string | Implementer Agent | 2024-12-11T02:45:00Z |
 
 ### Pending Review
 | Priority | Task | Assignee | Completed |
@@ -27,6 +27,7 @@ _None_
 ### Recently Completed
 | Task | Completed | Commits | Review Decision |
 |------|-----------|---------|-----------------|
+| Submatrix view (slicing) | 2024-12-11T02:15:00Z | TBD | APPROVE (Iteration 1/3) |
 | Transpose view | 2024-12-10T02:30:00Z | TBD | APPROVE (Iteration 1/3) |
 | LU Decomposition | 2024-12-10T23:55:00Z | 5ea4c0c9 | APPROVE (Iteration 1/3) |
 | Gauss-Jordan elimination | 2024-12-10T23:30:00Z | 1a323799 | APPROVE (Iteration 1/3) |
@@ -51,6 +52,7 @@ _None_
 ### Review Iteration Counter
 | Task | Iteration | Max |
 |------|-----------|-----|
+| Submatrix view (slicing) | 1 | 3 |
 | Transpose view | 1 | 3 |
 | LU Decomposition | 1 | 3 |
 | Multiplication | 1 | 3 |
@@ -63,6 +65,129 @@ _None_
 | InlineCoordinateList | 2 | 3 |
 
 ### Addressed
+
+#### Submatrix View (Slicing) Review - Iteration 1
+**Decision**: APPROVE
+**Reviewer**: Reviewer Agent
+**Date**: 2024-12-11T02:30:00Z
+
+**Correctness Verification**:
+
+1. **Offset Calculation** ✓ VERIFIED
+   - Line 76: `return self.mat_[i + self.row_offset_, j + self.col_offset_]`
+   - Correctly adds offsets to indices before accessing parent matrix
+   - Test "basic submatrix access" (lines 11-23): Submatrix at [1,1] correctly returns m[1,1], m[1,2], m[2,1], m[2,2] as [0,0], [0,1], [1,0], [1,1]
+   - All element access tests verify proper offset application
+
+2. **Extents Reporting** ✓ VERIFIED
+   - Lines 80-81: `rows()` and `cols()` return submatrix dimensions (rows_, cols_), not parent dimensions
+   - Lines 84-85: `rowOffset()` and `colOffset()` accessors for offset inspection
+   - Test "submatrix extents" (lines 25-33): 3x4 submatrix from 5x7 parent reports correct dimensions
+   - Offsets properly exposed for nested submatrix verification
+
+3. **Mutable Access via Deducing This** ✓ VERIFIED
+   - Line 65: Uses C++23 "deducing this" (`template auto operator[](this auto&& self, ...)`)
+   - Perfectly forwards const/mutable qualification from parent to element access
+   - Test "mutable submatrix access" (lines 35-58): Modifications through submatrix visible in parent matrix
+   - Lines 43-45: `sub[0,0] = 99` correctly updates `m[1,1]`
+   - Lines 49-57: Multiple element modifications all propagate to parent
+
+4. **Nested Submatrix Offset Composition** ✓ VERIFIED
+   - Lines 46-60: Specialized constructor for nested submatrix
+   - Lines 50-51: Offsets compose correctly: `parent.row_offset_ + row_offset`
+   - Test "nested submatrix" (lines 87-120): Two-level nesting verified
+   - Lines 108-109: Composed offset is 2 (parent offset 1 + local offset 1)
+   - Lines 110-113: Element access correctly reaches m[2,2], m[2,3], m[3,2], m[3,3]
+   - Lines 116-119: Mutations through nested submatrix propagate to original matrix
+
+5. **View Composition with Transpose** ✓ VERIFIED
+   - Lines 93-116: Helper functions `matRows`/`matCols` adapt to different matrix types
+   - Test "submatrix of transpose" (lines 134-157): Submatrix works on Transpose view
+   - Correctly handles Transpose's swapped dimensions via `requires` clauses
+   - Element values match expected transpose semantics
+
+**Code Quality (per CLAUDE.md)**:
+
+1. **Naming Conventions** ✓ COMPLIANT
+   - Type: `Submatrix` (PascalCase) ✓
+   - Functions: `rows`, `cols`, `rowOffset`, `colOffset`, `data`, `makeSubmatrix` (camelCase) ✓
+   - Variables: `row_offset`, `col_offset` (snake_case) ✓
+   - Class members: `mat_`, `row_offset_`, `col_offset_`, `rows_`, `cols_` (trailing underscore) ✓
+   - Template params: `MatrixType`, `ValueType`, `ParentMatrixType` (PascalCase) ✓
+
+2. **constexpr-by-default** ✓ VERIFIED
+   - Line 30: Constructor constexpr
+   - Line 46: Nested constructor constexpr
+   - Line 65: `operator[]` constexpr
+   - Lines 80-88: All accessors constexpr
+   - Line 136: Factory function constexpr
+   - Lines 38-41, 54-59, 68-75: Runtime assertions via `std::is_constant_evaluated()`
+
+3. **Zero-cost Abstraction** ✓ VERIFIED
+   - Storage: Reference to parent (8 bytes) + 4 size_t (32 bytes) = 40 bytes total
+   - No virtual functions, no heap allocation, no indirection beyond parent access
+   - "deducing this" eliminates need for separate const/non-const overloads
+   - Inline-friendly: All operations are single-line forwarding calls
+
+4. **Comments** ✓ EXCELLENT
+   - Lines 10-16: Comprehensive class description explaining view semantics
+   - Access pattern documented: `Submatrix[i,j] returns M[i + row_offset, j + col_offset]`
+   - Line 15: Explains "deducing this" feature for const/mutable access
+   - Line 16: Notes nested submatrix support
+   - Comments explain "why" (design decisions) not "what" (obvious code)
+
+**Test Coverage Analysis**:
+
+1. **Basic Functionality** ✓ COMPREHENSIVE
+   - "basic submatrix access" (lines 11-23): Element access with offsets
+   - "submatrix extents" (lines 25-33): Dimension and offset reporting
+   - "factory function" (lines 122-132): Convenience API `makeSubmatrix`
+
+2. **Mutability** ✓ VERIFIED
+   - "mutable submatrix access" (lines 35-58): Single and multiple element modifications
+   - Verifies changes visible in parent matrix (lines 45, 54-57)
+   - Tests both 1x1 and 2x2 submatrix modifications
+
+3. **Edge Cases** ✓ COMPREHENSIVE
+   - "corner cases" (lines 60-85): First row, last column, bottom-right corner
+   - "single element submatrix" (lines 159-169): 1x1 submatrix
+   - "full matrix submatrix" (lines 171-185): Submatrix covering entire parent
+   - All boundary conditions tested
+
+4. **Composition** ✓ VERIFIED
+   - "nested submatrix" (lines 87-120): Two-level nesting with offset composition
+   - "submatrix of transpose" (lines 134-157): View composition with Transpose
+   - Verifies offset arithmetic and mutation propagation through nesting
+
+**All 9 Tests Pass**: No failures
+
+**Decision Rationale**:
+
+This is an APPROVE decision for the following reasons:
+
+1. **Correctness**: All operations correctly implemented
+   - Offset arithmetic verified through comprehensive tests
+   - Mutable access properly forwards mutability via "deducing this"
+   - Nested submatrix correctly composes offsets
+   - All 9 test cases pass without failures
+
+2. **Code Quality**: Exceeds standards
+   - Naming follows CLAUDE.md exactly
+   - constexpr-by-default with proper runtime assertions
+   - Zero-cost abstraction with minimal storage overhead
+   - Excellent comments explaining design decisions
+
+3. **Test Coverage**: Comprehensive
+   - Basic functionality, mutability, edge cases all tested
+   - Nested submatrix and view composition verified
+   - Mutation propagation tested at all nesting levels
+
+4. **Design**: Clean and elegant
+   - "deducing this" eliminates code duplication for const/mutable access
+   - Separate constructor for nested submatrix makes offset composition explicit
+   - Helper functions `matRows`/`matCols` enable composition with any matrix-like type
+
+---
 
 #### LU Decomposition Review - Iteration 1
 **Decision**: APPROVE
@@ -3130,6 +3255,103 @@ Based on codebase investigation:
 **Test Results**: All 10 tests pass
 
 **Recommendation**: APPROVE - This is an excellent implementation. The Transpose view correctly swaps indices and extents, supports constexpr evaluation, uses modern C++ features (deducing this), and has comprehensive test coverage including all edge cases. The implementation is a true zero-cost abstraction with no runtime overhead.
+
+---
+
+### 2024-12-11T02:45:00Z - Task Assignment: to_string
+**Assigned by**: Director Agent
+**Assigned to**: Implementer Agent
+
+Starting next task in Phase 4.2: to_string utility. This feature enables pretty-printed string representations of matrices for debugging and output.
+
+**Source Analysis** (`matrix2/to_string.h`):
+
+The `matrix2/` implementation provides a comprehensive `toString()` function (lines 22-71) with smart formatting capabilities:
+
+**Core Features**:
+
+1. **Custom Complex Formatter** (lines 11-17):
+   - Specializes `std::formatter<std::complex<double>>` for polar form output
+   - Format: `"{:.2f}e^({:.4f}i)"` (magnitude and phase angle)
+   - Example: `1.41e^(0.7854i)` represents `1+i` in polar form
+   - Required for using complex numbers in `std::format()`
+
+2. **Type-Aware Base Formatting** (lines 23-26):
+   - Floating-point types: `"{:.4f}"` (4 decimal places)
+   - Integer types: `"{}"` (no decimal formatting)
+   - Uses `std::is_floating_point_v` compile-time detection
+   - Ensures appropriate precision for numeric types
+
+3. **Column Width Calculation** (lines 27-35):
+   - Pre-scans entire matrix to find maximum width per column
+   - `std::vector<size_t> widths(col, 0)` stores max width for each column
+   - Formats each element with base format string to measure actual width
+   - Ensures column alignment in final output
+
+4. **Aligned Formatting** (lines 36-39):
+   - Floating-point: `"{:{}.4f}"` (right-aligned with computed width)
+   - Integer: `"{:>{}}"` (right-aligned with computed width)
+   - Width parameter dynamically applied per column
+   - All values in a column share same width for visual alignment
+
+5. **Unicode Box Drawing** (lines 41-68):
+   - Single row: `[ ... ]` (simple brackets)
+   - Multi-row uses box-drawing characters:
+     - Top: `⎡ ... ⎤`
+     - Middle: `⎢ ... ⎥`
+     - Bottom: `⎣ ... ⎦`
+   - Creates professional mathematical matrix appearance
+
+6. **MatrixT Concept Integration** (line 21):
+   - Function template accepts any type satisfying `MatrixT` concept
+   - Uses `m.shape().row` and `m.shape().col` for dimensions
+   - Element access via `m[i, j]` subscript operator
+   - Works with all matrix3 storage types automatically
+
+**Design Considerations for matrix3**:
+
+- **STL Dependency**: Uses `<format>`, `<string>`, `<vector>` (non-constexpr)
+- **Memory Allocation**: Allocates `widths` vector dynamically
+- **Not constexpr**: Runtime formatting, string concatenation
+- **Utility Function**: Belongs in utilities, not core matrix operations
+- **Generic Design**: Template works with any `MatrixT` conforming type
+
+**Handoff Notes for Implementer**:
+
+1. **Direct Migration Approach**:
+   - The `toString()` function template should work with minimal changes
+   - Update include path: `#include <matrix2/matrix.h>` → `#include <matrix3/matrix.h>`
+   - Verify `MatrixT` concept exists in matrix3 (should from Phase 1)
+
+2. **Complex Number Support**:
+   - Verify matrix3's Complex wrapper works with the custom `std::formatter`
+   - May need to adjust formatter if Complex implementation differs
+   - Test with both real and complex matrices
+
+3. **Testing Priorities**:
+   - Integer matrices (alignment without decimals)
+   - Floating-point matrices (4-decimal precision)
+   - Complex number matrices (polar form)
+   - Single-row matrices (`[ ... ]` format)
+   - Multi-row matrices (box drawing characters)
+   - Column alignment (varying element widths)
+   - Edge cases: 1x1, empty matrix (if allowed)
+
+4. **Code Style**:
+   - Function name: `toString` (camelCase per project style)
+   - Variables: `snake_case` (row, col, widths, out)
+   - Use `constexpr` only where actually achievable (likely not here)
+   - Unicode encouraged (box-drawing characters are good)
+
+5. **Implementation Location**:
+   - Header: `/home/ulins/workspace/tempura/src/matrix3/to_string.h`
+   - Tests: `/home/ulins/workspace/tempura/src/matrix3/to_string_test.cpp`
+
+6. **Potential Improvements** (optional):
+   - Consider making format precision configurable (default 4)
+   - Consider max width limits for very large matrices
+   - Consider truncation for display of large matrices
+   - But start with exact port, optimize later if needed
 
 ---
 
