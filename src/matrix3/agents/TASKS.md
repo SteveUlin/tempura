@@ -29,14 +29,14 @@ Target: `src/matrix3/` - New mdspan-inspired implementation
 - [x] Dense (heap-allocated) - `matrix.h`
 - [x] InlineDense (stack-allocated) - `matrix.h`
 - [x] Identity - `matrix.h`
-- [ ] Complex number wrapper - from `matrix2/storage/complex.h`
+- [~] Complex number wrapper - from `matrix2/storage/complex.h`
 
 ---
 
 ## Phase 2: Storage Types from matrix2
 
 ### 2.1 Sparse Storage
-- [ ] InlineCoordinateList - from `matrix2/storage/inline_coordinate_list.h`
+- [x] InlineCoordinateList - from `matrix2/storage/inline_coordinate_list.h`
   - COO format for small sparse matrices
   - Must support constexpr operations
 
