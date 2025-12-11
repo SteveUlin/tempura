@@ -85,8 +85,8 @@ Target: `src/matrix3/` - New mdspan-inspired implementation
 ## Phase 4: Utilities
 
 ### 4.1 Views & Slicing
-- [~] Transpose view
-- [ ] Submatrix view (slicing)
+- [x] Transpose view
+- [~] Submatrix view (slicing)
 - [ ] Row/Column iteration
 
 ### 4.2 Output
