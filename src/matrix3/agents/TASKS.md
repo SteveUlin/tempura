@@ -29,7 +29,7 @@ Target: `src/matrix3/` - New mdspan-inspired implementation
 - [x] Dense (heap-allocated) - `matrix.h`
 - [x] InlineDense (stack-allocated) - `matrix.h`
 - [x] Identity - `matrix.h`
-- [~] Complex number wrapper - from `matrix2/storage/complex.h`
+- [x] Complex number wrapper - from `matrix2/storage/complex.h`
 
 ---
 
@@ -41,7 +41,7 @@ Target: `src/matrix3/` - New mdspan-inspired implementation
   - Must support constexpr operations
 
 ### 2.2 Structured Storage
-- [ ] Banded - from `matrix2/storage/banded.h`
+- [~] Banded - from `matrix2/storage/banded.h`
   - Efficient storage for banded matrices
   - Parameterized by upper/lower bandwidth
 
