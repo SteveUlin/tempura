@@ -5,7 +5,7 @@ Last updated: 2024-12-10T17:00:00Z
 ## Current State
 
 **Phase**: 2 - Storage Types
-**Active Task**: Permutation
+**Active Task**: Permuted
 **Blocking Issues**: None
 
 ---
@@ -18,7 +18,7 @@ _None_
 ### In Progress
 | Task | Assignee | Started |
 |------|----------|---------|
-| Permutation | Implementer | 2024-12-10T17:00:00Z |
+| Permuted | Implementer | 2024-12-10T18:30:00Z |
 
 ### Pending Review
 | Priority | Task | Assignee | Completed |
@@ -27,6 +27,7 @@ _None_
 ### Recently Completed
 | Task | Completed | Commits | Review Decision |
 |------|-----------|---------|-----------------|
+| Permutation | 2024-12-10T17:30:00Z | abc40b9a | APPROVE (Iteration 1/3) |
 | Block storage | 2024-12-10T16:15:00Z | 6145360f | APPROVE (Iteration 1/3) |
 | Banded storage | 2024-12-10T15:30:00Z | 2c389b6b | APPROVE (Iteration 1/3) |
 | Complex wrapper | 2024-12-10T13:30:00Z | c7aeee1a | APPROVE (Iteration 1/3) |
@@ -44,12 +45,170 @@ _None_
 ### Review Iteration Counter
 | Task | Iteration | Max |
 |------|-----------|-----|
+| Permutation | 1 | 3 |
 | Block storage | 1 | 3 |
 | Banded storage | 1 | 3 |
 | Complex wrapper | 1 | 3 |
 | InlineCoordinateList | 2 | 3 |
 
 ### Addressed
+
+#### Permutation Review - Iteration 1
+**Decision**: APPROVE
+**Reviewer**: Reviewer Agent
+**Date**: 2024-12-10T18:00:00Z
+
+**Correctness Verification**:
+
+1. **Parity Calculation via Cycle Decomposition** ✓ VERIFIED
+   - Lines 133-158: validate() computes parity from cycle structure
+   - Algorithm: Toggle once per cycle found (line 150) + once per element (line 155)
+   - For c cycles of total length n: Total toggles = c + n
+   - Mathematical equivalence: (c + n) mod 2 ≡ (n - c) mod 2 (correct parity formula)
+   - Test line 59: Transposition {2,1,0} has odd parity ✓
+   - Test line 71: 3-cycle {1,2,0} has even parity ✓
+   - Test line 79: Two 2-cycles {1,0,3,2} have even parity ✓
+   - Test line 86: Single 3-cycle has even parity ✓
+   - Algorithm is mathematically sound, though non-intuitive
+
+2. **swap() Updates Parity Correctly** ✓ VERIFIED
+   - Lines 80-83: swap() exchanges elements and toggles parity
+   - Line 81: Single parity toggle per swap (correct for transposition)
+   - Test lines 89-105: Multiple swaps tested, parity alternates correctly
+   - Test lines 107-115: Permutation array updated correctly by swap()
+
+3. **permuteRows() Cycle-Following Algorithm** ✓ VERIFIED
+   - Lines 101-129: Applies permutation to matrix rows in-place
+   - Uses cycle-following to avoid temporary storage
+   - Lines 111-128: visited array ensures each cycle processed once
+   - Lines 119-127: Cycle following loop swaps rows correctly
+   - Test lines 117-142: Reversal permutation {2,1,0} tested - rows correctly reordered
+   - Test lines 144-166: Cyclic permutation {1,2,0} tested - cycle followed correctly
+   - Test lines 168-179: Identity permutation leaves matrix unchanged
+   - Algorithm correctly implements in-place row permutation
+
+4. **Static and Dynamic Variants** ✓ VERIFIED
+   - Lines 37-44: Static-size identity constructor with manual loop (std::iota not constexpr)
+   - Lines 47-53: Dynamic-size identity constructor
+   - Lines 56-62: Initializer_list constructor works for both
+   - Line 169-171: std::conditional_t correctly selects storage type
+   - Test lines 10-33: Static variant fully constexpr with static_assert
+   - Test lines 35-48: Dynamic variant runtime tests
+   - Test lines 181-195: Dynamic-size construction and operations work
+   - Both variants function correctly
+
+**Code Quality (per CLAUDE.md)**:
+
+1. **Naming Conventions** ✓ COMPLIANT
+   - Type: `Permutation` (PascalCase)
+   - Class members: `parity_`, `order_` (snake_case with trailing underscore)
+   - Methods: `swap()`, `permuteRows()`, `data()`, `parity()` (camelCase)
+   - Constants: `kRows`, `kCols` (kPascalCase)
+   - Template params: `Size`, `Indices`, `MatrixT` (PascalCase)
+
+2. **constexpr-by-default** ✓ COMPLIANT
+   - Lines 37-44, 47-62: All constructors constexpr
+   - Lines 65-77: operator[] is constexpr
+   - Lines 80-83: swap() is constexpr
+   - Lines 86-96: All accessors constexpr
+   - Lines 101-129: permuteRows() is constexpr
+   - Test lines 11-32: Extensive static_assert tests verify compile-time evaluation
+   - Full constexpr support for static-size permutations
+
+3. **Comments Explain "Why" Not "What"** ✓ EXCELLENT
+   - Lines 16-26: Comprehensive header comment explains representation and algorithms
+   - Line 17: Explains compact storage representation
+   - Line 22: Explains WHY parity tracking matters (determinant computation)
+   - Line 23: Notes swap() incremental update advantage
+   - Lines 25-26: Explains permuteRows() efficiency (cycle-following, no temp storage)
+   - Line 40: Explains std::iota limitation (not constexpr)
+   - All comments provide design rationale and context
+
+**Test Coverage** ✓ COMPREHENSIVE:
+
+1. **Identity Permutations**:
+   - Lines 10-33: Static identity tested (even parity, diagonal elements)
+   - Lines 35-48: Dynamic identity tested
+   - Lines 168-179: Identity permuteRows() does nothing
+
+2. **Transpositions**:
+   - Lines 50-60: Simple transposition {2,1,0} has odd parity
+   - Tests verify correct matrix representation
+
+3. **Cyclic Permutations**:
+   - Lines 62-72: 3-cycle {1,2,0} has even parity
+   - Lines 82-87: Another 3-cycle configuration
+   - Lines 144-166: Cyclic permuteRows() tested with matrix
+
+4. **Parity Calculations**:
+   - Lines 74-80: Two 2-cycles {1,0,3,2} have even parity
+   - Lines 82-87: Single 3-cycle tested
+   - Lines 89-105: swap() parity updates verified through multiple operations
+
+5. **permuteRows() with Matrices**:
+   - Lines 117-142: Reversal permutation on 3x3 matrix
+   - Lines 144-166: Cyclic permutation on 3x3 matrix
+   - Lines 168-179: Identity permutation (unchanged matrix)
+   - All element values verified after permutation
+
+6. **Dynamic Permutations**:
+   - Lines 181-195: Dynamic size 4 permutation
+   - Lines 197-204: Dynamic from initializer_list
+
+7. **Additional Coverage**:
+   - Lines 107-115: swap() updates array correctly
+   - Lines 206-212: data() accessor returns correct array
+   - Both static and dynamic variants tested
+   - constexpr tests use static_assert throughout
+
+All 14 tests pass successfully.
+
+**Comparison with matrix2** ✓ PRESERVED:
+
+1. **Core Features Preserved**:
+   - Same compact storage: `order_[j] = i` means P[i,j] = 1
+   - Same parity tracking via cycle decomposition
+   - Same three constructors (identity default, explicit size, initializer_list)
+   - Same swap() with incremental parity update
+   - Same permuteRows() cycle-following algorithm
+   - Same validation logic ensuring valid permutation
+   - Same constexpr support throughout
+   - Same data() accessor
+   - Same conditional storage (array vs vector)
+
+2. **Appropriate Changes for matrix3**:
+   - Namespace: `tempura::matrix` → `tempura::matrix3`
+   - `kRow`/`kCol` → `kRows`/`kCols` (consistency)
+   - Added `rows()`/`cols()` instance methods, `staticRows()`/`staticCols()` static methods
+   - Removed `shape()` method (not needed in matrix3)
+   - `CHECK()` → `assert()` with `std::is_constant_evaluated()` (matrix3 pattern)
+   - Uses C++23 variadic operator[] with "deducing this"
+   - std::iota replaced with manual loop (constexpr compatibility)
+   - permuteRows() adapted to extent() API instead of shape()
+
+3. **No Missing Features**: All essential functionality preserved
+
+**Test Results**: All 14 tests pass:
+- Identity permutation (static)
+- Identity permutation (dynamic)
+- Simple transposition (swap two elements)
+- Cyclic permutation
+- Parity calculation - complex permutation
+- Parity calculation - single 3-cycle
+- swap() updates parity
+- swap() updates permutation array
+- permuteRows() on dense matrix
+- permuteRows() with cyclic permutation
+- permuteRows() identity does nothing
+- Dynamic permutation
+- Dynamic permutation from initializer list
+- data() returns permutation array
+
+**Final Assessment**: APPROVE - Permutation is correct, well-tested, and ready to merge.
+
+The parity calculation algorithm is mathematically sound (verified through careful analysis). The permuteRows() cycle-following algorithm correctly applies permutations in-place. Both static and dynamic variants work correctly. Code quality is excellent with clear comments explaining design rationale. Test coverage is comprehensive with all edge cases covered. All features from matrix2 are preserved with appropriate adaptations for matrix3.
+
+**Note**: The parity calculation uses a non-intuitive but mathematically correct formula: toggles c + n times for c cycles of total length n, which equals (n - c) mod 2 (the correct parity). Future maintainers may benefit from a more detailed comment explaining this equivalence.
 
 #### Block storage Review - Iteration 1
 **Decision**: APPROVE
@@ -503,11 +662,118 @@ Format: `[TIMESTAMP] AGENT: Action`
 [2024-12-10T16:30:00Z] REVIEWER: Reviewed Block storage - APPROVE (CHECKPOINT TRIGGERED)
 [2024-12-10T17:00:00Z] MEMORY_CURATOR: Consolidated memories after 4 tasks
 [2024-12-10T17:00:00Z] DIRECTOR: Assigned Permutation to Implementer
+[2024-12-10T17:30:00Z] IMPLEMENTER: Completed Permutation, ready for review
+[2024-12-10T18:00:00Z] REVIEWER: Reviewed Permutation - APPROVE
+[2024-12-10T18:30:00Z] DIRECTOR: Assigned Permuted to Implementer
 ```
 
 ---
 
 ## Handoff Notes
+
+### To: Implementer (Permuted)
+**From**: Director
+**Date**: 2024-12-10T18:30:00Z
+
+**Task**: Migrate Permuted view from matrix2 to matrix3 architecture
+
+**Source File**: `/home/ulins/workspace/tempura/src/matrix2/storage/permuted.h`
+
+**Implementation Notes**:
+
+1. **Source Analysis**:
+   - 121-line implementation providing permutation views of matrices
+   - Two template classes: `RowPermuted<MatT, PermT>` and `ColPermuted<MatT>`
+   - Apply row or column permutations without moving data in memory
+   - constexpr-friendly throughout
+   - Non-invasive wrapper design
+
+2. **Key Features - RowPermuted**:
+   - **Template parameters**: `MatrixT MatT`, `typename PermT = Permutation<MatT::kRow>`
+   - **Constructors**:
+     - Explicit from matrix only (identity permutation)
+     - Matrix + permutation (6 overloads for const/move combinations)
+   - **Access**: `operator[](i, j)` redirects to `mat_[perm_.data()[i], j]`
+   - **Mutation**: `swap(i, j)` to swap rows in permutation
+   - **Accessors**: `permutation()` returns const reference to permutation
+
+3. **Key Features - ColPermuted**:
+   - **Template parameter**: `typename MatT`
+   - **Constructors**: Matrix only, or matrix + permutation
+   - **Access**: `operator[](i, j)` redirects to `mat_[i, perm_.data()[j]]`
+   - **Mutation**: `swap(i, j)` to swap columns in permutation
+   - **Accessors**: `permutation()` returns const reference
+
+4. **Design Pattern**:
+   - Both classes store the underlying matrix (by value or reference)
+   - Both store a Permutation object (initialized to identity by default)
+   - Element access redirects through permutation indirection
+   - swap() operations modify the permutation, not the underlying data
+   - Very efficient: O(1) swaps, zero data movement
+
+5. **Deduction Guides**:
+   - RowPermuted: 3 guides (const&, &&, && with Permutation)
+   - ColPermuted: 2 guides (&&, && with Permutation)
+   - Allow CTAD: `RowPermuted{mat}` infers template parameters
+
+6. **Migration Strategy**:
+   - These are VIEW/WRAPPER types, similar to Banded wrapper
+   - Should remain standalone (not inherit from GenericMatrix)
+   - Update namespace to `tempura::matrix3`
+   - Adapt to matrix3's operator[] syntax and patterns
+   - Will depend on Permutation (already migrated)
+
+7. **Important Design Details**:
+   - **ValueType**: Extracted from wrapped matrix's ValueType
+   - **Shape**: Same as wrapped matrix (no dimension change)
+   - **Const correctness**: Uses "deducing this" for const/mutable access
+   - **Permutation default**: Identity permutation (indices 0, 1, 2, ...)
+   - **bounds checking**: Uses CHECK() macro (should become assert())
+   - **Column-vector specialization**: RowPermuted has `operator[](i)` for kCol==1
+
+8. **Testing Requirements**:
+   - Construction: from matrix only, from matrix + permutation
+   - Element access through permutation indirection
+   - swap() operation modifies permutation, not data
+   - Verify identity permutation behavior (no change)
+   - Verify non-trivial permutations (rows/cols reordered correctly)
+   - permutation() accessor returns correct permutation
+   - shape() reports correct dimensions
+   - Both RowPermuted and ColPermuted
+   - constexpr compatibility where possible
+   - Deduction guides
+   - Both static and dynamic dimensions
+
+9. **Differences from matrix2**:
+   - matrix2 uses `CHECK()` macro, matrix3 should use `assert()`
+   - Update namespace from `tempura::matrix` to `tempura::matrix3`
+   - matrix2 uses `RowCol` struct for shape(), matrix3 may use different pattern
+   - Uses C++23 variadic operator[] with "deducing this"
+   - May need MatrixTraits helper (like Banded) for dimension extraction
+   - PermT template parameter may need adjustment for matrix3 Permutation type
+
+10. **Potential Challenges**:
+    - Template parameter forwarding (const&, &&, combinations)
+    - Deduction guides with default template parameters
+    - Ensuring permutation() returns correct type
+    - Column-vector specialization (requires constraint)
+    - Integration with matrix3 Permutation type
+    - Balancing value semantics vs reference semantics for wrapped matrix
+
+**Expected Deliverables**:
+- `/home/ulins/workspace/tempura/src/matrix3/permuted.h`
+- `/home/ulins/workspace/tempura/src/matrix3/permuted_test.cpp`
+- Updated `/home/ulins/workspace/tempura/src/matrix3/CMakeLists.txt`
+
+**Notes**:
+- Relatively straightforward wrapper, simpler than Permutation itself
+- Main complexity is template parameter combinations and deduction guides
+- Good test of view/wrapper pattern in matrix3
+- Depends on Permutation (already completed)
+- Should be faster than Permutation task (~2 hours estimate)
+- Consider whether to support both value and reference storage for wrapped matrix
+
+---
 
 ### To: Implementer (Permutation)
 **From**: Director
@@ -621,6 +887,112 @@ Format: `[TIMESTAMP] AGENT: Action`
 - permuteRows is an advanced feature - needs careful testing
 - Consider whether swap() is the right mutation API or if we need more
 - Estimated effort: 3-4 hours due to algorithmic complexity
+
+---
+
+### From: Implementer (Permutation)
+**To**: Reviewer
+**Date**: 2024-12-10T17:30:00Z
+**Commit**: abc40b9a
+
+**Implementation Summary:**
+Successfully migrated Permutation storage from matrix2 to matrix3 architecture as a standalone class.
+
+**Files Created:**
+- `/home/ulins/workspace/tempura/src/matrix3/permutation.h` - Implementation
+- `/home/ulins/workspace/tempura/src/matrix3/permutation_test.cpp` - Comprehensive tests
+
+**Files Modified:**
+- `/home/ulins/workspace/tempura/src/matrix3/CMakeLists.txt` - Added test target
+
+**Design Decisions:**
+
+1. **Standalone Design**:
+   - Kept as standalone class, not inheriting from GenericMatrix
+   - Similar to InlineCoordinateList and Complex - provides specialized matrix semantics
+   - Permutation matrices have unique properties (boolean values, special construction)
+
+2. **Static/Dynamic Storage Pattern**:
+   - Uses `std::conditional_t<Size == kDynamic, std::vector<int64_t>, std::array<int64_t, Size>>`
+   - Follows same pattern as matrix2 implementation
+   - Template parameter `Size` defaults to `kDynamic`
+
+3. **C++23 operator[] with "deducing this"**:
+   - Used variadic `operator[](this auto const& self, Indices... indices)`
+   - Returns by value (bool) - permutation matrix entries are 0 or 1
+   - Matches matrix3's multi-index syntax: `mat[i, j]`
+
+4. **Manual std::iota Replacement**:
+   - std::iota not constexpr in current C++ standards
+   - Replaced with manual loop: `for (std::size_t i = 0; i < Size; ++i) order_[i] = i;`
+   - Maintains constexpr compatibility for static-size permutations
+
+5. **Parity Tracking via Cycle Decomposition**:
+   - validate() method computes parity from cycle structure
+   - Each cycle of length k contributes (k-1) transpositions
+   - Parity toggles once per cycle start, once per element in cycle
+   - swap() updates parity incrementally (single toggle per swap)
+
+6. **permuteRows() Algorithm**:
+   - Uses cycle-following approach from matrix2
+   - Works with any matrix type providing `extent()` API
+   - Accesses dimensions via `other.extent().extent(0)` and `other.extent().extent(1)`
+   - Avoids temporary storage by processing cycles in-place
+
+7. **Bounds Checking**:
+   - Uses `assert()` with `std::is_constant_evaluated()` pattern
+   - Consistent with other matrix3 types
+   - Checks both operator[] access and validate() logic
+
+8. **Namespace and Naming**:
+   - Changed from `tempura::matrix` to `tempura::matrix3`
+   - Uses `kRows`/`kCols` for consistency (always equal for square matrix)
+   - Added `rows()`/`cols()` instance methods and `staticRows()`/`staticCols()` static methods
+   - Removed `shape()` method (not needed in matrix3)
+
+**Key Features Preserved:**
+- Three constructors: identity (default or explicit size), from initializer_list
+- Compact storage: array of indices where `order_[j] = i` means P[i,j] = 1
+- Parity tracking for determinant calculations
+- swap() method with incremental parity update
+- permuteRows() for applying permutation to other matrices
+- validate() ensures valid permutation and computes parity
+- constexpr-friendly for static-size permutations
+- data() accessor returns const reference to order_ array
+
+**Testing:**
+Comprehensive test suite covering:
+- Identity permutation (static and dynamic)
+- Simple transposition (swap two elements)
+- Cyclic permutation
+- Parity calculation (complex permutations, 3-cycles)
+- swap() operation and parity updates
+- permuteRows() on dense matrices (reversal, cyclic, identity)
+- Dynamic permutation construction and operations
+- data() accessor
+- Both static and dynamic size variants
+- constexpr compatibility with static_assert
+
+All 14 tests pass successfully.
+
+**Implementation Notes:**
+- Initializer_list constructor takes precedence over size constructor with `{n}` syntax
+- Tests use parentheses `Permutation<> p(3)` to call size constructor explicitly
+- permuteRows() uses extent() API to work with GenericMatrix-based types
+- Parity calculation follows mathematical cycle decomposition algorithm
+- Static-size permutations fully constexpr, dynamic uses runtime validation
+
+**Challenges Addressed:**
+1. std::iota not constexpr - replaced with manual loop
+2. permuteRows() needed extent() API adaptation for matrix3
+3. Initializer_list vs size constructor disambiguation
+4. Parity calculation correctness verified with cycle analysis
+
+**Notes for Reviewer:**
+- Parity calculation is mathematically subtle - verify cycle counting logic
+- permuteRows() algorithm uses in-place cycle following - check correctness
+- All static tests use static_assert for compile-time verification
+- Dynamic tests verify runtime behavior with expectTrue/expectEq
 
 ---
 
@@ -1188,10 +1560,10 @@ _Completed - see handoff note above_
 
 | Metric | Value |
 |--------|-------|
-| Tasks Completed | 4 |
+| Tasks Completed | 5 |
 | Tasks In Progress | 0 |
-| Tasks Remaining | 10 |
-| Review Cycles | 4 |
-| Avg Reviews/Task | 1.25 |
-| Commits Since Checkpoint | 0 |
+| Tasks Remaining | 9 |
+| Review Cycles | 5 |
+| Avg Reviews/Task | 1.20 |
+| Commits Since Checkpoint | 1 |
 | Checkpoint Target | 5 |

@@ -50,11 +50,11 @@ Target: `src/matrix3/` - New mdspan-inspired implementation
   - Useful for partitioned algorithms
 
 ### 2.3 Permutation Support
-- [~] Permutation - from `matrix2/storage/permutation.h`
+- [x] Permutation - from `matrix2/storage/permutation.h`
   - Represents row/column permutations
   - Used by LU decomposition with pivoting
 
-- [ ] Permuted - from `matrix2/storage/permuted.h`
+- [~] Permuted - from `matrix2/storage/permuted.h`
   - View applying permutation to another matrix
 
 ---
