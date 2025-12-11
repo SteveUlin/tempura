@@ -3,12 +3,16 @@
     "defaultMode": "acceptEdits",
     "ask": ["Write(./.claude/**)", "Edit(./.claude/**)"],
     "allow": [
-      "Bash(./build/**)",
-      "Bash(./debug/**)",
-      "Bash(./release/**)",
+      "Bash(./build/:*)",
+      "Bash(./debug/:*)",
+      "Bash(./release/:*)",
+      "Bash(./build-asan/:*)",
+      "Bash(./build-tsan/:*)",
       "Bash(ninja:*)",
       "Bash(cmake:*)",
-      "Bash(ctest:*)"
+      "Bash(ctest:*)",
+      "Bash(time:*)",
+      "Bash(timeout:*)"
     ]
   }
 }
