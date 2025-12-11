@@ -99,8 +99,8 @@ Target: `src/matrix3/` - New mdspan-inspired implementation
 ## Phase 5: Integration from matrix (if applicable)
 
 ### 5.1 Additional Features
-- [~] Kronecker product - from `matrix/kronecker_product.h`
-- [ ] MatRef (reference wrapper) - from `matrix/matrix.h`
+- [x] Kronecker product - from `matrix/kronecker_product.h`
+- [x] MatRef (reference wrapper) - SKIPPED (not needed in matrix3)
 
 ---
 

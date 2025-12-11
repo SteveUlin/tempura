@@ -5,7 +5,7 @@ Last updated: 2024-12-10T00:00:00Z
 ## Current State
 
 **Phase**: 5 - Integration
-**Active Task**: Kronecker product
+**Active Task**: None
 **Blocking Issues**: None
 
 ---
@@ -18,7 +18,6 @@ _None_
 ### In Progress
 | Task | Assignee | Started |
 |------|----------|---------|
-| Kronecker product | Implementer Agent | 2024-12-11T03:00:00Z |
 
 ### Pending Review
 | Priority | Task | Assignee | Completed |
@@ -27,6 +26,8 @@ _None_
 ### Recently Completed
 | Task | Completed | Commits | Review Decision |
 |------|-----------|---------|-----------------|
+| MatRef analysis | 2024-12-11T06:00:00Z | N/A | SKIP (Not needed in matrix3) |
+| Kronecker product | 2024-12-11T04:00:00Z | 0f41c8aa | APPROVE (Iteration 1/3) |
 | to_string | 2024-12-10T00:00:00Z | c0ffcc38 | APPROVE (Iteration 1/3) |
 | Submatrix view (slicing) | 2024-12-11T02:15:00Z | TBD | APPROVE (Iteration 1/3) |
 | Transpose view | 2024-12-10T02:30:00Z | TBD | APPROVE (Iteration 1/3) |
@@ -2835,6 +2836,155 @@ The original `matrix/` implementation provides a clean expression template for K
    - Block structure means no special optimizations needed for sparse matrices
    - May want to add specialized tests for quantum computing use cases (common application)
 
+**Implementation Report** (Implementer Agent):
+
+Successfully migrated Kronecker product to matrix3 with full lazy evaluation support.
+
+**Files Created**:
+- `/home/ulins/workspace/tempura/src/matrix3/kronecker_product.h` (145 lines)
+- `/home/ulins/workspace/tempura/src/matrix3/kronecker_product_test.cpp` (232 lines)
+
+**Design Decisions**:
+
+1. **Expression Template Architecture**:
+   - Used custom `KroneckerAccessor` that computes elements on-the-fly
+   - `KroneckerLayout` passes (i,j) pairs directly to accessor
+   - `KroneckerAccessorAdapter` unpacks pairs for element computation
+   - Fully lazy evaluation - no materialization required
+
+2. **Extent Calculation** (lines 48-59):
+   - `kroneckerExtents<LhsExtents, RhsExtents>()` computes result dimensions
+   - Static extent multiplication when both operands are static
+   - Falls back to `kDynamic` if either operand is dynamic
+   - Runtime extent computed in constructor (lines 122-129)
+
+3. **Element Access Logic** (lines 18-31):
+   - Implements A[i/m₂, j/n₂] * B[i%m₂, j%n₂] mapping
+   - Division gives block position in A, modulo gives position within B block
+   - Works with any matrix3 storage type (tested with InlineDense and Identity)
+
+4. **Type Safety**:
+   - Mixed-type support via automatic type promotion
+   - Requires rank-2 matrices (static_assert on lines 50-51)
+   - `constexpr` throughout for compile-time evaluation
+
+**Test Results**: All 8 tests passed ✓
+
+1. Basic 2×2 ⊗ 2×2 = 4×4 - verified all 16 elements
+2. Rectangular 2×3 ⊗ 2×1 = 4×3 - confirmed dimension calculation
+3. Identity left: I ⊗ A = block diagonal structure
+4. Identity right: A ⊗ I = different block pattern
+5. Scalar multiplication: (2A) ⊗ B = 2(A ⊗ B)
+6. Mixed types: int ⊗ double → double result
+7. Edge case: 1×1 matrices
+8. Zero elements: proper sparse handling
+
+**Compile-time Verification**:
+- Static extents correctly computed: 2×3 ⊗ 4×5 = 8×15 (lines 218-228)
+
+**API**:
+- Function: `kronecker(A, B)` - clean, readable syntax
+- Returns lazy view, compatible with all matrix3 types
+- Works in constexpr contexts
+
+**Commit**: 0f41c8aa
+
+---
+
+### 2024-12-11T07:45:00Z - Review: kronecker_product
+**Reviewed by**: Reviewer Agent
+**Decision**: APPROVE
+
+Successfully reviewed the Kronecker product implementation. All tests pass, code quality is excellent, and the implementation correctly preserves the algorithm from the original matrix implementation.
+
+**Correctness Review**:
+
+1. **Index Mapping** ✓
+   - Correctly implements A[i/m₂, j/n₂] * B[i%m₂, j%n₂] (lines 21-30)
+   - Division operator determines which block of A (lines 25, 27)
+   - Modulo operator determines position within B block (lines 26, 28)
+   - Element computation uses proper multiplication (line 30)
+
+2. **Result Dimensions** ✓
+   - Correctly computes (m₁×n₁) ⊗ (m₂×n₂) = (m₁·m₂ × n₁·n₂)
+   - Static extent computation in `kroneckerExtents()` (lines 41-57)
+   - Runtime extent computation in `computeExtents()` (lines 119-126)
+   - Handles mixed static/dynamic extents: falls back to kDynamic (lines 51-54)
+
+3. **Type Promotion** ✓
+   - Automatic type deduction via `operator*` on element types
+   - Tested int ⊗ double → double (lines 167-183 in test)
+   - No explicit ScalarT type needed due to expression template design
+
+**Code Quality Review**:
+
+1. **Naming Conventions** ✓
+   - Types: PascalCase (KroneckerAccessor, KroneckerLayout, KroneckerProduct)
+   - Functions: camelCase (kronecker, computeExtents, kroneckerExtents)
+   - Variables: snake_case (lhs_row, rhs_row, lhs_cols, rhs_rows)
+   - All naming follows project style guide perfectly
+
+2. **Expression Template Design** ✓
+   - Clean separation: Accessor (computation) + Layout (indexing) + Adapter (unpacking)
+   - `KroneckerAccessor` computes elements on-the-fly (lines 14-36)
+   - `KroneckerLayout` passes (i,j) pairs without flattening (lines 60-76)
+   - `KroneckerAccessorAdapter` unpacks pairs using deducing-this (lines 79-92)
+   - Fully lazy - no materialization unless explicitly requested
+
+3. **constexpr-by-default** ✓
+   - All operations marked constexpr (lines 17, 21, 41, 62, 68, 82, 110, 119, 132)
+   - Compile-time extent calculation (lines 41-57)
+   - Enables compile-time verification (lines 218-228 in test)
+
+**Test Coverage Review**:
+
+Comprehensive 8-test suite covering all requirements:
+
+1. **Basic Kronecker product** ✓ - 2×2 ⊗ 2×2 = 4×4, all 16 elements verified (lines 10-44)
+2. **Rectangular matrices** ✓ - 2×3 ⊗ 2×1 = 4×3, confirms dimension formula (lines 47-77)
+3. **Identity left** ✓ - I ⊗ A produces block diagonal structure (lines 80-111)
+4. **Identity right** ✓ - A ⊗ I produces different block pattern (lines 114-147)
+5. **Scalar multiplication** ✓ - (2A) ⊗ B = 2(A ⊗ B) property verified (lines 150-164)
+6. **Mixed types** ✓ - int ⊗ double = double with correct values (lines 167-183)
+7. **Single element** ✓ - 1×1 ⊗ 1×1 edge case (lines 186-195)
+8. **Zero handling** ✓ - Sparse structure preserved (lines 198-215)
+
+Additional verification:
+- Compile-time static extent checks (lines 218-228)
+- All tests use appropriate expect* helpers
+
+**Comparison with Original matrix Implementation**:
+
+Core algorithm preserved perfectly:
+
+1. **Element computation** ✓
+   - Original (line 40-45): `lhs_row = row / rhs_.shape().row`, `rhs_row = row % rhs_.shape().row`
+   - matrix3 (line 21-30): `lhs_row = i / rhs_rows`, `rhs_row = i % rhs_rows`
+   - Identical logic, updated to matrix3 API
+
+2. **Extent calculation** ✓
+   - Original (lines 8-22): `internal::kroneckerExtent()` with RowCol
+   - matrix3 (lines 41-57): `kroneckerExtents<>()` template with Extents<>
+   - Same algorithm, modernized to mdspan-style extents
+
+3. **Type deduction** ✓
+   - Original (lines 29-30): `decltype(Lhs::ScalarT * Rhs::ScalarT)`
+   - matrix3: Implicit via accessor return type
+   - More elegant - relies on language type deduction
+
+**Design Improvements over Original**:
+
+1. **Better separation of concerns**: Split into Accessor/Layout/Adapter vs monolithic class
+2. **No internal namespace**: Follows matrix3's "no ::internal" convention
+3. **Deducing-this**: Modern C++26 feature in adapter (line 85)
+4. **constexpr throughout**: Original wasn't fully constexpr
+
+**Test Results**: All 8 tests pass successfully ✓
+
+**Recommendation**: APPROVE - Excellent implementation with comprehensive tests. The expression template design is clean and efficient. Algorithm correctly preserved from original with appropriate matrix3 modernizations.
+
+---
+
 ### 2024-12-11T02:00:00Z - Task Assignment: Submatrix view (slicing)
 **Assigned by**: Director Agent
 **Assigned to**: Implementer Agent
@@ -3613,5 +3763,95 @@ Commits since checkpoint:
 5. to_string (c0ffcc38) ← Current
 
 **Recommendation**: APPROVE - Excellent implementation with comprehensive tests. The helper function approach for compile-time format string requirements is cleaner than the original matrix2 implementation. All matrix2 features are preserved and correctly adapted to matrix3's API. Ready for checkpoint commit.
+
+---
+
+
+## MatRef Analysis - Phase 5.1
+
+**Decision**: SKIP - Not needed in matrix3
+**Date**: 2024-12-11T06:00:00Z
+**Analyzer**: Director Agent
+
+### What is MatRef?
+
+MatRef is a reference wrapper from matrix2 (located in `/home/ulins/workspace/tempura/src/matrix2/matrix.h`, lines 178-223) that provides non-owning access to matrices.
+
+**Purpose**: In matrix2's design philosophy, all view classes (like Transpose, Submatrix) copy or move their input matrices by default. MatRef allows users to avoid this copy while making ownership semantics explicit.
+
+**Example usage from matrix2**:
+```cpp
+auto m = InlineDense{{1., 2.}, {3., 4.}};
+auto m_t = Transpose{MatRef{m}};  // No copy - references m
+```
+
+**Key characteristics**:
+- Stores a pointer to the matrix (T* mat_)
+- Provides operator[] forwarding to underlying matrix
+- Supports implicit conversion to T&
+- Has constexpr support
+- Explicitly rejects rvalue references (deleted FUN(T&&))
+
+### Why MatRef is NOT Needed in matrix3
+
+Matrix3 uses a **different ownership model** than matrix2:
+
+1. **Template-based ownership**: matrix3 views like `Transpose<MatrixType>` and `Submatrix<MatrixType>` store `MatrixType mat_`, which can be:
+   - A value type (owns the matrix): `Transpose<InlineDense<int, 2, 3>>`
+   - A reference type (doesn't own): `Transpose<InlineDense<int, 2, 3>&>`
+
+2. **Deducing constructors**: Views have both const& and && constructors (see `/home/ulins/workspace/tempura/src/matrix3/transpose.h`, lines 20-21):
+   ```cpp
+   constexpr explicit Transpose(const MatrixType& mat) : mat_{mat} {}
+   constexpr explicit Transpose(MatrixType&& mat) : mat_{std::move(mat)} {}
+   ```
+
+3. **Explicit copy behavior**: Test evidence shows that `Transpose t{m}` with an lvalue copies by default:
+   - From `/home/ulins/workspace/tempura/src/matrix3/transpose_test.cpp` (lines 72-76)
+   - Modifications to `t` don't affect original `m`
+
+4. **C++ reference semantics**: Users can achieve non-owning behavior using standard C++ references:
+   ```cpp
+   InlineDense<int, 2, 3> m{...};
+   Transpose<InlineDense<int, 2, 3>&> t{m};  // Non-owning, references m
+   ```
+
+### Comparison: matrix2 vs matrix3
+
+| Aspect | matrix2 | matrix3 |
+|--------|---------|---------|
+| **Default behavior** | Copy/move required | Copy on lvalue, move on rvalue |
+| **Non-owning syntax** | `Transpose{MatRef{m}}` | `Transpose<Matrix&>{m}` |
+| **Ownership clarity** | Type shows MatRef explicitly | Type parameter shows & explicitly |
+| **Implementation** | Separate MatRef class | Built-in C++ reference semantics |
+| **Flexibility** | Two-step wrapping | Direct template instantiation |
+
+### Correctness Verification
+
+Matrix3's approach is correct because:
+
+1. **Type system enforcement**: The template parameter `MatrixType` can be a reference type, which the C++ type system naturally handles
+2. **Perfect forwarding**: Deducing this pattern (`auto&& self`) preserves const/mutable access through the view
+3. **No lifetime issues**: References in C++ have well-defined lifetime rules
+4. **Existing precedent**: std::reference_wrapper exists but isn't needed when you can template on T&
+
+### Architectural Benefits of Skipping MatRef
+
+1. **Simpler API**: Users don't need to learn about MatRef
+2. **Standard C++**: Uses idiomatic C++ reference template parameters
+3. **No wrapper overhead**: No indirection through wrapper class
+4. **Consistent patterns**: Same approach works for all views (Transpose, Submatrix, Permuted, etc.)
+
+### Migration Impact
+
+**No migration needed** because:
+- MatRef was in matrix2, not matrix
+- TASKS.md incorrectly listed source as `matrix/matrix.h` (it doesn't exist there)
+- Matrix3 achieves the same functionality with better design
+- No existing matrix3 code depends on MatRef
+
+### Recommendation
+
+**SKIP this migration**. Matrix3's template-based ownership model is superior to matrix2's MatRef approach. Document this design decision for future reference.
 
 ---

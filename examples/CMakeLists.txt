@@ -71,3 +71,6 @@ target_link_libraries(sudoku_parallel PRIVATE task sudoku threadpool)
 # add_executable(unit_main unit_main.cpp)
 # target_link_libraries(unit_main PRIVATE unit)
 
+add_executable(matrix3_demo matrix3_demo.cpp)
+target_link_libraries(matrix3_demo PRIVATE matrix3)
+
