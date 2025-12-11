@@ -62,11 +62,11 @@ Target: `src/matrix3/` - New mdspan-inspired implementation
 ## Phase 3: Algorithms
 
 ### 3.1 Basic Operations
-- [~] Addition - from `matrix2/addition.h`
+- [x] Addition - from `matrix2/addition.h`
   - Element-wise addition
   - Expression template support
 
-- [ ] Multiplication - from `matrix2/multiplication.h`
+- [~] Multiplication - from `matrix2/multiplication.h`
   - Matrix-matrix multiplication
   - Matrix-vector multiplication
   - Expression template support

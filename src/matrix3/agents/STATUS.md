@@ -1,11 +1,11 @@
 # Migration Status
 
-Last updated: 2024-12-10T17:00:00Z
+Last updated: 2024-12-10T21:15:00Z
 
 ## Current State
 
 **Phase**: 3 - Algorithms
-**Active Task**: Addition
+**Active Task**: Multiplication
 **Blocking Issues**: None
 
 ---
@@ -18,7 +18,7 @@ _None_
 ### In Progress
 | Task | Assignee | Started |
 |------|----------|---------|
-| Addition | Implementer | 2024-12-10T20:00:00Z |
+| Multiplication | Implementer | 2024-12-10T21:15:00Z |
 
 ### Pending Review
 | Priority | Task | Assignee | Completed |
@@ -27,6 +27,7 @@ _None_
 ### Recently Completed
 | Task | Completed | Commits | Review Decision |
 |------|-----------|---------|-----------------|
+| Addition | 2024-12-10T20:30:00Z | 9d5bcfe8 | APPROVE (Iteration 1/3) |
 | Permuted | 2024-12-10T19:30:00Z | 0721c352 | APPROVE (Iteration 1/3) |
 | Permutation | 2024-12-10T17:30:00Z | abc40b9a | APPROVE (Iteration 1/3) |
 | Block storage | 2024-12-10T16:15:00Z | 6145360f | APPROVE (Iteration 1/3) |
@@ -46,6 +47,7 @@ _None_
 ### Review Iteration Counter
 | Task | Iteration | Max |
 |------|-----------|-----|
+| Addition | 1 | 3 |
 | Permuted | 1 | 3 |
 | Permutation | 1 | 3 |
 | Block storage | 1 | 3 |
@@ -54,6 +56,138 @@ _None_
 | InlineCoordinateList | 2 | 3 |
 
 ### Addressed
+
+#### Addition Review - Iteration 1
+**Decision**: APPROVE
+**Reviewer**: Reviewer Agent
+**Date**: 2024-12-10T21:00:00Z
+
+**Correctness Verification**:
+
+1. **Three-Tier Pattern** ✓ VERIFIED
+   - Lines 20-30: `operator+=(Lhs&, const Rhs&) -> Lhs&` - in-place addition
+   - Lines 33-43: `operator-=(Lhs&, const Rhs&) -> Lhs&` - in-place subtraction
+   - Lines 46-58: `add<Out>(const Lhs&, const Rhs&) -> Out` - explicit output type
+   - Lines 61-73: `subtract<Out>(const Lhs&, const Rhs&) -> Out` - explicit output type
+   - Lines 77-86: `operator+(const Lhs&, const Rhs&)` - auto-inference addition
+   - Lines 90-99: `operator-(const Lhs&, const Rhs&)` - auto-inference subtraction
+   - All three tiers implemented for both addition and subtraction
+
+2. **Shape Validation** ✓ VERIFIED
+   - Lines 10-17: `checkSameExtent()` helper validates dimensions
+   - Line 12-13: Static assertion for rank equality (both rank-2)
+   - Lines 14-16: Runtime assertion for dimension equality (rows and columns)
+   - Used in all operators before performing operations (lines 23, 36, 50, 65)
+   - Test verification via proper element-wise computation
+
+3. **Type Promotion** ✓ VERIFIED
+   - Lines 81, 94: `using ScalarT = decltype(left[0, 0] + right[0, 0])`
+   - Automatic type deduction from element addition/subtraction
+   - Test lines 81-92: int + double correctly promotes to double
+   - Test lines 94-105: int - double correctly promotes to double
+   - Uses `expectNear` with tolerance 1e-10 for floating-point comparisons
+
+4. **constexpr Support** ✓ VERIFIED
+   - All operators declared constexpr (lines 22, 35, 49, 64, 79, 92)
+   - Test lines 146-157: constexpr addition with static_assert verification
+   - Test lines 159-170: constexpr subtraction with static_assert verification
+   - Test lines 172-184: constexpr in-place addition with static_assert
+   - Compile-time evaluation fully working
+
+**Code Quality (per CLAUDE.md)**:
+
+1. **Naming Conventions** ✓ COMPLIANT
+   - Functions: `checkSameExtent`, `add`, `subtract` (camelCase)
+   - Template params: `Lhs`, `Rhs`, `Out`, `ScalarT` (PascalCase)
+   - Constants: `kRow`, `kCol` (kPascalCase)
+   - All follow project conventions
+
+2. **constexpr-by-default** ✓ COMPLIANT
+   - Lines 11, 22, 35, 49, 64, 79, 92: All functions constexpr
+   - Extensive compile-time tests verify functionality
+   - Full constexpr support throughout
+
+3. **Comments Explain "Why" Not "What"** ✓ GOOD
+   - Line 9: Explains purpose of extent checking
+   - Lines 19, 32, 45, 60, 75, 88: Describe operation purposes
+   - Lines 76, 80-84: Explain type promotion mechanism via decltype
+   - Line 85: Explains return type strategy (InlineDense with static extents)
+   - Comments provide context and design rationale
+
+**Test Coverage** ✓ COMPREHENSIVE:
+
+1. **All Three Operation Tiers**:
+   - Lines 9-19: In-place addition (+=)
+   - Lines 21-31: In-place subtraction (-=)
+   - Lines 33-43: Explicit output type (add<Out>)
+   - Lines 45-55: Explicit output type (subtract<Out>)
+   - Lines 57-67: Auto-inference addition (+)
+   - Lines 69-79: Auto-inference subtraction (-)
+
+2. **Type Promotion**:
+   - Lines 81-92: int + double → double (addition)
+   - Lines 94-105: int - double → double (subtraction)
+   - Proper floating-point tolerance handling
+
+3. **Various Matrix Sizes**:
+   - Lines 9-79: 2x2 matrices (standard case)
+   - Lines 107-122: 3x3 matrices (larger square)
+   - Lines 124-133: 1x3 row vectors
+   - Lines 135-144: 3x1 column vectors
+   - Good coverage of different shapes
+
+4. **constexpr Tests**:
+   - Lines 146-157: constexpr addition with static_assert
+   - Lines 159-170: constexpr subtraction with static_assert
+   - Lines 172-184: constexpr in-place addition with static_assert
+   - All three tiers verified at compile-time
+
+All 14 tests pass successfully.
+
+**Comparison with matrix2** ✓ PRESERVED:
+
+1. **Core Features Preserved**:
+   - Three-tier pattern (in-place, explicit output, auto-inference)
+   - Shape validation before operations
+   - Type promotion via decltype
+   - InlineDense as default return type
+   - constexpr throughout
+   - Element-wise operations
+
+2. **Appropriate Changes for matrix3**:
+   - Namespace: `tempura::matrix` → `tempura::matrix3`
+   - Shape check: `checkSameShape()` → `checkSameExtent()`
+   - Dimension access: `.shape().row/col` → `.extent().extent(0)/extent(1)`
+   - Loop indices: `int64_t` → `std::size_t` (consistent with extent API)
+   - Static extent extraction: `Lhs::kRow` → `Lhs::ExtentsType::staticExtent(0)`
+   - Rank-2 constraint via requires clause
+   - Uses C++23 variadic operator[] syntax
+
+3. **No Missing Features**: All functionality from matrix2 preserved
+
+**Test Results**: All 14 tests pass:
+- in-place addition with +=
+- in-place subtraction with -=
+- explicit output type with add<Out>
+- explicit output type with subtract<Out>
+- auto-inference addition with +
+- auto-inference subtraction with -
+- type promotion int + double
+- type promotion int - double
+- 3x3 matrix addition
+- 1x3 row vector addition
+- 3x1 column vector subtraction
+- constexpr addition
+- constexpr subtraction
+- constexpr in-place addition
+
+**Final Assessment**: APPROVE - Addition operations are correct, well-tested, and ready to merge.
+
+The implementation correctly handles all three operation tiers with proper shape validation and type promotion. Code quality is excellent with clear comments explaining design rationale. Test coverage is comprehensive covering all operations, type combinations, matrix sizes, and compile-time evaluation. All features from matrix2 are preserved with appropriate adaptations for matrix3.
+
+**Note**: This is the first algorithm migration (Phase 3), establishing the pattern for element-wise operations. The implementation is clean, correct, and serves as a good template for future arithmetic operators.
+
+
 
 #### Permuted Review - Iteration 1
 **Decision**: APPROVE
@@ -821,11 +955,92 @@ Format: `[TIMESTAMP] AGENT: Action`
 [2024-12-10T19:00:00Z] IMPLEMENTER: Completed Permuted, ready for review
 [2024-12-10T19:30:00Z] REVIEWER: Reviewed Permuted - APPROVE
 [2024-12-10T20:00:00Z] DIRECTOR: Assigned Addition to Implementer (Phase 3 start)
+[2024-12-10T20:30:00Z] IMPLEMENTER: Completed Addition, ready for review
+[2024-12-10T21:00:00Z] REVIEWER: Reviewed Addition - APPROVE
 ```
 
 ---
 
 ## Handoff Notes
+
+### To: Implementer (Multiplication)
+**From**: Director
+**Date**: 2024-12-10T21:15:00Z
+
+**Task Assignment:**
+Migrate Multiplication operations from matrix2 to matrix3.
+
+**Source File:**
+- `/home/ulins/workspace/tempura/src/matrix2/multiplication.h`
+
+**Key Features to Migrate:**
+
+1. **tileMultiply Function** (lines 8-28):
+   - Template parameters: `block_size = 16`, `MatrixT Lhs`, `MatrixT Rhs`
+   - Requires clause: `Lhs::kCol == Rhs::kRow` (dimension compatibility)
+   - Cache-friendly blocked multiplication algorithm
+   - Loop order: jblock → i → kblock → j → k (optimized for cache)
+   - Result type: `InlineDense<ScalarT, Lhs::kRow, Rhs::kCol>`
+   - Type promotion: `ScalarT = decltype(left[0, 0] * right[0, 0])`
+
+2. **operator* Overload** (lines 30-33):
+   - Delegates to tileMultiply with default block_size
+   - Simple wrapper for ergonomic usage
+
+**Algorithm Details:**
+- **Blocking Strategy**: Divides matrix into block_size × block_size tiles to improve cache locality
+- **Loop Structure**:
+  - Outer loops iterate over blocks (jblock, kblock)
+  - Inner loops iterate within blocks (j, k)
+  - Row index (i) is in between to maximize data reuse
+- **Bounds Checking**: Uses `std::min(jblock + block_size, right.shape().col)` to handle edge blocks
+
+**Design Considerations for matrix3:**
+
+1. **Shape Validation**:
+   - Add runtime check: left columns must equal right rows
+   - Consider both static (kRow/kCol) and dynamic dimensions
+
+2. **Output Type Selection**:
+   - Current implementation hardcodes `InlineDense` output
+   - Consider whether to support different output types (Dense, InlineDense, etc.)
+   - May want explicit template parameter for output type
+
+3. **constexpr Support**:
+   - Original is constexpr - preserve this
+   - Test with compile-time matrices
+
+4. **Type Promotion**:
+   - Current: `decltype(left[0, 0] * right[0, 0])`
+   - Should handle int × double → double correctly
+
+5. **Block Size Tuning**:
+   - Default block_size = 16 is reasonable for small matrices
+   - May want to make this runtime-configurable for larger matrices
+   - Consider whether to expose as template parameter or parameter
+
+**Testing Requirements:**
+- Basic multiplication: 2×3 × 3×2 → 2×2
+- Type promotion: int × double → double
+- Dimension mismatch validation (should fail)
+- constexpr multiplication at compile time
+- Different block sizes (edge cases where dimensions not divisible by block_size)
+- Matrix-vector multiplication (M×N × N×1 → M×1)
+
+**Files to Create:**
+- `/home/ulins/workspace/tempura/src/matrix3/multiplication.h`
+- `/home/ulins/workspace/tempura/src/matrix3/multiplication_test.cpp`
+
+**Files to Modify:**
+- `/home/ulins/workspace/tempura/src/matrix3/CMakeLists.txt` (add test target)
+
+**Notes:**
+- The tileMultiply algorithm is well-tested and efficient - preserve the loop structure
+- Pay attention to the accumulation: `out[i, j] += left[i, k] * right[k, j]` (compound assignment)
+- Ensure zero-initialization of output matrix before accumulation
+- Consider whether to support matrix-vector as separate optimized path or just use generic multiply
+
+---
 
 ### From: Implementer (Permuted)
 **To**: Reviewer
@@ -920,6 +1135,84 @@ All 9 tests pass successfully.
 - Follows established matrix3 patterns from previous wrappers
 - Simple, clean implementation focusing on core permutation view functionality
 - Value semantics ensure no surprising side effects on wrapped matrices
+
+---
+
+### From: Implementer (Addition)
+**To**: Reviewer
+**Date**: 2024-12-10T20:30:00Z
+**Commit**: 9d5bcfe8
+
+**Implementation Summary:**
+Successfully migrated Addition and Subtraction operations from matrix2 to matrix3 architecture.
+
+**Files Created:**
+- `/home/ulins/workspace/tempura/src/matrix3/addition.h` - Implementation
+- `/home/ulins/workspace/tempura/src/matrix3/addition_test.cpp` - Comprehensive tests
+
+**Files Modified:**
+- `/home/ulins/workspace/tempura/src/matrix3/CMakeLists.txt` - Added test target
+- `/home/ulins/workspace/tempura/src/matrix3/matrix.h` - Made extent() constexpr
+
+**Design Decisions:**
+
+1. **Three-Tier Pattern**:
+   - In-place operators: `operator+=` and `operator-=`
+   - Explicit output type: `add<Out>()` and `subtract<Out>()`
+   - Auto-inference operators: `operator+` and `operator-`
+   - Same pattern as matrix2 for consistency
+
+2. **Shape Validation**:
+   - Created `checkSameExtent()` helper function
+   - Uses extent().extent(0) and extent().extent(1) for dimension access
+   - Static assertion for rank equality
+   - Runtime assertion for dimension equality
+
+3. **Type Promotion**:
+   - Uses `decltype(left[0, 0] + right[0, 0])` for automatic type deduction
+   - Handles mixed types (e.g., int + double → double)
+   - Same approach as matrix2
+
+4. **Auto-Inference Return Type**:
+   - Returns `InlineDense<ScalarT, kRow, kCol>` for operator+ and operator-
+   - Extracts static extents from left operand
+   - Assumes both operands have same static shape
+
+5. **constexpr Support**:
+   - All operations are constexpr
+   - Required making `GenericMatrix::extent()` constexpr
+   - Tests verify compile-time evaluation
+
+**Key Features Preserved:**
+- Three-tier operator pattern
+- Element-wise operations with shape validation
+- Type promotion via decltype
+- InlineDense as default output type
+- constexpr throughout
+
+**Testing:**
+Comprehensive test suite covering:
+- In-place addition and subtraction
+- Explicit output type specification
+- Auto-inference operators
+- Type promotion (int + double)
+- Various matrix sizes (1x3, 3x1, 2x2, 3x3)
+- constexpr compatibility (static_assert tests)
+- All operations with multiple scalar types
+
+All 14 tests pass successfully.
+
+**Implementation Notes:**
+- Made GenericMatrix::extent() constexpr to enable compile-time operations
+- Used requires clauses to restrict to rank-2 matrices
+- Loop indices use std::size_t for consistency with extent API
+- checkSameExtent uses assert for runtime validation
+
+**Notes for Reviewer:**
+- First algorithm migration - establishes pattern for Phase 3
+- Simple element-wise operations - straightforward migration
+- All tests pass including constexpr tests
+- Follows established matrix3 patterns from storage types
 
 ---
 
@@ -1916,10 +2209,10 @@ _Completed - see handoff note above_
 
 | Metric | Value |
 |--------|-------|
-| Tasks Completed | 6 |
+| Tasks Completed | 7 |
 | Tasks In Progress | 0 |
-| Tasks Remaining | 8 |
-| Review Cycles | 6 |
-| Avg Reviews/Task | 1.17 |
-| Commits Since Checkpoint | 3 |
+| Tasks Remaining | 7 |
+| Review Cycles | 7 |
+| Avg Reviews/Task | 1.14 |
+| Commits Since Checkpoint | 4 |
 | Checkpoint Target | 5 |
