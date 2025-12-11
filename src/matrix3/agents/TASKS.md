@@ -76,7 +76,7 @@ Target: `src/matrix3/` - New mdspan-inspired implementation
   - In-place row reduction
   - Pivoting strategies
 
-- [~] LU Decomposition - from `matrix2/algorithms/lu_decomposition.h`
+- [x] LU Decomposition - from `matrix2/algorithms/lu_decomposition.h`
   - Doolittle/Crout methods
   - Partial pivoting support
 
@@ -85,7 +85,7 @@ Target: `src/matrix3/` - New mdspan-inspired implementation
 ## Phase 4: Utilities
 
 ### 4.1 Views & Slicing
-- [ ] Transpose view
+- [~] Transpose view
 - [ ] Submatrix view (slicing)
 - [ ] Row/Column iteration
 
