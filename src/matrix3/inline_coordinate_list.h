@@ -1,7 +1,9 @@
 #pragma once
 
 #include <array>
+#include <cassert>
 #include <cstddef>
+#include <cstdint>
 #include <ranges>
 #include <tuple>
 #include <utility>
@@ -41,7 +43,7 @@ class CoordinateListAccessor {
   }
 
   // Insert a new element - returns true on success, false if capacity exceeded
-  constexpr auto insert(std::size_t row, std::size_t col, T value) -> bool {
+  constexpr auto insert(int64_t row, int64_t col, T value) -> bool {
     if (size_ >= Capacity) {
       return false;
     }
@@ -65,8 +67,8 @@ class CoordinateListAccessor {
   static constexpr T kZero_ = ValueType{};
 
   std::size_t size_ = 0;
-  std::array<std::size_t, Capacity> row_indices_ = {};
-  std::array<std::size_t, Capacity> col_indices_ = {};
+  std::array<int64_t, Capacity> row_indices_ = {};
+  std::array<int64_t, Capacity> col_indices_ = {};
   std::array<T, Capacity> values_ = {};
 };
 
@@ -78,8 +80,8 @@ template <typename Scalar, std::size_t Rows, std::size_t Cols,
 class InlineCoordinateList {
  public:
   struct Triplet {
-    std::size_t i;
-    std::size_t j;
+    int64_t i;
+    int64_t j;
     Scalar value;
   };
 
@@ -98,7 +100,15 @@ class InlineCoordinateList {
     requires(sizeof...(Indices) == 2)
   constexpr auto operator[](this auto const& self, Indices... indices)
       -> Scalar {
-    return self.accessor_(std::tuple{indices...});
+    auto coords = std::tuple{indices...};
+    if (std::is_constant_evaluated()) {
+      auto [row, col] = coords;
+      assert(0 <= row && static_cast<std::size_t>(row) < Rows &&
+             "row index out of bounds");
+      assert(0 <= col && static_cast<std::size_t>(col) < Cols &&
+             "col index out of bounds");
+    }
+    return self.accessor_(coords);
   }
 
   // Insert operations for modifying sparse matrix
@@ -106,8 +116,7 @@ class InlineCoordinateList {
     return accessor_.insert(triplet.i, triplet.j, std::move(triplet.value));
   }
 
-  constexpr auto insert(std::size_t row, std::size_t col, Scalar value)
-      -> bool {
+  constexpr auto insert(int64_t row, int64_t col, Scalar value) -> bool {
     return accessor_.insert(row, col, std::move(value));
   }
 
