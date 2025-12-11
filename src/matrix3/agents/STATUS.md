@@ -4,8 +4,8 @@ Last updated: 2024-12-10T17:00:00Z
 
 ## Current State
 
-**Phase**: 2 - Storage Types
-**Active Task**: Permuted
+**Phase**: 3 - Algorithms
+**Active Task**: Addition
 **Blocking Issues**: None
 
 ---
@@ -18,7 +18,7 @@ _None_
 ### In Progress
 | Task | Assignee | Started |
 |------|----------|---------|
-| Permuted | Implementer | 2024-12-10T18:30:00Z |
+| Addition | Implementer | 2024-12-10T20:00:00Z |
 
 ### Pending Review
 | Priority | Task | Assignee | Completed |
@@ -27,6 +27,7 @@ _None_
 ### Recently Completed
 | Task | Completed | Commits | Review Decision |
 |------|-----------|---------|-----------------|
+| Permuted | 2024-12-10T19:30:00Z | 0721c352 | APPROVE (Iteration 1/3) |
 | Permutation | 2024-12-10T17:30:00Z | abc40b9a | APPROVE (Iteration 1/3) |
 | Block storage | 2024-12-10T16:15:00Z | 6145360f | APPROVE (Iteration 1/3) |
 | Banded storage | 2024-12-10T15:30:00Z | 2c389b6b | APPROVE (Iteration 1/3) |
@@ -45,6 +46,7 @@ _None_
 ### Review Iteration Counter
 | Task | Iteration | Max |
 |------|-----------|-----|
+| Permuted | 1 | 3 |
 | Permutation | 1 | 3 |
 | Block storage | 1 | 3 |
 | Banded storage | 1 | 3 |
@@ -52,6 +54,157 @@ _None_
 | InlineCoordinateList | 2 | 3 |
 
 ### Addressed
+
+#### Permuted Review - Iteration 1
+**Decision**: APPROVE
+**Reviewer**: Reviewer Agent
+**Date**: 2024-12-10T19:30:00Z
+
+**Correctness Verification**:
+
+1. **Row Permutation Indirection** ✓ VERIFIED
+   - Line 66: `return self.mat_[self.perm_.data()[i], j]` - correctly redirects row index
+   - Row index `i` mapped through permutation array before accessing matrix
+   - Column index `j` passed through unchanged
+   - Test lines 24-29: Identity permutation verified (no reordering)
+   - Test lines 43-53: Explicit permutation [2,0,1] correctly reorders rows
+   - Test lines 68-78: swap() correctly modifies view, not underlying data
+
+2. **Column Permutation Indirection** ✓ VERIFIED
+   - Line 164: `return self.mat_[i, self.perm_.data()[j]]` - correctly redirects column index
+   - Row index `i` passed through unchanged
+   - Column index `j` mapped through permutation array before accessing matrix
+   - Test lines 131-137: Identity permutation verified
+   - Test lines 150-160: Explicit permutation [2,0,1] correctly reorders columns
+   - Test lines 174-184: swap() correctly modifies column view
+
+3. **Zero-Copy swap() Operations** ✓ VERIFIED
+   - Lines 81-87 (RowPermuted): `perm_.swap(i, j)` - delegates to permutation
+   - Lines 179-185 (ColPermuted): `perm_.swap(i, j)` - delegates to permutation
+   - No data movement, only permutation index modification
+   - Test lines 65-92: Multiple swaps verify parity tracking (even after 2 swaps)
+   - Test lines 172-198: Column swaps with parity verification
+   - Efficient O(1) operation
+
+4. **Mutable Access Through View** ✓ VERIFIED
+   - Lines 55-67: operator[] uses "deducing this" with `decltype(auto)` return
+   - Preserves reference type from underlying matrix
+   - Test lines 95-118: Mutable access modifies wrapped matrix copy
+   - Test lines 112-117: Modifications persist after swap (move with permutation)
+   - Test lines 201-223: Column permuted mutable access works correctly
+   - Value semantics: modifications affect wrapped copy, not original
+
+5. **Static and Dynamic Permutation Sizes** ✓ VERIFIED
+   - Lines 21-36: Four constructors handle static/dynamic variants
+   - Lines 30-32, 34-36: Dynamic size explicitly constructs `Permutation<kDynamic>(rows/cols)`
+   - Lines 21-23, 25-27: Static size uses default constructor `Permutation<PermSize>{}`
+   - Test lines 249-266: Static size permutation (PermSize=3) tested
+   - Default template parameter `PermSize = kDynamic` for flexibility
+   - Deduction guides (lines 103-108, 201-206) correctly infer sizes
+
+**Code Quality (per CLAUDE.md)**:
+
+1. **Naming Conventions** ✓ COMPLIANT
+   - Types: `RowPermuted`, `ColPermuted`, `ValueType` (PascalCase)
+   - Class members: `mat_`, `perm_` (snake_case with trailing underscore)
+   - Methods: `swap()`, `permutation()`, `data()`, `rows()`, `cols()`, `extent()` (camelCase)
+   - Constants: `kDynamic` (kPascalCase)
+   - Template params: `MatrixType`, `PermSize`, `Indices` (PascalCase)
+
+2. **constexpr-by-default** ✓ COMPLIANT
+   - Lines 21-50: All constructors are constexpr
+   - Lines 55-67, 153-165: operator[] is constexpr
+   - Lines 70-78, 168-176: Extent accessors are constexpr
+   - Lines 81-87, 179-185: swap() is constexpr
+   - Lines 90-95, 188-193: Accessors are constexpr
+   - Fully constexpr-compatible where possible
+
+3. **Comments Explain "Why" Not "What"** ✓ EXCELLENT
+   - Lines 12-14: Explains zero-copy swap concept and purpose
+   - Lines 110-112: Same explanation for ColPermuted
+   - Line 52: Comment explains permutation of row index (provides context)
+   - Line 150: Comment explains permutation of column index
+   - Line 80: Comment explains zero-copy nature of swap
+   - Comments focus on design rationale, not obvious code behavior
+
+**Test Coverage** ✓ COMPREHENSIVE:
+
+1. **Identity Permutations**:
+   - Lines 11-30: RowPermuted identity (no reordering)
+   - Lines 120-138: ColPermuted identity (no reordering)
+
+2. **Explicit Permutations**:
+   - Lines 32-54: RowPermuted with [2,0,1] permutation
+   - Lines 140-161: ColPermuted with [2,0,1] permutation
+   - Verify all row/column mappings correct
+
+3. **swap() Operations**:
+   - Lines 56-93: RowPermuted multiple swaps with parity tracking
+   - Lines 163-199: ColPermuted multiple swaps with parity tracking
+   - Both verify zero-copy behavior and parity correctness
+
+4. **Mutable Access**:
+   - Lines 95-118: RowPermuted modifications persist and move with permutation
+   - Lines 201-223: ColPermuted modifications persist and move with permutation
+   - Verify value semantics (wrapped matrix is copy)
+
+5. **Deduction Guides**:
+   - Lines 225-247: Both RowPermuted and ColPermuted CTAD tested
+   - With and without explicit Permutation parameter
+   - ValueType deduction verified with static_assert
+
+6. **Static Size Permutations**:
+   - Lines 249-266: Static size template parameter tested
+   - Verifies both construction and swap operations
+
+All 9 tests pass successfully.
+
+**Comparison with matrix2** ✓ PRESERVED:
+
+1. **Core Features Preserved**:
+   - Same two-class design: RowPermuted and ColPermuted
+   - Same zero-copy swap semantics
+   - Same identity permutation default
+   - Same permutation indirection (row or column)
+   - Same "deducing this" for const/mutable access
+   - Same permutation() accessor returning const reference
+   - Same perfect forwarding constructors (6 overloads → 4 for static/dynamic)
+
+2. **Appropriate Changes for matrix3**:
+   - Namespace: `tempura::matrix` → `tempura::matrix3`
+   - Uses matrix3 Permutation type (already migrated)
+   - Removed column-vector specialization (lines 40-44 in matrix2)
+     - Requires clause `requires self.mat_.extent().extent(1) == 1` not constexpr-evaluatable
+     - Documented in implementer handoff as intentional omission
+   - `shape()` → `extent()`, `rows()`, `cols()` (matrix3 API)
+   - `CHECK()` → `assert()` with `std::is_constant_evaluated()` (matrix3 pattern)
+   - Uses C++23 variadic operator[] with "deducing this"
+   - Simplified deduction guides (2 per class instead of 3)
+   - Added explicit PermSize template parameter with kDynamic default
+
+3. **Intentional Omissions Documented**:
+   - Column-vector single-index specialization removed
+   - Documented in handoff notes (lines 715-716 in STATUS.md)
+   - Rationale: constexpr limitations with extent-based requires clause
+   - Users can still use two-index syntax for column vectors
+
+**Test Results**: All 9 tests pass:
+- RowPermuted with identity permutation
+- RowPermuted with explicit permutation
+- RowPermuted swap operations
+- RowPermuted mutable access
+- ColPermuted with identity permutation
+- ColPermuted with explicit permutation
+- ColPermuted swap operations
+- ColPermuted mutable access
+- deduction guides
+- static size permutation
+
+**Final Assessment**: APPROVE - Permuted is correct, well-tested, and ready to merge.
+
+The implementation correctly handles row and column permutation indirection. Zero-copy swap() operations work as expected via permutation modification. Mutable access through the view functions correctly with value semantics (wrapped matrix is a copy). Both static and dynamic permutation sizes are supported. Code quality is excellent with clear comments explaining the zero-copy design rationale. Test coverage is comprehensive covering identity, explicit permutations, swaps, mutable access, deduction guides, and static sizes. All features from matrix2 are preserved with appropriate adaptations for matrix3, and the intentional omission of column-vector specialization is well-documented with clear rationale.
+
+**Note**: This is the 6th approval since the last checkpoint. The checkpoint target is 5 commits, so a checkpoint commit should be created soon.
 
 #### Permutation Review - Iteration 1
 **Decision**: APPROVE
@@ -665,11 +818,214 @@ Format: `[TIMESTAMP] AGENT: Action`
 [2024-12-10T17:30:00Z] IMPLEMENTER: Completed Permutation, ready for review
 [2024-12-10T18:00:00Z] REVIEWER: Reviewed Permutation - APPROVE
 [2024-12-10T18:30:00Z] DIRECTOR: Assigned Permuted to Implementer
+[2024-12-10T19:00:00Z] IMPLEMENTER: Completed Permuted, ready for review
+[2024-12-10T19:30:00Z] REVIEWER: Reviewed Permuted - APPROVE
+[2024-12-10T20:00:00Z] DIRECTOR: Assigned Addition to Implementer (Phase 3 start)
 ```
 
 ---
 
 ## Handoff Notes
+
+### From: Implementer (Permuted)
+**To**: Reviewer
+**Date**: 2024-12-10T19:00:00Z
+**Commit**: 0721c352
+
+**Implementation Summary:**
+Successfully migrated RowPermuted and ColPermuted views from matrix2 to matrix3 architecture as standalone wrapper classes.
+
+**Files Created:**
+- `/home/ulins/workspace/tempura/src/matrix3/permuted.h` - Implementation
+- `/home/ulins/workspace/tempura/src/matrix3/permuted_test.cpp` - Comprehensive tests
+
+**Files Modified:**
+- `/home/ulins/workspace/tempura/src/matrix3/CMakeLists.txt` - Added test target
+
+**Design Decisions:**
+
+1. **Template Parameters**:
+   - RowPermuted<MatrixType, PermSize = kDynamic>
+   - ColPermuted<MatrixType, PermSize = kDynamic>
+   - Both support static and dynamic permutation sizes
+   - Default to dynamic size for flexibility
+
+2. **Permutation Initialization**:
+   - Dynamic size: Explicitly construct `Permutation<kDynamic>(rows)` or `Permutation<kDynamic>(cols)`
+   - Static size: Use default constructor `Permutation<N>{}` for identity
+   - Fixed issue where member initialization `perm_{size}` was calling vector constructor
+
+3. **ValueType Extraction**:
+   - Uses `std::remove_cvref_t<decltype(std::declval<MatrixType>()[0, 0])>`
+   - Works with any matrix type that supports operator[]
+   - Avoids dependency on MatrixType having a ValueType typedef
+
+4. **Deduction Guides**:
+   - Simplified to two guides per class (with/without Permutation)
+   - Uses `std::remove_cvref_t` to avoid reference types in deduced template parameters
+   - Enables CTAD: `RowPermuted{mat}` infers all parameters
+
+5. **Removed Column Vector Specialization**:
+   - Original matrix2 had single-index operator[] for column vectors
+   - Requires clause `requires self.mat_.extent().extent(1) == 1` not constexpr-evaluatable
+   - Removed to simplify implementation - users can still use two-index syntax
+
+6. **C++23 operator[] with "deducing this"**:
+   - Used variadic `operator[](this auto&& self, Indices... indices)`
+   - Return type `decltype(auto)` preserves reference type from underlying matrix
+   - Supports both const and mutable access through same template
+
+7. **Value Semantics**:
+   - Both classes store wrapped matrix by value (copy)
+   - Modifications through permuted view persist within the view
+   - Original matrix unaffected (stored copy is modified)
+   - Tests updated to reflect this behavior
+
+**Key Features Preserved:**
+- Zero-copy row/column swaps via permutation modification
+- Identity permutation by default (indices 0, 1, 2, ...)
+- swap(i, j) modifies permutation, not data
+- permutation() accessor returns const reference to Permutation
+- Both RowPermuted and ColPermuted implementations
+- extent(), rows(), cols() accessors
+- data() accessor for underlying matrix
+- constexpr-friendly constructors
+
+**Testing:**
+Comprehensive test suite covering:
+- Identity permutation (no change)
+- Explicit permutation with reordering
+- swap() operations with parity tracking
+- Mutable access (modifications persist in view)
+- Both RowPermuted and ColPermuted
+- Deduction guides (with and without explicit Permutation)
+- Static size permutations
+
+All 9 tests pass successfully.
+
+**Implementation Notes:**
+- Simplified from matrix2's 6 constructor overloads to 4 per class (static/dynamic variants)
+- Removed column vector specialization due to constexpr limitations
+- Fixed Permutation initialization to call constructor explicitly
+- Tests verify value semantics (modifications don't affect original matrix)
+
+**Challenges Addressed:**
+1. Permutation initialization required explicit constructor call
+2. ValueType extraction needed decltype-based approach
+3. Deduction guides needed std::remove_cvref_t to avoid reference types
+4. Column vector specialization not feasible with current constraint system
+
+**Notes for Reviewer:**
+- All tests pass successfully
+- Follows established matrix3 patterns from previous wrappers
+- Simple, clean implementation focusing on core permutation view functionality
+- Value semantics ensure no surprising side effects on wrapped matrices
+
+---
+
+### To: Implementer (Addition)
+**From**: Director
+**Date**: 2024-12-10T20:00:00Z
+
+**Task**: Migrate Addition operators from matrix2 to matrix3 architecture
+
+**Source File**: `/home/ulins/workspace/tempura/src/matrix2/addition.h`
+
+**Implementation Notes**:
+
+1. **Source Analysis**:
+   - Compact 71-line implementation providing addition and subtraction operators
+   - Three operations per arithmetic type (addition/subtraction):
+     - `operator+=` / `operator-=` (in-place modification)
+     - `add<Out>()` / `subtract<Out>()` (explicit output type)
+     - `operator+` / `operator-` (automatic output type inference)
+   - constexpr-friendly throughout
+   - Simple element-wise operations with shape validation
+
+2. **Key Features**:
+   - **In-place operators** (lines 8-17, 40-48):
+     - `operator+=(Lhs& left, const Rhs& right) -> Lhs&`
+     - `operator-=(Lhs& left, const Rhs& right) -> Lhs&`
+     - Mutates left operand in-place
+     - Requires compatible shapes via `checkSameShape()`
+
+   - **Explicit output type** (lines 19-29, 50-60):
+     - `add<Out>(const Lhs& lhs, const Rhs& rhs) -> Out`
+     - `subtract<Out>(const Lhs& lhs, const Rhs& rhs) -> Out`
+     - User specifies result type explicitly
+     - Allows control over output storage format
+
+   - **Automatic type inference** (lines 31-37, 62-68):
+     - `operator+(const Lhs& left, const Rhs& right)`
+     - `operator-(const Lhs& left, const Rhs& right)`
+     - Automatically selects InlineDense for output
+     - Uses `decltype(left[0, 0] + right[0, 0])` for scalar type deduction
+     - Dimensions from left operand: `InlineDense<ScalarT, Lhs::kRow, Lhs::kCol>`
+
+3. **Design Pattern**:
+   - Shape validation before operation (`checkSameShape()`)
+   - Nested loops: outer for rows, inner for columns
+   - Direct element access via `[i, j]` notation
+   - Result construction: creates new matrix, assigns elements, returns
+
+4. **Important Design Details**:
+   - **Type deduction**: `decltype(left[0, 0] + right[0, 0])` handles type promotion
+   - **Shape check**: Uses `checkSameShape()` utility (likely in matrix.h)
+   - **Default output**: InlineDense chosen as "worst case" for operator+ / operator-
+   - **Dimension access**: Uses `.shape().row` and `.shape().col` (matrix2 API)
+   - **Index types**: `int64_t` for loop variables
+   - **Template constraints**: Uses `MatrixT` concept
+
+5. **Testing Requirements**:
+   - Addition operator (+=, add, +) for various matrix types
+   - Subtraction operator (-=, subtract, -) for various matrix types
+   - Type promotion (int + double → double)
+   - Shape validation (mismatched shapes should fail)
+   - In-place modification correctness
+   - Automatic type deduction
+   - Explicit output type specification
+   - constexpr compatibility where possible
+   - Mixed storage types (Dense + InlineDense, etc.)
+   - Edge cases: 1x1 matrices, rectangular matrices
+
+6. **Differences from matrix2**:
+   - matrix2 uses `.shape().row` / `.shape().col`, matrix3 may use different API
+   - matrix2 uses `checkSameShape()`, matrix3 should use assert-based approach
+   - Update namespace from `tempura::matrix` to `tempura::matrix3`
+   - matrix3 may need different matrix dimension extraction methods
+   - Adapt to matrix3's extent() API instead of shape()
+
+7. **Potential Challenges**:
+   - Determining matrix3's shape validation pattern
+   - Type deduction with matrix3's type system
+   - Ensuring InlineDense is available in matrix3
+   - constexpr compatibility with result construction
+   - Handling mixed static/dynamic dimensions
+   - Deciding on proper return type deduction strategy
+
+8. **Migration Strategy**:
+   - These are FREE FUNCTIONS in the matrix namespace
+   - NOT methods on a class
+   - Should work with any MatrixT types (generic)
+   - Simple element-wise algorithms - straightforward to migrate
+   - Update to use matrix3's API (extent() vs shape())
+
+**Expected Deliverables**:
+- `/home/ulins/workspace/tempura/src/matrix3/addition.h`
+- `/home/ulins/workspace/tempura/src/matrix3/addition_test.cpp`
+- Updated `/home/ulins/workspace/tempura/src/matrix3/CMakeLists.txt`
+
+**Notes**:
+- This is the first ALGORITHM migration (Phase 3)
+- Simpler than multiplication (no inner product logic)
+- Good test of matrix3's generic operator patterns
+- May establish patterns for other element-wise operations
+- Estimated effort: 2-3 hours
+- Consider whether to support expression templates (future enhancement)
+
+---
+
+### To: Implementer (Permuted - COMPLETED)
 
 ### To: Implementer (Permuted)
 **From**: Director
@@ -1560,10 +1916,10 @@ _Completed - see handoff note above_
 
 | Metric | Value |
 |--------|-------|
-| Tasks Completed | 5 |
+| Tasks Completed | 6 |
 | Tasks In Progress | 0 |
-| Tasks Remaining | 9 |
-| Review Cycles | 5 |
-| Avg Reviews/Task | 1.20 |
-| Commits Since Checkpoint | 1 |
+| Tasks Remaining | 8 |
+| Review Cycles | 6 |
+| Avg Reviews/Task | 1.17 |
+| Commits Since Checkpoint | 3 |
 | Checkpoint Target | 5 |

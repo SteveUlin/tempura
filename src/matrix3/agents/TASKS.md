@@ -54,7 +54,7 @@ Target: `src/matrix3/` - New mdspan-inspired implementation
   - Represents row/column permutations
   - Used by LU decomposition with pivoting
 
-- [~] Permuted - from `matrix2/storage/permuted.h`
+- [x] Permuted - from `matrix2/storage/permuted.h`
   - View applying permutation to another matrix
 
 ---
@@ -62,7 +62,7 @@ Target: `src/matrix3/` - New mdspan-inspired implementation
 ## Phase 3: Algorithms
 
 ### 3.1 Basic Operations
-- [ ] Addition - from `matrix2/addition.h`
+- [~] Addition - from `matrix2/addition.h`
   - Element-wise addition
   - Expression template support
 

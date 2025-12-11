@@ -31,7 +31,7 @@ class GenericMatrix {
     return self.accessor_(self.layout_(indicies...));
   }
 
-  auto extent() const -> const ExtentsT& { return extent_; }
+  constexpr auto extent() const -> const ExtentsT& { return extent_; }
 
   constexpr auto data() -> decltype(auto)
     requires requires(const AccessorT& a) { a.data(); }
