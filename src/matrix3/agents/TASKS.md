@@ -41,11 +41,11 @@ Target: `src/matrix3/` - New mdspan-inspired implementation
   - Must support constexpr operations
 
 ### 2.2 Structured Storage
-- [~] Banded - from `matrix2/storage/banded.h`
+- [x] Banded - from `matrix2/storage/banded.h`
   - Efficient storage for banded matrices
   - Parameterized by upper/lower bandwidth
 
-- [ ] Block - from `matrix2/storage/block.h`
+- [~] Block - from `matrix2/storage/block.h`
   - Block-structured matrices
   - Useful for partitioned algorithms
 
