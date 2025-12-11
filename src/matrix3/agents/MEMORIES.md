@@ -3,7 +3,7 @@
 > This file contains accumulated knowledge for agents. Keep entries concise.
 > Memory Curator reviews this file periodically to maintain quality.
 
-Last curated: 2024-12-10T22:45:00Z
+Last curated: 2024-12-11T03:00:00Z
 
 ---
 
@@ -18,7 +18,7 @@ class GenericMatrix { ... };
 // Example: Dense<Scalar, Ns...> extends GenericMatrix
 ```
 
-### Standalone Wrapper Pattern (Complex, Banded, BlockRow)
+### Standalone Wrapper Pattern (Complex, Banded, BlockRow, Transpose, Submatrix)
 ```cpp
 // For wrappers/views that don't fit GenericMatrix inheritance:
 template <typename... Params>
@@ -26,12 +26,15 @@ class WrapperType {
   static constexpr int64_t kRows = ...;
   static constexpr int64_t kCols = ...;
 
-  constexpr auto operator[](this auto&& self, Indices... indices) -> ReturnType {
-    // Custom indexing logic
+  // "deducing this" enables perfect forwarding of const/mutable qualification
+  template <typename... Indices>
+    requires(sizeof...(Indices) == 2)
+  constexpr auto operator[](this auto&& self, Indices... indices) -> decltype(auto) {
+    // Custom indexing logic - auto&& forwards cv-qualification
   }
 
-  constexpr int64_t rows() const { return kRows; }
-  constexpr int64_t cols() const { return kCols; }
+  constexpr std::size_t rows() const { return kRows; }
+  constexpr std::size_t cols() const { return kCols; }
 };
 ```
 
@@ -186,6 +189,41 @@ using ScalarT = decltype(left[0, 0] * right[0, 0]);  // For multiplication
 // Handles mixed types: int + double → double, int * double → double
 ```
 
+### View Composition Pattern (Transpose, Submatrix)
+```cpp
+// Views use helper functions to work with different matrix types:
+template <typename M>
+static constexpr auto matRows(const M& m) -> std::size_t {
+  if constexpr (requires { m.extent(); }) {
+    return m.extent().extent(0);  // GenericMatrix types
+  } else if constexpr (requires { m.rows(); }) {
+    return m.rows();  // View types (Submatrix, Transpose)
+  } else {
+    return m.cols();  // Fallback for irregular types
+  }
+}
+
+// Nested views compose: Submatrix<Transpose<Dense>> works
+// Special constructor for nested submatrix composes offsets
+```
+
+### Compile-Time Format String Pattern (to_string)
+```cpp
+// std::format requires compile-time format strings in C++26
+// Use helper functions to construct format strings:
+
+template <typename T>
+auto formatValue(const T& val) -> std::string {
+  if constexpr (std::is_floating_point_v<std::remove_cvref_t<T>>) {
+    return std::format("{:.4f}", val);  // Fixed at compile-time
+  } else {
+    return std::format("{}", val);
+  }
+}
+
+// For runtime width: use format("{:>{}}", val, width) with width as parameter
+```
+
 ---
 
 ## Architecture Decisions
@@ -220,6 +258,10 @@ using ScalarT = decltype(left[0, 0] * right[0, 0]);  // For multiplication
 9. **constexpr extent()**: Required making GenericMatrix::extent() constexpr for constexpr algorithms
 10. **Static extent extraction**: Use `Lhs::ExtentsType::staticExtent(0)` not `Lhs::kRow` in matrix3
 11. **Zero initialization**: InlineDense constructor zero-initializes; use `Out out{}` for tileMultiply
+12. **"deducing this" return type**: Use `decltype(auto)` for perfect forwarding, not `auto` or `auto&`
+13. **View dimension helpers**: Use `requires` expressions not concepts to avoid circular dependencies
+14. **Nested view offsets**: Submatrix needs special constructor to compose offsets correctly
+15. **std::format compile-time strings**: C++26 requires format strings be compile-time constants; use helpers for runtime width
 
 ---
 
@@ -232,6 +274,9 @@ using ScalarT = decltype(left[0, 0] * right[0, 0]);  // For multiplication
 - `src/matrix3/block.h` - Short-circuit fold + compositional pattern
 - `src/matrix3/addition.h` - Three-tier pattern + checkSameExtent validation
 - `src/matrix3/multiplication.h` - Block-based tiling + checkMultiplyExtent validation
+- `src/matrix3/transpose.h` - View pattern with dimension helpers
+- `src/matrix3/submatrix.h` - View composition with nested offset arithmetic
+- `src/matrix3/to_string.h` - Compile-time format strings + std::formatter specialization
 - `src/unit.h` - Testing framework reference
 
 ---

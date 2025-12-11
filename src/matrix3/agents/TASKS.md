@@ -90,7 +90,7 @@ Target: `src/matrix3/` - New mdspan-inspired implementation
 - [ ] Row/Column iteration
 
 ### 4.2 Output
-- [~] to_string - from `matrix2/to_string.h`
+- [x] to_string - from `matrix2/to_string.h`
   - Pretty printing
   - Configurable formatting
 
@@ -99,7 +99,7 @@ Target: `src/matrix3/` - New mdspan-inspired implementation
 ## Phase 5: Integration from matrix (if applicable)
 
 ### 5.1 Additional Features
-- [ ] Kronecker product - from `matrix/kronecker_product.h`
+- [~] Kronecker product - from `matrix/kronecker_product.h`
 - [ ] MatRef (reference wrapper) - from `matrix/matrix.h`
 
 ---
