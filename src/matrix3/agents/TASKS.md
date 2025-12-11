@@ -66,13 +66,13 @@ Target: `src/matrix3/` - New mdspan-inspired implementation
   - Element-wise addition
   - Expression template support
 
-- [~] Multiplication - from `matrix2/multiplication.h`
+- [x] Multiplication - from `matrix2/multiplication.h`
   - Matrix-matrix multiplication
   - Matrix-vector multiplication
   - Expression template support
 
 ### 3.2 Decompositions
-- [ ] Gauss-Jordan elimination - from `matrix2/algorithms/gauss_jordan.h`
+- [~] Gauss-Jordan elimination - from `matrix2/algorithms/gauss_jordan.h`
   - In-place row reduction
   - Pivoting strategies
 

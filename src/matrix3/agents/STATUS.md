@@ -1,11 +1,11 @@
 # Migration Status
 
-Last updated: 2024-12-10T21:15:00Z
+Last updated: 2024-12-10T23:30:00Z
 
 ## Current State
 
 **Phase**: 3 - Algorithms
-**Active Task**: Multiplication
+**Active Task**: None (waiting for review)
 **Blocking Issues**: None
 
 ---
@@ -18,15 +18,17 @@ _None_
 ### In Progress
 | Task | Assignee | Started |
 |------|----------|---------|
-| Multiplication | Implementer | 2024-12-10T21:15:00Z |
 
 ### Pending Review
 | Priority | Task | Assignee | Completed |
 |----------|------|----------|-----------|
+| 1 | Gauss-Jordan elimination | Implementer | 2024-12-10T23:30:00Z |
 
 ### Recently Completed
 | Task | Completed | Commits | Review Decision |
 |------|-----------|---------|-----------------|
+| Gauss-Jordan elimination | 2024-12-10T23:30:00Z | 1a323799 | Pending |
+| Multiplication | 2024-12-10T22:00:00Z | 9ae59930 | APPROVE (Iteration 1/3) |
 | Addition | 2024-12-10T20:30:00Z | 9d5bcfe8 | APPROVE (Iteration 1/3) |
 | Permuted | 2024-12-10T19:30:00Z | 0721c352 | APPROVE (Iteration 1/3) |
 | Permutation | 2024-12-10T17:30:00Z | abc40b9a | APPROVE (Iteration 1/3) |
@@ -47,6 +49,7 @@ _None_
 ### Review Iteration Counter
 | Task | Iteration | Max |
 |------|-----------|-----|
+| Multiplication | 1 | 3 |
 | Addition | 1 | 3 |
 | Permuted | 1 | 3 |
 | Permutation | 1 | 3 |
@@ -56,6 +59,151 @@ _None_
 | InlineCoordinateList | 2 | 3 |
 
 ### Addressed
+
+#### Multiplication Review - Iteration 1
+**Decision**: APPROVE
+**Reviewer**: Reviewer Agent
+**Date**: 2024-12-10T22:30:00Z
+
+**Correctness Verification**:
+
+1. **Block-Based Tiling Algorithm** ✓ VERIFIED
+   - Lines 36-51: Five nested loops implementing cache-friendly tiling
+   - Loop ordering: jblock (outer columns) → i (rows) → kblock (inner dim) → j (column) → k (inner)
+   - Line 42: Block boundaries handled with `std::min(jblock + block_size, right.extent().extent(1))`
+   - Line 44: Inner dimension boundaries with `std::min(kblock + block_size, left.extent().extent(1))`
+   - Line 46: Accumulation `out[i, j] += left[i, k] * right[k, j]`
+   - Algorithm structure matches matrix2 exactly (matrix2/multiplication.h lines 14-26)
+
+2. **Dimension Validation** ✓ VERIFIED
+   - Lines 12-16: `checkMultiplyExtent()` validates Lhs cols == Rhs rows
+   - Line 13-14: Static assertion for rank-2 matrices
+   - Line 15: Runtime assertion `lhs.extent().extent(1) == rhs.extent().extent(0)`
+   - Used in `tileMultiply` (line 23) before computation
+   - Test verification via correct matrix product results
+
+3. **Type Promotion** ✓ VERIFIED
+   - Line 26: `using ScalarT = decltype(left[0, 0] * right[0, 0])`
+   - Automatic type deduction from element multiplication
+   - Test lines 117-129: int * double correctly promotes to double
+   - Uses `expectNear` with tolerance 1e-10 for floating-point comparisons
+
+4. **constexpr Support** ✓ VERIFIED
+   - Line 12: `checkMultiplyExtent` is constexpr
+   - Line 22: `tileMultiply` is constexpr
+   - Line 58: `operator*` is constexpr
+   - Test lines 161-172: constexpr multiplication with static_assert verification
+   - Test lines 174-185: constexpr identity multiplication with static_assert
+   - Full compile-time evaluation working
+
+**Code Quality (per CLAUDE.md)**:
+
+1. **Naming Conventions** ✓ COMPLIANT
+   - Functions: `checkMultiplyExtent`, `tileMultiply` (camelCase)
+   - Variables: `block_size`, `jblock`, `kblock` (snake_case)
+   - Template params: `Lhs`, `Rhs`, `ScalarT` (PascalCase)
+   - Constants: `kRow`, `kCol` (kPascalCase)
+   - All follow project conventions
+
+2. **constexpr-by-default** ✓ COMPLIANT
+   - Lines 12, 22, 58: All functions constexpr
+   - Extensive compile-time tests verify functionality
+   - Full constexpr support throughout
+
+3. **Cache-Optimized Loop Ordering** ✓ PRESERVED
+   - Exact same loop structure as matrix2
+   - jblock → i → kblock → j → k ordering maintained
+   - Block size default of 16 preserved (line 20)
+   - Cache-friendly blocked multiplication algorithm intact
+
+4. **Comments Explain "Why" Not "What"** ✓ GOOD
+   - Line 10: Explains dimension compatibility requirement
+   - Line 18-19: Describes block-based tiling and cache optimization
+   - Line 25: Explains type promotion via decltype
+   - Line 34: Describes five-loop cache-friendly structure
+   - Comments provide context and design rationale
+
+**Test Coverage** ✓ COMPREHENSIVE:
+
+1. **Square Matrices**:
+   - Lines 9-20: Basic 2x2 multiplication
+   - Lines 42-58: 3x3 multiplication
+   - Covers standard cases with verification
+
+2. **Rectangular Matrices**:
+   - Lines 60-73: 2x3 * 3x2 → 2x2
+   - Lines 75-91: 3x2 * 2x3 → 3x3
+   - Both directions tested
+
+3. **Matrix-Vector Multiplication**:
+   - Lines 93-103: 2x3 * 3x1 (matrix * column vector)
+   - Lines 105-115: 1x3 * 3x2 (row vector * matrix)
+   - Both orientations covered
+
+4. **Identity Matrix**:
+   - Lines 22-40: mat * I = mat and I * mat = mat
+   - Verifies multiplication with special matrices
+
+5. **Type Promotion**:
+   - Lines 117-129: int * double → double
+   - Floating-point tolerance properly handled
+
+6. **Edge Cases**:
+   - Lines 131-147: Zero matrix multiplication
+   - Verifies both directions (mat * zero and zero * mat)
+
+7. **Explicit Template Parameters**:
+   - Lines 149-159: `tileMultiply<8>` with custom block_size
+   - Verifies template parameter functionality
+
+8. **constexpr Tests**:
+   - Lines 161-172: constexpr multiplication with static_assert
+   - Lines 174-185: constexpr identity multiplication with static_assert
+   - Compile-time evaluation fully verified
+
+All 12 tests pass successfully.
+
+**Comparison with matrix2** ✓ PRESERVED:
+
+1. **Core Features Preserved**:
+   - Block-based tiling algorithm
+   - Cache-optimized loop ordering (jblock → i → kblock → j → k)
+   - Default block_size = 16
+   - Type promotion via decltype
+   - Dimension validation (Lhs cols == Rhs rows)
+   - InlineDense as return type
+   - constexpr throughout
+
+2. **Appropriate Changes for matrix3**:
+   - Namespace: `tempura::matrix` → `tempura::matrix3`
+   - Dimension check: requires clause → separate `checkMultiplyExtent()` function
+   - Dimension access: `.shape().row/col` → `.extent().extent(0)/extent(1)`
+   - Loop indices: `int64_t` → `std::size_t` (consistent with extent API)
+   - Static extent extraction: `Lhs::kRow` → `Lhs::ExtentsType::staticExtent(0)`
+   - Rank-2 constraint via requires clause on templates
+   - Uses C++23 variadic operator[] syntax
+
+3. **No Missing Features**: All functionality from matrix2 preserved
+
+**Test Results**: All 12 tests pass:
+- basic 2x2 matrix multiplication
+- identity matrix multiplication
+- 3x3 matrix multiplication
+- rectangular matrix multiplication 2x3 * 3x2
+- rectangular matrix multiplication 3x2 * 2x3
+- matrix-vector multiplication 2x3 * 3x1
+- vector-matrix multiplication 1x3 * 3x2
+- type promotion int * double
+- zero matrix multiplication
+- tileMultiply with explicit block_size
+- constexpr multiplication
+- constexpr identity multiplication
+
+**Final Assessment**: APPROVE - Multiplication operations are correct, well-tested, and ready to merge.
+
+The block-based tiling algorithm is faithfully migrated with the same cache-optimized loop ordering. Dimension validation properly ensures Lhs cols == Rhs rows. Type promotion works correctly for mixed types. All operations work at compile-time with constexpr. Test coverage is comprehensive covering square matrices, rectangular matrices, matrix-vector products, identity multiplication, type promotion, zero matrices, and constexpr evaluation.
+
+**Note**: This is the 6th approval since the last checkpoint. The checkpoint target is 5 commits, so a checkpoint commit should be created after this approval.
 
 #### Addition Review - Iteration 1
 **Decision**: APPROVE
@@ -957,6 +1105,9 @@ Format: `[TIMESTAMP] AGENT: Action`
 [2024-12-10T20:00:00Z] DIRECTOR: Assigned Addition to Implementer (Phase 3 start)
 [2024-12-10T20:30:00Z] IMPLEMENTER: Completed Addition, ready for review
 [2024-12-10T21:00:00Z] REVIEWER: Reviewed Addition - APPROVE
+[2024-12-10T21:15:00Z] DIRECTOR: Assigned Multiplication to Implementer
+[2024-12-10T22:00:00Z] IMPLEMENTER: Completed Multiplication, ready for review
+[2024-12-10T22:30:00Z] REVIEWER: Reviewed Multiplication - APPROVE (CHECKPOINT REACHED)
 ```
 
 ---
@@ -1135,6 +1286,95 @@ All 9 tests pass successfully.
 - Follows established matrix3 patterns from previous wrappers
 - Simple, clean implementation focusing on core permutation view functionality
 - Value semantics ensure no surprising side effects on wrapped matrices
+
+---
+
+### From: Implementer (Multiplication)
+**To**: Reviewer
+**Date**: 2024-12-10T22:00:00Z
+**Commit**: 9ae59930
+
+**Implementation Summary:**
+Successfully migrated matrix multiplication from matrix2 to matrix3 architecture using block-based tiling algorithm.
+
+**Files Created:**
+- `/home/ulins/workspace/tempura/src/matrix3/multiplication.h` - Implementation
+- `/home/ulins/workspace/tempura/src/matrix3/multiplication_test.cpp` - Comprehensive tests
+
+**Files Modified:**
+- `/home/ulins/workspace/tempura/src/matrix3/CMakeLists.txt` - Added test target
+
+**Design Decisions:**
+
+1. **Block-Based Tiling Algorithm**:
+   - Implemented `tileMultiply<block_size>()` with configurable block size (default 16)
+   - Five nested loops optimized for cache locality
+   - Loop order: jblock → i → kblock → j → k
+   - Uses std::min() to handle non-multiple block sizes
+   - Same algorithm structure as matrix2 for performance consistency
+
+2. **Dimension Validation**:
+   - Created `checkMultiplyExtent()` helper function
+   - Validates Lhs columns == Rhs rows using extent().extent(1) and extent().extent(0)
+   - Static assertion for rank-2 matrices
+   - Runtime assertion for compatible dimensions
+
+3. **Type Promotion**:
+   - Uses `decltype(left[0, 0] * right[0, 0])` for automatic scalar type deduction
+   - Handles mixed types (e.g., int * double → double)
+   - Consistent with addition/subtraction pattern
+
+4. **Output Type**:
+   - Returns `InlineDense<ScalarT, kRow, kCol>` where:
+     - kRow = Lhs::ExtentsType::staticExtent(0)
+     - kCol = Rhs::ExtentsType::staticExtent(1)
+   - Extracts static extents at compile time
+   - Automatic zero-initialization of output matrix
+
+5. **Operator Convenience**:
+   - `operator*` delegates to `tileMultiply` with default block_size
+   - Provides clean syntax: `mat1 * mat2`
+   - Block size can be customized via direct `tileMultiply<8>()` call
+
+6. **constexpr Support**:
+   - All operations are constexpr
+   - Verified with static_assert tests
+   - Works at compile time with InlineDense and Identity matrices
+
+**Key Features Preserved:**
+- Block-based cache-optimized algorithm
+- Configurable block size
+- constexpr throughout
+- Type promotion
+- Dimension validation
+
+**Testing:**
+Comprehensive test suite with 12 tests covering:
+- Basic 2x2 and 3x3 multiplication
+- Identity matrix multiplication (both orders)
+- Rectangular matrices (2x3 * 3x2, 3x2 * 2x3)
+- Matrix-vector multiplication (2x3 * 3x1)
+- Vector-matrix multiplication (1x3 * 3x2)
+- Type promotion (int * double)
+- Zero matrix multiplication
+- Explicit block_size specification
+- constexpr multiplication
+- constexpr identity multiplication
+
+All tests pass successfully.
+
+**Implementation Notes:**
+- Loop indices use std::size_t for consistency with extent API
+- Output matrix automatically zero-initialized via InlineDense constructor
+- Block size is template parameter (not runtime) for compile-time optimization
+- checkMultiplyExtent uses assert for runtime validation
+
+**Notes for Reviewer:**
+- Preserves cache-optimized tiling from matrix2
+- First non-element-wise algorithm - more complex than addition
+- All tests pass including constexpr tests
+- Follows established matrix3 patterns
+- Algorithm complexity correctly handled for various matrix shapes
 
 ---
 
@@ -2209,10 +2449,105 @@ _Completed - see handoff note above_
 
 | Metric | Value |
 |--------|-------|
-| Tasks Completed | 7 |
-| Tasks In Progress | 0 |
-| Tasks Remaining | 7 |
-| Review Cycles | 7 |
-| Avg Reviews/Task | 1.14 |
-| Commits Since Checkpoint | 4 |
+| Tasks Completed | 8 |
+| Tasks In Progress | 1 |
+| Tasks Remaining | 4 |
+| Review Cycles | 8 |
+| Avg Reviews/Task | 1.0 |
+| Commits Since Checkpoint | 0 |
 | Checkpoint Target | 5 |
+
+---
+
+## Activity Log
+
+### 2024-12-10T22:50:00Z - Memory Curation (Checkpoint 2)
+**Curator**: Memory Curator Agent
+
+Second checkpoint reached after 8 completed tasks. Updated MEMORIES.md with Phase 3 learnings:
+
+**Added Content:**
+- Three-Tier Arithmetic Operation Pattern (addition/subtraction with in-place, explicit output, auto-inference)
+- Block-Based Tiling Algorithm Pattern (cache-optimized matrix multiplication)
+- Extent Validation Helpers (checkSameExtent, checkMultiplyExtent)
+- Type Promotion Pattern (decltype-based automatic type deduction)
+- Four new gotchas (#8-11): loop indices, constexpr extent, static extent extraction, zero initialization
+- Two new references: addition.h and multiplication.h
+
+**Rationale**: Phase 3 introduced algorithm patterns distinct from storage types. The three-tier pattern for element-wise operations and block-based tiling for multiplication are fundamental patterns that future algorithm implementations will follow.
+
+**File size**: 243 lines (target <120 exceeded due to comprehensive code examples)
+
+### 2024-12-10T22:45:00Z - Task Assignment: Gauss-Jordan elimination
+**Assigned by**: Director Agent
+**Assigned to**: Implementer Agent
+
+Checkpoint reached (6 commits). Starting Phase 3.2 decomposition algorithms with Gauss-Jordan elimination.
+
+**Source Analysis** (`matrix2/algorithms/gauss_jordan.h`):
+- Two overloads based on `Pivot` strategy:
+  1. `Pivot::kNone` (lines 78-90): No pivoting, diagonal reduction only
+  2. `Pivot::kRow` (lines 92-148): Partial pivoting with permutation tracking
+- Core reduction function `gaussJordanReduce` (lines 12-51):
+  - Scales pivot row to make pivot element = 1
+  - Eliminates all other rows in pivot column
+  - Variadic template supports multiple RHS matrices (solving Ax=B)
+- Row pivoting implementation (lines 106-130):
+  - Finds largest magnitude element in column (partial pivoting)
+  - Swaps rows physically (not just in permutation)
+  - Tracks permutation for column unscrambling
+- Column unscrambling (lines 136-145):
+  - Required after row pivoting to get correct inverse
+  - Applies permutation in reverse to columns
+- Template parameters:
+  - `Pivot pivot`: Strategy (kNone or kRow)
+  - `auto eps = 1e-10`: Singularity threshold
+  - Variadic `MatrixT auto&... B`: Additional matrices to transform
+
+**Handoff Notes for Implementer**:
+
+1. **Dependencies**:
+   - Requires `Permutation` storage (already migrated to matrix3)
+   - Uses `MatrixT` concept for generic matrix operations
+   - Needs `CHECK` macro for runtime assertions
+   - Requires `std::min`, `std::abs`, `std::swap` from standard library
+
+2. **Implementation Strategy**:
+   - Create `src/matrix3/algorithms/gauss_jordan.h`
+   - Port `internal::gaussJordanReduce` helper first (lines 12-51)
+   - Implement no-pivot overload (simpler, good for testing)
+   - Implement row-pivot overload with permutation support
+   - Maintain exact algorithm structure for correctness
+   - Keep template parameters identical (Pivot enum, eps, variadic B)
+
+3. **Testing Requirements**:
+   - Create `src/matrix3/algorithms/gauss_jordan_test.cc`
+   - Test cases needed:
+     - Matrix inversion (no pivot vs row pivot)
+     - Solving linear systems (single and multiple RHS)
+     - Singularity detection (eps threshold)
+     - constexpr evaluation where possible
+     - Edge cases: 1x1, non-square (no pivot only)
+   - Verify against known inverses and solutions
+   - Test permutation correctness for pivoting variant
+
+4. **Key Differences from matrix2**:
+   - Use matrix3's `GenericMatrix` instead of matrix2's `MatrixT` concept
+   - Access elements via `[i, j]` syntax (should be compatible)
+   - Permutation class is already migrated, use matrix3 version
+   - Shape access may differ (check matrix3's interface)
+
+5. **Algorithm Notes**:
+   - Lines 18-22: Pivot row scaling must preserve numerical stability
+   - Lines 32-47: Row reduction eliminates both above and below pivot
+   - Lines 136-145: Column unscrambling is subtle - test thoroughly
+   - Variadic template pattern (lines 23-29, 41-47) allows solving multiple systems in one pass
+   - Return value: `false` indicates singularity or near-singularity
+
+6. **Potential Issues**:
+   - constexpr evaluation may be limited by `std::swap` and dynamic allocation
+   - Shape queries need to work with matrix3's extent system
+   - CHECK macro availability (may need to import or define)
+   - Ensure permutation swap operations are compatible
+
+---
