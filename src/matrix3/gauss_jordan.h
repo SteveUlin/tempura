@@ -13,12 +13,10 @@ enum class Pivot : uint8_t {
   kRow,
 };
 
-namespace internal {
-
 // Single pivot reduction: scale pivot to 1, zero all other column elements
 template <auto eps, typename MatrixT, typename... MatrixTs>
-constexpr auto gaussJordanReduce(int64_t i, int64_t j, MatrixT& A,
-                                 MatrixTs&... B) -> bool {
+constexpr auto gaussJordanReduceImpl_(int64_t i, int64_t j, MatrixT& A,
+                                      MatrixTs&... B) -> bool {
   using std::abs;
   if (abs(A[i, j]) < eps) [[unlikely]] {
     return false;
@@ -61,8 +59,6 @@ constexpr auto gaussJordanReduce(int64_t i, int64_t j, MatrixT& A,
   return true;
 }
 
-}  // namespace internal
-
 // Gauss-Jordan Elimination
 // ------------------------
 // Numerical Recipes 3rd Edition, Section 2.1
@@ -88,7 +84,7 @@ constexpr auto gaussJordan(MatrixT& A, MatrixTs&... B) -> bool {
 
   using std::min;
   for (int64_t i = 0; i < min(rows, cols); ++i) {
-    if (!internal::gaussJordanReduce<eps>(i, i, A, B...)) [[unlikely]] {
+    if (!gaussJordanReduceImpl_<eps>(i, i, A, B...)) [[unlikely]] {
       return false;
     }
   }
@@ -137,7 +133,7 @@ constexpr auto gaussJordan(MatrixT& A, MatrixTs&... B) -> bool {
         }(),
         ...);
 
-    if (!internal::gaussJordanReduce<eps>(i, i, A, B...)) [[unlikely]] {
+    if (!gaussJordanReduceImpl_<eps>(i, i, A, B...)) [[unlikely]] {
       return false;
     }
   }
