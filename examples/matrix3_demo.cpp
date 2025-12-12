@@ -1,14 +1,17 @@
 // Matrix3 Demo - Showcasing the mdspan-inspired matrix library
 //
-// This demo highlights the key features migrated to matrix3:
-// - Storage types: InlineDense, InlineCoordinateList
-// - Views: Transpose, Submatrix, RowPermuted
-// - Algorithms: Addition, Multiplication, Gauss-Jordan, LU Decomposition
-// - Utilities: toString, Kronecker product
+// This demo highlights the key features of matrix3:
+// - Storage types: InlineDense, Dense, InlineCoordinateList, Banded
+// - Views: Transpose, HermitianTranspose, Submatrix, RowPermuted, BlockRow/Col
+// - Algorithms: Addition, Multiplication, Gauss-Jordan, LU, Tridiagonal Solver
+// - Utilities: toString, Kronecker product, materialize
 
+#include <complex>
 #include <iostream>
 
 #include "matrix3/addition.h"
+#include "matrix3/banded.h"
+#include "matrix3/block.h"
 #include "matrix3/gauss_jordan.h"
 #include "matrix3/inline_coordinate_list.h"
 #include "matrix3/kronecker_product.h"
@@ -37,18 +40,21 @@ void demoBasicMatrices() {
 
   std::cout << "InlineDense 3×3 matrix A:\n" << toString(A) << "\n";
 
-  // Identity matrix - print manually since it doesn't have extent()
+  // rows() and cols() convenience methods
+  std::cout << "A.rows() = " << A.rows() << ", A.cols() = " << A.cols() << "\n";
+  std::cout << "A.extent().size() = " << A.extent().size() << " elements\n\n";
+
+  // Identity matrix
   constexpr Identity<double, 3> I;
   std::cout << "Identity 3×3 matrix I:\n";
-  std::cout << "⎡ 1.0000 0.0000 0.0000 ⎤\n";
-  std::cout << "⎢ 0.0000 1.0000 0.0000 ⎥\n";
-  std::cout << "⎣ 0.0000 0.0000 1.0000 ⎦\n\n";
+  std::cout << "I[0,0] = " << I[0, 0] << ", I[0,1] = " << I[0, 1]
+            << ", I[1,1] = " << I[1, 1] << "\n\n";
 }
 
 void demoSparseStorage() {
   printSection("Sparse Storage (COO Format)");
 
-  // InlineCoordinateList - COO sparse format
+  // InlineCoordinateList - COO sparse format with iteration support
   using Sparse = InlineCoordinateList<double, 4, 4, 6>;
   Sparse sparse;
   sparse.insert(0, 0, 1.0);
@@ -59,69 +65,165 @@ void demoSparseStorage() {
   sparse.insert(3, 0, -0.5);
 
   std::cout << "Sparse 4×4 matrix (COO format, 6 non-zero elements):\n";
-  std::cout << "  Diagonal: [1, 2, 3, 4]\n";
-  std::cout << "  Off-diagonal: (0,3)=0.5, (3,0)=-0.5\n\n";
 
-  // Materialize to show actual values
-  InlineDense<double, 4, 4> sparse_view{};
-  for (int i = 0; i < 4; ++i) {
-    for (int j = 0; j < 4; ++j) {
-      sparse_view[i, j] = sparse[i, j];
-    }
+  // NEW: Iterate over non-zero entries
+  std::cout << "Non-zero entries (via iteration):\n";
+  for (const auto& entry : sparse) {
+    std::cout << "  (" << entry.row << ", " << entry.col << ") = " << entry.value
+              << "\n";
   }
-  std::cout << "Materialized view:\n" << toString(sparse_view) << "\n";
+  std::cout << "\n";
+}
 
-  // Demonstrate constexpr sparse matrix
-  std::cout << "Sparse matrices are fully constexpr - compile-time construction!\n";
+void demoBandedMatrices() {
+  printSection("Banded Matrices & Tridiagonal Solver");
+
+  // Create a tridiagonal matrix (3 bands) manually
+  // Layout: each row stores [lower, main, upper] diagonal entries
+  Banded<InlineDense<double, 4, 3>, 1> tri{};
+  // Row 0: main=2, upper=-1
+  tri[0, 0] = 2.0;
+  tri[0, 1] = -1.0;
+  // Row 1: lower=-1, main=2, upper=-1
+  tri[1, 0] = -1.0;
+  tri[1, 1] = 2.0;
+  tri[1, 2] = -1.0;
+  // Row 2: lower=-1, main=2, upper=-1
+  tri[2, 1] = -1.0;
+  tri[2, 2] = 2.0;
+  tri[2, 3] = -1.0;
+  // Row 3: lower=-1, main=2
+  tri[3, 2] = -1.0;
+  tri[3, 3] = 2.0;
+
+  std::cout << "Tridiagonal 4×4 matrix (3 bands, center=1):\n";
+  std::cout << "  Main diagonal: [2, 2, 2, 2]\n";
+  std::cout << "  Off-diagonals: [-1, -1, -1]\n\n";
+
+  // NEW: Solve tridiagonal system using Thomas algorithm
+  InlineDense<double, 4, 1> b{{1.0}, {0.0}, {0.0}, {1.0}};
+
+  std::cout << "Solving tridiagonal system Ax = b\n";
+  std::cout << "b = [1, 0, 0, 1]ᵀ\n\n";
+
+  auto x = solveTridiagonal(tri, b);
+  std::cout << "Solution x (Thomas algorithm, O(n)):\n" << toString(x);
+
+  // Verify with banded multiplication
+  auto Ax = multiplyBanded(tri, x);
+  std::cout << "\nVerification Ax:\n" << toString(Ax);
 }
 
 void demoViews() {
   printSection("Matrix Views (Zero-Copy)");
 
-  InlineDense<int, 3, 4> M{
-      {1, 2, 3, 4}, {5, 6, 7, 8}, {9, 10, 11, 12}};
+  InlineDense<int, 3, 4> M{{1, 2, 3, 4}, {5, 6, 7, 8}, {9, 10, 11, 12}};
 
   std::cout << "Original 3×4 matrix M:\n" << toString(M) << "\n";
 
-  // Transpose view - swaps indices without copying
-  Transpose<InlineDense<int, 3, 4>> Mt{M};
-  std::cout << "Transpose view Mᵀ (4×3):\n";
-  InlineDense<int, 4, 3> mt_view{};
-  for (int i = 0; i < 4; ++i) {
-    for (int j = 0; j < 3; ++j) {
-      mt_view[i, j] = Mt[i, j];
-    }
-  }
-  std::cout << toString(mt_view) << "\n";
+  // Transpose view - now stores by reference (zero-copy)
+  auto Mt = Transpose{M};
+  std::cout << "Transpose view Mᵀ (4×3) - zero copy:\n" << toString(Mt) << "\n";
 
-  // Submatrix view - view into a rectangular region
-  auto sub = makeSubmatrix(M, 0, 1, 2, 2);  // 2×2 starting at (0,1)
-  std::cout << "Submatrix view (2×2 at offset [0,1]):\n";
-  InlineDense<int, 2, 2> sub_view{};
-  for (int i = 0; i < 2; ++i) {
-    for (int j = 0; j < 2; ++j) {
-      sub_view[i, j] = sub[i, j];
-    }
-  }
-  std::cout << toString(sub_view) << "\n";
+  // Modify through transpose, affects original
+  Mt[0, 2] = 99;  // This is M[2, 0]
+  std::cout << "After Mt[0,2] = 99, original M:\n" << toString(M) << "\n";
+  M[2, 0] = 9;  // Restore
 
-  // Permutation - row/column reordering
-  Permutation<3> perm{2, 0, 1};  // Cyclic permutation
-  std::cout << "Permutation P = [2, 0, 1] (cyclic):\n";
-  std::cout << "  Parity: " << perm.parity() << " (odd permutation)\n\n";
+  // Submatrix view
+  auto sub = makeSubmatrix(M, 0, 1, 2, 3);  // 2×3 starting at (0,1)
+  std::cout << "Submatrix view (2×3 at offset [0,1]):\n" << toString(sub) << "\n";
 
-  InlineDense<int, 3, 3> P{
-      {1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
-  RowPermuted rp{P, perm};
-  std::cout << "Original P:\n" << toString(P);
-  std::cout << "\nRow-permuted P (rows reordered by [2,0,1]):\n";
-  InlineDense<int, 3, 3> rp_view{};
-  for (int i = 0; i < 3; ++i) {
-    for (int j = 0; j < 3; ++j) {
-      rp_view[i, j] = rp[i, j];
+  // NEW: materialize() creates independent copy
+  auto sub_copy = sub.materialize();
+  sub_copy[0, 0] = 999;
+  std::cout << "Materialized submatrix (independent copy, modified [0,0]=999):\n"
+            << toString(sub_copy) << "\n";
+  std::cout << "Original M unchanged:\n" << toString(M) << "\n";
+}
+
+void demoBlockMatrices() {
+  printSection("Block Matrices (Horizontal & Vertical)");
+
+  InlineDense<int, 2, 2> A{{1, 2}, {3, 4}};
+  InlineDense<int, 2, 3> B{{5, 6, 7}, {8, 9, 10}};
+
+  std::cout << "Block A (2×2):\n" << toString(A);
+  std::cout << "\nBlock B (2×3):\n" << toString(B);
+
+  // BlockRow - horizontal concatenation
+  auto row_block = BlockRow{A, B};
+  std::cout << "\nBlockRow [A | B] (2×5):\n";
+  for (std::size_t i = 0; i < row_block.rows(); ++i) {
+    std::cout << "  ";
+    for (std::size_t j = 0; j < row_block.cols(); ++j) {
+      std::cout << row_block[i, j] << " ";
     }
+    std::cout << "\n";
   }
-  std::cout << toString(rp_view) << "\n";
+  std::cout << "\n";
+
+  // NEW: BlockCol - vertical concatenation
+  InlineDense<int, 2, 2> C{{11, 12}, {13, 14}};
+  InlineDense<int, 1, 2> D{{15, 16}};
+
+  std::cout << "Block C (2×2):\n" << toString(C);
+  std::cout << "\nBlock D (1×2):\n" << toString(D);
+
+  auto col_block = BlockCol{A, C, D};
+  std::cout << "\nBlockCol [A; C; D] (5×2):\n";
+  for (std::size_t i = 0; i < col_block.rows(); ++i) {
+    std::cout << "  ";
+    for (std::size_t j = 0; j < col_block.cols(); ++j) {
+      std::cout << col_block[i, j] << " ";
+    }
+    std::cout << "\n";
+  }
+  std::cout << "\n";
+}
+
+void demoHermitianTranspose() {
+  printSection("Hermitian Transpose (Conjugate Transpose)");
+
+  // Complex matrix
+  using Complex = std::complex<double>;
+  InlineDense<Complex, 2, 2> H{
+      {Complex{1.0, 2.0}, Complex{3.0, 4.0}},
+      {Complex{5.0, 6.0}, Complex{7.0, 8.0}}};
+
+  std::cout << "Complex matrix H:\n";
+  std::cout << "  H[0,0] = " << H[0, 0] << "  H[0,1] = " << H[0, 1] << "\n";
+  std::cout << "  H[1,0] = " << H[1, 0] << "  H[1,1] = " << H[1, 1] << "\n\n";
+
+  // NEW: Hermitian transpose (conjugate transpose)
+  auto Hh = HermitianTranspose{H};
+  std::cout << "Hermitian transpose Hᴴ:\n";
+  std::cout << "  Hᴴ[0,0] = " << Hh[0, 0] << "  Hᴴ[0,1] = " << Hh[0, 1] << "\n";
+  std::cout << "  Hᴴ[1,0] = " << Hh[1, 0] << "  Hᴴ[1,1] = " << Hh[1, 1] << "\n\n";
+
+  // For real matrices, Hermitian = regular transpose
+  InlineDense<double, 2, 2> R{{1.0, 2.0}, {3.0, 4.0}};
+  auto Rh = HermitianTranspose{R};
+  std::cout << "For real matrix R, Rᴴ = Rᵀ:\n" << toString(Rh) << "\n";
+}
+
+void demoScalarMultiplication() {
+  printSection("Scalar Multiplication");
+
+  constexpr InlineDense<int, 2, 3> M{{1, 2, 3}, {4, 5, 6}};
+
+  std::cout << "Matrix M:\n" << toString(M);
+
+  // NEW: Scalar multiplication operators
+  auto M2 = 2 * M;  // scalar * matrix
+  std::cout << "\n2 * M:\n" << toString(M2);
+
+  auto M3 = M * 3;  // matrix * scalar
+  std::cout << "\nM * 3:\n" << toString(M3);
+
+  // Type promotion: int matrix * double scalar = double matrix
+  auto Md = M * 0.5;
+  std::cout << "\nM * 0.5 (type promotion to double):\n" << toString(Md);
 }
 
 void demoArithmetic() {
@@ -133,15 +235,12 @@ void demoArithmetic() {
   std::cout << "Matrix A:\n" << toString(A);
   std::cout << "\nMatrix B:\n" << toString(B);
 
-  // Addition
   auto C = A + B;
   std::cout << "\nA + B:\n" << toString(C);
 
-  // Subtraction
   auto D = A - B;
   std::cout << "\nA - B:\n" << toString(D);
 
-  // Matrix multiplication (cache-optimized tiled algorithm)
   auto E = A * B;
   std::cout << "\nA × B:\n" << toString(E);
 
@@ -149,24 +248,19 @@ void demoArithmetic() {
   constexpr InlineDense<int, 2, 2> K1{{1, 2}, {3, 4}};
   constexpr InlineDense<int, 2, 2> K2{{0, 5}, {6, 7}};
 
-  std::cout << "\nKronecker product K1 ⊗ K2:\n";
-  std::cout << "K1:\n" << toString(K1);
-  std::cout << "\nK2:\n" << toString(K2);
-
   auto kron = kronecker(K1, K2);
-  InlineDense<int, 4, 4> kron_view{};
+  InlineDense<int, 4, 4> kron_mat{};
   for (int i = 0; i < 4; ++i) {
     for (int j = 0; j < 4; ++j) {
-      kron_view[i, j] = kron[i, j];
+      kron_mat[i, j] = kron[i, j];
     }
   }
-  std::cout << "\nK1 ⊗ K2 (4×4):\n" << toString(kron_view) << "\n";
+  std::cout << "\nKronecker product K1 ⊗ K2 (4×4):\n" << toString(kron_mat) << "\n";
 }
 
 void demoLinearAlgebra() {
   printSection("Linear Algebra: Solving Ax = b");
 
-  // System: Ax = b
   InlineDense<double, 3, 3> A{
       {2.0, 1.0, -1.0}, {-3.0, -1.0, 2.0}, {-2.0, 1.0, 2.0}};
 
@@ -186,13 +280,13 @@ void demoLinearAlgebra() {
 
   // Method 2: LU Decomposition
   LU lu{A};
-  auto x_lu = b;  // Copy b since solve() modifies in-place
+  auto x_lu = b;
   lu.solve(x_lu);
 
   std::cout << "\nLU Decomposition solution x:\n" << toString(x_lu);
   std::cout << "Determinant: " << lu.determinant() << "\n";
 
-  // Verify: compute Ax
+  // Verify
   auto Ax = A * x_lu;
   std::cout << "\nVerification A × x:\n" << toString(Ax);
 }
@@ -200,23 +294,31 @@ void demoLinearAlgebra() {
 void demoConstexpr() {
   printSection("Compile-Time Computation (constexpr)");
 
-  // All of this is computed at compile time!
+  // All computed at compile time!
   constexpr InlineDense<int, 2, 2> A{{1, 2}, {3, 4}};
   constexpr InlineDense<int, 2, 2> B{{5, 6}, {7, 8}};
   constexpr auto C = A + B;
   constexpr auto D = A * B;
+  constexpr auto S = 2 * A;  // NEW: constexpr scalar multiplication
 
-  // Compile-time matrix multiplication result
+  // Compile-time verification
   static_assert(D[0, 0] == 19);  // 1*5 + 2*7 = 19
   static_assert(D[0, 1] == 22);  // 1*6 + 2*8 = 22
   static_assert(D[1, 0] == 43);  // 3*5 + 4*7 = 43
   static_assert(D[1, 1] == 50);  // 3*6 + 4*8 = 50
+  static_assert(S[0, 0] == 2);   // 2*1 = 2
+  static_assert(S[1, 1] == 8);   // 2*4 = 8
 
-  std::cout << "Compile-time matrix multiplication verified!\n\n";
+  // NEW: Extents comparison at compile time
+  static_assert(A.extent() == B.extent());
+  static_assert(A.extent().size() == 4);
+
+  std::cout << "Compile-time matrix operations verified!\n\n";
   std::cout << "constexpr A:\n" << toString(A);
   std::cout << "\nconstexpr B:\n" << toString(B);
   std::cout << "\nconstexpr A + B:\n" << toString(C);
   std::cout << "\nconstexpr A × B:\n" << toString(D);
+  std::cout << "\nconstexpr 2 * A:\n" << toString(S);
 
   std::cout << "\nAll results computed at compile time (static_assert verified)\n";
 }
@@ -231,7 +333,11 @@ auto main() -> int {
 
   demoBasicMatrices();
   demoSparseStorage();
+  demoBandedMatrices();
   demoViews();
+  demoBlockMatrices();
+  demoHermitianTranspose();
+  demoScalarMultiplication();
   demoArithmetic();
   demoLinearAlgebra();
   demoConstexpr();
