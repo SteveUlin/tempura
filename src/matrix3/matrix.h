@@ -33,6 +33,9 @@ class GenericMatrix {
 
   constexpr auto extent() const -> const ExtentsT& { return extent_; }
 
+  constexpr auto rows() const { return extent_.extent(0); }
+  constexpr auto cols() const { return extent_.extent(1); }
+
   constexpr auto data() -> decltype(auto)
     requires requires(const AccessorT& a) { a.data(); }
   {

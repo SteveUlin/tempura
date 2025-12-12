@@ -17,8 +17,7 @@ class Transpose {
  public:
   using ValueType = std::remove_cvref_t<decltype(std::declval<MatrixType>()[0, 0])>;
 
-  constexpr explicit Transpose(const MatrixType& mat) : mat_{mat} {}
-  constexpr explicit Transpose(MatrixType&& mat) : mat_{std::move(mat)} {}
+  constexpr explicit Transpose(MatrixType& mat) : mat_{mat} {}
 
   // Two-index access: swap indices
   template <typename... Indices>
@@ -77,11 +76,11 @@ class Transpose {
   constexpr auto data() const -> const MatrixType& { return mat_; }
 
  private:
-  MatrixType mat_;
+  MatrixType& mat_;
 };
 
 // Deduction guide
 template <typename MatrixType>
-Transpose(MatrixType) -> Transpose<MatrixType>;
+Transpose(MatrixType&) -> Transpose<MatrixType>;
 
 }  // namespace tempura::matrix3

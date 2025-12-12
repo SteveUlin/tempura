@@ -8,10 +8,10 @@ using namespace tempura::matrix3;
 
 auto main() -> int {
   "index swapping"_test = [] {
-  constexpr InlineDense<int, 2, 3> m{
+  InlineDense<int, 2, 3> m{
       {1, 2, 3},
       {4, 5, 6}};
-  constexpr Transpose t{m};
+  Transpose t{m};
 
   // Original: 2x3 matrix
   // [1 2 3]
@@ -31,10 +31,10 @@ auto main() -> int {
 };
 
   "extent swapping"_test = [] {
-  constexpr InlineDense<int, 2, 3> m{
+  InlineDense<int, 2, 3> m{
       {1, 2, 3},
       {4, 5, 6}};
-  constexpr Transpose t{m};
+  Transpose t{m};
 
   expectEq(2uz, m.extent().extent(0));  // Original: 2 rows
   expectEq(3uz, m.extent().extent(1));  // Original: 3 cols
@@ -44,12 +44,12 @@ auto main() -> int {
 };
 
   "double transpose identity"_test = [] {
-    constexpr InlineDense<int, 2, 3> m{
+    InlineDense<int, 2, 3> m{
         {1, 2, 3},
         {4, 5, 6}};
-    constexpr Transpose<InlineDense<int, 2, 3>> t1{m};
+    Transpose<InlineDense<int, 2, 3>> t1{m};
     // Explicitly specify type to avoid CTAD issues
-    constexpr Transpose<Transpose<InlineDense<int, 2, 3>>> t2{t1};
+    Transpose<Transpose<InlineDense<int, 2, 3>>> t2{t1};
 
     // t2 should have same extents and values as m
     expectEq(2uz, t2.rows());
@@ -63,30 +63,30 @@ auto main() -> int {
   };
 
   "mutable access"_test = [] {
-    // Transpose stores by value, so modifications are independent
+    // Transpose stores by reference, so modifications propagate
     InlineDense<int, 2, 3> m{
         {1, 2, 3},
         {4, 5, 6}};
     Transpose t{m};
 
-    // Modify through transpose view (modifies the copy, not original)
-    t[1, 0] = 99;  // Modifies t's internal copy at position [0,1]
+    // Modify through transpose view (propagates to original)
+    t[1, 0] = 99;  // Modifies position [0,1] in original
 
-    expectEq(2, m[0, 1]);    // Original unchanged
-    expectEq(99, t[1, 0]);   // Transpose copy modified
+    expectEq(99, m[0, 1]);   // Original modified
+    expectEq(99, t[1, 0]);   // Transpose reflects change
 
-    // Modify original (doesn't affect transpose's copy)
+    // Modify original (visible through transpose)
     m[1, 2] = 77;
 
-    expectEq(6, t[2, 1]);  // Transpose copy unchanged
+    expectEq(77, t[2, 1]);  // Transpose reflects change
   };
 
   "square matrix"_test = [] {
-  constexpr InlineDense<int, 3, 3> m{
+  InlineDense<int, 3, 3> m{
       {1, 2, 3},
       {4, 5, 6},
       {7, 8, 9}};
-  constexpr Transpose t{m};
+  Transpose t{m};
 
   expectEq(3uz, t.rows());
   expectEq(3uz, t.cols());
@@ -106,8 +106,8 @@ auto main() -> int {
 };
 
   "1x1 matrix"_test = [] {
-  constexpr InlineDense<int, 1, 1> m{{42}};
-  constexpr Transpose t{m};
+  InlineDense<int, 1, 1> m{{42}};
+  Transpose t{m};
 
   expectEq(1uz, t.rows());
   expectEq(1uz, t.cols());
@@ -115,11 +115,11 @@ auto main() -> int {
 };
 
   "column vector"_test = [] {
-  constexpr InlineDense<int, 3, 1> col{
+  InlineDense<int, 3, 1> col{
       {1},
       {2},
       {3}};
-  constexpr Transpose row{col};
+  Transpose row{col};
 
   expectEq(1uz, row.rows());  // Row vector: 1 row
   expectEq(3uz, row.cols());  // Row vector: 3 cols
@@ -130,8 +130,8 @@ auto main() -> int {
 };
 
   "row vector"_test = [] {
-  constexpr InlineDense<int, 1, 4> row{{1, 2, 3, 4}};
-  constexpr Transpose col{row};
+  InlineDense<int, 1, 4> row{{1, 2, 3, 4}};
+  Transpose col{row};
 
   expectEq(4uz, col.rows());  // Column vector: 4 rows
   expectEq(1uz, col.cols());  // Column vector: 1 col
@@ -142,12 +142,12 @@ auto main() -> int {
   expectEq(4, col[3, 0]);
 };
 
-  // Compile-time verification
+  // Compile-time verification (using static for constant address)
   {
-    constexpr InlineDense<int, 2, 3> m{
+    static constexpr InlineDense<int, 2, 3> m{
         {1, 2, 3},
         {4, 5, 6}};
-    constexpr Transpose t{m};
+    static constexpr Transpose t{m};
     static_assert(t.rows() == 3);
     static_assert(t.cols() == 2);
   }
@@ -166,10 +166,10 @@ auto main() -> int {
 };
 
   "floating point"_test = [] {
-    constexpr InlineDense<double, 2, 2> m{
+    InlineDense<double, 2, 2> m{
         {1.5, 2.5},
         {3.5, 4.5}};
-    constexpr Transpose t{m};
+    Transpose t{m};
 
     expectEq(1.5, t[0, 0]);
     expectEq(3.5, t[0, 1]);
