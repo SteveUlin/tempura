@@ -208,6 +208,31 @@ auto main() -> int {
     expectNear(0.0, det, 1e-9);
   };
 
+  "LU determinant - negative determinant"_test = [] {
+    // Matrix that requires row swap: det([0 1; 1 0]) = -1
+    InlineDense<double, 2, 2> A{{0.0, 1.0}, {1.0, 0.0}};
+    auto lu = LU{A};
+    expectNear(-1.0, lu.determinant(), 1e-9);
+  };
+
+  "LU determinant - odd permutation parity"_test = [] {
+    // Reverse identity: odd permutation, det = -1
+    InlineDense<double, 3, 3> A{{0.0, 0.0, 1.0}, {0.0, 1.0, 0.0}, {1.0, 0.0, 0.0}};
+    auto lu = LU{A};
+    expectNear(-1.0, lu.determinant(), 1e-9);
+  };
+
+  "LU determinant - 3x3 with pivoting"_test = [] {
+    // Matrix requiring pivoting with known determinant
+    // [0 2 1]
+    // [1 0 0]
+    // [0 1 1]
+    // det = -1 (can verify by cofactor expansion)
+    InlineDense<double, 3, 3> A{{0.0, 2.0, 1.0}, {1.0, 0.0, 0.0}, {0.0, 1.0, 1.0}};
+    auto lu = LU{A};
+    expectNear(-1.0, lu.determinant(), 1e-9);
+  };
+
   "LU solve - scale-invariant pivoting"_test = [] {
     // Matrix where scale-invariant pivoting matters
     // First row has large elements, second row has small

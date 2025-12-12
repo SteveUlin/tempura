@@ -78,13 +78,14 @@ class LU {
     }
   }
 
-  // Determinant from product of diagonal elements
+  // Determinant from product of diagonal elements, adjusted for permutation parity
   constexpr auto determinant() const -> ValueType {
     auto det = matrix_[0, 0];
     for (int64_t i = 1; i < static_cast<int64_t>(matrix_.rows()); ++i) {
       det *= matrix_[i, i];
     }
-    return det;
+    // Permutation sign: det(P) = (-1)^parity for PA = LU
+    return matrix_.permutation().parity() ? -det : det;
   }
 
   // Access decomposed matrix (L below diagonal, U on/above diagonal)
@@ -122,9 +123,11 @@ class LU {
         }
       }
 
-      // Swap rows via permutation
-      matrix_.swap(i, pivot_row);
-      std::swap(scale_data[i], scale_data[pivot_row]);
+      // Swap rows via permutation (only if different row)
+      if (i != pivot_row) {
+        matrix_.swap(i, pivot_row);
+        std::swap(scale_data[i], scale_data[pivot_row]);
+      }
 
       // Gaussian elimination: zero out column below pivot
       for (std::size_t j = i + 1; j < matrix_.rows(); ++j) {
