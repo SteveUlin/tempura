@@ -59,4 +59,28 @@ constexpr auto operator*(const Lhs& left, const Rhs& right) {
   return tileMultiply(left, right);
 }
 
+// Scalar-matrix multiplication: scalar * matrix
+template <typename Scalar, typename Matrix>
+  requires(Matrix::ExtentsType::rank() == 2 && std::is_arithmetic_v<Scalar>)
+constexpr auto operator*(Scalar scalar, const Matrix& mat) {
+  using ScalarT = decltype(scalar * mat[0, 0]);
+  constexpr auto kRow = Matrix::ExtentsType::staticExtent(0);
+  constexpr auto kCol = Matrix::ExtentsType::staticExtent(1);
+
+  InlineDense<ScalarT, kRow, kCol> out;
+  for (std::size_t i = 0; i < mat.extent().extent(0); ++i) {
+    for (std::size_t j = 0; j < mat.extent().extent(1); ++j) {
+      out[i, j] = scalar * mat[i, j];
+    }
+  }
+  return out;
+}
+
+// Matrix-scalar multiplication: matrix * scalar
+template <typename Matrix, typename Scalar>
+  requires(Matrix::ExtentsType::rank() == 2 && std::is_arithmetic_v<Scalar>)
+constexpr auto operator*(const Matrix& mat, Scalar scalar) {
+  return scalar * mat;  // Reuse scalar * matrix
+}
+
 }  // namespace tempura::matrix3

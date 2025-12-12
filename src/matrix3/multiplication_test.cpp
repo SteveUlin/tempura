@@ -184,5 +184,94 @@ auto main() -> int {
     static_assert(result[1, 1] == 4);
   };
 
+  "scalar-matrix multiplication"_test = [] {
+    InlineDense mat = {{1, 2}, {3, 4}};
+    auto result = 3 * mat;
+
+    expectEq(result[0, 0], 3);
+    expectEq(result[0, 1], 6);
+    expectEq(result[1, 0], 9);
+    expectEq(result[1, 1], 12);
+  };
+
+  "matrix-scalar multiplication"_test = [] {
+    InlineDense mat = {{1, 2}, {3, 4}};
+    auto result = mat * 3;
+
+    expectEq(result[0, 0], 3);
+    expectEq(result[0, 1], 6);
+    expectEq(result[1, 0], 9);
+    expectEq(result[1, 1], 12);
+  };
+
+  "scalar multiplication with double"_test = [] {
+    InlineDense<int, 2, 2> mat = {{1, 2}, {3, 4}};
+    auto result = 2.5 * mat;
+
+    expectNear(result[0, 0], 2.5, 1e-10);
+    expectNear(result[0, 1], 5.0, 1e-10);
+    expectNear(result[1, 0], 7.5, 1e-10);
+    expectNear(result[1, 1], 10.0, 1e-10);
+  };
+
+  "scalar multiplication with zero"_test = [] {
+    InlineDense mat = {{1, 2}, {3, 4}};
+    auto result = 0 * mat;
+
+    expectEq(result[0, 0], 0);
+    expectEq(result[0, 1], 0);
+    expectEq(result[1, 0], 0);
+    expectEq(result[1, 1], 0);
+  };
+
+  "scalar multiplication with negative"_test = [] {
+    InlineDense mat = {{1, 2}, {3, 4}};
+    auto result = -2 * mat;
+
+    expectEq(result[0, 0], -2);
+    expectEq(result[0, 1], -4);
+    expectEq(result[1, 0], -6);
+    expectEq(result[1, 1], -8);
+  };
+
+  "scalar multiplication with rectangular matrix"_test = [] {
+    InlineDense<int, 2, 3> mat = {{1, 2, 3}, {4, 5, 6}};
+    auto result = 2 * mat;
+
+    expectEq(result[0, 0], 2);
+    expectEq(result[0, 1], 4);
+    expectEq(result[0, 2], 6);
+    expectEq(result[1, 0], 8);
+    expectEq(result[1, 1], 10);
+    expectEq(result[1, 2], 12);
+  };
+
+  "constexpr scalar multiplication"_test = [] {
+    constexpr auto result = [] consteval {
+      InlineDense mat = {{1, 2}, {3, 4}};
+      return 5 * mat;
+    }();
+
+    static_assert(result[0, 0] == 5);
+    static_assert(result[0, 1] == 10);
+    static_assert(result[1, 0] == 15);
+    static_assert(result[1, 1] == 20);
+  };
+
+  "scalar multiplication with identity"_test = [] {
+    Identity<int, 3, 3> id;
+    auto result = 7 * id;
+
+    expectEq(result[0, 0], 7);
+    expectEq(result[0, 1], 0);
+    expectEq(result[0, 2], 0);
+    expectEq(result[1, 0], 0);
+    expectEq(result[1, 1], 7);
+    expectEq(result[1, 2], 0);
+    expectEq(result[2, 0], 0);
+    expectEq(result[2, 1], 0);
+    expectEq(result[2, 2], 7);
+  };
+
   return TestRegistry::result();
 }
