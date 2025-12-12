@@ -4,6 +4,8 @@
 #include <complex>
 #include <cstdint>
 
+#include "extents.h"
+
 namespace tempura::matrix3 {
 
 // Complex is a thin wrapper around std::complex providing the 2x2
@@ -15,6 +17,7 @@ template <typename T = double>
 class Complex {
  public:
   using ValueType = T;
+  using ExtentsType = Extents<std::size_t, 2, 2>;
   static constexpr int64_t kRows = 2;
   static constexpr int64_t kCols = 2;
 
@@ -51,6 +54,7 @@ class Complex {
   // Extent accessors for compatibility
   static constexpr auto rows() -> int64_t { return kRows; }
   static constexpr auto cols() -> int64_t { return kCols; }
+  constexpr auto extent() const -> ExtentsType { return ExtentsType{}; }
 
   constexpr auto data() const -> const std::complex<T>& { return value_; }
 

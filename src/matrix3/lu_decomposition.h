@@ -27,10 +27,13 @@ namespace tempura::matrix3 {
 //   1. Forward substitution: Ly = Pb
 //   2. Backward substitution: Ux = y
 
-// Perturbation to avoid division by zero
-constexpr auto safeDivide(auto a, auto b) {
+// Minimum divisor to avoid division by zero (singularity masking)
+constexpr double kMinDivisor = 1e-30;
+
+// Safe division with perturbation for near-zero divisors
+constexpr auto safeDivideImpl_(auto a, auto b) {
   if (b == 0) {
-    return a / 1e-30;
+    return a / kMinDivisor;
   }
   return a / b;
 }
@@ -73,7 +76,7 @@ class LU {
         }
       }
       for (int64_t k = 0; k < static_cast<int64_t>(b.extent().extent(1)); ++k) {
-        b[i, k] = safeDivide(b[i, k], matrix_[i, i]);
+        b[i, k] = safeDivideImpl_(b[i, k], matrix_[i, i]);
       }
     }
   }
@@ -113,10 +116,10 @@ class LU {
       // Find pivot row: largest scaled element in column i
       std::size_t pivot_row = i;
       using std::abs;
-      auto pivot_score = safeDivide(abs(matrix_[i, i]), scale_data[i]);
+      auto pivot_score = safeDivideImpl_(abs(matrix_[i, i]), scale_data[i]);
 
       for (std::size_t ii = i + 1; ii < matrix_.rows(); ++ii) {
-        auto score = safeDivide(abs(matrix_[ii, i]), scale_data[ii]);
+        auto score = safeDivideImpl_(abs(matrix_[ii, i]), scale_data[ii]);
         if (score > pivot_score) {
           pivot_row = ii;
           pivot_score = score;
@@ -131,7 +134,7 @@ class LU {
 
       // Gaussian elimination: zero out column below pivot
       for (std::size_t j = i + 1; j < matrix_.rows(); ++j) {
-        matrix_[j, i] = safeDivide(matrix_[j, i], matrix_[i, i]);
+        matrix_[j, i] = safeDivideImpl_(matrix_[j, i], matrix_[i, i]);
         for (std::size_t k = i + 1; k < matrix_.cols(); ++k) {
           matrix_[j, k] -= matrix_[j, i] * matrix_[i, k];
         }
