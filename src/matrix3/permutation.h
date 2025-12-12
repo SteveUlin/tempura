@@ -130,6 +130,8 @@ class Permutation {
 
  private:
   // Validate permutation and compute parity via cycle decomposition
+  // Parity = (n - c) mod 2, where n = number of elements, c = number of cycles
+  // Each cycle of length k contributes (k-1) transpositions to the parity
   constexpr void validate() {
     parity_ = false;
     std::vector<bool> visited(order_.size());
@@ -146,13 +148,15 @@ class Permutation {
         continue;
       }
 
-      // Found new cycle - toggle parity
+      // New cycle found: toggle once for cycle start
       parity_ = !parity_;
 
-      // Follow cycle
+      // Follow cycle: toggle once per element (k toggles for k elements)
+      // Total: (k+1) toggles per cycle of length k
+      // Since (k+1) mod 2 = (k-1) mod 2, this correctly computes parity
       do {
         visited[element] = true;
-        parity_ = !parity_;  // Each element in cycle toggles parity
+        parity_ = !parity_;
         element = order_[element];
       } while (!visited[element]);
     }

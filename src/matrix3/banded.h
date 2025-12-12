@@ -6,27 +6,9 @@
 #include <utility>
 
 #include "matrix3/matrix.h"
+#include "matrix3/matrix_traits.h"
 
 namespace tempura::matrix3 {
-
-// Helper to extract dimensions from InlineDense
-template <typename T>
-struct MatrixTraits;
-
-template <typename Scalar, std::size_t... Ns>
-struct MatrixTraits<InlineDense<Scalar, Ns...>> {
-  using ValueType = Scalar;
-  static constexpr std::size_t kRows =
-      []() constexpr -> std::size_t {
-        std::size_t values[] = {Ns...};
-        return values[0];
-      }();
-  static constexpr std::size_t kCols =
-      []() constexpr -> std::size_t {
-        std::size_t values[] = {Ns...};
-        return values[1];
-      }();
-};
 
 // Banded is a wrapper that interprets a dense matrix's columns as "bands"
 // around the diagonal of a square matrix.
