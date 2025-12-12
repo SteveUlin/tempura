@@ -273,5 +273,41 @@ auto main() -> int {
     expectEq(result[2, 2], 7);
   };
 
+  "dynamic extent matrix multiplication"_test = [] {
+    // Create Dense matrices with dynamic extents (2x2)
+    Extents<std::size_t, kDynamic, kDynamic> extents{2, 2};
+    Dense<int, kDynamic, kDynamic> mat1{
+        extents,
+        typename LayoutLeft::Mapping<Extents<std::size_t, kDynamic, kDynamic>, std::size_t>{extents},
+        std::vector<int>{1, 3, 2, 4}};  // [[1,2], [3,4]] in column-major
+    Dense<int, kDynamic, kDynamic> mat2{
+        extents,
+        typename LayoutLeft::Mapping<Extents<std::size_t, kDynamic, kDynamic>, std::size_t>{extents},
+        std::vector<int>{5, 7, 6, 8}};  // [[5,6], [7,8]] in column-major
+
+    auto result = mat1 * mat2;
+
+    // [[1,2], [3,4]] * [[5,6], [7,8]] = [[19,22], [43,50]]
+    expectEq(result[0, 0], 19);
+    expectEq(result[0, 1], 22);
+    expectEq(result[1, 0], 43);
+    expectEq(result[1, 1], 50);
+  };
+
+  "dynamic extent scalar multiplication"_test = [] {
+    Extents<std::size_t, kDynamic, kDynamic> extents{2, 2};
+    Dense<int, kDynamic, kDynamic> mat{
+        extents,
+        typename LayoutLeft::Mapping<Extents<std::size_t, kDynamic, kDynamic>, std::size_t>{extents},
+        std::vector<int>{1, 3, 2, 4}};  // [[1,2], [3,4]] in column-major
+
+    auto result = 3 * mat;
+
+    expectEq(result[0, 0], 3);
+    expectEq(result[0, 1], 6);
+    expectEq(result[1, 0], 9);
+    expectEq(result[1, 1], 12);
+  };
+
   return TestRegistry::result();
 }

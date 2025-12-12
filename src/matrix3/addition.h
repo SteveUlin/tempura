@@ -73,29 +73,71 @@ constexpr auto subtract(const Lhs& lhs, const Rhs& rhs) -> Out {
 }
 
 // Auto-inference addition: result = left + right
-// Returns InlineDense with promoted scalar type
+// Returns InlineDense for static extents, Dense for dynamic extents
 template <typename Lhs, typename Rhs>
   requires(Lhs::ExtentsType::rank() == 2 && Rhs::ExtentsType::rank() == 2)
 constexpr auto operator+(const Lhs& left, const Rhs& right) {
+  checkSameExtent(left, right);
+
   // Type promotion via decltype of element addition
   using ScalarT = decltype(left[0, 0] + right[0, 0]);
   // Extract static extents (assuming both matrices have the same static shape)
   constexpr auto kRow = Lhs::ExtentsType::staticExtent(0);
   constexpr auto kCol = Lhs::ExtentsType::staticExtent(1);
-  return add<InlineDense<ScalarT, kRow, kCol>>(left, right);
+
+  // Use Dense for dynamic extents, InlineDense for static extents
+  if constexpr (kRow == kDynamic || kCol == kDynamic) {
+    // For dynamic extents, construct with runtime dimensions
+    std::size_t rows = left.extent().extent(0);
+    std::size_t cols = left.extent().extent(1);
+    Extents<std::size_t, kRow, kCol> extents{rows, cols};
+    Dense<ScalarT, kRow, kCol> result{
+        extents,
+        typename LayoutLeft::Mapping<Extents<std::size_t, kRow, kCol>, std::size_t>{extents},
+        std::vector<ScalarT>(rows * cols)};
+    for (std::size_t i = 0; i < rows; ++i) {
+      for (std::size_t j = 0; j < cols; ++j) {
+        result[i, j] = left[i, j] + right[i, j];
+      }
+    }
+    return result;
+  } else {
+    return add<InlineDense<ScalarT, kRow, kCol>>(left, right);
+  }
 }
 
 // Auto-inference subtraction: result = left - right
-// Returns InlineDense with promoted scalar type
+// Returns InlineDense for static extents, Dense for dynamic extents
 template <typename Lhs, typename Rhs>
   requires(Lhs::ExtentsType::rank() == 2 && Rhs::ExtentsType::rank() == 2)
 constexpr auto operator-(const Lhs& left, const Rhs& right) {
+  checkSameExtent(left, right);
+
   // Type promotion via decltype of element subtraction
   using ScalarT = decltype(left[0, 0] - right[0, 0]);
   // Extract static extents (assuming both matrices have the same static shape)
   constexpr auto kRow = Lhs::ExtentsType::staticExtent(0);
   constexpr auto kCol = Lhs::ExtentsType::staticExtent(1);
-  return subtract<InlineDense<ScalarT, kRow, kCol>>(left, right);
+
+  // Use Dense for dynamic extents, InlineDense for static extents
+  if constexpr (kRow == kDynamic || kCol == kDynamic) {
+    // For dynamic extents, construct with runtime dimensions
+    std::size_t rows = left.extent().extent(0);
+    std::size_t cols = left.extent().extent(1);
+    Extents<std::size_t, kRow, kCol> extents{rows, cols};
+    Dense<ScalarT, kRow, kCol> result{
+        extents,
+        typename LayoutLeft::Mapping<Extents<std::size_t, kRow, kCol>, std::size_t>{extents},
+        std::vector<ScalarT>(rows * cols)};
+    for (std::size_t i = 0; i < rows; ++i) {
+      for (std::size_t j = 0; j < cols; ++j) {
+        result[i, j] = left[i, j] - right[i, j];
+      }
+    }
+    return result;
+  } else {
+    return subtract<InlineDense<ScalarT, kRow, kCol>>(left, right);
+  }
 }
 
 }  // namespace tempura::matrix3

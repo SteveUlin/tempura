@@ -5,6 +5,8 @@
 #include <type_traits>
 #include <utility>
 
+#include "extents.h"
+
 namespace tempura::matrix3 {
 
 // Transpose is a zero-cost wrapper that swaps row/column indices.
@@ -44,6 +46,11 @@ class Transpose {
   constexpr auto cols() const -> std::size_t {
     // Use rows() for all matrix types to avoid circular dependencies
     return colsImpl(mat_);
+  }
+
+  // Pattern A interface for compatibility with toString() and generic algorithms
+  constexpr auto extent() const -> Extents<std::size_t, kDynamic, kDynamic> {
+    return Extents<std::size_t, kDynamic, kDynamic>{rows(), cols()};
   }
 
  private:

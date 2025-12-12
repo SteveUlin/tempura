@@ -17,6 +17,7 @@ constexpr void checkMultiplyExtent(const Lhs& lhs, const Rhs& rhs) {
 
 // Block-based matrix multiplication with configurable block size
 // Optimized for cache locality via tiling
+// Returns InlineDense for static extents, Dense for dynamic extents
 template <int64_t block_size = 16, typename Lhs, typename Rhs>
   requires(Lhs::ExtentsType::rank() == 2 && Rhs::ExtentsType::rank() == 2)
 constexpr auto tileMultiply(const Lhs& left, const Rhs& right) {
@@ -29,27 +30,57 @@ constexpr auto tileMultiply(const Lhs& left, const Rhs& right) {
   constexpr auto kRow = Lhs::ExtentsType::staticExtent(0);
   constexpr auto kCol = Rhs::ExtentsType::staticExtent(1);
 
-  InlineDense<ScalarT, kRow, kCol> out;
-
-  // Five nested loops optimized for cache locality
-  // Block over columns (j), then rows (i), then inner dimension (k)
-  for (std::size_t jblock = 0; jblock < right.extent().extent(1);
-       jblock += block_size) {
-    for (std::size_t i = 0; i < left.extent().extent(0); ++i) {
-      for (std::size_t kblock = 0; kblock < left.extent().extent(1);
-           kblock += block_size) {
-        for (std::size_t j = jblock;
-             j < std::min(jblock + block_size, right.extent().extent(1)); ++j) {
-          for (std::size_t k = kblock;
-               k < std::min(kblock + block_size, left.extent().extent(1));
-               ++k) {
-            out[i, j] += left[i, k] * right[k, j];
+  // Use Dense for dynamic extents, InlineDense for static extents
+  if constexpr (kRow == kDynamic || kCol == kDynamic) {
+    // For dynamic extents, construct with runtime dimensions
+    std::size_t rows = left.extent().extent(0);
+    std::size_t cols = right.extent().extent(1);
+    Extents<std::size_t, kRow, kCol> extents{rows, cols};
+    Dense<ScalarT, kRow, kCol> out{
+        extents,
+        typename LayoutLeft::Mapping<Extents<std::size_t, kRow, kCol>, std::size_t>{extents},
+        std::vector<ScalarT>(rows * cols)};
+    // Five nested loops optimized for cache locality
+    // Block over columns (j), then rows (i), then inner dimension (k)
+    for (std::size_t jblock = 0; jblock < right.extent().extent(1);
+         jblock += block_size) {
+      for (std::size_t i = 0; i < left.extent().extent(0); ++i) {
+        for (std::size_t kblock = 0; kblock < left.extent().extent(1);
+             kblock += block_size) {
+          for (std::size_t j = jblock;
+               j < std::min(jblock + block_size, right.extent().extent(1)); ++j) {
+            for (std::size_t k = kblock;
+                 k < std::min(kblock + block_size, left.extent().extent(1));
+                 ++k) {
+              out[i, j] += left[i, k] * right[k, j];
+            }
           }
         }
       }
     }
+    return out;
+  } else {
+    InlineDense<ScalarT, kRow, kCol> out;
+    // Five nested loops optimized for cache locality
+    // Block over columns (j), then rows (i), then inner dimension (k)
+    for (std::size_t jblock = 0; jblock < right.extent().extent(1);
+         jblock += block_size) {
+      for (std::size_t i = 0; i < left.extent().extent(0); ++i) {
+        for (std::size_t kblock = 0; kblock < left.extent().extent(1);
+             kblock += block_size) {
+          for (std::size_t j = jblock;
+               j < std::min(jblock + block_size, right.extent().extent(1)); ++j) {
+            for (std::size_t k = kblock;
+                 k < std::min(kblock + block_size, left.extent().extent(1));
+                 ++k) {
+              out[i, j] += left[i, k] * right[k, j];
+            }
+          }
+        }
+      }
+    }
+    return out;
   }
-  return out;
 }
 
 // Convenient operator* for matrix multiplication
@@ -60,6 +91,7 @@ constexpr auto operator*(const Lhs& left, const Rhs& right) {
 }
 
 // Scalar-matrix multiplication: scalar * matrix
+// Returns InlineDense for static extents, Dense for dynamic extents
 template <typename Scalar, typename Matrix>
   requires(Matrix::ExtentsType::rank() == 2 && std::is_arithmetic_v<Scalar>)
 constexpr auto operator*(Scalar scalar, const Matrix& mat) {
@@ -67,13 +99,31 @@ constexpr auto operator*(Scalar scalar, const Matrix& mat) {
   constexpr auto kRow = Matrix::ExtentsType::staticExtent(0);
   constexpr auto kCol = Matrix::ExtentsType::staticExtent(1);
 
-  InlineDense<ScalarT, kRow, kCol> out;
-  for (std::size_t i = 0; i < mat.extent().extent(0); ++i) {
-    for (std::size_t j = 0; j < mat.extent().extent(1); ++j) {
-      out[i, j] = scalar * mat[i, j];
+  // Use Dense for dynamic extents, InlineDense for static extents
+  if constexpr (kRow == kDynamic || kCol == kDynamic) {
+    // For dynamic extents, construct with runtime dimensions
+    std::size_t rows = mat.extent().extent(0);
+    std::size_t cols = mat.extent().extent(1);
+    Extents<std::size_t, kRow, kCol> extents{rows, cols};
+    Dense<ScalarT, kRow, kCol> out{
+        extents,
+        typename LayoutLeft::Mapping<Extents<std::size_t, kRow, kCol>, std::size_t>{extents},
+        std::vector<ScalarT>(rows * cols)};
+    for (std::size_t i = 0; i < rows; ++i) {
+      for (std::size_t j = 0; j < cols; ++j) {
+        out[i, j] = scalar * mat[i, j];
+      }
     }
+    return out;
+  } else {
+    InlineDense<ScalarT, kRow, kCol> out;
+    for (std::size_t i = 0; i < mat.extent().extent(0); ++i) {
+      for (std::size_t j = 0; j < mat.extent().extent(1); ++j) {
+        out[i, j] = scalar * mat[i, j];
+      }
+    }
+    return out;
   }
-  return out;
 }
 
 // Matrix-scalar multiplication: matrix * scalar

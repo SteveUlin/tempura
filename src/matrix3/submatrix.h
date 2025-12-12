@@ -5,6 +5,8 @@
 #include <type_traits>
 #include <utility>
 
+#include "extents.h"
+
 namespace tempura::matrix3 {
 
 // Submatrix is a zero-cost view into a rectangular region of a parent matrix.
@@ -79,6 +81,11 @@ class Submatrix {
   // Extent accessors
   constexpr auto rows() const -> std::size_t { return rows_; }
   constexpr auto cols() const -> std::size_t { return cols_; }
+
+  // Pattern A interface for compatibility with toString() and generic algorithms
+  constexpr auto extent() const -> Extents<std::size_t, kDynamic, kDynamic> {
+    return Extents<std::size_t, kDynamic, kDynamic>{rows_, cols_};
+  }
 
   // Access to offset (useful for nested submatrices)
   constexpr auto rowOffset() const -> std::size_t { return row_offset_; }

@@ -183,5 +183,44 @@ auto main() -> int {
     static_assert(result[1, 1] == 12);
   };
 
+  "dynamic extent addition"_test = [] {
+    // Create Dense matrices with dynamic extents
+    Extents<std::size_t, kDynamic, kDynamic> extents{2, 2};
+    Dense<int, kDynamic, kDynamic> mat1{
+        extents,
+        typename LayoutLeft::Mapping<Extents<std::size_t, kDynamic, kDynamic>, std::size_t>{extents},
+        std::vector<int>{1, 3, 2, 4}};
+    Dense<int, kDynamic, kDynamic> mat2{
+        extents,
+        typename LayoutLeft::Mapping<Extents<std::size_t, kDynamic, kDynamic>, std::size_t>{extents},
+        std::vector<int>{5, 7, 6, 8}};
+
+    auto result = mat1 + mat2;
+
+    expectEq(result[0, 0], 6);
+    expectEq(result[0, 1], 8);
+    expectEq(result[1, 0], 10);
+    expectEq(result[1, 1], 12);
+  };
+
+  "dynamic extent subtraction"_test = [] {
+    Extents<std::size_t, kDynamic, kDynamic> extents{2, 2};
+    Dense<int, kDynamic, kDynamic> mat1{
+        extents,
+        typename LayoutLeft::Mapping<Extents<std::size_t, kDynamic, kDynamic>, std::size_t>{extents},
+        std::vector<int>{10, 30, 20, 40}};
+    Dense<int, kDynamic, kDynamic> mat2{
+        extents,
+        typename LayoutLeft::Mapping<Extents<std::size_t, kDynamic, kDynamic>, std::size_t>{extents},
+        std::vector<int>{1, 3, 2, 4}};
+
+    auto result = mat1 - mat2;
+
+    expectEq(result[0, 0], 9);
+    expectEq(result[0, 1], 18);
+    expectEq(result[1, 0], 27);
+    expectEq(result[1, 1], 36);
+  };
+
   return TestRegistry::result();
 }

@@ -1,5 +1,7 @@
 #include "matrix3/matrix.h"
+#include "matrix3/submatrix.h"
 #include "matrix3/to_string.h"
+#include "matrix3/transpose.h"
 #include "unit.h"
 
 using namespace tempura;
@@ -89,6 +91,33 @@ auto main() -> int {
     auto str = toString(mat);
     expectTrue(str.find("-1") != std::string::npos);
     expectTrue(str.find("-4") != std::string::npos);
+  };
+
+  "Transpose view formatting"_test = [] {
+    Dense mat{{1, 2, 3}, {4, 5, 6}};
+    auto transposed = Transpose{mat};
+    auto str = toString(transposed);
+    // Transposed should be 3x2 instead of 2x3
+    // First column of transposed = first row of original: [1, 4]
+    expectTrue(str.find("1") != std::string::npos);
+    expectTrue(str.find("4") != std::string::npos);
+    expectTrue(str.find("6") != std::string::npos);
+    expectTrue(str.find("⎡") != std::string::npos);
+    expectTrue(str.find("⎣") != std::string::npos);
+  };
+
+  "Submatrix view formatting"_test = [] {
+    Dense mat{{20, 21, 22, 23}, {30, 31, 32, 33}, {40, 41, 42, 43}};
+    auto submat = Submatrix{mat, 1, 1, 2, 2};  // Extract [[31,32],[41,42]]
+    auto str = toString(submat);
+    // Should show the 2x2 submatrix
+    expectTrue(str.find("31") != std::string::npos);
+    expectTrue(str.find("32") != std::string::npos);
+    expectTrue(str.find("41") != std::string::npos);
+    expectTrue(str.find("42") != std::string::npos);
+    // Should not show elements outside the submatrix
+    expectTrue(str.find("20") == std::string::npos);
+    expectTrue(str.find("43") == std::string::npos);
   };
 
   return TestRegistry::result();
