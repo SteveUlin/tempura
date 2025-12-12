@@ -120,5 +120,51 @@ auto main() -> int {
     expectTrue(str.find("43") == std::string::npos);
   };
 
+  "Exact output: 2x2 integer matrix"_test = [] {
+    Dense mat{{10, 20}, {30, 40}};
+    auto str = toString(mat);
+    expectEq(str, "⎡ 10 20 ⎤\n⎣ 30 40 ⎦");
+  };
+
+  "Exact output: 2-row matrix (edge case)"_test = [] {
+    // 2-row matrices are important: middle row loop doesn't execute
+    Dense mat{{1, 2, 3}, {4, 5, 6}};
+    auto str = toString(mat);
+    expectEq(str, "⎡ 1 2 3 ⎤\n⎣ 4 5 6 ⎦");
+  };
+
+  "Exact output: single row matrix"_test = [] {
+    Dense mat{{100, 200, 300}};
+    auto str = toString(mat);
+    expectEq(str, "[ 100 200 300 ]");
+  };
+
+  "Column alignment verification"_test = [] {
+    Dense mat{{1, 100}, {2000, 3}};
+    auto str = toString(mat);
+    // All numbers should align: "   1" and "2000" both width 4, "100" and "  3" both width 3
+    expectEq(str, "⎡    1 100 ⎤\n⎣ 2000   3 ⎦");
+  };
+
+  "Column alignment with floats"_test = [] {
+    Dense mat{{1.5, 100.25}, {2000.3, 3.1}};
+    auto str = toString(mat);
+    // Floats use .4f: "   1.5000" and "2000.3000" width 9, "100.2500" and "  3.1000" width 8
+    expectEq(str, "⎡    1.5000 100.2500 ⎤\n⎣ 2000.3000   3.1000 ⎦");
+  };
+
+  "Exact output: 3x3 with middle rows"_test = [] {
+    Dense mat{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+    auto str = toString(mat);
+    expectEq(str, "⎡ 1 2 3 ⎤\n⎢ 4 5 6 ⎥\n⎣ 7 8 9 ⎦");
+  };
+
+  "Exact output: negative numbers with alignment"_test = [] {
+    Dense mat{{-1, 100}, {-200, 3}};
+    auto str = toString(mat);
+    // "-1" and "-200" both right-aligned in width 4 column
+    expectEq(str, "⎡   -1 100 ⎤\n⎣ -200   3 ⎦");
+  };
+
   return TestRegistry::result();
 }

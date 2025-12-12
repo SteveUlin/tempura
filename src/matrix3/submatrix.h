@@ -4,10 +4,16 @@
 #include <cstdint>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include "extents.h"
+#include "layouts.h"
 
 namespace tempura::matrix3 {
+
+// Forward declaration
+template <typename Scalar, std::size_t... Ns>
+class Dense;
 
 // Submatrix is a zero-cost view into a rectangular region of a parent matrix.
 // For a parent matrix M, Submatrix(M, row_offset, col_offset, rows, cols)
@@ -90,6 +96,25 @@ class Submatrix {
   // Access to offset (useful for nested submatrices)
   constexpr auto rowOffset() const -> std::size_t { return row_offset_; }
   constexpr auto colOffset() const -> std::size_t { return col_offset_; }
+
+  // Materialize view into a concrete Dense matrix
+  template <typename OutScalar = ValueType>
+  constexpr auto materialize() const -> Dense<OutScalar, kDynamic, kDynamic> {
+    Extents<std::size_t, kDynamic, kDynamic> extents{rows(), cols()};
+    std::vector<OutScalar> data(rows() * cols());
+
+    // Fill in column-major order (LayoutLeft)
+    for (std::size_t j = 0; j < cols(); ++j) {
+      for (std::size_t i = 0; i < rows(); ++i) {
+        data[i + j * rows()] = static_cast<OutScalar>((*this)[i, j]);
+      }
+    }
+
+    return Dense<OutScalar, kDynamic, kDynamic>{
+        extents,
+        typename LayoutLeft::Mapping<Extents<std::size_t, kDynamic, kDynamic>, std::size_t>{extents},
+        std::move(data)};
+  }
 
   // Access underlying matrix
   constexpr auto data() const -> const MatrixType& { return mat_; }

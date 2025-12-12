@@ -51,6 +51,35 @@ auto main() -> int {
     static_assert(e.extent(4) == 4);
   };
 
+  "Extents size()"_test = [] {
+    constexpr Extents<int64_t, 2, 3> e1{};
+    static_assert(e1.size() == 6);
+
+    constexpr Extents<int64_t, 2, 3, 4> e2{};
+    static_assert(e2.size() == 24);
+
+    constexpr Extents<int64_t, kDynamic, kDynamic> e3(5, 7);
+    static_assert(e3.size() == 35);
+
+    constexpr Extents<int64_t, 2, kDynamic, 3> e4(4);
+    static_assert(e4.size() == 24);
+  };
+
+  "Extents operator=="_test = [] {
+    constexpr Extents<int64_t, 2, 3> e1{};
+    constexpr Extents<int64_t, 2, 3> e2{};
+    static_assert(e1 == e2);
+
+    constexpr Extents<int64_t, kDynamic, kDynamic> e3(2, 3);
+    static_assert(e1 == e3);
+
+    constexpr Extents<int64_t, kDynamic, kDynamic> e4(2, 4);
+    static_assert(!(e1 == e4));
+
+    constexpr Extents<int64_t, 2, kDynamic> e5(3);
+    static_assert(e1 == e5);
+  };
+
   "LayoutLeft"_test = [] {
     static constexpr Extents<int64_t, 2, 3, 4> e{};
     LayoutLeft::Mapping layout(e);

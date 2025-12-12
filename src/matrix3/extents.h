@@ -101,6 +101,26 @@ class Extents {
     return ans;
   }
 
+  // Returns total number of elements (product of all extents)
+  constexpr auto size() const -> IndexType {
+    IndexType result = 1;
+    for (std::size_t i = 0; i < rank(); ++i) {
+      result *= extent(i);
+    }
+    return result;
+  }
+
+  // Compares two Extents objects for equality
+  template <typename OtherIndexTypeT, std::size_t... OtherNs>
+  constexpr auto operator==(
+      const Extents<OtherIndexTypeT, OtherNs...>& other) const -> bool {
+    if (rank() != other.rank()) return false;
+    for (std::size_t i = 0; i < rank(); ++i) {
+      if (extent(i) != other.extent(i)) return false;
+    }
+    return true;
+  }
+
  private:
   std::array<IndexType, rankDynamic()> extents_ = {};
 };

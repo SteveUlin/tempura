@@ -221,5 +221,57 @@ auto main() -> int {
     // t[0, 0] = 99;  // Should NOT compile (underlying matrix is const)
   };
 
+  "materialize transpose"_test = [] {
+    InlineDense<int, 2, 3> m{
+        {1, 2, 3},
+        {4, 5, 6}};
+    Transpose t{m};
+
+    // Materialize into Dense matrix
+    auto materialized = t.materialize();
+
+    // Check dimensions
+    expectEq(3uz, materialized.rows());  // Transpose has 3 rows
+    expectEq(2uz, materialized.cols());  // Transpose has 2 cols
+
+    // Check values match the transpose
+    for (std::size_t i = 0; i < 3; ++i) {
+      for (std::size_t j = 0; j < 2; ++j) {
+        expectEq(t[i, j], materialized[i, j]);
+      }
+    }
+
+    // Verify specific values
+    expectEq(1, materialized[0, 0]);
+    expectEq(4, materialized[0, 1]);
+    expectEq(2, materialized[1, 0]);
+    expectEq(5, materialized[1, 1]);
+    expectEq(3, materialized[2, 0]);
+    expectEq(6, materialized[2, 1]);
+
+    // Modifying materialized shouldn't affect original
+    materialized[0, 0] = 99;
+    expectEq(1, m[0, 0]);  // Original unchanged
+    expectEq(1, t[0, 0]);  // Transpose view unchanged
+    expectEq(99, materialized[0, 0]);  // Materialized changed
+  };
+
+  "materialize with type conversion"_test = [] {
+    InlineDense<int, 2, 2> m{
+        {1, 2},
+        {3, 4}};
+    Transpose t{m};
+
+    // Materialize to double
+    auto materialized = t.materialize<double>();
+
+    expectEq(2uz, materialized.rows());
+    expectEq(2uz, materialized.cols());
+    expectEq(1.0, materialized[0, 0]);
+    expectEq(3.0, materialized[0, 1]);
+    expectEq(2.0, materialized[1, 0]);
+    expectEq(4.0, materialized[1, 1]);
+  };
+
   return TestRegistry::result();
 }

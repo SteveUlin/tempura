@@ -246,5 +246,79 @@ auto main() -> int {
     // sub2[0, 0] = 99;  // Should NOT compile (const)
   };
 
+  "materialize submatrix"_test = [] {
+    Dense<int, 4, 5> m{{1, 2, 3, 4, 5},
+                       {6, 7, 8, 9, 10},
+                       {11, 12, 13, 14, 15},
+                       {16, 17, 18, 19, 20}};
+
+    // Extract 2x3 submatrix starting at [1,1]
+    auto sub = Submatrix{m, 1, 1, 2, 3};
+
+    // Materialize into Dense matrix
+    auto materialized = sub.materialize();
+
+    // Check dimensions
+    expectEq(2uz, materialized.rows());
+    expectEq(3uz, materialized.cols());
+
+    // Check all values match the submatrix
+    for (std::size_t i = 0; i < 2; ++i) {
+      for (std::size_t j = 0; j < 3; ++j) {
+        expectEq(sub[i, j], materialized[i, j]);
+      }
+    }
+
+    // Verify specific values (submatrix is [[7,8,9], [12,13,14]])
+    expectEq(7, materialized[0, 0]);
+    expectEq(8, materialized[0, 1]);
+    expectEq(9, materialized[0, 2]);
+    expectEq(12, materialized[1, 0]);
+    expectEq(13, materialized[1, 1]);
+    expectEq(14, materialized[1, 2]);
+
+    // Modifying materialized shouldn't affect original
+    materialized[0, 0] = 99;
+    expectEq(7, m[1, 1]);   // Original unchanged
+    expectEq(7, sub[0, 0]); // Submatrix view unchanged
+    expectEq(99, materialized[0, 0]); // Materialized changed
+  };
+
+  "materialize nested submatrix"_test = [] {
+    Dense<int, 5, 5> m{{1, 2, 3, 4, 5},
+                       {6, 7, 8, 9, 10},
+                       {11, 12, 13, 14, 15},
+                       {16, 17, 18, 19, 20},
+                       {21, 22, 23, 24, 25}};
+
+    auto sub1 = Submatrix{m, 1, 1, 3, 3};
+    auto sub2 = Submatrix{sub1, 1, 1, 2, 2};
+
+    // Materialize nested submatrix
+    auto materialized = sub2.materialize();
+
+    expectEq(2uz, materialized.rows());
+    expectEq(2uz, materialized.cols());
+    expectEq(13, materialized[0, 0]);  // m[2,2]
+    expectEq(14, materialized[0, 1]);  // m[2,3]
+    expectEq(18, materialized[1, 0]);  // m[3,2]
+    expectEq(19, materialized[1, 1]);  // m[3,3]
+  };
+
+  "materialize with type conversion"_test = [] {
+    Dense<int, 3, 3> m{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+    auto sub = Submatrix{m, 0, 0, 2, 2};
+
+    // Materialize to double
+    auto materialized = sub.materialize<double>();
+
+    expectEq(2uz, materialized.rows());
+    expectEq(2uz, materialized.cols());
+    expectEq(1.0, materialized[0, 0]);
+    expectEq(2.0, materialized[0, 1]);
+    expectEq(4.0, materialized[1, 0]);
+    expectEq(5.0, materialized[1, 1]);
+  };
+
   return TestRegistry::result();
 }
