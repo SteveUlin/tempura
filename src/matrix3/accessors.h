@@ -32,11 +32,11 @@ template <typename Scalar>
 class IdentityAccessor {
 public:
   // Rely on copy elision to make this efficient.
-  template <typename... Indicies>
-  static constexpr auto operator()(std::tuple<Indicies...> tuple) -> Scalar {
+  template <typename... Indices>
+  static constexpr auto operator()(std::tuple<Indices...> tuple) -> Scalar {
     return std::apply(
-        [](auto&& first, auto&&... indicies) {
-          return ((first == indicies) && ...) ? Scalar{1} : Scalar{0};
+        [](auto&& first, auto&&... indices) {
+          return ((first == indices) && ...) ? Scalar{1} : Scalar{0};
         },
         tuple);
   }

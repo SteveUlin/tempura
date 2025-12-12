@@ -10,9 +10,9 @@ struct LayoutPassthrough {
   template <typename ExtentT, typename IndexT>
   class Mapping {
    public:
-    template <typename... Indicies>
-    static constexpr auto operator()(Indicies... indicies) {
-      return std::tuple{indicies...};
+    template <typename... Indices>
+    static constexpr auto operator()(Indices... indices) {
+      return std::tuple{indices...};
     }
   };
 };
@@ -37,13 +37,13 @@ struct LayoutLeft {
       }
     }
 
-    template <typename... Indicies>
-      requires((sizeof...(Indicies) == ExtentsType::rank()) &&
-               (std::is_convertible_v<Indicies, IndexType> && ...) &&
-               (std::is_nothrow_constructible_v<Indicies, IndexType> && ...))
-    constexpr auto operator()(Indicies... indicies) const -> IndexType {
+    template <typename... Indices>
+      requires((sizeof...(Indices) == ExtentsType::rank()) &&
+               (std::is_convertible_v<Indices, IndexType> && ...) &&
+               (std::is_nothrow_constructible_v<Indices, IndexType> && ...))
+    constexpr auto operator()(Indices... indices) const -> IndexType {
       return [&]<auto... Is>(std::index_sequence<Is...>) {
-        return (0 + ... + (indicies * stride_[Is]));
+        return (0 + ... + (indices * stride_[Is]));
       }(std::make_index_sequence<ExtentT::rank()>{});
     }
 
@@ -62,13 +62,13 @@ struct LayoutLeft {
 
     constexpr explicit Mapping(const ExtentsType& /*unused*/) noexcept {}
 
-    template <typename... Indicies>
-      requires((sizeof...(Indicies) == ExtentsType::rank()) &&
-               (std::is_convertible_v<Indicies, IndexType> && ...) &&
-               (std::is_nothrow_constructible_v<Indicies, IndexType> && ...))
-    constexpr auto operator()(Indicies... indicies) const -> IndexType {
+    template <typename... Indices>
+      requires((sizeof...(Indices) == ExtentsType::rank()) &&
+               (std::is_convertible_v<Indices, IndexType> && ...) &&
+               (std::is_nothrow_constructible_v<Indices, IndexType> && ...))
+    constexpr auto operator()(Indices... indices) const -> IndexType {
       return [&]<auto... Is>(std::index_sequence<Is...>) {
-        return (0 + ... + (indicies * stride_[Is]));
+        return (0 + ... + (indices * stride_[Is]));
       }(std::make_index_sequence<ExtentT::rank()>{});
     }
 
@@ -110,13 +110,13 @@ struct LayoutRight {
       }
     }
 
-    template <typename... Indicies>
-      requires((sizeof...(Indicies) == ExtentsType::rank()) &&
-               (std::is_convertible_v<Indicies, IndexType> && ...) &&
-               (std::is_nothrow_constructible_v<Indicies, IndexType> && ...))
-    constexpr auto operator()(Indicies... indicies) const -> IndexType {
+    template <typename... Indices>
+      requires((sizeof...(Indices) == ExtentsType::rank()) &&
+               (std::is_convertible_v<Indices, IndexType> && ...) &&
+               (std::is_nothrow_constructible_v<Indices, IndexType> && ...))
+    constexpr auto operator()(Indices... indices) const -> IndexType {
       return [&]<auto... Is>(std::index_sequence<Is...>) {
-        return (0 + ... + (indicies * stride_[Is]));
+        return (0 + ... + (indices * stride_[Is]));
       }(std::make_index_sequence<ExtentT::rank()>{});
     }
 
@@ -135,13 +135,13 @@ struct LayoutRight {
 
     constexpr explicit Mapping(const ExtentsType& /*unused*/) noexcept {}
 
-    template <typename... Indicies>
-      requires((sizeof...(Indicies) == ExtentsType::rank()) &&
-               (std::is_convertible_v<Indicies, IndexType> && ...) &&
-               (std::is_nothrow_constructible_v<Indicies, IndexType> && ...))
-    constexpr auto operator()(Indicies... indicies) const -> IndexType {
+    template <typename... Indices>
+      requires((sizeof...(Indices) == ExtentsType::rank()) &&
+               (std::is_convertible_v<Indices, IndexType> && ...) &&
+               (std::is_nothrow_constructible_v<Indices, IndexType> && ...))
+    constexpr auto operator()(Indices... indices) const -> IndexType {
       return [&]<auto... Is>(std::index_sequence<Is...>) {
-        return (0 + ... + (indicies * stride_[Is]));
+        return (0 + ... + (indices * stride_[Is]));
       }(std::make_index_sequence<ExtentT::rank()>{});
     }
 

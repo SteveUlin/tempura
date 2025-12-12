@@ -24,11 +24,11 @@ class GenericMatrix {
                           AccessorT accessor)
       : extent_(extent), layout_(layout), accessor_(accessor) {}
 
-  template <typename... Indicies>
-    requires(sizeof...(Indicies) == ExtentsT::rank())
-  constexpr auto operator[](this auto&& self, Indicies... indicies)
+  template <typename... Indices>
+    requires(sizeof...(Indices) == ExtentsT::rank())
+  constexpr auto operator[](this auto&& self, Indices... indices)
       -> decltype(auto) {
-    return self.accessor_(self.layout_(indicies...));
+    return self.accessor_(self.layout_(indices...));
   }
 
   constexpr auto extent() const -> const ExtentsT& { return extent_; }
