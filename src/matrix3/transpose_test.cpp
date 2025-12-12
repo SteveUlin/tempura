@@ -177,5 +177,49 @@ auto main() -> int {
     expectEq(4.5, t[1, 1]);
   };
 
+  "const matrix with transpose"_test = [] {
+    const InlineDense<int, 2, 3> m{{1, 2, 3}, {4, 5, 6}};
+    auto t = Transpose{m};  // Should work with const matrix
+
+    expectEq(3uz, t.rows());
+    expectEq(2uz, t.cols());
+    expectEq(1, t[0, 0]);
+    expectEq(4, t[0, 1]);
+    expectEq(2, t[1, 0]);
+    expectEq(5, t[1, 1]);
+    expectEq(3, t[2, 0]);
+    expectEq(6, t[2, 1]);
+    // t[0, 0] = 99;  // Should NOT compile (const)
+  };
+
+  "const transpose view"_test = [] {
+    InlineDense<int, 2, 3> m{{1, 2, 3}, {4, 5, 6}};
+    const auto t = Transpose{m};  // Const view of non-const matrix
+
+    // Can read through const view
+    expectEq(1, t[0, 0]);
+    expectEq(4, t[0, 1]);
+    expectEq(2, t[1, 0]);
+
+    // t[0, 0] = 99;  // Should NOT compile (const view)
+
+    // But can modify original matrix
+    m[0, 1] = 77;
+    expectEq(77, t[1, 0]);  // Change visible through const view
+  };
+
+  "mutable transpose of const matrix"_test = [] {
+    const InlineDense<int, 2, 2> m{{1, 2}, {3, 4}};
+    Transpose t{m};  // Non-const view, but matrix is const
+
+    // Can read
+    expectEq(1, t[0, 0]);
+    expectEq(3, t[0, 1]);
+    expectEq(2, t[1, 0]);
+    expectEq(4, t[1, 1]);
+
+    // t[0, 0] = 99;  // Should NOT compile (underlying matrix is const)
+  };
+
   return TestRegistry::result();
 }

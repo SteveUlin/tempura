@@ -85,6 +85,57 @@ class InlineCoordinateList {
     Scalar value;
   };
 
+  struct Entry {
+    std::size_t row;
+    std::size_t col;
+    Scalar value;
+  };
+
+  // Iterator for non-zero entries
+  class Iterator {
+   public:
+    using value_type = Entry;
+    using difference_type = std::ptrdiff_t;
+    using reference = Entry;
+    using pointer = void;
+    using iterator_category = std::forward_iterator_tag;
+
+    constexpr Iterator() = default;
+    constexpr Iterator(const CoordinateListAccessor<Scalar, Capacity>* accessor,
+                       std::size_t index)
+        : accessor_{accessor}, index_{index} {}
+
+    constexpr auto operator*() const -> Entry {
+      return Entry{
+          static_cast<std::size_t>(accessor_->rowIndices()[index_]),
+          static_cast<std::size_t>(accessor_->colIndices()[index_]),
+          accessor_->values()[index_]};
+    }
+
+    constexpr auto operator++() -> Iterator& {
+      ++index_;
+      return *this;
+    }
+
+    constexpr auto operator++(int) -> Iterator {
+      Iterator tmp = *this;
+      ++index_;
+      return tmp;
+    }
+
+    constexpr auto operator==(const Iterator& other) const -> bool {
+      return index_ == other.index_;
+    }
+
+    constexpr auto operator!=(const Iterator& other) const -> bool {
+      return index_ != other.index_;
+    }
+
+   private:
+    const CoordinateListAccessor<Scalar, Capacity>* accessor_ = nullptr;
+    std::size_t index_ = 0;
+  };
+
   constexpr InlineCoordinateList() = default;
 
   // Constructor from range of triplets
@@ -129,6 +180,15 @@ class InlineCoordinateList {
   // Extent accessors for compatibility
   static constexpr auto rows() -> std::size_t { return Rows; }
   static constexpr auto cols() -> std::size_t { return Cols; }
+
+  // Iteration over non-zero entries
+  constexpr auto begin() const -> Iterator {
+    return Iterator{&accessor_, 0};
+  }
+
+  constexpr auto end() const -> Iterator {
+    return Iterator{&accessor_, accessor_.size()};
+  }
 
  private:
   CoordinateListAccessor<Scalar, Capacity> accessor_;

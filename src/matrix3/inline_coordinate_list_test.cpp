@@ -151,5 +151,149 @@ auto main() -> int {
     static_assert(mat_i64[0, 1] == 1000000000000LL);
   };
 
+  "Iteration over empty matrix"_test = [] {
+    constexpr InlineCoordinateList<int, 3, 3> mat{};
+    static_assert(mat.begin() == mat.end());
+
+    // Runtime check
+    InlineCoordinateList<int, 3, 3> mat_rt{};
+    int count = 0;
+    for (auto entry : mat_rt) {
+      (void)entry;  // Suppress unused variable warning
+      ++count;
+    }
+    expectEq(count, 0);
+  };
+
+  "Iteration over single entry"_test = [] {
+    constexpr auto mat = [] consteval {
+      InlineCoordinateList<int, 3, 3, 10> m{};
+      m.insert(1, 2, 42);
+      return m;
+    }();
+
+    // constexpr iteration
+    constexpr auto first = *mat.begin();
+    static_assert(first.row == 1);
+    static_assert(first.col == 2);
+    static_assert(first.value == 42);
+
+    // Runtime iteration
+    InlineCoordinateList<int, 3, 3> mat_rt{};
+    mat_rt.insert(1, 2, 42);
+
+    int count = 0;
+    for (auto entry : mat_rt) {
+      expectEq(entry.row, 1);
+      expectEq(entry.col, 2);
+      expectEq(entry.value, 42);
+      ++count;
+    }
+    expectEq(count, 1);
+  };
+
+  "Iteration over multiple entries"_test = [] {
+    InlineCoordinateList<int, 5, 5> mat{};
+    mat.insert(0, 1, 10);
+    mat.insert(1, 2, 20);
+    mat.insert(2, 3, 30);
+    mat.insert(3, 4, 40);
+
+    // Collect entries
+    std::array<InlineCoordinateList<int, 5, 5>::Entry, 4> entries{};
+    std::size_t idx = 0;
+    for (auto entry : mat) {
+      entries[idx++] = entry;
+    }
+
+    // Verify entries (in insertion order)
+    expectEq(entries[0].row, 0);
+    expectEq(entries[0].col, 1);
+    expectEq(entries[0].value, 10);
+
+    expectEq(entries[1].row, 1);
+    expectEq(entries[1].col, 2);
+    expectEq(entries[1].value, 20);
+
+    expectEq(entries[2].row, 2);
+    expectEq(entries[2].col, 3);
+    expectEq(entries[2].value, 30);
+
+    expectEq(entries[3].row, 3);
+    expectEq(entries[3].col, 4);
+    expectEq(entries[3].value, 40);
+
+    expectEq(idx, 4);
+  };
+
+  "Iteration includes duplicates"_test = [] {
+    // When the same (row, col) is inserted multiple times,
+    // iteration includes all entries (even though lookup returns last)
+    InlineCoordinateList<int, 3, 3, 10> mat{};  // Explicit capacity
+    mat.insert(1, 1, 10);
+    mat.insert(1, 1, 20);
+    mat.insert(1, 1, 30);
+
+    int count = 0;
+    std::array<int, 3> values{};
+    for (auto entry : mat) {
+      expectEq(entry.row, 1);
+      expectEq(entry.col, 1);
+      values[count] = entry.value;
+      ++count;
+    }
+
+    expectEq(count, 3);
+    expectEq(values[0], 10);
+    expectEq(values[1], 20);
+    expectEq(values[2], 30);
+
+    // But lookup returns the last
+    expectEq(mat[1, 1], 30);
+  };
+
+  "constexpr iteration"_test = [] {
+    constexpr auto mat = [] consteval {
+      InlineCoordinateList<int, 3, 3, 10> m{};
+      m.insert(0, 0, 1);
+      m.insert(1, 1, 2);
+      m.insert(2, 2, 3);
+      return m;
+    }();
+
+    // Count entries at compile time
+    constexpr auto count = [&mat] consteval {
+      int n = 0;
+      for (auto it = mat.begin(); it != mat.end(); ++it) {
+        ++n;
+      }
+      return n;
+    }();
+    static_assert(count == 3);
+
+    // Sum values at compile time
+    constexpr auto sum = [&mat] consteval {
+      int s = 0;
+      for (auto entry : mat) {
+        s += entry.value;
+      }
+      return s;
+    }();
+    static_assert(sum == 6);
+  };
+
+  "Range-based for with different types"_test = [] {
+    InlineCoordinateList<double, 4, 4> mat{};
+    mat.insert(0, 1, 1.5);
+    mat.insert(1, 2, 2.5);
+    mat.insert(2, 3, 3.5);
+
+    double sum = 0.0;
+    for (auto entry : mat) {
+      sum += entry.value;
+    }
+    expectEq(sum, 7.5);
+  };
+
   return TestRegistry::result();
 }

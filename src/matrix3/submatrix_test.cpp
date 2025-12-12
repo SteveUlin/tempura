@@ -184,5 +184,67 @@ auto main() -> int {
     }
   };
 
+  "const matrix with submatrix"_test = [] {
+    const Dense<int, 3, 4> m{{1, 2, 3, 4}, {5, 6, 7, 8}, {9, 10, 11, 12}};
+    auto sub = Submatrix{m, 1, 1, 2, 2};  // Should work with const matrix
+
+    expectEq(2uz, sub.rows());
+    expectEq(2uz, sub.cols());
+    expectEq(6, sub[0, 0]);
+    expectEq(7, sub[0, 1]);
+    expectEq(10, sub[1, 0]);
+    expectEq(11, sub[1, 1]);
+    // sub[0, 0] = 99;  // Should NOT compile (const)
+  };
+
+  "const submatrix view"_test = [] {
+    Dense<int, 3, 3> m{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+    const auto sub = Submatrix{m, 0, 0, 2, 2};  // Const view of non-const matrix
+
+    // Can read through const view
+    expectEq(1, sub[0, 0]);
+    expectEq(2, sub[0, 1]);
+    expectEq(4, sub[1, 0]);
+    expectEq(5, sub[1, 1]);
+
+    // sub[0, 0] = 99;  // Should NOT compile (const view)
+
+    // But can modify original matrix
+    m[0, 0] = 77;
+    expectEq(77, sub[0, 0]);  // Change visible through const view
+  };
+
+  "mutable submatrix of const matrix"_test = [] {
+    const Dense<int, 3, 3> m{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+    Submatrix sub{m, 1, 1, 2, 2};  // Non-const view, but matrix is const
+
+    // Can read
+    expectEq(5, sub[0, 0]);
+    expectEq(6, sub[0, 1]);
+    expectEq(8, sub[1, 0]);
+    expectEq(9, sub[1, 1]);
+
+    // sub[0, 0] = 99;  // Should NOT compile (underlying matrix is const)
+  };
+
+  "const nested submatrix"_test = [] {
+    const Dense<int, 4, 4> m{
+        {1, 2, 3, 4}, {5, 6, 7, 8}, {9, 10, 11, 12}, {13, 14, 15, 16}};
+
+    // Extract const submatrix from const matrix
+    auto sub1 = Submatrix{m, 0, 0, 3, 3};
+    expectEq(1, sub1[0, 0]);
+    expectEq(11, sub1[2, 2]);
+
+    // Nested const submatrix
+    auto sub2 = Submatrix{sub1, 1, 1, 2, 2};
+    expectEq(6, sub2[0, 0]);
+    expectEq(7, sub2[0, 1]);
+    expectEq(10, sub2[1, 0]);
+    expectEq(11, sub2[1, 1]);
+
+    // sub2[0, 0] = 99;  // Should NOT compile (const)
+  };
+
   return TestRegistry::result();
 }
