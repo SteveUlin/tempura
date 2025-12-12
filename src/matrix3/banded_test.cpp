@@ -248,5 +248,220 @@ auto main() -> int {
     expectEq(1.5f, float_banded[0, 0]);
   };
 
+  "solveTridiagonal_simple_2x2"_test = [] {
+    // System: [2 1] [x0]   [5]
+    //         [1 2] [x1] = [4]
+    // Solution: x0 = 2, x1 = 1
+    InlineDense<double, 2, 3> storage{
+        {0.0, 2.0, 1.0},  // X, b0=2, c0=1
+        {1.0, 2.0, 0.0},  // a1=1, b1=2, X
+    };
+    Banded<InlineDense<double, 2, 3>, 1> A{storage};
+
+    InlineDense<double, 2, 1> b{{5.0}, {4.0}};
+
+    auto x = solveTridiagonal(A, b);
+
+    expectNear(2.0, x[0, 0], 1e-10);
+    expectNear(1.0, x[1, 0], 1e-10);
+  };
+
+  "solveTridiagonal_3x3"_test = [] {
+    // System: [4 1 0] [x0]   [5]
+    //         [1 4 1] [x1] = [6]
+    //         [0 1 4] [x2]   [5]
+    // Diagonally dominant, solution: x0 = 1, x1 = 1, x2 = 1
+    InlineDense<double, 3, 3> storage{
+        {0.0, 4.0, 1.0},  // X, b0=4, c0=1
+        {1.0, 4.0, 1.0},  // a1=1, b1=4, c1=1
+        {1.0, 4.0, 0.0},  // a2=1, b2=4, X
+    };
+    Banded<InlineDense<double, 3, 3>, 1> A{storage};
+
+    InlineDense<double, 3, 1> b{{5.0}, {6.0}, {5.0}};
+
+    auto x = solveTridiagonal(A, b);
+
+    expectNear(1.0, x[0, 0], 1e-10);
+    expectNear(1.0, x[1, 0], 1e-10);
+    expectNear(1.0, x[2, 0], 1e-10);
+  };
+
+  "solveTridiagonal_4x4_varying_solution"_test = [] {
+    // System with varying solution values
+    InlineDense<double, 4, 3> storage{
+        {0.0, 3.0, 1.0},  // X, b0=3, c0=1
+        {1.0, 3.0, 1.0},  // a1=1, b1=3, c1=1
+        {1.0, 3.0, 1.0},  // a2=1, b2=3, c2=1
+        {1.0, 3.0, 0.0},  // a3=1, b3=3, X
+    };
+    Banded<InlineDense<double, 4, 3>, 1> A{storage};
+
+    // RHS chosen so solution is [1, 2, 3, 4]
+    // Ax: [3*1 + 1*2, 1*1 + 3*2 + 1*3, 1*2 + 3*3 + 1*4, 1*3 + 3*4]
+    //   = [5, 10, 15, 15]
+    InlineDense<double, 4, 1> b{{5.0}, {10.0}, {15.0}, {15.0}};
+
+    auto x = solveTridiagonal(A, b);
+
+    expectNear(1.0, x[0, 0], 1e-10);
+    expectNear(2.0, x[1, 0], 1e-10);
+    expectNear(3.0, x[2, 0], 1e-10);
+    expectNear(4.0, x[3, 0], 1e-10);
+  };
+
+  "solveTridiagonal_single_equation"_test = [] {
+    // Trivial 1x1 system: [5] [x0] = [10]
+    // Solution: x0 = 2
+    InlineDense<double, 1, 3> storage{
+        {0.0, 5.0, 0.0},  // X, b0=5, X
+    };
+    Banded<InlineDense<double, 1, 3>, 1> A{storage};
+
+    InlineDense<double, 1, 1> b{{10.0}};
+
+    auto x = solveTridiagonal(A, b);
+
+    expectNear(2.0, x[0, 0], 1e-10);
+  };
+
+  "solveTridiagonal_negative_values"_test = [] {
+    // System with negative coefficients
+    InlineDense<double, 3, 3> storage{
+        {0.0, 5.0, -1.0},   // X, b0=5, c0=-1
+        {-2.0, 6.0, -1.0},  // a1=-2, b1=6, c1=-1
+        {-2.0, 7.0, 0.0},   // a2=-2, b2=7, X
+    };
+    Banded<InlineDense<double, 3, 3>, 1> A{storage};
+
+    InlineDense<double, 3, 1> b{{4.0}, {5.0}, {6.0}};
+
+    auto x = solveTridiagonal(A, b);
+
+    // Verify Ax = b
+    double r0 = A[0, 0] * x[0, 0] + A[0, 1] * x[1, 0];
+    double r1 = A[1, 0] * x[0, 0] + A[1, 1] * x[1, 0] + A[1, 2] * x[2, 0];
+    double r2 = A[2, 1] * x[1, 0] + A[2, 2] * x[2, 0];
+
+    expectNear(4.0, r0, 1e-10);
+    expectNear(5.0, r1, 1e-10);
+    expectNear(6.0, r2, 1e-10);
+  };
+
+  "solveTridiagonal_constexpr"_test = [] {
+    // Compile-time evaluation
+    constexpr auto test = []() {
+      InlineDense<double, 2, 3> storage{
+          {0.0, 2.0, 1.0},
+          {1.0, 2.0, 0.0},
+      };
+      Banded<InlineDense<double, 2, 3>, 1> A{storage};
+
+      InlineDense<double, 2, 1> b{{5.0}, {4.0}};
+
+      auto x = solveTridiagonal(A, b);
+      return x[0, 0] + x[1, 0];  // Should be 2 + 1 = 3
+    };
+
+    static_assert(test() == 3.0);
+  };
+
+  "multiplyBanded_tridiagonal_3x3"_test = [] {
+    // Matrix: [4 1 0]     Vector: [1]
+    //         [1 4 1]  *          [2]
+    //         [0 1 4]             [3]
+    // Result: [6, 12, 14]
+    InlineDense<double, 3, 3> storage{
+        {0.0, 4.0, 1.0},
+        {1.0, 4.0, 1.0},
+        {1.0, 4.0, 0.0},
+    };
+    Banded<InlineDense<double, 3, 3>, 1> A{storage};
+
+    InlineDense<double, 3, 1> x{{1.0}, {2.0}, {3.0}};
+
+    auto y = multiplyBanded(A, x);
+
+    expectNear(6.0, y[0, 0], 1e-10);   // 4*1 + 1*2 = 6
+    expectNear(12.0, y[1, 0], 1e-10);  // 1*1 + 4*2 + 1*3 = 1 + 8 + 3 = 12
+    expectNear(14.0, y[2, 0], 1e-10);  // 1*2 + 4*3 = 2 + 12 = 14
+  };
+
+  "multiplyBanded_diagonal_only"_test = [] {
+    // Diagonal matrix (1 band, center=0)
+    InlineDense<double, 4, 1> storage{
+        {2.0},
+        {3.0},
+        {4.0},
+        {5.0},
+    };
+    Banded<InlineDense<double, 4, 1>, 0> A{storage};
+
+    InlineDense<double, 4, 1> x{{1.0}, {2.0}, {3.0}, {4.0}};
+
+    auto y = multiplyBanded(A, x);
+
+    expectNear(2.0, y[0, 0], 1e-10);   // 2*1 = 2
+    expectNear(6.0, y[1, 0], 1e-10);   // 3*2 = 6
+    expectNear(12.0, y[2, 0], 1e-10);  // 4*3 = 12
+    expectNear(20.0, y[3, 0], 1e-10);  // 5*4 = 20
+  };
+
+  "multiplyBanded_upper_triangular"_test = [] {
+    // Upper bidiagonal (2 bands: diagonal + upper)
+    InlineDense<double, 3, 2> storage{
+        {1.0, 2.0},  // diag=1, upper=2
+        {3.0, 4.0},  // diag=3, upper=4
+        {5.0, 6.0},  // diag=5, (upper=6 out of bounds)
+    };
+    Banded<InlineDense<double, 3, 2>, 0> A{storage};
+
+    InlineDense<double, 3, 1> x{{1.0}, {1.0}, {1.0}};
+
+    auto y = multiplyBanded(A, x);
+
+    expectNear(3.0, y[0, 0], 1e-10);  // 1*1 + 2*1 = 3
+    expectNear(7.0, y[1, 0], 1e-10);  // 3*1 + 4*1 = 7
+    expectNear(5.0, y[2, 0], 1e-10);  // 5*1 = 5
+  };
+
+  "multiplyBanded_verification_with_solve"_test = [] {
+    // Verify multiplyBanded is consistent with solveTridiagonal
+    // Solve Ax=b, then check A(Ax) gives the same as A*b
+    InlineDense<double, 3, 3> storage{
+        {0.0, 4.0, 1.0},
+        {1.0, 4.0, 1.0},
+        {1.0, 4.0, 0.0},
+    };
+    Banded<InlineDense<double, 3, 3>, 1> A{storage};
+
+    InlineDense<double, 3, 1> b{{5.0}, {6.0}, {5.0}};
+
+    auto x = solveTridiagonal(A, b);
+    auto Ax = multiplyBanded(A, x);
+
+    // Ax should equal b (within numerical tolerance)
+    expectNear(5.0, Ax[0, 0], 1e-9);
+    expectNear(6.0, Ax[1, 0], 1e-9);
+    expectNear(5.0, Ax[2, 0], 1e-9);
+  };
+
+  "multiplyBanded_constexpr"_test = [] {
+    constexpr auto test = []() {
+      InlineDense<double, 2, 3> storage{
+          {0.0, 2.0, 1.0},
+          {1.0, 2.0, 0.0},
+      };
+      Banded<InlineDense<double, 2, 3>, 1> A{storage};
+
+      InlineDense<double, 2, 1> x{{3.0}, {4.0}};
+
+      auto y = multiplyBanded(A, x);
+      return y[0, 0] + y[1, 0];  // (2*3 + 1*4) + (1*3 + 2*4) = 10 + 11 = 21
+    };
+
+    static_assert(test() == 21.0);
+  };
+
   return TestRegistry::result();
 }

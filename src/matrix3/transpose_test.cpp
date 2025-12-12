@@ -1,6 +1,9 @@
 #include "matrix3/transpose.h"
 
+#include <complex>
+
 #include "matrix3/matrix.h"
+#include "matrix3/to_string.h"  // For std::complex formatter
 #include "unit.h"
 
 using namespace tempura;
@@ -271,6 +274,140 @@ auto main() -> int {
     expectEq(3.0, materialized[0, 1]);
     expectEq(2.0, materialized[1, 0]);
     expectEq(4.0, materialized[1, 1]);
+  };
+
+  // HermitianTranspose tests
+
+  "hermitian of real matrix equals transpose"_test = [] {
+    InlineDense<int, 2, 3> m{
+        {1, 2, 3},
+        {4, 5, 6}};
+    HermitianTranspose h{m};
+
+    // For real matrices, Hermitian transpose = regular transpose
+    expectEq(3uz, h.rows());
+    expectEq(2uz, h.cols());
+
+    expectEq(1, h[0, 0]);
+    expectEq(4, h[0, 1]);
+    expectEq(2, h[1, 0]);
+    expectEq(5, h[1, 1]);
+    expectEq(3, h[2, 0]);
+    expectEq(6, h[2, 1]);
+  };
+
+  "hermitian of complex matrix"_test = [] {
+    using C = std::complex<double>;
+    InlineDense<C, 2, 2> m{
+        {C{1.0, 2.0}, C{3.0, 4.0}},
+        {C{5.0, 6.0}, C{7.0, 8.0}}};
+    HermitianTranspose h{m};
+
+    expectEq(2uz, h.rows());
+    expectEq(2uz, h.cols());
+
+    // Hermitian: h[i,j] = conj(m[j,i])
+    // h[0,0] = conj(m[0,0]) = conj(1+2i) = 1-2i
+    expectEq(C(1.0, -2.0), h[0, 0]);
+    // h[0,1] = conj(m[1,0]) = conj(5+6i) = 5-6i
+    expectEq(C(5.0, -6.0), h[0, 1]);
+    // h[1,0] = conj(m[0,1]) = conj(3+4i) = 3-4i
+    expectEq(C(3.0, -4.0), h[1, 0]);
+    // h[1,1] = conj(m[1,1]) = conj(7+8i) = 7-8i
+    expectEq(C(7.0, -8.0), h[1, 1]);
+  };
+
+  "hermitian double application returns original"_test = [] {
+    using C = std::complex<double>;
+    InlineDense<C, 2, 2> m{
+        {C{1.0, 2.0}, C{3.0, 4.0}},
+        {C{5.0, 6.0}, C{7.0, 8.0}}};
+    HermitianTranspose<InlineDense<C, 2, 2>> h1{m};
+    HermitianTranspose<HermitianTranspose<InlineDense<C, 2, 2>>> h2{h1};
+
+    // h2 should have same dimensions and original values as m
+    expectEq(2uz, h2.rows());
+    expectEq(2uz, h2.cols());
+
+    // h2[i,j] = conj(h1[j,i]) = conj(conj(m[i,j])) = m[i,j]
+    expectEq(C(1.0, 2.0), h2[0, 0]);
+    expectEq(C(3.0, 4.0), h2[0, 1]);
+    expectEq(C(5.0, 6.0), h2[1, 0]);
+    expectEq(C(7.0, 8.0), h2[1, 1]);
+  };
+
+  "hermitian of real square matrix"_test = [] {
+    InlineDense<double, 3, 3> m{
+        {1.5, 2.5, 3.5},
+        {4.5, 5.5, 6.5},
+        {7.5, 8.5, 9.5}};
+    HermitianTranspose h{m};
+
+    expectEq(3uz, h.rows());
+    expectEq(3uz, h.cols());
+
+    // Diagonal unchanged
+    expectEq(1.5, h[0, 0]);
+    expectEq(5.5, h[1, 1]);
+    expectEq(9.5, h[2, 2]);
+
+    // Off-diagonal swapped (no conjugation for real)
+    expectEq(4.5, h[0, 1]);
+    expectEq(2.5, h[1, 0]);
+    expectEq(7.5, h[0, 2]);
+    expectEq(3.5, h[2, 0]);
+  };
+
+  "hermitian deduction guide"_test = [] {
+    using C = std::complex<double>;
+    InlineDense<C, 2, 2> m{
+        {C{1.0, 1.0}, C{2.0, 2.0}},
+        {C{3.0, 3.0}, C{4.0, 4.0}}};
+
+    // Should deduce HermitianTranspose<InlineDense<C, 2, 2>>
+    HermitianTranspose h{m};
+
+    expectEq(2uz, h.rows());
+    expectEq(2uz, h.cols());
+    expectEq(C(1.0, -1.0), h[0, 0]);
+    expectEq(C(3.0, -3.0), h[0, 1]);
+  };
+
+  "hermitian of const complex matrix"_test = [] {
+    using C = std::complex<double>;
+    const InlineDense<C, 2, 2> m{
+        {C{1.0, 2.0}, C{3.0, 4.0}},
+        {C{5.0, 6.0}, C{7.0, 8.0}}};
+    auto h = HermitianTranspose{m};
+
+    expectEq(C(1.0, -2.0), h[0, 0]);
+    expectEq(C(5.0, -6.0), h[0, 1]);
+    expectEq(C(3.0, -4.0), h[1, 0]);
+    expectEq(C(7.0, -8.0), h[1, 1]);
+  };
+
+  "hermitian materialize"_test = [] {
+    using C = std::complex<double>;
+    InlineDense<C, 2, 2> m{
+        {C{1.0, 2.0}, C{3.0, 4.0}},
+        {C{5.0, 6.0}, C{7.0, 8.0}}};
+    HermitianTranspose h{m};
+
+    auto materialized = h.materialize();
+
+    expectEq(2uz, materialized.rows());
+    expectEq(2uz, materialized.cols());
+
+    // Verify values match
+    expectEq(C(1.0, -2.0), materialized[0, 0]);
+    expectEq(C(5.0, -6.0), materialized[0, 1]);
+    expectEq(C(3.0, -4.0), materialized[1, 0]);
+    expectEq(C(7.0, -8.0), materialized[1, 1]);
+
+    // Modifying materialized shouldn't affect original
+    materialized[0, 0] = C{99.0, 99.0};
+    expectEq(C(1.0, 2.0), m[0, 0]);
+    expectEq(C(1.0, -2.0), h[0, 0]);
   };
 
   return TestRegistry::result();
