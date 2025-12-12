@@ -79,7 +79,7 @@ class Extents {
   // Returns the extent of the dimension i as known at compile time
   static constexpr auto staticExtent(std::size_t i) -> std::size_t {
     assert(i < rank());
-    std::size_t ans;
+    std::size_t ans = 0;
 
 #pragma clang diagnostic ignored "-Wunused-value"
     (((i-- == 0) ? (ans = Ns, true) : false) || ...);
@@ -90,7 +90,7 @@ class Extents {
   constexpr auto extent(std::size_t i) const -> IndexType {
     assert(i < rank());
     std::size_t dynamic_index = 0;
-    std::size_t ans;
+    std::size_t ans = 0;
 
 #pragma clang diagnostic ignored "-Wunused-value"
     (((i-- == 0) ? (ans = Ns, true)
