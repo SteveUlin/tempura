@@ -26,7 +26,10 @@ namespace tempura::matrix3 {
 // Band calculation: band = col - row + kCenterBand
 // Out-of-band elements return a reference to kZero member (reads as zero).
 //
-// DANGER: Writing to out-of-band elements is undefined behavior.
+// DANGER: Writing to out-of-band elements is undefined behavior - they return
+// a reference to the kZero member, so writes would corrupt it and affect all
+// subsequent out-of-band reads. Always check bounds before writing, or use an
+// accessor that throws on out-of-band access.
 template <typename ChildType, int64_t CenterBand = MatrixTraits<ChildType>::kCols / 2>
   requires(CenterBand >= 0 && CenterBand < static_cast<int64_t>(MatrixTraits<ChildType>::kCols))
 class Banded {
