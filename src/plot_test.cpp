@@ -149,5 +149,40 @@ auto main() -> int {
     expectEq(colors::kBlue.b, 255);
   };
 
+  "multiPlotBraille empty"_test = [] {
+    std::vector<Series> empty;
+    expectEq(multiPlotBraille(empty, 0, 10, 40, 10), "");
+  };
+
+  "multiPlotBraille single series"_test = [] {
+    std::vector<Series> series{
+        {[](double x) { return std::sin(x); }, colors::kRed, "sin"},
+    };
+    auto result = multiPlotBraille(series, 0, 6.28, 40, 10);
+    expectTrue(!result.empty());
+    expectTrue(result.find("sin") != std::string::npos);
+  };
+
+  "multiPlotBraille color mixing"_test = [] {
+    std::vector<Series> series{
+        {[](double x) { return std::sin(x); }, colors::kRed, "R"},
+        {[](double x) { return std::cos(x); }, colors::kBlue, "B"},
+    };
+    auto result = multiPlotBraille(series, 0, 6.28, 50, 12);
+    expectTrue(!result.empty());
+    // Should have legend
+    expectTrue(result.find("R") != std::string::npos);
+    expectTrue(result.find("B") != std::string::npos);
+  };
+
+  "multiPlotBraille with title"_test = [] {
+    std::vector<Series> series{
+        {[](double x) { return x; }, colors::kGreen, "linear"},
+    };
+    auto result =
+        multiPlotBraille(series, 0, 10, 40, 8, true, true, "Test Title");
+    expectTrue(result.find("Test Title") != std::string::npos);
+  };
+
   return TestRegistry::result();
 }

@@ -640,7 +640,7 @@ inline auto scatterPlot(const std::vector<Point>& points, int64_t width,
   return result;
 }
 
-// Multi-series plot
+// Multi-series plot (simple, low resolution)
 inline auto multiPlot(std::vector<Series>& series_list, double min_x,
                       double max_x, int64_t width, int64_t height)
     -> std::string {
@@ -709,6 +709,211 @@ inline auto multiPlot(std::vector<Series>& series_list, double min_x,
       }
     }
     result += "\n";
+  }
+
+  // Add legend
+  result += "\n";
+  for (const auto& s : series_list) {
+    result += s.color.wrap("●");
+    result += " ";
+    result += s.label.empty() ? "series" : s.label;
+    result += "  ";
+  }
+  result += "\n";
+
+  return result;
+}
+
+// High-resolution multi-series Braille plot with color mixing
+// When multiple series occupy the same Braille dot, their colors are blended
+inline auto multiPlotBraille(std::vector<Series>& series_list, double min_x,
+                             double max_x, int64_t width, int64_t height,
+                             bool show_border = true, bool show_axes = true,
+                             const std::string& title = "") -> std::string {
+  if (width <= 0 || height <= 0) return "";
+  if (max_x <= min_x) return "";
+  if (series_list.empty()) return "";
+
+  // Sample at 2x4 resolution for Braille rendering
+  const int64_t sample_width = 2 * width;
+  const int64_t sample_height = 4 * height;
+  const auto grid_size = static_cast<size_t>(sample_width * sample_height);
+
+  // Find global y range by sampling all series
+  double min_y = std::numeric_limits<double>::max();
+  double max_y = std::numeric_limits<double>::lowest();
+
+  // Store y values for each series at each sample point
+  std::vector<std::vector<double>> all_y_values;
+  all_y_values.reserve(series_list.size());
+
+  for (auto& s : series_list) {
+    std::vector<double> y_values;
+    y_values.reserve(static_cast<size_t>(sample_width + 1));
+
+    for (int64_t i = 0; i <= sample_width; ++i) {
+      const double x =
+          min_x + (max_x - min_x) * static_cast<double>(i) / sample_width;
+      const double y = s.fn(x);
+      y_values.push_back(y);
+      min_y = std::min(min_y, y);
+      max_y = std::max(max_y, y);
+    }
+    all_y_values.push_back(std::move(y_values));
+  }
+
+  // Ensure non-zero range
+  if (max_y <= min_y) {
+    const double center = (max_y + min_y) / 2;
+    max_y = center + 1.0;
+    min_y = center - 1.0;
+  }
+
+  // For each Braille dot, track which series contribute (as bitmask per series)
+  // We store accumulated RGB values and count for averaging
+  struct CellColor {
+    uint32_t r_sum = 0;
+    uint32_t g_sum = 0;
+    uint32_t b_sum = 0;
+    uint8_t count = 0;
+
+    void add(const RGB& color) {
+      r_sum += color.r;
+      g_sum += color.g;
+      b_sum += color.b;
+      ++count;
+    }
+
+    [[nodiscard]] auto blend() const -> RGB {
+      if (count == 0) return colors::kDefault;
+      return RGB{static_cast<uint8_t>(r_sum / count),
+                 static_cast<uint8_t>(g_sum / count),
+                 static_cast<uint8_t>(b_sum / count)};
+    }
+  };
+
+  // For each sample cell, track accumulated color
+  std::vector<CellColor> cell_colors(grid_size);
+  // Occupancy grid - which cells are "on"
+  std::vector<bool> occupancy(grid_size, false);
+
+  // Fill occupancy and colors for each series
+  for (size_t s = 0; s < series_list.size(); ++s) {
+    const auto& y_values = all_y_values[s];
+    const RGB& color = series_list[s].color;
+
+    for (int64_t i = 0; i < sample_width; ++i) {
+      const double y0 = y_values[static_cast<size_t>(i)];
+      const double y1 = y_values[static_cast<size_t>(i + 1)];
+
+      int64_t row0 = detail::yToRow(y0, min_y, max_y, sample_height);
+      int64_t row1 = detail::yToRow(y1, min_y, max_y, sample_height);
+
+      row0 = std::clamp(row0, int64_t{0}, sample_height - 1);
+      row1 = std::clamp(row1, int64_t{0}, sample_height - 1);
+
+      const int64_t start_row = std::min(row0, row1);
+      const int64_t end_row = std::max(row0, row1);
+
+      for (int64_t j = start_row; j <= end_row; ++j) {
+        const auto idx = static_cast<size_t>(i + j * sample_width);
+        if (idx < grid_size) {
+          if (!occupancy[idx]) {
+            occupancy[idx] = true;
+          }
+          cell_colors[idx].add(color);
+        }
+      }
+    }
+  }
+
+  // For each character cell, compute the blended color from all contributing
+  // Braille dots
+  struct CharCell {
+    int64_t octant = 0;
+    CellColor blended_color;
+  };
+
+  std::vector<CharCell> char_cells(static_cast<size_t>(width * height));
+
+  for (int64_t col = 0; col < width; ++col) {
+    for (int64_t row = 0; row < height; ++row) {
+      const int64_t ox = col * 2;
+      const int64_t oy = row * 4;
+
+      auto& cell = char_cells[static_cast<size_t>(col + row * width)];
+
+      // Braille bit layout: rows 0-3 in left column (bits 0-3),
+      // rows 0-3 in right column (bits 4-7)
+      for (int64_t dy = 0; dy < 4; ++dy) {
+        const auto idx_l = static_cast<size_t>(ox + (oy + dy) * sample_width);
+        const auto idx_r =
+            static_cast<size_t>((ox + 1) + (oy + dy) * sample_width);
+
+        if (idx_l < occupancy.size() && occupancy[idx_l]) {
+          cell.octant |= (1 << dy);
+          // Add all colors that contributed to this dot
+          const auto& cc = cell_colors[idx_l];
+          cell.blended_color.r_sum += cc.r_sum;
+          cell.blended_color.g_sum += cc.g_sum;
+          cell.blended_color.b_sum += cc.b_sum;
+          cell.blended_color.count += cc.count;
+        }
+        if (idx_r < occupancy.size() && occupancy[idx_r]) {
+          cell.octant |= (1 << (dy + 4));
+          const auto& cc = cell_colors[idx_r];
+          cell.blended_color.r_sum += cc.r_sum;
+          cell.blended_color.g_sum += cc.g_sum;
+          cell.blended_color.b_sum += cc.b_sum;
+          cell.blended_color.count += cc.count;
+        }
+      }
+    }
+  }
+
+  // Build the plot
+  std::vector<std::string> plot(static_cast<size_t>(width * height), " ");
+
+  // Draw x-axis first
+  if (show_axes) {
+    detail::drawXAxis(plot, min_y, max_y, width, height);
+  }
+
+  // Render Braille characters with blended colors
+  for (int64_t col = 0; col < width; ++col) {
+    for (int64_t row = 0; row < height; ++row) {
+      const auto& cell = char_cells[static_cast<size_t>(col + row * width)];
+      if (cell.octant != 0) {
+        if (auto idx = detail::safeIndex(col, row, width, height)) {
+          const RGB blended = cell.blended_color.blend();
+          plot[*idx] = blended.wrap(kOctant[cell.octant]);
+        }
+      }
+    }
+  }
+
+  // Build result string
+  std::string result;
+  result.reserve(
+      static_cast<size_t>((width + 10) * (height + series_list.size() + 5)));
+
+  if (show_border) {
+    detail::drawBorder(result, width, title);
+  }
+
+  for (int64_t row = 0; row < height; ++row) {
+    if (show_border) result += "│";
+    for (int64_t col = 0; col < width; ++col) {
+      if (auto idx = detail::safeIndex(col, row, width, height)) {
+        result += plot[*idx];
+      }
+    }
+    if (show_border) result += "│";
+    result += "\n";
+  }
+
+  if (show_border) {
+    detail::drawBottomBorder(result, width);
   }
 
   // Add legend

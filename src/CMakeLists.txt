@@ -147,6 +147,14 @@ target_include_directories(image INTERFACE
 target_link_libraries(image INTERFACE tempura_flags)
 add_library(tempura::image ALIAS image)
 
+add_library(plot INTERFACE plot.h)
+target_include_directories(plot INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
+  $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(plot INTERFACE tempura_flags)
+add_library(tempura::plot ALIAS plot)
+
 # Profiler is a shared library (not INTERFACE)
 add_library(profiler SHARED)
 target_sources(profiler PUBLIC profiler.h profiler.cpp)
@@ -201,6 +209,11 @@ if(TEMPURA_BUILD_TESTS)
   target_link_libraries(interpolate_test unit interpolate)
   add_test(NAME interpolate_test COMMAND interpolate_test)
   set_property(TEST interpolate_test PROPERTY LABELS base)
+
+  add_executable(plot_test plot_test.cpp)
+  target_link_libraries(plot_test unit plot)
+  add_test(NAME plot_test COMMAND plot_test)
+  set_property(TEST plot_test PROPERTY LABELS base)
 endif()
 
 

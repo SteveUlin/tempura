@@ -21,8 +21,8 @@ target_link_libraries(sample_normal_main PRIVATE bayes)
 add_executable(histogram histogram_main.cpp)
 target_link_libraries(histogram PRIVATE bayes)
 
-add_executable(plot plot_main.cpp)
-target_link_libraries(plot PRIVATE bayes)
+add_executable(plot_demo plot_main.cpp)
+target_link_libraries(plot_demo PRIVATE plot)
 add_executable(text_size text_size.cpp)
 # add_executable(symbols_main symbols.cpp)  # Disabled - uses old symbolic system
 add_executable(symbolic3_debug_demo symbolic3_debug_demo.cpp)

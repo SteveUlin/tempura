@@ -63,8 +63,8 @@ auto main() -> int {
   std::cout << scatterPlot(points, 60, 15, colors::kYellow);
   std::println("");
 
-  // 5. Multi-series plot
-  std::println("5. Multi-Series Plot (sin, cos, and tan clipped)");
+  // 5. Multi-series plot (simple)
+  std::println("5. Multi-Series Plot - Simple (sin, cos, and tan clipped)");
 
   std::vector<Series> series{
       {[](double x) { return std::sin(x); }, colors::kRed, "sin(x)"},
@@ -75,6 +75,32 @@ auto main() -> int {
   };
 
   std::cout << multiPlot(series, 0., 6.28, 70, 15);
+  std::println("");
+
+  // 5b. High-resolution Braille multi-series with color mixing
+  std::println("5b. Multi-Series Braille Plot with Color Mixing");
+  std::println("    When lines cross, colors blend (red+blue=purple, etc.)\n");
+
+  std::vector<Series> braille_series{
+      {[](double x) { return std::sin(x); }, colors::kRed, "sin(x)"},
+      {[](double x) { return std::cos(x); }, colors::kBlue, "cos(x)"},
+  };
+
+  std::cout << multiPlotBraille(braille_series, 0., 12.56, 80, 15, true, true,
+                                " sin & cos with color mixing ");
+  std::println("");
+
+  // 5c. Three-way color mixing
+  std::println("5c. Three-Way Color Mixing (RGB waves)");
+
+  std::vector<Series> rgb_series{
+      {[](double x) { return std::sin(x); }, colors::kRed, "R"},
+      {[](double x) { return std::sin(x + 2.09); }, colors::kGreen, "G"},
+      {[](double x) { return std::sin(x + 4.19); }, colors::kBlue, "B"},
+  };
+
+  std::cout << multiPlotBraille(rgb_series, 0., 12.56, 80, 12, true, true,
+                                " RGB phase-shifted sines ");
   std::println("");
 
   // 6. Histogram
