@@ -8,10 +8,26 @@
 
 namespace tempura {
 
-using JsonValue = std::variant<std::monostate, bool, int64_t, double,
-                               std::string, struct JsonArray, struct JsonMap>;
-struct JsonArray : std::vector<JsonValue> {};
-struct JsonMap : std::map<std::string, JsonValue> {};
+// Forward declarations for recursive variant
+struct JsonArray;
+struct JsonMap;
+
+using JsonValue = std::variant<std::monostate, bool, int, int64_t, double,
+                               std::string, JsonArray, JsonMap>;
+
+struct JsonArray : std::vector<JsonValue> {
+  using std::vector<JsonValue>::vector;
+  JsonArray() = default;
+  JsonArray(std::initializer_list<JsonValue> init)
+      : std::vector<JsonValue>(init) {}
+};
+
+struct JsonMap : std::map<std::string, JsonValue> {
+  using std::map<std::string, JsonValue>::map;
+  JsonMap() = default;
+  JsonMap(std::initializer_list<std::pair<const std::string, JsonValue>> init)
+      : std::map<std::string, JsonValue>(init) {}
+};
 
 auto escapeJson(const std::string& s) -> std::string {
   std::string output;
@@ -109,6 +125,7 @@ constexpr auto toString(const JsonValue& obj, size_t indentLevel)
       Overloaded{
           [](std::monostate) -> std::string { return "null"; },
           [](bool curr) -> std::string { return curr ? "true" : "false"; },
+          [](int curr) -> std::string { return std::to_string(curr); },
           [](int64_t curr) -> std::string { return std::to_string(curr); },
           [](double curr) -> std::string { return std::format("{:g}", curr); },
           [](const std::string& curr) -> std::string {
