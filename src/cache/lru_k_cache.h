@@ -63,8 +63,8 @@ class LruKCache {
     return true;
   }
 
-  [[nodiscard]] auto size() const -> std::size_t { return data_.size(); }
-  [[nodiscard]] auto capacity() const -> std::size_t { return capacity_; }
+  auto size() const -> std::size_t { return data_.size(); }
+  auto capacity() const -> std::size_t { return capacity_; }
 
  private:
   struct Entry {

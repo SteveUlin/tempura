@@ -47,6 +47,7 @@
               vulkan-validation-layers
               jq
               python3
+              liburing
             ];
 
             env = {

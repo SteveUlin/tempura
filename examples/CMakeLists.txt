@@ -77,3 +77,6 @@ target_link_libraries(matrix3_demo PRIVATE matrix3)
 add_executable(ode_demo ode_demo.cpp)
 target_link_libraries(ode_demo PRIVATE ode)
 
+add_executable(io_uring_demo io_uring_demo.cpp)
+target_link_libraries(io_uring_demo PRIVATE io_uring_sender task threadpool)
+
