@@ -11,4 +11,7 @@ if(TEMPURA_BUILD_TESTS)
   target_link_libraries(linear_probing_test unit linear_probing)
   add_test(NAME linear_probing_test COMMAND linear_probing_test)
   set_property(TEST linear_probing_test PROPERTY LABELS containers)
+
+  add_executable(probe_analysis probe_analysis.cpp)
+  target_link_libraries(probe_analysis linear_probing)
 endif()
