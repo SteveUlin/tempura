@@ -66,9 +66,21 @@
 - Create test files in project-local directories (e.g., `build/`, test subdirectories)
 - Keep all development artifacts within the project tree
 
+## Build & Test
+
+- Prefer `cmake --build <dir>` over calling `make`/`ninja` directly (generator-agnostic)
+- Prefer `ctest` for running tests (handles test discovery, labels, output capture)
+- Examples:
+  ```bash
+  cmake --build build                    # Build all targets
+  cmake --build build --target foo_test  # Build specific target
+  ctest --test-dir build -R foo          # Run tests matching "foo"
+  ctest --test-dir build -L containers   # Run tests with label "containers"
+  ```
+
 ## Command Execution
 
 - AVOID using `$` variables in bash commands when possible
 - Commands with `$` trigger user approval prompts which slow down workflow
 - Use absolute paths or relative paths instead of environment variables
-- Example: use `cd build-asan && make` NOT `cd $BUILD_DIR && make`
+- Example: use `cd build-asan && cmake --build .` NOT `cd $BUILD_DIR && make`

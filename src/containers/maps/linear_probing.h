@@ -612,7 +612,7 @@ class LinearProbingMap {
 
     // Should never reach here - load factor check guarantees empty slots exist
     assert(false && "insertSlot: table full despite load factor check - bad hash?");
-    __builtin_unreachable();
+    std::unreachable();
   }
 
   // Resize the table to new_capacity.
