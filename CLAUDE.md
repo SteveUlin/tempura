@@ -84,3 +84,14 @@
 - Commands with `$` trigger user approval prompts which slow down workflow
 - Use absolute paths or relative paths instead of environment variables
 - Example: use `cd build-asan && cmake --build .` NOT `cd $BUILD_DIR && make`
+
+## Code Organization
+
+**Locality vs DRY tradeoffs:**
+
+- **Concepts and type traits**: Deduplicate into shared headers - these are stable abstractions
+- **Implementation details** (e.g., SlotState enums per container): Keep local to each file
+  - Locality aids comprehension for humans and AI
+  - Similar implementations can diverge independently
+  - Avoids coupling between files that happen to share patterns today
+- **Rule of thumb**: Share stable abstractions, duplicate volatile implementation details

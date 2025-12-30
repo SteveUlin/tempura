@@ -1,75 +1,83 @@
 #pragma once
 
 // ============================================================================
-// Linear Probing Hash Map
+// Double Hashing Hash Map
 // ============================================================================
 //
-// A hash map is an associative container that maps keys to values. The key
-// insight is that we can use a hash function to convert keys into array
-// indices, giving us O(1) average-case lookup, insertion, and deletion.
-//
-// This implementation uses "open addressing" with "linear probing" as its
-// collision resolution strategy. Let's understand what this means:
+// A hash map using "open addressing" with "double hashing" as its collision
+// resolution strategy. Double hashing uses TWO hash functions to compute the
+// probe sequence, eliminating the clustering problems of simpler methods.
 //
 // THE BASIC IDEA
 // --------------
-// 1. We maintain an array of "slots" (buckets)
-// 2. To insert key K: compute hash(K) % capacity to get the target slot
-// 3. If that slot is empty, store the key-value pair there
-// 4. If occupied (a "collision"), probe linearly: try slot+1, slot+2, etc.
-// 5. To find a key: start at hash(K) % capacity, probe until found or empty
+// Unlike linear probing which steps by 1 on each collision:
+//   slot, slot+1, slot+2, slot+3, ...
 //
-// EXAMPLE: Inserting keys with hash values 5, 12, 5, 6 into capacity=7
+// Double hashing uses a key-dependent step size computed by a second hash:
+//   h1(key), h1(key)+h2(key), h1(key)+2*h2(key), h1(key)+3*h2(key), ...
 //
-//   Insert hash=5: slot 5 empty → store at [5]
-//   Insert hash=12: 12%7=5, slot 5 occupied → try [6] → store at [6]
-//   Insert hash=5: slot 5 occupied → try [6] occupied → try [0] → store at [0]
-//   Insert hash=6: slot 6 occupied → try [0] occupied → try [1] → store at [1]
+// The formula is: (h1(key) + i * h2(key)) % capacity, where i = 0, 1, 2, ...
 //
-//   Array: [ K3 | K4 | ∅ | ∅ | ∅ | K1 | K2 ]
-//           [0]  [1]  [2] [3] [4] [5]  [6]
+// WHY TWO HASH FUNCTIONS?
+// -----------------------
+// Linear probing suffers from "primary clustering": keys that hash to nearby
+// positions follow overlapping probe sequences, creating long chains.
 //
-// WHY LINEAR PROBING?
-// -------------------
+// Quadratic probing (slot+1, slot+4, slot+9, ...) reduces primary clustering
+// but creates "secondary clustering": all keys with the same h1 value follow
+// the same probe sequence.
+//
+// Double hashing eliminates BOTH forms of clustering: even if two keys have
+// the same h1(key), they will (likely) have different h2(key) values, giving
+// them completely different probe sequences.
+//
+// EXAMPLE: Inserting keys A, B, C with h1(A)=5, h1(B)=5, h1(C)=5
+//          and h2(A)=3, h2(B)=2, h2(C)=5 into capacity=7
+//
+//   Insert A: slot 5 empty → store at [5]
+//   Insert B: slot 5 occupied → try (5+2)%7=0 → store at [0]
+//   Insert C: slot 5 occupied → try (5+5)%7=3 → store at [3]
+//
+//   Array: [ B | ∅ | ∅ | C | ∅ | A | ∅ ]
+//           [0] [1] [2] [3] [4] [5] [6]
+//
+//   Compare with linear probing where all three would cluster at [5][6][0].
+//
+// THE h2(key) REQUIREMENTS
+// ------------------------
+// Critical: h2(key) must satisfy two constraints:
+//
+//   1. h2(key) ≠ 0: Otherwise we'd check slot h1(key) forever (infinite loop)
+//   2. h2(key) must be coprime with capacity: Otherwise we won't visit all
+//      slots before repeating. Example: h2=4, capacity=8 gives cycle:
+//      0→4→0→4→... (only visits 2 of 8 slots)
+//
+// Solution: Use PRIME table sizes. Every h2 value in [1, capacity-1] is
+// automatically coprime with a prime capacity.
+//
+// Common h2 formula: PRIME - (key % PRIME), where PRIME < capacity
+// This guarantees h2 ∈ [1, PRIME], avoiding zero.
+//
+// PROS AND CONS
+// -------------
 // Pros:
-//   - Cache-friendly: sequential memory access during probing
-//   - Simple to implement and reason about
-//   - No extra memory for linked lists (unlike chaining)
+//   ✓ Eliminates both primary and secondary clustering
+//   ✓ More uniform probe distribution than linear/quadratic probing
+//   ✓ Better worst-case performance under adversarial inputs
+//   ✓ Theoretical probe count: 1/(1-α) for unsuccessful search (α = load factor)
 //
 // Cons:
-//   - "Primary clustering": long runs of occupied slots form, degrading perf
-//   - Deletion is tricky (we use tombstones, explained below)
-//   - Performance degrades rapidly as load factor approaches 1.0
+//   ✗ Requires two hash function evaluations per probe (more computation)
+//   ✗ Needs good, independent hash functions to realize benefits
+//   ✗ Less cache-friendly than linear probing (non-sequential access)
+//   ✗ Requires prime table sizes for correctness guarantees
 //
-// LOAD FACTOR
-// -----------
-// Load factor α = size / capacity. It measures how "full" the table is.
-//
-//   α = 0.0: Empty table, O(1) operations
-//   α = 0.5: ~1.5 probes on average for successful search
-//   α = 0.7: ~2.2 probes on average (our resize threshold)
-//   α = 0.9: ~5.5 probes on average (getting slow)
-//   α → 1.0: Probe count → ∞ (catastrophic)
-//
-// We resize when α > 0.7 to maintain good performance.
-//
-// DELETION AND TOMBSTONES
-// -----------------------
-// Naive deletion breaks the probe chain. Consider:
-//
-//   [A][B][C][ ]  where B was inserted after A due to collision
-//
-// If we delete A by marking it empty:
-//
-//   [ ][B][C][ ]
-//
-// Now searching for B starts at A's old slot, sees empty, and wrongly
-// concludes B doesn't exist! Solution: mark deleted slots as "tombstones":
-//
-//   [†][B][C][ ]
-//
-// Tombstones are skipped during search but can be reused during insertion.
-// Too many tombstones degrade performance, so we clean them during resize.
+// WHEN TO USE DOUBLE HASHING
+// --------------------------
+// - When you need predictable worst-case performance
+// - When keys may have patterns that cause clustering with simpler probing
+// - When table utilization is high (α > 0.6)
+// - When cache locality is less important than avoiding pathological cases
 //
 // ============================================================================
 
@@ -87,21 +95,70 @@ namespace tempura {
 // ============================================================================
 // Slot State
 // ============================================================================
-// Each slot in our table is in one of three states:
 
-enum class SlotState : std::uint8_t {
+enum class DoubleHashSlotState : std::uint8_t {
   kEmpty,      // Never used, or cleaned during resize
   kOccupied,   // Contains a valid key-value pair
   kTombstone,  // Was occupied, now deleted (keeps probe chain intact)
 };
 
 // ============================================================================
-// LinearProbingMap
+// Default Second Hash Function
+// ============================================================================
+// For keys convertible to size_t, we use the formula:
+//   h2(key) = PRIME - (hash(key) % PRIME)
+//
+// where PRIME is a constant smaller than any reasonable capacity.
+// This guarantees h2 ∈ [1, PRIME], never zero.
+
+template <typename Key>
+struct DefaultHash2 {
+  // Use a prime smaller than our minimum capacity
+  static constexpr std::size_t kPrime = 7;
+
+  constexpr auto operator()(const Key& key) const -> std::size_t {
+    // Apply std::hash first, then compute the secondary step
+    std::size_t h = std::hash<Key>{}(key);
+    return kPrime - (h % kPrime);  // Result in [1, kPrime]
+  }
+};
+
+// ============================================================================
+// Prime Table Sizes
+// ============================================================================
+// We use prime capacities to ensure h2(key) is always coprime with capacity.
+// Each size is roughly double the previous for amortized O(1) resize.
+
+constexpr std::size_t kPrimeSizes[] = {
+    11,        23,        47,        97,         193,        389,
+    769,       1543,      3079,      6151,       12289,      24593,
+    49157,     98317,     196613,    393241,     786433,     1572869,
+    3145739,   6291469,   12582917,  25165843,   50331653,   100663319,
+    201326611, 402653189, 805306457, 1610612741,
+};
+
+constexpr std::size_t kNumPrimeSizes =
+    sizeof(kPrimeSizes) / sizeof(kPrimeSizes[0]);
+
+// Find the smallest prime >= n
+constexpr auto nextPrime(std::size_t n) -> std::size_t {
+  for (std::size_t i = 0; i < kNumPrimeSizes; ++i) {
+    if (kPrimeSizes[i] >= n) {
+      return kPrimeSizes[i];
+    }
+  }
+  // Fallback for very large tables (unlikely in practice)
+  return kPrimeSizes[kNumPrimeSizes - 1];
+}
+
+// ============================================================================
+// DoubleHashingMap
 // ============================================================================
 
-template <typename Key, typename Value, Hasher<Key> Hash = std::hash<Key>,
+template <typename Key, typename Value, Hasher<Key> Hash1 = std::hash<Key>,
+          Hasher<Key> Hash2 = DefaultHash2<Key>,
           typename KeyEqual = std::equal_to<Key>>
-class LinearProbingMap {
+class DoubleHashingMap {
  public:
   // --------------------------------------------------------------------------
   // Type Aliases
@@ -111,7 +168,8 @@ class LinearProbingMap {
   using mapped_type = Value;
   using value_type = std::pair<const Key, Value>;
   using size_type = std::size_t;
-  using hasher = Hash;
+  using hasher = Hash1;
+  using second_hasher = Hash2;
   using key_equal = KeyEqual;
 
   // --------------------------------------------------------------------------
@@ -122,12 +180,18 @@ class LinearProbingMap {
   // default-construction overhead for empty slots.
 
   struct Slot {
-    SlotState state = SlotState::kEmpty;
+    DoubleHashSlotState state = DoubleHashSlotState::kEmpty;
     ManualLifetime<std::pair<Key, Value>> storage;
 
-    auto isEmpty() const -> bool { return state == SlotState::kEmpty; }
-    auto isOccupied() const -> bool { return state == SlotState::kOccupied; }
-    auto isTombstone() const -> bool { return state == SlotState::kTombstone; }
+    auto isEmpty() const -> bool {
+      return state == DoubleHashSlotState::kEmpty;
+    }
+    auto isOccupied() const -> bool {
+      return state == DoubleHashSlotState::kOccupied;
+    }
+    auto isTombstone() const -> bool {
+      return state == DoubleHashSlotState::kTombstone;
+    }
 
     auto data() -> std::pair<Key, Value>* { return &storage.get(); }
     auto data() const -> const std::pair<Key, Value>* { return &storage.get(); }
@@ -135,21 +199,21 @@ class LinearProbingMap {
     template <typename... Args>
     void construct(Args&&... args) {
       storage.construct(std::forward<Args>(args)...);
-      state = SlotState::kOccupied;
+      state = DoubleHashSlotState::kOccupied;
     }
 
     void destroy() {
-      if (state == SlotState::kOccupied) {
+      if (state == DoubleHashSlotState::kOccupied) {
         storage.destruct();
       }
-      state = SlotState::kEmpty;
+      state = DoubleHashSlotState::kEmpty;
     }
 
     void markTombstone() {
-      if (state == SlotState::kOccupied) {
+      if (state == DoubleHashSlotState::kOccupied) {
         storage.destruct();
       }
-      state = SlotState::kTombstone;
+      state = DoubleHashSlotState::kTombstone;
     }
   };
 
@@ -158,25 +222,26 @@ class LinearProbingMap {
   // --------------------------------------------------------------------------
 
   // Load factor threshold: resize when (size + tombstones) * 10 >= capacity * 7
-  // This avoids floating-point math in the hot path while achieving ~0.7 threshold.
+  // This avoids floating-point math in the hot path while achieving ~0.7
+  // threshold.
   static constexpr size_type kLoadFactorNumerator = 7;
   static constexpr size_type kLoadFactorDenominator = 10;
 
-  // Minimum capacity. Must be > 0. Small tables have high overhead anyway.
-  static constexpr size_type kMinCapacity = 8;
+  // Minimum capacity (smallest prime in our list)
+  static constexpr size_type kMinCapacity = kPrimeSizes[0];  // 11
 
   // --------------------------------------------------------------------------
   // Constructors
   // --------------------------------------------------------------------------
 
-  constexpr LinearProbingMap() : LinearProbingMap{kMinCapacity} {}
+  constexpr DoubleHashingMap() : DoubleHashingMap{kMinCapacity} {}
 
-  constexpr explicit LinearProbingMap(size_type initial_capacity)
-      : capacity_{std::max(initial_capacity, kMinCapacity)},
+  constexpr explicit DoubleHashingMap(size_type initial_capacity)
+      : capacity_{nextPrime(std::max(initial_capacity, kMinCapacity))},
         slots_{new Slot[capacity_]{}} {}
 
   // Copy constructor: deep copy all occupied slots
-  constexpr LinearProbingMap(const LinearProbingMap& other)
+  constexpr DoubleHashingMap(const DoubleHashingMap& other)
       : capacity_{other.capacity_},
         size_{other.size_},
         tombstone_count_{other.tombstone_count_},
@@ -191,7 +256,7 @@ class LinearProbingMap {
   }
 
   // Move constructor: steal resources
-  constexpr LinearProbingMap(LinearProbingMap&& other) noexcept
+  constexpr DoubleHashingMap(DoubleHashingMap&& other) noexcept
       : capacity_{other.capacity_},
         size_{other.size_},
         tombstone_count_{other.tombstone_count_},
@@ -203,25 +268,25 @@ class LinearProbingMap {
   }
 
   // Copy assignment using copy-and-swap for exception safety
-  constexpr auto operator=(const LinearProbingMap& other) -> LinearProbingMap& {
+  constexpr auto operator=(const DoubleHashingMap& other) -> DoubleHashingMap& {
     if (this != &other) {
-      LinearProbingMap tmp{other};
+      DoubleHashingMap tmp{other};
       swap(tmp);
     }
     return *this;
   }
 
   // Move assignment using swap
-  constexpr auto operator=(LinearProbingMap&& other) noexcept
-      -> LinearProbingMap& {
+  constexpr auto operator=(DoubleHashingMap&& other) noexcept
+      -> DoubleHashingMap& {
     if (this != &other) {
-      LinearProbingMap tmp{std::move(other)};
+      DoubleHashingMap tmp{std::move(other)};
       swap(tmp);
     }
     return *this;
   }
 
-  constexpr ~LinearProbingMap() {
+  constexpr ~DoubleHashingMap() {
     if (slots_) {
       for (size_type i = 0; i < capacity_; ++i) {
         slots_[i].destroy();
@@ -231,12 +296,13 @@ class LinearProbingMap {
   }
 
   // Swap two maps (used by copy-and-swap idiom)
-  constexpr void swap(LinearProbingMap& other) noexcept {
+  constexpr void swap(DoubleHashingMap& other) noexcept {
     std::swap(capacity_, other.capacity_);
     std::swap(size_, other.size_);
     std::swap(tombstone_count_, other.tombstone_count_);
     std::swap(slots_, other.slots_);
-    std::swap(hasher_, other.hasher_);
+    std::swap(hasher1_, other.hasher1_);
+    std::swap(hasher2_, other.hasher2_);
     std::swap(equal_, other.equal_);
   }
 
@@ -244,17 +310,11 @@ class LinearProbingMap {
   // Capacity
   // --------------------------------------------------------------------------
 
-  constexpr auto size() const noexcept -> size_type {
-    return size_;
-  }
+  constexpr auto size() const noexcept -> size_type { return size_; }
 
-  constexpr auto capacity() const noexcept -> size_type {
-    return capacity_;
-  }
+  constexpr auto capacity() const noexcept -> size_type { return capacity_; }
 
-  constexpr auto empty() const noexcept -> bool {
-    return size_ == 0;
-  }
+  constexpr auto empty() const noexcept -> bool { return size_ == 0; }
 
   constexpr auto loadFactor() const noexcept -> double {
     return static_cast<double>(size_ + tombstone_count_) /
@@ -268,12 +328,10 @@ class LinearProbingMap {
   // Find a key and return pointer to its value, or nullptr if not found.
   //
   // Algorithm:
-  //   1. Compute starting slot: hash(key) % capacity
-  //   2. Probe linearly until we find:
-  //      - The key itself → return pointer to value
-  //      - An empty slot → key doesn't exist, return nullptr
-  //      - A tombstone → keep probing (deleted key, chain continues)
-  //      - Different key → keep probing (collision)
+  //   1. Compute h1(key) for starting slot, h2(key) for step size
+  //   2. Probe with double hashing: idx = (h1 + i*h2) % capacity
+  //   3. Stop when: empty slot (not found) or key matches (found)
+  //   4. Skip: tombstones and other occupied slots
 
   constexpr auto find(const Key& key) -> Value* {
     size_type idx = findSlot(key);
@@ -310,10 +368,8 @@ class LinearProbingMap {
   //
   // Algorithm:
   //   1. Check load factor; resize if necessary
-  //   2. Find insertion point:
-  //      - If key exists, return existing slot
-  //      - Otherwise, find first empty or tombstone slot
-  //   3. Insert at that slot
+  //   2. Find insertion point using double hashing probe
+  //   3. Insert at first empty/tombstone slot after verifying key doesn't exist
 
   constexpr auto insert(const Key& key, const Value& value)
       -> std::pair<Value*, bool> {
@@ -346,12 +402,8 @@ class LinearProbingMap {
 
   // Erase a key. Returns true if the key was found and removed.
   //
-  // We use tombstones rather than actually clearing the slot:
-  //   - Mark state as kTombstone (destroys the data)
-  //   - Increment tombstone count
-  //
-  // Tombstones preserve probe chain integrity but degrade performance over
-  // time. We clean them up during resize operations.
+  // We use tombstones rather than actually clearing the slot to preserve
+  // probe chain integrity. Tombstones are cleaned up during resize.
 
   constexpr auto erase(const Key& key) -> bool {
     size_type idx = findSlot(key);
@@ -384,17 +436,7 @@ class LinearProbingMap {
   // ---------------------------------------------------
   // Internally we store pair<Key, Value>, but map semantics require exposing
   // pair<const Key, Value> to prevent users from mutating keys (which would
-  // corrupt the hash table). We use reinterpret_cast because:
-  //
-  //   1. pair<Key, Value> and pair<const Key, Value> have identical layout
-  //      (const is a compile-time qualifier, not a runtime difference)
-  //   2. We're casting a reference to the same object, not type-punning
-  //   3. This is the same technique used by libc++ and libstdc++ in their
-  //      std::map/std::unordered_map implementations
-  //
-  // The alternative would be storing pair<const Key, Value> directly, but
-  // that prevents move-assignment of keys during resize and makes the Slot
-  // type non-assignable. Validated clean under UBSAN.
+  // corrupt the hash table). See linear_probing.h for detailed rationale.
 
   class Iterator {
    public:
@@ -403,7 +445,7 @@ class LinearProbingMap {
     using pointer = value_type*;
     using reference = value_type&;
 
-    constexpr Iterator(LinearProbingMap* map, size_type idx)
+    constexpr Iterator(DoubleHashingMap* map, size_type idx)
         : map_{map}, idx_{idx} {
       advanceToOccupied();
     }
@@ -439,7 +481,7 @@ class LinearProbingMap {
       }
     }
 
-    LinearProbingMap* map_;
+    DoubleHashingMap* map_;
     size_type idx_;
   };
 
@@ -450,7 +492,7 @@ class LinearProbingMap {
     using pointer = const value_type*;
     using reference = const value_type&;
 
-    constexpr ConstIterator(const LinearProbingMap* map, size_type idx)
+    constexpr ConstIterator(const DoubleHashingMap* map, size_type idx)
         : map_{map}, idx_{idx} {
       advanceToOccupied();
     }
@@ -486,7 +528,7 @@ class LinearProbingMap {
       }
     }
 
-    const LinearProbingMap* map_;
+    const DoubleHashingMap* map_;
     size_type idx_;
   };
 
@@ -494,13 +536,9 @@ class LinearProbingMap {
 
   constexpr auto end() -> Iterator { return {this, capacity_}; }
 
-  constexpr auto begin() const -> ConstIterator {
-    return {this, 0};
-  }
+  constexpr auto begin() const -> ConstIterator { return {this, 0}; }
 
-  constexpr auto end() const -> ConstIterator {
-    return {this, capacity_};
-  }
+  constexpr auto end() const -> ConstIterator { return {this, capacity_}; }
 
  private:
   // --------------------------------------------------------------------------
@@ -509,30 +547,43 @@ class LinearProbingMap {
 
   // Check if resize is needed using integer arithmetic.
   // Equivalent to: (size + tombstones) / capacity >= 0.7
-  // Rewritten as: (size + tombstones) * 10 >= capacity * 7
   constexpr auto needsResize() const -> bool {
     return (size_ + tombstone_count_) * kLoadFactorDenominator >=
            capacity_ * kLoadFactorNumerator;
   }
 
-  // Compute the starting slot index for a key
-  constexpr auto hashIndex(const Key& key) const -> size_type {
-    return hasher_(key) % capacity_;
+  // Compute the primary hash index (starting position)
+  constexpr auto hashIndex1(const Key& key) const -> size_type {
+    return hasher1_(key) % capacity_;
+  }
+
+  // Compute the secondary hash (step size)
+  // Must be in [1, capacity-1] to avoid infinite loops and ensure full coverage
+  constexpr auto hashIndex2(const Key& key) const -> size_type {
+    size_type h2 = hasher2_(key) % capacity_;
+    // Ensure h2 is non-zero - zero step size would cause infinite loop
+    // Check AFTER modulo: h2 could equal capacity_ before, giving 0 after
+    if (h2 == 0) {
+      h2 = 1;
+    }
+    return h2;
   }
 
   // Find the slot containing a key, or capacity_ if not found.
   //
-  // This is the core linear probing loop:
-  //   - Start at hash(key) % capacity
-  //   - Probe: idx = (idx + 1) % capacity (wraps around)
+  // This is the core double hashing probe loop:
+  //   - Start at h1(key) % capacity
+  //   - Probe: idx = (h1 + i * h2) % capacity
   //   - Stop when: empty slot (not found) or key matches (found)
   //   - Skip: tombstones and other occupied slots
 
   constexpr auto findSlot(const Key& key) const -> size_type {
-    size_type idx = hashIndex(key);
+    size_type h1 = hashIndex1(key);
+    size_type h2 = hashIndex2(key);
+    size_type idx = h1;
     size_type probes = 0;
 
-    // We must stop after capacity_ probes to avoid infinite loop on full table
+    // With prime capacity and non-zero h2, we visit all slots before repeating
     while (probes < capacity_) {
       const Slot& slot = slots_[idx];
 
@@ -546,8 +597,8 @@ class LinearProbingMap {
         return idx;
       }
 
-      // Collision or tombstone: continue probing
-      idx = (idx + 1) % capacity_;
+      // Collision or tombstone: continue double-hashing probe
+      idx = (idx + h2) % capacity_;
       ++probes;
     }
 
@@ -558,22 +609,24 @@ class LinearProbingMap {
   // Returns {slot_index, was_new_insertion}
 
   constexpr auto insertSlot(const Key& key) -> std::pair<size_type, bool> {
-    // Check if resize is needed using integer math
+    // Check if resize is needed
     if (needsResize()) {
       resize(capacity_ * 2);
     }
 
-    size_type idx = hashIndex(key);
+    size_type h1 = hashIndex1(key);
+    size_type h2 = hashIndex2(key);
+    size_type idx = h1;
     size_type first_tombstone = capacity_;  // Track first tombstone for reuse
     size_type probes = 0;
 
-    // Bounded loop for safety (shouldn't hit limit with proper load factor)
     while (probes < capacity_) {
       Slot& slot = slots_[idx];
 
       if (slot.isEmpty()) {
         // Empty slot: insert here (or at earlier tombstone)
-        size_type insert_idx = (first_tombstone != capacity_) ? first_tombstone : idx;
+        size_type insert_idx =
+            (first_tombstone != capacity_) ? first_tombstone : idx;
 
         if (first_tombstone != capacity_) {
           // Reusing a tombstone
@@ -595,28 +648,29 @@ class LinearProbingMap {
         return {idx, false};
       }
 
-      idx = (idx + 1) % capacity_;
+      // Double hashing probe
+      idx = (idx + h2) % capacity_;
       ++probes;
     }
 
-    // Should never reach here - load factor check guarantees empty slots exist
-    assert(false && "insertSlot: table full despite load factor check - bad hash?");
+    // Should never reach here with proper load factor management
+    assert(false &&
+           "insertSlot: table full despite load factor check - bad hash?");
     std::unreachable();
   }
 
-  // Resize the table to new_capacity.
+  // Resize the table to next prime >= new_capacity.
   //
   // This is where we clean up tombstones:
-  //   1. Allocate new, larger array (all slots empty)
+  //   1. Allocate new prime-sized array (all slots empty)
   //   2. Re-insert only occupied slots (skip tombstones)
   //   3. Delete old array
   //
   // After resize, tombstone_count = 0 and all slots are either empty or
-  // occupied. This "garbage collection" is essential for maintaining
-  // performance when there are many deletions.
+  // occupied.
 
   constexpr void resize(size_type new_capacity) {
-    new_capacity = std::max(new_capacity, kMinCapacity);
+    new_capacity = nextPrime(std::max(new_capacity, kMinCapacity));
 
     Slot* old_slots = slots_;
     size_type old_capacity = capacity_;
@@ -647,12 +701,13 @@ class LinearProbingMap {
   // Member Variables
   // --------------------------------------------------------------------------
 
-  size_type capacity_ = kMinCapacity;  // Number of slots in the array
+  size_type capacity_ = kMinCapacity;  // Number of slots (always prime)
   size_type size_ = 0;                 // Number of occupied slots
   size_type tombstone_count_ = 0;      // Number of tombstone slots
   Slot* slots_ = nullptr;              // The actual storage
 
-  [[no_unique_address]] Hash hasher_{};       // Hash function object
+  [[no_unique_address]] Hash1 hasher1_{};     // Primary hash function
+  [[no_unique_address]] Hash2 hasher2_{};     // Secondary hash function (step)
   [[no_unique_address]] KeyEqual equal_{};    // Key equality function object
 };
 

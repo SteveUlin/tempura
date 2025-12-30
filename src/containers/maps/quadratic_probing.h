@@ -1,75 +1,80 @@
 #pragma once
 
 // ============================================================================
-// Linear Probing Hash Map
+// Quadratic Probing Hash Map
 // ============================================================================
 //
-// A hash map is an associative container that maps keys to values. The key
-// insight is that we can use a hash function to convert keys into array
-// indices, giving us O(1) average-case lookup, insertion, and deletion.
-//
-// This implementation uses "open addressing" with "linear probing" as its
-// collision resolution strategy. Let's understand what this means:
+// A hash map using "open addressing" with "quadratic probing" as its
+// collision resolution strategy. This is an alternative to linear probing
+// that reduces primary clustering at the cost of some complexity.
 //
 // THE BASIC IDEA
 // --------------
 // 1. We maintain an array of "slots" (buckets)
 // 2. To insert key K: compute hash(K) % capacity to get the target slot
 // 3. If that slot is empty, store the key-value pair there
-// 4. If occupied (a "collision"), probe linearly: try slot+1, slot+2, etc.
-// 5. To find a key: start at hash(K) % capacity, probe until found or empty
+// 4. If occupied (a "collision"), probe quadratically: try slot+1², slot+2², etc.
+// 5. To find a key: start at hash(K) % capacity, probe same sequence
 //
-// EXAMPLE: Inserting keys with hash values 5, 12, 5, 6 into capacity=7
+// PROBE SEQUENCE
+// --------------
+// Linear probing:    h, h+1, h+2, h+3, h+4, ...  (step = 1)
+// Quadratic probing: h, h+1, h+4, h+9, h+16, ... (step = i²)
+//
+// We use the triangular number variant: h, h+1, h+3, h+6, h+10, ...
+// This is equivalent to (i² + i) / 2 and guarantees visiting all slots
+// when capacity is a power of 2.
+//
+// EXAMPLE: Inserting keys with hash values 5, 12, 5, 6 into capacity=8
 //
 //   Insert hash=5: slot 5 empty → store at [5]
-//   Insert hash=12: 12%7=5, slot 5 occupied → try [6] → store at [6]
-//   Insert hash=5: slot 5 occupied → try [6] occupied → try [0] → store at [0]
-//   Insert hash=6: slot 6 occupied → try [0] occupied → try [1] → store at [1]
+//   Insert hash=12: 12%8=4, slot 4 empty → store at [4]
+//   Insert hash=5: slot 5 occupied → try 5+1=6 → store at [6]
+//   Insert hash=5: slot 5 occupied → 6 occupied → try 5+3=0 → store at [0]
 //
-//   Array: [ K3 | K4 | ∅ | ∅ | ∅ | K1 | K2 ]
-//           [0]  [1]  [2] [3] [4] [5]  [6]
+//   Probe sequence for h=5: [5] → [6] → [0] → [3] → [7] → [4] → [2] → [1]
+//                           +0   +1    +3    +6   +10   +15   +21   +28 (mod 8)
 //
-// WHY LINEAR PROBING?
-// -------------------
+//   Array: [ K4 | ∅ | ∅ | ∅ | K2 | K1 | K3 | ∅ ]
+//           [0]  [1] [2] [3] [4]  [5]  [6]  [7]
+//
+// WHY QUADRATIC PROBING?
+// ----------------------
 // Pros:
-//   - Cache-friendly: sequential memory access during probing
-//   - Simple to implement and reason about
-//   - No extra memory for linked lists (unlike chaining)
+//   - Reduces "primary clustering": elements with different hashes don't
+//     compete for the same probe sequence
+//   - Better cache behavior than chaining (still open addressing)
+//   - Distributes elements more evenly across the table
 //
 // Cons:
-//   - "Primary clustering": long runs of occupied slots form, degrading perf
-//   - Deletion is tricky (we use tombstones, explained below)
-//   - Performance degrades rapidly as load factor approaches 1.0
+//   - "Secondary clustering": elements with the SAME hash still follow the
+//     same probe sequence (but this is less severe than primary clustering)
+//   - More complex probing math than linear probing
+//   - May not visit all slots unless table size is carefully chosen
+//
+// TABLE SIZE REQUIREMENTS
+// -----------------------
+// Standard quadratic probing (h + i²) doesn't guarantee visiting all slots.
+// For example, with capacity=8 and h=0: 0, 1, 4, 1, 0, 1, 4, 1... (cycles!)
+//
+// Solutions:
+//   1. Use prime table size (visits at least half the slots)
+//   2. Use power-of-2 table size with triangular numbers: (i² + i) / 2
+//
+// We use option 2. With h + (i² + i)/2 and power-of-2 capacity, we visit
+// every slot exactly once before cycling. Proof: the differences between
+// consecutive triangular numbers are 1, 2, 3, 4, ... which are all distinct
+// mod any power of 2.
 //
 // LOAD FACTOR
 // -----------
-// Load factor α = size / capacity. It measures how "full" the table is.
-//
-//   α = 0.0: Empty table, O(1) operations
-//   α = 0.5: ~1.5 probes on average for successful search
-//   α = 0.7: ~2.2 probes on average (our resize threshold)
-//   α = 0.9: ~5.5 probes on average (getting slow)
-//   α → 1.0: Probe count → ∞ (catastrophic)
-//
-// We resize when α > 0.7 to maintain good performance.
+// We use the same 0.7 threshold as linear probing, but quadratic probing
+// tolerates higher load factors better due to reduced clustering.
 //
 // DELETION AND TOMBSTONES
 // -----------------------
-// Naive deletion breaks the probe chain. Consider:
-//
-//   [A][B][C][ ]  where B was inserted after A due to collision
-//
-// If we delete A by marking it empty:
-//
-//   [ ][B][C][ ]
-//
-// Now searching for B starts at A's old slot, sees empty, and wrongly
-// concludes B doesn't exist! Solution: mark deleted slots as "tombstones":
-//
-//   [†][B][C][ ]
-//
-// Tombstones are skipped during search but can be reused during insertion.
-// Too many tombstones degrade performance, so we clean them during resize.
+// Same approach as linear probing: deleted slots become tombstones to
+// preserve the probe chain. See linear_probing.h for detailed explanation.
 //
 // ============================================================================
 
@@ -87,21 +92,20 @@ namespace tempura {
 // ============================================================================
 // Slot State
 // ============================================================================
-// Each slot in our table is in one of three states:
 
-enum class SlotState : std::uint8_t {
+enum class QuadraticSlotState : std::uint8_t {
   kEmpty,      // Never used, or cleaned during resize
   kOccupied,   // Contains a valid key-value pair
   kTombstone,  // Was occupied, now deleted (keeps probe chain intact)
 };
 
 // ============================================================================
-// LinearProbingMap
+// QuadraticProbingMap
 // ============================================================================
 
 template <typename Key, typename Value, Hasher<Key> Hash = std::hash<Key>,
           typename KeyEqual = std::equal_to<Key>>
-class LinearProbingMap {
+class QuadraticProbingMap {
  public:
   // --------------------------------------------------------------------------
   // Type Aliases
@@ -122,12 +126,12 @@ class LinearProbingMap {
   // default-construction overhead for empty slots.
 
   struct Slot {
-    SlotState state = SlotState::kEmpty;
+    QuadraticSlotState state = QuadraticSlotState::kEmpty;
     ManualLifetime<std::pair<Key, Value>> storage;
 
-    auto isEmpty() const -> bool { return state == SlotState::kEmpty; }
-    auto isOccupied() const -> bool { return state == SlotState::kOccupied; }
-    auto isTombstone() const -> bool { return state == SlotState::kTombstone; }
+    auto isEmpty() const -> bool { return state == QuadraticSlotState::kEmpty; }
+    auto isOccupied() const -> bool { return state == QuadraticSlotState::kOccupied; }
+    auto isTombstone() const -> bool { return state == QuadraticSlotState::kTombstone; }
 
     auto data() -> std::pair<Key, Value>* { return &storage.get(); }
     auto data() const -> const std::pair<Key, Value>* { return &storage.get(); }
@@ -135,21 +139,21 @@ class LinearProbingMap {
     template <typename... Args>
     void construct(Args&&... args) {
       storage.construct(std::forward<Args>(args)...);
-      state = SlotState::kOccupied;
+      state = QuadraticSlotState::kOccupied;
     }
 
     void destroy() {
-      if (state == SlotState::kOccupied) {
+      if (state == QuadraticSlotState::kOccupied) {
         storage.destruct();
       }
-      state = SlotState::kEmpty;
+      state = QuadraticSlotState::kEmpty;
     }
 
     void markTombstone() {
-      if (state == SlotState::kOccupied) {
+      if (state == QuadraticSlotState::kOccupied) {
         storage.destruct();
       }
-      state = SlotState::kTombstone;
+      state = QuadraticSlotState::kTombstone;
     }
   };
 
@@ -162,21 +166,21 @@ class LinearProbingMap {
   static constexpr size_type kLoadFactorNumerator = 7;
   static constexpr size_type kLoadFactorDenominator = 10;
 
-  // Minimum capacity. Must be > 0. Small tables have high overhead anyway.
+  // Minimum capacity. Must be power of 2 for quadratic probing guarantee.
   static constexpr size_type kMinCapacity = 8;
 
   // --------------------------------------------------------------------------
   // Constructors
   // --------------------------------------------------------------------------
 
-  constexpr LinearProbingMap() : LinearProbingMap{kMinCapacity} {}
+  constexpr QuadraticProbingMap() : QuadraticProbingMap{kMinCapacity} {}
 
-  constexpr explicit LinearProbingMap(size_type initial_capacity)
-      : capacity_{std::max(initial_capacity, kMinCapacity)},
+  constexpr explicit QuadraticProbingMap(size_type initial_capacity)
+      : capacity_{roundUpToPowerOf2(std::max(initial_capacity, kMinCapacity))},
         slots_{new Slot[capacity_]{}} {}
 
   // Copy constructor: deep copy all occupied slots
-  constexpr LinearProbingMap(const LinearProbingMap& other)
+  constexpr QuadraticProbingMap(const QuadraticProbingMap& other)
       : capacity_{other.capacity_},
         size_{other.size_},
         tombstone_count_{other.tombstone_count_},
@@ -191,7 +195,7 @@ class LinearProbingMap {
   }
 
   // Move constructor: steal resources
-  constexpr LinearProbingMap(LinearProbingMap&& other) noexcept
+  constexpr QuadraticProbingMap(QuadraticProbingMap&& other) noexcept
       : capacity_{other.capacity_},
         size_{other.size_},
         tombstone_count_{other.tombstone_count_},
@@ -203,25 +207,25 @@ class LinearProbingMap {
   }
 
   // Copy assignment using copy-and-swap for exception safety
-  constexpr auto operator=(const LinearProbingMap& other) -> LinearProbingMap& {
+  constexpr auto operator=(const QuadraticProbingMap& other) -> QuadraticProbingMap& {
     if (this != &other) {
-      LinearProbingMap tmp{other};
+      QuadraticProbingMap tmp{other};
       swap(tmp);
     }
     return *this;
   }
 
   // Move assignment using swap
-  constexpr auto operator=(LinearProbingMap&& other) noexcept
-      -> LinearProbingMap& {
+  constexpr auto operator=(QuadraticProbingMap&& other) noexcept
+      -> QuadraticProbingMap& {
     if (this != &other) {
-      LinearProbingMap tmp{std::move(other)};
+      QuadraticProbingMap tmp{std::move(other)};
       swap(tmp);
     }
     return *this;
   }
 
-  constexpr ~LinearProbingMap() {
+  constexpr ~QuadraticProbingMap() {
     if (slots_) {
       for (size_type i = 0; i < capacity_; ++i) {
         slots_[i].destroy();
@@ -231,7 +235,7 @@ class LinearProbingMap {
   }
 
   // Swap two maps (used by copy-and-swap idiom)
-  constexpr void swap(LinearProbingMap& other) noexcept {
+  constexpr void swap(QuadraticProbingMap& other) noexcept {
     std::swap(capacity_, other.capacity_);
     std::swap(size_, other.size_);
     std::swap(tombstone_count_, other.tombstone_count_);
@@ -269,7 +273,7 @@ class LinearProbingMap {
   //
   // Algorithm:
   //   1. Compute starting slot: hash(key) % capacity
-  //   2. Probe linearly until we find:
+  //   2. Probe quadratically until we find:
   //      - The key itself → return pointer to value
   //      - An empty slot → key doesn't exist, return nullptr
   //      - A tombstone → keep probing (deleted key, chain continues)
@@ -391,10 +395,6 @@ class LinearProbingMap {
   //   2. We're casting a reference to the same object, not type-punning
   //   3. This is the same technique used by libc++ and libstdc++ in their
   //      std::map/std::unordered_map implementations
-  //
-  // The alternative would be storing pair<const Key, Value> directly, but
-  // that prevents move-assignment of keys during resize and makes the Slot
-  // type non-assignable. Validated clean under UBSAN.
 
   class Iterator {
    public:
@@ -403,7 +403,7 @@ class LinearProbingMap {
     using pointer = value_type*;
     using reference = value_type&;
 
-    constexpr Iterator(LinearProbingMap* map, size_type idx)
+    constexpr Iterator(QuadraticProbingMap* map, size_type idx)
         : map_{map}, idx_{idx} {
       advanceToOccupied();
     }
@@ -439,7 +439,7 @@ class LinearProbingMap {
       }
     }
 
-    LinearProbingMap* map_;
+    QuadraticProbingMap* map_;
     size_type idx_;
   };
 
@@ -450,7 +450,7 @@ class LinearProbingMap {
     using pointer = const value_type*;
     using reference = const value_type&;
 
-    constexpr ConstIterator(const LinearProbingMap* map, size_type idx)
+    constexpr ConstIterator(const QuadraticProbingMap* map, size_type idx)
         : map_{map}, idx_{idx} {
       advanceToOccupied();
     }
@@ -486,7 +486,7 @@ class LinearProbingMap {
       }
     }
 
-    const LinearProbingMap* map_;
+    const QuadraticProbingMap* map_;
     size_type idx_;
   };
 
@@ -507,6 +507,21 @@ class LinearProbingMap {
   // Internal Helpers
   // --------------------------------------------------------------------------
 
+  // Round up to the next power of 2 (required for quadratic probing guarantee)
+  static constexpr auto roundUpToPowerOf2(size_type n) -> size_type {
+    if (n == 0) {
+      return 1;
+    }
+    --n;
+    n |= n >> 1;
+    n |= n >> 2;
+    n |= n >> 4;
+    n |= n >> 8;
+    n |= n >> 16;
+    n |= n >> 32;
+    return n + 1;
+  }
+
   // Check if resize is needed using integer arithmetic.
   // Equivalent to: (size + tombstones) / capacity >= 0.7
   // Rewritten as: (size + tombstones) * 10 >= capacity * 7
@@ -515,25 +530,33 @@ class LinearProbingMap {
            capacity_ * kLoadFactorNumerator;
   }
 
-  // Compute the starting slot index for a key
+  // Compute the starting slot index for a key.
+  // Uses bitwise AND instead of modulo since capacity is power of 2.
   constexpr auto hashIndex(const Key& key) const -> size_type {
-    return hasher_(key) % capacity_;
+    return hasher_(key) & (capacity_ - 1);
+  }
+
+  // Compute the i-th probe offset using triangular numbers: (i² + i) / 2
+  // Sequence: 0, 1, 3, 6, 10, 15, 21, 28, ...
+  // This guarantees visiting all slots with power-of-2 capacity.
+  static constexpr auto triangularNumber(size_type i) -> size_type {
+    return (i * i + i) / 2;
   }
 
   // Find the slot containing a key, or capacity_ if not found.
   //
-  // This is the core linear probing loop:
-  //   - Start at hash(key) % capacity
-  //   - Probe: idx = (idx + 1) % capacity (wraps around)
+  // This is the core quadratic probing loop:
+  //   - Start at hash(key) & (capacity - 1)
+  //   - Probe: idx = (start + triangular(i)) & (capacity - 1)
   //   - Stop when: empty slot (not found) or key matches (found)
   //   - Skip: tombstones and other occupied slots
 
   constexpr auto findSlot(const Key& key) const -> size_type {
-    size_type idx = hashIndex(key);
-    size_type probes = 0;
+    size_type start = hashIndex(key);
 
-    // We must stop after capacity_ probes to avoid infinite loop on full table
-    while (probes < capacity_) {
+    // With triangular probing and power-of-2 capacity, we visit all slots
+    for (size_type i = 0; i < capacity_; ++i) {
+      size_type idx = (start + triangularNumber(i)) & (capacity_ - 1);
       const Slot& slot = slots_[idx];
 
       if (slot.isEmpty()) {
@@ -547,8 +570,6 @@ class LinearProbingMap {
       }
 
       // Collision or tombstone: continue probing
-      idx = (idx + 1) % capacity_;
-      ++probes;
     }
 
     return capacity_;  // Table is full (shouldn't happen with proper resizing)
@@ -563,12 +584,12 @@ class LinearProbingMap {
       resize(capacity_ * 2);
     }
 
-    size_type idx = hashIndex(key);
+    size_type start = hashIndex(key);
     size_type first_tombstone = capacity_;  // Track first tombstone for reuse
-    size_type probes = 0;
 
-    // Bounded loop for safety (shouldn't hit limit with proper load factor)
-    while (probes < capacity_) {
+    // With triangular probing and power-of-2 capacity, we visit all slots
+    for (size_type i = 0; i < capacity_; ++i) {
+      size_type idx = (start + triangularNumber(i)) & (capacity_ - 1);
       Slot& slot = slots_[idx];
 
       if (slot.isEmpty()) {
@@ -594,9 +615,6 @@ class LinearProbingMap {
         // Key already exists
         return {idx, false};
       }
-
-      idx = (idx + 1) % capacity_;
-      ++probes;
     }
 
     // Should never reach here - load factor check guarantees empty slots exist
@@ -616,7 +634,7 @@ class LinearProbingMap {
   // performance when there are many deletions.
 
   constexpr void resize(size_type new_capacity) {
-    new_capacity = std::max(new_capacity, kMinCapacity);
+    new_capacity = roundUpToPowerOf2(std::max(new_capacity, kMinCapacity));
 
     Slot* old_slots = slots_;
     size_type old_capacity = capacity_;
@@ -647,7 +665,7 @@ class LinearProbingMap {
   // Member Variables
   // --------------------------------------------------------------------------
 
-  size_type capacity_ = kMinCapacity;  // Number of slots in the array
+  size_type capacity_ = kMinCapacity;  // Number of slots (always power of 2)
   size_type size_ = 0;                 // Number of occupied slots
   size_type tombstone_count_ = 0;      // Number of tombstone slots
   Slot* slots_ = nullptr;              // The actual storage
