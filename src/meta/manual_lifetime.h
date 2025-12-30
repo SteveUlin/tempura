@@ -1,23 +1,25 @@
 #pragma once
 
-// Manual Lifetime Management - Raw storage with placement new helpers
+// Manual Lifetime Management - Deferred construction/destruction via union
+//
+// Uses a union to provide uninitialized storage that's constexpr-compatible.
+// The union approach avoids reinterpret_cast (forbidden in constexpr) and
+// works with std::construct_at/std::destroy_at which are constexpr in C++20+.
 
-#include <cassert>
-#include <cstddef>
-#include <new>
+#include <memory>
 #include <type_traits>
 #include <utility>
 
 namespace tempura {
 
 // ManualLifetime<T> provides storage for T with deferred
-// construction/destruction.
+// construction/destruction. Fully constexpr-compatible.
 template <typename T>
 class ManualLifetime {
  public:
-  ManualLifetime() noexcept = default;
+  constexpr ManualLifetime() noexcept {}
   // Does NOT destroy - you must call destruct()
-  ~ManualLifetime() noexcept = default;
+  constexpr ~ManualLifetime() noexcept = default;
 
   // Non-copyable, non-moveable (raw storage shouldn't be relocated)
   ManualLifetime(const ManualLifetime&) = delete;
@@ -27,7 +29,7 @@ class ManualLifetime {
 
   // Construct T in-place from constructor arguments.
   //
-  // Use this when you have constructor arguments, not a factory function:
+  // Example:
   //   storage.construct(42, "hello");  // Calls T(int, const char*)
   //
   // PRECONDITION:
@@ -35,23 +37,9 @@ class ManualLifetime {
   // POSTCONDITION:
   //   Storage contains a constructed T
   template <typename... Args>
-  void construct(Args&&... args) noexcept(
+  constexpr void construct(Args&&... args) noexcept(
       std::is_nothrow_constructible_v<T, Args...>) {
-    ::new (static_cast<void*>(&storage_)) T(std::forward<Args>(args)...);
-  }
-
-  // Construct T in-place from a factory function.
-  //
-  // REQUIREMENT:
-  //   - Callable must return exactly T (not T&, not convertible-to-T)
-  // PRECONDITION:
-  //   - Storage is not currently constructed (your responsibility)
-  // POSTCONDITION:
-  //   - Storage contains a constructed T
-  template <typename Func>
-  void constructWith(Func&& func) noexcept(
-      noexcept(T(std::forward<Func>(func)()))) {
-    ::new (static_cast<void*>(&storage_)) T(std::forward<Func>(func)());
+    std::construct_at(&storage_.value_, std::forward<Args>(args)...);
   }
 
   // Destroy the contained object.
@@ -64,7 +52,9 @@ class ManualLifetime {
   // DANGER:
   //   - Calling this on unconstructed storage is undefined behavior.
   //   - Not calling this before storage destruction leaks the object.
-  void destruct() noexcept(std::is_nothrow_destructible_v<T>) { get().~T(); }
+  constexpr void destruct() noexcept(std::is_nothrow_destructible_v<T>) {
+    std::destroy_at(&storage_.value_);
+  }
 
   // Access the contained object.
   //
@@ -73,21 +63,22 @@ class ManualLifetime {
   //
   // DANGER:
   //   - Accessing unconstructed storage is undefined behavior.
-  auto get() noexcept -> T& {
-    return *std::launder(reinterpret_cast<T*>(&storage_));
-  }
+  constexpr auto get() noexcept -> T& { return storage_.value_; }
+  constexpr auto get() const noexcept -> const T& { return storage_.value_; }
 
-  auto get() const noexcept -> const T& {
-    return *std::launder(reinterpret_cast<const T*>(&storage_));
-  }
-
-  auto operator->() noexcept -> T* { return &get(); }
-  auto operator->() const noexcept -> const T* { return &get(); }
-  auto operator*() noexcept -> T& { return get(); }
-  auto operator*() const noexcept -> const T& { return get(); }
+  constexpr auto operator->() noexcept -> T* { return &storage_.value_; }
+  constexpr auto operator->() const noexcept -> const T* { return &storage_.value_; }
+  constexpr auto operator*() noexcept -> T& { return storage_.value_; }
+  constexpr auto operator*() const noexcept -> const T& { return storage_.value_; }
 
  private:
-  alignas(T) std::byte storage_[sizeof(T)];
+  // Union with non-trivial T would have deleted destructor by default.
+  // We provide an empty destructor since lifetime is managed manually.
+  union Storage {
+    constexpr Storage() noexcept {}
+    constexpr ~Storage() noexcept {}
+    T value_;
+  } storage_;
 };
 
 }  // namespace tempura

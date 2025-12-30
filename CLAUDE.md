@@ -29,6 +29,7 @@
 - Unicode/emojis encouraged (α, β, ∂, ∑, ✓, ✗, ⚠️)
 - Use PRECONDITION/POSTCONDITION/DANGER as needed
 - No copyright statements
+- `[[nodiscard]]` on types, not functions (e.g., RAII guards, result types)
 
 **Comments:**
 

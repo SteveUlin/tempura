@@ -38,6 +38,7 @@
 # add_subdirectory(matrix)
 # add_subdirectory(bigint)
 add_subdirectory(cache)
+add_subdirectory(containers)
 add_subdirectory(modular)
 add_subdirectory(symbolic3)  # Combinator-based symbolic system (canonical)
 add_subdirectory(bayes)
