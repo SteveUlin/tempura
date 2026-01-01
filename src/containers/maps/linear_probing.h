@@ -77,23 +77,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <utility>
 
 #include "containers/maps/hasher.h"
+#include "containers/maps/map_storage.h"
 #include "meta/manual_lifetime.h"
 
 namespace tempura {
-
-// ============================================================================
-// Slot State
-// ============================================================================
-// Each slot in our table is in one of three states:
-
-enum class SlotState : std::uint8_t {
-  kEmpty,      // Never used, or cleaned during resize
-  kOccupied,   // Contains a valid key-value pair
-  kTombstone,  // Was occupied, now deleted (keeps probe chain intact)
-};
 
 // ============================================================================
 // LinearProbingMap
@@ -118,38 +109,57 @@ class LinearProbingMap {
   // Slot Structure
   // --------------------------------------------------------------------------
   // Each slot stores its state and the key-value data. We use ManualLifetime
-  // to construct data only when the slot becomes occupied, avoiding
-  // default-construction overhead for empty slots.
+  // to defer construction, and MapStorage to handle the const key problem
+  // (see map_storage.h for details on the union trick).
 
   struct Slot {
-    SlotState state = SlotState::kEmpty;
-    ManualLifetime<std::pair<Key, Value>> storage;
+    enum class State : std::uint8_t {
+      kEmpty,      // Never used, or cleaned during resize
+      kOccupied,   // Contains a valid key-value pair
+      kTombstone,  // Was occupied, now deleted (keeps probe chain intact)
+    };
 
-    auto isEmpty() const -> bool { return state == SlotState::kEmpty; }
-    auto isOccupied() const -> bool { return state == SlotState::kOccupied; }
-    auto isTombstone() const -> bool { return state == SlotState::kTombstone; }
+    State state = State::kEmpty;
+    ManualLifetime<MapStorage<Key, Value>> storage;
 
-    auto data() -> std::pair<Key, Value>* { return &storage.get(); }
-    auto data() const -> const std::pair<Key, Value>* { return &storage.get(); }
+    auto isEmpty() const -> bool { return state == State::kEmpty; }
+    auto isOccupied() const -> bool { return state == State::kOccupied; }
+    auto isTombstone() const -> bool { return state == State::kTombstone; }
+
+    // Internal access (mutable) - for moves during resize
+    auto mutableData() -> std::pair<Key, Value>* {
+      return &storage.get().mutable_pair;
+    }
+
+    // User-facing access (const key) - prevents key mutation
+    auto data() -> std::pair<const Key, Value>* {
+      return &storage.get().const_pair;
+    }
+    auto data() const -> const std::pair<const Key, Value>* {
+      return &storage.get().const_pair;
+    }
 
     template <typename... Args>
     void construct(Args&&... args) {
-      storage.construct(std::forward<Args>(args)...);
-      state = SlotState::kOccupied;
+      storage.construct();
+      std::construct_at(&storage.get().mutable_pair, std::forward<Args>(args)...);
+      state = State::kOccupied;
     }
 
     void destroy() {
-      if (state == SlotState::kOccupied) {
+      if (state == State::kOccupied) {
+        std::destroy_at(&storage.get().mutable_pair);
         storage.destruct();
       }
-      state = SlotState::kEmpty;
+      state = State::kEmpty;
     }
 
     void markTombstone() {
-      if (state == SlotState::kOccupied) {
+      if (state == State::kOccupied) {
+        std::destroy_at(&storage.get().mutable_pair);
         storage.destruct();
       }
-      state = SlotState::kTombstone;
+      state = State::kTombstone;
     }
   };
 
@@ -173,14 +183,14 @@ class LinearProbingMap {
 
   constexpr explicit LinearProbingMap(size_type initial_capacity)
       : capacity_{std::max(initial_capacity, kMinCapacity)},
-        slots_{new Slot[capacity_]{}} {}
+        slots_{std::make_unique<Slot[]>(capacity_)} {}
 
   // Copy constructor: deep copy all occupied slots
   constexpr LinearProbingMap(const LinearProbingMap& other)
       : capacity_{other.capacity_},
         size_{other.size_},
         tombstone_count_{other.tombstone_count_},
-        slots_{new Slot[capacity_]{}} {
+        slots_{std::make_unique<Slot[]>(capacity_)} {
     for (size_type i = 0; i < capacity_; ++i) {
       if (other.slots_[i].isOccupied()) {
         slots_[i].construct(*other.slots_[i].data());
@@ -195,8 +205,7 @@ class LinearProbingMap {
       : capacity_{other.capacity_},
         size_{other.size_},
         tombstone_count_{other.tombstone_count_},
-        slots_{other.slots_} {
-    other.slots_ = nullptr;
+        slots_{std::move(other.slots_)} {
     other.size_ = 0;
     other.capacity_ = 0;
     other.tombstone_count_ = 0;
@@ -226,7 +235,6 @@ class LinearProbingMap {
       for (size_type i = 0; i < capacity_; ++i) {
         slots_[i].destroy();
       }
-      delete[] slots_;
     }
   }
 
@@ -379,22 +387,8 @@ class LinearProbingMap {
   // Iterator Support
   // --------------------------------------------------------------------------
   // We provide a forward iterator that skips empty and tombstone slots.
-  //
-  // IMPLEMENTATION NOTE: reinterpret_cast for const Key
-  // ---------------------------------------------------
-  // Internally we store pair<Key, Value>, but map semantics require exposing
-  // pair<const Key, Value> to prevent users from mutating keys (which would
-  // corrupt the hash table). We use reinterpret_cast because:
-  //
-  //   1. pair<Key, Value> and pair<const Key, Value> have identical layout
-  //      (const is a compile-time qualifier, not a runtime difference)
-  //   2. We're casting a reference to the same object, not type-punning
-  //   3. This is the same technique used by libc++ and libstdc++ in their
-  //      std::map/std::unordered_map implementations
-  //
-  // The alternative would be storing pair<const Key, Value> directly, but
-  // that prevents move-assignment of keys during resize and makes the Slot
-  // type non-assignable. Validated clean under UBSAN.
+  // The Slot::data() method returns pair<const Key, Value>* directly via the
+  // union trick (see Slot documentation), so no casts are needed here.
 
   class Iterator {
    public:
@@ -408,13 +402,9 @@ class LinearProbingMap {
       advanceToOccupied();
     }
 
-    constexpr auto operator*() const -> reference {
-      return reinterpret_cast<reference>(*map_->slots_[idx_].data());
-    }
+    constexpr auto operator*() const -> reference { return *map_->slots_[idx_].data(); }
 
-    constexpr auto operator->() const -> pointer {
-      return reinterpret_cast<pointer>(map_->slots_[idx_].data());
-    }
+    constexpr auto operator->() const -> pointer { return map_->slots_[idx_].data(); }
 
     constexpr auto operator++() -> Iterator& {
       ++idx_;
@@ -455,13 +445,9 @@ class LinearProbingMap {
       advanceToOccupied();
     }
 
-    constexpr auto operator*() const -> reference {
-      return reinterpret_cast<reference>(*map_->slots_[idx_].data());
-    }
+    constexpr auto operator*() const -> reference { return *map_->slots_[idx_].data(); }
 
-    constexpr auto operator->() const -> pointer {
-      return reinterpret_cast<pointer>(map_->slots_[idx_].data());
-    }
+    constexpr auto operator->() const -> pointer { return map_->slots_[idx_].data(); }
 
     constexpr auto operator++() -> ConstIterator& {
       ++idx_;
@@ -560,7 +546,12 @@ class LinearProbingMap {
   constexpr auto insertSlot(const Key& key) -> std::pair<size_type, bool> {
     // Check if resize is needed using integer math
     if (needsResize()) {
-      resize(capacity_ * 2);
+      constexpr size_type kMaxCapacity = size_type{1} << 60;
+      size_type new_cap = capacity_ * 2;
+      // Assert on overflow or exceeding max - silent failure is unacceptable
+      assert(new_cap > capacity_ && "insertSlot: capacity overflow");
+      assert(new_cap <= kMaxCapacity && "insertSlot: capacity exceeds maximum");
+      resize(new_cap);
     }
 
     size_type idx = hashIndex(key);
@@ -618,39 +609,62 @@ class LinearProbingMap {
   constexpr void resize(size_type new_capacity) {
     new_capacity = std::max(new_capacity, kMinCapacity);
 
-    Slot* old_slots = slots_;
+    // Sanity check: capacity must be reasonable
+    // (also helps static analyzers understand bounds)
+    constexpr size_type kMaxCapacity = size_type{1} << 60;  // ~1 exabyte
+    assert(new_capacity <= kMaxCapacity && "resize: capacity exceeds maximum");
+
+    auto old_slots = std::move(slots_);
     size_type old_capacity = capacity_;
 
     // Allocate new array
     capacity_ = new_capacity;
-    slots_ = new Slot[capacity_]{};
+    slots_ = std::make_unique<Slot[]>(capacity_);
     size_ = 0;
     tombstone_count_ = 0;
 
-    // Re-insert all occupied elements
+    // Re-insert all occupied elements (no resize check needed - we just grew)
+    // Use mutableData() to allow moving keys efficiently
     for (size_type i = 0; i < old_capacity; ++i) {
       if (old_slots[i].isOccupied()) {
-        auto& [key, value] = *old_slots[i].data();
-        auto [idx, _] = insertSlot(key);
-        slots_[idx].data()->second = std::move(value);
+        auto& [key, value] = *old_slots[i].mutableData();
+        size_type idx = insertSlotNoResize(key);
+        slots_[idx].mutableData()->second = std::move(value);
       }
     }
 
-    // Clean up old slots
+    // Clean up old slots (destroy ManualLifetime contents)
     for (size_type i = 0; i < old_capacity; ++i) {
       old_slots[i].destroy();
     }
-    delete[] old_slots;
+    // old_slots automatically freed when unique_ptr goes out of scope
+  }
+
+  // Insert without resize check - used during resize when we know there's room
+  constexpr auto insertSlotNoResize(const Key& key) -> size_type {
+    size_type idx = hashIndex(key);
+
+    for (size_type probes = 0; probes < capacity_; ++probes) {
+      Slot& slot = slots_[idx];
+      if (slot.isEmpty()) {
+        slot.construct(key, Value{});
+        ++size_;
+        return idx;
+      }
+      idx = (idx + 1) % capacity_;
+    }
+
+    std::unreachable();
   }
 
   // --------------------------------------------------------------------------
   // Member Variables
   // --------------------------------------------------------------------------
 
-  size_type capacity_ = kMinCapacity;  // Number of slots in the array
-  size_type size_ = 0;                 // Number of occupied slots
-  size_type tombstone_count_ = 0;      // Number of tombstone slots
-  Slot* slots_ = nullptr;              // The actual storage
+  size_type capacity_ = kMinCapacity;       // Number of slots in the array
+  size_type size_ = 0;                      // Number of occupied slots
+  size_type tombstone_count_ = 0;           // Number of tombstone slots
+  std::unique_ptr<Slot[]> slots_ = nullptr; // The actual storage
 
   [[no_unique_address]] Hash hasher_{};       // Hash function object
   [[no_unique_address]] KeyEqual equal_{};    // Key equality function object

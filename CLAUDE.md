@@ -2,10 +2,11 @@
 
 ## Core Principles
 
-- Correct over fast (algorithmic efficiency, not micro-optimization)
+- Don't sacrifice correctness for micro-optimizations
 - constexpr-by-default (maximum compile-time evaluation)
-- Zero STL dependencies in critical paths
-- Using GCC C++26 (not all features implemented yet; clangd may have issues)
+- Prefer `std::` by default unless there's a reason to use a custom implementation
+- Avoid STL in heavy template metaprogramming (e.g., `meta/` type lists) where it bloats compile times
+- Using **GCC C++26** (not C++20/23) - mainly for constexpr math, also `operator[]` multidimensional indexing, etc.
 
 ## Code Style
 
@@ -27,17 +28,20 @@
 - Prefer `{}` over `()` for initialization (including ctor init lists)
 - `static_assert` tests belong in test files, not headers
 - Unicode/emojis encouraged (α, β, ∂, ∑, ✓, ✗, ⚠️)
-- Use PRECONDITION/POSTCONDITION/DANGER as needed
+- Document preconditions/postconditions/dangers in comments where non-obvious
 - No copyright statements
-- `[[nodiscard]]` on types, not functions (e.g., RAII guards, result types)
+- `[[nodiscard]]` on types only, never on functions - too noisy
+- `noexcept` only when needed for performance (move constructors, swap) - codebase is exception-free by design, don't sprinkle it everywhere
 
 **Comments:**
 
-- Explain *why*, not *what* - the code shows what, comments provide context
-- Add comments where logic is non-obvious (e.g., algorithmic tricks, edge cases)
+- Assume the reader is a competent C++ developer - be instructive, not condescending
+- Explain *why this specific approach* - what constraint or insight drove the decision
 - Keep comments concise - one line when possible
-- Good: `// Impossible events have log-probability -∞`
+- Good: `// API requires positive input, so take abs() and negate output if needed`
+- Good: `// Robin Hood reduces probe length variance at cost of more swaps`
 - Good: `// Variance = p(1-p), maximized at p=0.5`
+- Bad: `// Now print the output` (obvious from code)
 - Bad: `// This function returns the probability` (obvious from signature)
 
 ## Testing
@@ -84,6 +88,38 @@
 - Commands with `$` trigger user approval prompts which slow down workflow
 - Use absolute paths or relative paths instead of environment variables
 - Example: use `cd build-asan && cmake --build .` NOT `cd $BUILD_DIR && make`
+
+## Error Handling
+
+**Fail loudly, not silently:**
+
+- Use `assert()` for invariant violations and "impossible" conditions
+- Never silently return or skip operations on bad input - crash instead
+- Silent failures hide bugs and make debugging harder
+- Example: if resize detects overflow, assert rather than silently refusing to grow
+
+**Safety checks and performance:**
+
+- Bounds checks and asserts throughout code are encouraged - minor perf hit is acceptable
+- Removing checks for performance requires measurement and documentation:
+  ```cpp
+  // PERF: bounds check removed - see benchmark results in maps/README.md
+  ```
+- Better to crash than return wrong results
+
+## Exploration vs Consolidation
+
+This codebase is primarily in **exploration mode**:
+
+- API inconsistencies between similar components are OK - we'll refactor later
+- Match existing patterns in the file you're editing
+- Don't block exploration to fix API mismatches - that's a separate refactoring step
+- For containers: follow standard library APIs where reasonable, consolidate into concepts later
+
+**Numeric types:**
+
+- Prefer generic implementations that work across numeric types when feasible
+- Specific types (e.g., `double`) are fine when genericity isn't needed
 
 ## Code Organization
 

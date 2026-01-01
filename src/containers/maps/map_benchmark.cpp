@@ -8,6 +8,7 @@
 #include "containers/maps/double_hashing.h"
 #include "containers/maps/linear_probing.h"
 #include "containers/maps/quadratic_probing.h"
+#include "containers/maps/separate_chaining.h"
 #include "plot.h"
 
 using namespace tempura;
@@ -162,17 +163,18 @@ struct BenchResult {
   double linear_ns;
   double quadratic_ns;
   double double_hash_ns;
+  double chaining_ns;
 };
 
 void printBarChart(const std::string& title,
                    const std::vector<BenchResult>& results) {
   std::println("\n{}", title);
-  std::println("────────────────────────────────────────────────────────────");
+  std::println("────────────────────────────────────────────────────────────────────");
 
   for (const auto& r : results) {
     // Find max for scaling
     double max_ns =
-        std::max({r.linear_ns, r.quadratic_ns, r.double_hash_ns});
+        std::max({r.linear_ns, r.quadratic_ns, r.double_hash_ns, r.chaining_ns});
     double scale = 40.0 / max_ns;
 
     std::println("{}:", r.name);
@@ -188,19 +190,20 @@ void printBarChart(const std::string& title,
     bar(r.linear_ns, "Linear", colors::kCyan);
     bar(r.quadratic_ns, "Quadratic", colors::kGreen);
     bar(r.double_hash_ns, "Double", colors::kMagenta);
+    bar(r.chaining_ns, "Chaining", colors::kYellow);
     std::println("");
   }
 }
 
 void printComparisonTable(const std::vector<BenchResult>& results) {
-  std::println("\n╔══════════════════════════════════════════════════════════════════╗");
-  std::println("║                    PERFORMANCE COMPARISON (ns/op)                ║");
-  std::println("╠══════════════════════╦══════════╦══════════╦══════════╦══════════╣");
-  std::println("║ Benchmark            ║  Linear  ║Quadratic ║  Double  ║  Winner  ║");
-  std::println("╠══════════════════════╬══════════╬══════════╬══════════╬══════════╣");
+  std::println("\n╔════════════════════════════════════════════════════════════════════════════╗");
+  std::println("║                       PERFORMANCE COMPARISON (ns/op)                       ║");
+  std::println("╠══════════════════════╦════════╦════════╦════════╦════════╦═════════════════╣");
+  std::println("║ Benchmark            ║ Linear ║  Quad  ║ Double ║ Chain  ║     Winner      ║");
+  std::println("╠══════════════════════╬════════╬════════╬════════╬════════╬═════════════════╣");
 
   for (const auto& r : results) {
-    double min_ns = std::min({r.linear_ns, r.quadratic_ns, r.double_hash_ns});
+    double min_ns = std::min({r.linear_ns, r.quadratic_ns, r.double_hash_ns, r.chaining_ns});
     const char* winner = "?";
     RGB winner_color = colors::kDefault;
 
@@ -210,57 +213,62 @@ void printComparisonTable(const std::vector<BenchResult>& results) {
     } else if (min_ns == r.quadratic_ns) {
       winner = "Quadratic";
       winner_color = colors::kGreen;
-    } else {
+    } else if (min_ns == r.double_hash_ns) {
       winner = "Double";
       winner_color = colors::kMagenta;
+    } else {
+      winner = "Chaining";
+      winner_color = colors::kYellow;
     }
 
-    std::println("║ {:20} ║ {:>8.1f} ║ {:>8.1f} ║ {:>8.1f} ║ {}{:^8}{}║",
-                 r.name, r.linear_ns, r.quadratic_ns, r.double_hash_ns,
+    std::println("║ {:20} ║ {:>6.1f} ║ {:>6.1f} ║ {:>6.1f} ║ {:>6.1f} ║ {}{:^15}{}║",
+                 r.name, r.linear_ns, r.quadratic_ns, r.double_hash_ns, r.chaining_ns,
                  winner_color.ansiPrefix(), winner, RGB::ansiSuffix());
   }
 
-  std::println("╚══════════════════════╩══════════╩══════════╩══════════╩══════════╝");
+  std::println("╚══════════════════════╩════════╩════════╩════════╩════════╩═════════════════╝");
 }
 
 void printSizeScalingChart(std::mt19937& rng) {
-  std::println("\n╔══════════════════════════════════════════════════════════════════╗");
-  std::println("║              INSERT PERFORMANCE vs SIZE (ns/op)                  ║");
-  std::println("╚══════════════════════════════════════════════════════════════════╝");
+  std::println("\n╔════════════════════════════════════════════════════════════════════════════╗");
+  std::println("║                     INSERT PERFORMANCE vs SIZE (ns/op)                     ║");
+  std::println("╚════════════════════════════════════════════════════════════════════════════╝");
 
   std::vector<std::size_t> sizes = {1000, 10000, 100000, 1000000};
 
   std::vector<Series> series;
 
   // Collect data points
-  std::vector<double> linear_times, quad_times, double_times;
+  std::vector<double> linear_times, quad_times, double_times, chain_times;
   std::vector<double> x_values;
 
   for (std::size_t size : sizes) {
     x_values.push_back(static_cast<double>(size));
 
-    std::mt19937 rng1{42}, rng2{42}, rng3{42};
+    std::mt19937 rng1{42}, rng2{42}, rng3{42}, rng4{42};
     linear_times.push_back(
         benchmarkInsert<LinearProbingMap<int, int>>(size, rng1));
     quad_times.push_back(
         benchmarkInsert<QuadraticProbingMap<int, int>>(size, rng2));
     double_times.push_back(
         benchmarkInsert<DoubleHashingMap<int, int>>(size, rng3));
+    chain_times.push_back(
+        benchmarkInsert<SeparateChainingMap<int, int>>(size, rng4));
   }
 
   // Print table
-  std::println("{:>10} {:>12} {:>12} {:>12}", "Size", "Linear", "Quadratic",
-               "Double");
-  std::println("──────────────────────────────────────────────────");
+  std::println("{:>10} {:>10} {:>10} {:>10} {:>10}", "Size", "Linear", "Quad",
+               "Double", "Chain");
+  std::println("──────────────────────────────────────────────────────────");
   for (std::size_t i = 0; i < sizes.size(); ++i) {
-    std::println("{:>10} {:>12.1f} {:>12.1f} {:>12.1f}", sizes[i],
-                 linear_times[i], quad_times[i], double_times[i]);
+    std::println("{:>10} {:>10.1f} {:>10.1f} {:>10.1f} {:>10.1f}", sizes[i],
+                 linear_times[i], quad_times[i], double_times[i], chain_times[i]);
   }
 
   // ASCII bar comparison for largest size
-  std::println("\nAt N = 100,000:");
+  std::println("\nAt N = 1,000,000:");
   double max_time =
-      std::max({linear_times.back(), quad_times.back(), double_times.back()});
+      std::max({linear_times.back(), quad_times.back(), double_times.back(), chain_times.back()});
   double scale = 50.0 / max_time;
 
   auto bar = [scale](double ns, const char* label, RGB color) {
@@ -274,18 +282,19 @@ void printSizeScalingChart(std::mt19937& rng) {
   bar(linear_times.back(), "Linear", colors::kCyan);
   bar(quad_times.back(), "Quadratic", colors::kGreen);
   bar(double_times.back(), "Double", colors::kMagenta);
+  bar(chain_times.back(), "Chaining", colors::kYellow);
 }
 
 void printClusteringAnalysis(std::mt19937& rng) {
-  std::println("\n╔══════════════════════════════════════════════════════════════════╗");
-  std::println("║            CLUSTERING RESISTANCE (pathological hash)             ║");
-  std::println("╚══════════════════════════════════════════════════════════════════╝");
+  std::println("\n╔════════════════════════════════════════════════════════════════════════════╗");
+  std::println("║                CLUSTERING RESISTANCE (pathological hash)                   ║");
+  std::println("╚════════════════════════════════════════════════════════════════════════════╝");
 
   std::println("Using hash that maps all keys to only 16 buckets...\n");
 
   constexpr std::size_t n = 100000;
 
-  std::mt19937 rng1{42}, rng2{42}, rng3{42};
+  std::mt19937 rng1{42}, rng2{42}, rng3{42}, rng4{42};
 
   // Custom hash that causes clustering
   double linear_ns =
@@ -301,8 +310,10 @@ void printClusteringAnalysis(std::mt19937& rng) {
   };
   double double_ns = benchmarkClustering<
       DoubleHashingMap<int, int, ClusteringHash, ClusteringHash2>>(n, rng3);
+  double chain_ns =
+      benchmarkClustering<SeparateChainingMap<int, int, ClusteringHash>>(n, rng4);
 
-  double max_ns = std::max({linear_ns, quad_ns, double_ns});
+  double max_ns = std::max({linear_ns, quad_ns, double_ns, chain_ns});
   double scale = 50.0 / max_ns;
 
   auto bar = [scale](double ns, const char* label, RGB color) {
@@ -316,51 +327,63 @@ void printClusteringAnalysis(std::mt19937& rng) {
   bar(linear_ns, "Linear", colors::kCyan);
   bar(quad_ns, "Quadratic", colors::kGreen);
   bar(double_ns, "Double", colors::kMagenta);
+  bar(chain_ns, "Chaining", colors::kYellow);
 
   // Analysis
   std::println("\nAnalysis:");
-  if (linear_ns > quad_ns && linear_ns > double_ns) {
+  if (linear_ns > quad_ns && linear_ns > double_ns && linear_ns > chain_ns) {
     std::println("  → Linear probing suffers most from primary clustering");
   }
-  if (quad_ns < linear_ns && quad_ns < double_ns) {
-    std::println("  → Quadratic probing handles clustering well");
+  if (quad_ns < linear_ns) {
+    std::println("  → Quadratic probing reduces primary clustering");
   }
   if (double_ns < linear_ns) {
     std::println("  → Double hashing reduces clustering via key-dependent steps");
+  }
+  if (chain_ns < linear_ns && chain_ns < quad_ns && chain_ns < double_ns) {
+    std::println("  → Separate chaining is immune to clustering (lists just get longer)");
   }
 }
 
 void printSummary() {
   std::println("\n");
-  std::println("╔══════════════════════════════════════════════════════════════════╗");
-  std::println("║                          SUMMARY                                 ║");
-  std::println("╠══════════════════════════════════════════════════════════════════╣");
-  std::println("║                                                                  ║");
-  std::println("║  Linear Probing:                                                 ║");
-  std::println("║    ✓ Best cache locality (sequential access)                     ║");
-  std::println("║    ✓ Simplest implementation                                     ║");
-  std::println("║    ✗ Suffers from primary clustering                             ║");
-  std::println("║                                                                  ║");
-  std::println("║  Quadratic Probing:                                              ║");
-  std::println("║    ✓ Reduces primary clustering                                  ║");
-  std::println("║    ✓ Good balance of simplicity and performance                  ║");
-  std::println("║    ✗ Secondary clustering (same hash → same probe sequence)      ║");
-  std::println("║                                                                  ║");
-  std::println("║  Double Hashing:                                                 ║");
-  std::println("║    ✓ Eliminates both clustering types                            ║");
-  std::println("║    ✓ Most uniform probe distribution                             ║");
-  std::println("║    ✗ Two hash computations per probe                             ║");
-  std::println("║    ✗ Requires prime table sizes                                  ║");
-  std::println("║                                                                  ║");
-  std::println("╚══════════════════════════════════════════════════════════════════╝");
+  std::println("╔════════════════════════════════════════════════════════════════════════════╗");
+  std::println("║                               SUMMARY                                      ║");
+  std::println("╠════════════════════════════════════════════════════════════════════════════╣");
+  std::println("║                                                                            ║");
+  std::println("║  Linear Probing:                                                           ║");
+  std::println("║    ✓ Best cache locality (sequential access)                               ║");
+  std::println("║    ✓ Simplest implementation                                               ║");
+  std::println("║    ✗ Suffers from primary clustering                                       ║");
+  std::println("║                                                                            ║");
+  std::println("║  Quadratic Probing:                                                        ║");
+  std::println("║    ✓ Reduces primary clustering                                            ║");
+  std::println("║    ✓ Good balance of simplicity and performance                            ║");
+  std::println("║    ✗ Secondary clustering (same hash → same probe sequence)                ║");
+  std::println("║                                                                            ║");
+  std::println("║  Double Hashing:                                                           ║");
+  std::println("║    ✓ Eliminates both clustering types                                      ║");
+  std::println("║    ✓ Most uniform probe distribution                                       ║");
+  std::println("║    ✗ Two hash computations per probe                                       ║");
+  std::println("║    ✗ Requires prime table sizes                                            ║");
+  std::println("║                                                                            ║");
+  std::println("║  Separate Chaining:                                                        ║");
+  std::println("║    ✓ No clustering (independent bucket lists)                              ║");
+  std::println("║    ✓ Simple deletion (no tombstones)                                       ║");
+  std::println("║    ✓ Load factor can exceed 1.0                                            ║");
+  std::println("║    ✗ Extra memory for node pointers                                        ║");
+  std::println("║    ✗ Cache-unfriendly (pointer chasing)                                    ║");
+  std::println("║    ✗ More allocations (one per insert)                                     ║");
+  std::println("║                                                                            ║");
+  std::println("╚════════════════════════════════════════════════════════════════════════════╝");
 }
 
 auto main() -> int {
-  std::println("╔══════════════════════════════════════════════════════════════════╗");
-  std::println("║              HASH MAP PROBING STRATEGY BENCHMARK                 ║");
-  std::println("║                                                                  ║");
-  std::println("║  Comparing: Linear Probing │ Quadratic Probing │ Double Hashing  ║");
-  std::println("╚══════════════════════════════════════════════════════════════════╝");
+  std::println("╔════════════════════════════════════════════════════════════════════════════╗");
+  std::println("║                      HASH MAP STRATEGY BENCHMARK                           ║");
+  std::println("║                                                                            ║");
+  std::println("║  Comparing: Linear │ Quadratic │ Double Hashing │ Separate Chaining        ║");
+  std::println("╚════════════════════════════════════════════════════════════════════════════╝");
 
   std::mt19937 rng{42};
 
@@ -370,45 +393,49 @@ auto main() -> int {
   // Insert benchmark
   {
     constexpr std::size_t n = 500000;
-    std::mt19937 rng1{42}, rng2{42}, rng3{42};
+    std::mt19937 rng1{42}, rng2{42}, rng3{42}, rng4{42};
     results.push_back({"Insert (500k)",
                        colors::kYellow,
                        benchmarkInsert<LinearProbingMap<int, int>>(n, rng1),
                        benchmarkInsert<QuadraticProbingMap<int, int>>(n, rng2),
-                       benchmarkInsert<DoubleHashingMap<int, int>>(n, rng3)});
+                       benchmarkInsert<DoubleHashingMap<int, int>>(n, rng3),
+                       benchmarkInsert<SeparateChainingMap<int, int>>(n, rng4)});
   }
 
   // Find (100% hit rate)
   {
     constexpr std::size_t n = 500000;
-    std::mt19937 rng1{42}, rng2{42}, rng3{42};
+    std::mt19937 rng1{42}, rng2{42}, rng3{42}, rng4{42};
     results.push_back(
         {"Find (100% hit)", colors::kGreen,
          benchmarkFind<LinearProbingMap<int, int>>(n, 1.0, rng1),
          benchmarkFind<QuadraticProbingMap<int, int>>(n, 1.0, rng2),
-         benchmarkFind<DoubleHashingMap<int, int>>(n, 1.0, rng3)});
+         benchmarkFind<DoubleHashingMap<int, int>>(n, 1.0, rng3),
+         benchmarkFind<SeparateChainingMap<int, int>>(n, 1.0, rng4)});
   }
 
   // Find (50% hit rate)
   {
     constexpr std::size_t n = 500000;
-    std::mt19937 rng1{42}, rng2{42}, rng3{42};
+    std::mt19937 rng1{42}, rng2{42}, rng3{42}, rng4{42};
     results.push_back(
         {"Find (50% hit)", colors::kBlue,
          benchmarkFind<LinearProbingMap<int, int>>(n, 0.5, rng1),
          benchmarkFind<QuadraticProbingMap<int, int>>(n, 0.5, rng2),
-         benchmarkFind<DoubleHashingMap<int, int>>(n, 0.5, rng3)});
+         benchmarkFind<DoubleHashingMap<int, int>>(n, 0.5, rng3),
+         benchmarkFind<SeparateChainingMap<int, int>>(n, 0.5, rng4)});
   }
 
   // Mixed workload
   {
     constexpr std::size_t n = 500000;
-    std::mt19937 rng1{42}, rng2{42}, rng3{42};
+    std::mt19937 rng1{42}, rng2{42}, rng3{42}, rng4{42};
     results.push_back({"Mixed (ins/find/del)",
                        colors::kMagenta,
                        benchmarkMixed<LinearProbingMap<int, int>>(n, rng1),
                        benchmarkMixed<QuadraticProbingMap<int, int>>(n, rng2),
-                       benchmarkMixed<DoubleHashingMap<int, int>>(n, rng3)});
+                       benchmarkMixed<DoubleHashingMap<int, int>>(n, rng3),
+                       benchmarkMixed<SeparateChainingMap<int, int>>(n, rng4)});
   }
 
   // Print results
