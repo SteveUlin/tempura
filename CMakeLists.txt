@@ -57,6 +57,20 @@ target_compile_options(tempura_compiler_flags INTERFACE
   -Wno-sign-compare
   -mavx512f
   -mavx512dq
+  -mavx512bw
+  -mavx512vl
+  -mavx512vbmi
+  -mavx512vbmi2
+  -mavx512bitalg
+  -mavx512vpopcntdq
+  -mavx512vnni
+  -mgfni
+  -mvaes
+  -mvpclmulqdq
+  -maes
+  -mrdseed
+  -mbmi
+  -mbmi2
   -ftemplate-depth=2048
   -fconstexpr-depth=2048
 )

@@ -1,69 +1,47 @@
 #pragma once
 
 // ============================================================================
-// Robin Hood Hash Map
+// Swiss Table Hash Map (64-byte AVX-512 Groups)
 // ============================================================================
 //
-// Robin Hood hashing is a refinement of linear probing that dramatically
-// reduces probe length variance. The key insight: "steal from the rich,
-// give to the poor."
+// This is a variant of Swiss Tables using 64-byte groups instead of 16-byte
+// groups. With AVX-512BW, we can match 64 control bytes in a single instruction,
+// potentially reducing probe iterations by 4x.
 //
-// THE ROBIN HOOD PRINCIPLE
-// ------------------------
-// Each element has a "displacement" - how far it is from its ideal position.
-// An element at its ideal slot has displacement 0, one slot away has 1, etc.
+// KEY DIFFERENCES FROM 16-BYTE VERSION
+// ------------------------------------
+// - Group width: 64 bytes (vs 16)
+// - SIMD register: __m512i / Vec64i8 (vs __m128i / Vec16i8)
+// - Bitmask type: uint64_t (vs uint16_t)
+// - Min capacity: 64 (vs 16)
 //
-// During insertion, if the inserting element has traveled FURTHER than the
-// current occupant (larger displacement), we swap them. The displaced element
-// continues probing. This ensures no element gets TOO far from home.
+// TRADEOFFS
+// ---------
+// Advantages of 64-byte groups:
+//   - Fewer probe iterations (check 64 slots per group)
+//   - Better utilization of AVX-512 width
+//   - Potentially better for large tables with high load factors
 //
-// EXAMPLE: Insert key with hash=5, table has occupant at slot 6 with disp=0
+// Disadvantages:
+//   - Larger minimum allocation (64 slots minimum)
+//   - May overshoot for small tables
+//   - 64-byte alignment preferred (cache line considerations)
+//   - AVX-512 frequency throttling on some CPUs (less issue on Zen 4/5)
 //
-//   Inserting at slot 5: occupied, our disp=0, theirs=? → probe to 6
-//   Inserting at slot 6: occupied, our disp=1, theirs=0 → 1 > 0, SWAP!
-//   Now we're inserting the displaced element (disp=1) at slot 7...
-//
-// WHY IT WORKS
-// ------------
-// Standard linear probing: some elements have displacement 0, others 10+
-// Robin Hood: everyone has displacement ~2-3 (variance minimized)
-//
-// Expected maximum probe length:
-//   Linear probing: O(log n) average, O(n) worst case
-//   Robin Hood: O(log log n) expected maximum!
-//
-// EARLY TERMINATION
-// -----------------
-// During lookup, if we see an element with displacement LESS than what ours
-// would be at that position, we know our key isn't in the table. It would
-// have stolen that slot during insertion.
-//
-// BACKWARD-SHIFT DELETION
-// -----------------------
-// Robin Hood doesn't use tombstones. Instead, when deleting:
-//   1. Remove the element, leaving a hole
-//   2. Shift subsequent elements backward if they have displacement > 0
-//   3. Stop when we hit an empty slot or element at its ideal position
-//
-// This keeps the table clean but makes deletion O(n) worst case.
-//
-// MISSING FEATURES
-// ----------------
-// - Hash caching: Store computed hash values with elements to avoid
-//   rehashing during displacement comparisons and resizing. Trades
-//   memory (8 bytes/entry) for CPU cycles.
-//
-// - SIMD matching: Modern Robin Hood implementations use SIMD to match
-//   multiple hash fingerprints in parallel (like Swiss Tables).
-//
-// - Memory-efficient displacement: Track displacement in upper bits of
-//   stored hash rather than recomputing during probing.
+// WHEN TO USE
+// -----------
+// - Large hash tables (1000+ elements)
+// - High load factor workloads
+// - Lookup-heavy workloads (amortizes AVX-512 setup cost)
+// - AMD Zen 4/5 CPUs (no frequency penalty for AVX-512)
 //
 // ============================================================================
 
+#include <bit>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <functional>
 #include <memory>
 #include <utility>
@@ -71,12 +49,116 @@
 #include "containers/maps/hasher.h"
 #include "containers/maps/map_storage.h"
 #include "meta/manual_lifetime.h"
+#include "simd/simd.h"
 
 namespace tempura {
 
+// ============================================================================
+// Control Byte Constants (same as 16-byte version)
+// ============================================================================
+
+namespace swiss64 {
+inline constexpr std::uint8_t kEmpty = 0b1111'1111;
+inline constexpr std::uint8_t kDeleted = 0b1111'1110;
+
+constexpr auto h2(std::size_t hash) -> std::uint8_t {
+  return static_cast<std::uint8_t>(hash & 0x7F);
+}
+}  // namespace swiss64
+
+// ============================================================================
+// Group64 - AVX-512 Control Byte Matching (64 bytes at once)
+// ============================================================================
+
+class alignas(64) Group64 {
+ public:
+  static constexpr std::size_t kWidth = 64;
+
+  constexpr Group64() = default;
+
+  static auto load(const std::uint8_t* ctrl) -> Group64 {
+    Group64 g;
+    g.data_ = Vec64i8::load(ctrl);
+    return g;
+  }
+
+  // Match control bytes equal to the given value
+  // Returns a 64-bit mask where bit i is set if ctrl[i] == byte
+  auto match(std::uint8_t byte) const -> std::uint64_t {
+    return data_.match(byte);
+  }
+
+  // Match empty slots (control bytes with high bit set)
+  auto matchEmpty() const -> std::uint64_t {
+    return data_.matchHighBitSet();
+  }
+
+  // Match empty or deleted slots
+  auto matchEmptyOrDeleted() const -> std::uint64_t {
+    return matchEmpty();
+  }
+
+ private:
+  Vec64i8 data_{};
+};
+
+// ============================================================================
+// BitMask64 - Iterator over set bits in 64-bit mask
+// ============================================================================
+
+class BitMask64 {
+ public:
+  explicit constexpr BitMask64(std::uint64_t mask) : mask_{mask} {}
+
+  constexpr auto operator*() const -> std::size_t {
+    return std::countr_zero(mask_);
+  }
+
+  constexpr auto operator++() -> BitMask64& {
+    mask_ &= (mask_ - 1);  // Clear lowest set bit
+    return *this;
+  }
+
+  constexpr explicit operator bool() const { return mask_ != 0; }
+
+ private:
+  std::uint64_t mask_;
+};
+
+// ============================================================================
+// ProbeSeq64 - Quadratic Probing for 64-byte groups
+// ============================================================================
+
+class ProbeSeq64 {
+ public:
+  constexpr ProbeSeq64(std::size_t hash, std::size_t mask)
+      : mask_{mask}, offset_{hash & mask_} {}
+
+  constexpr auto offset() const -> std::size_t { return offset_; }
+
+  constexpr auto offset(std::size_t i) const -> std::size_t {
+    return (offset_ + i) & mask_;
+  }
+
+  constexpr void next() {
+    index_ += Group64::kWidth;
+    offset_ += index_;
+    offset_ &= mask_;
+  }
+
+ private:
+  std::size_t mask_;
+  std::size_t offset_;
+  std::size_t index_ = 0;
+};
+
+// ============================================================================
+// SwissTable64
+// ============================================================================
+
 template <typename Key, typename Value, Hasher<Key> Hash = std::hash<Key>,
           typename KeyEqual = std::equal_to<Key>>
-class RobinHoodMap {
+class SwissTable64 {
  public:
   using key_type = Key;
   using mapped_type = Value;
@@ -88,21 +170,9 @@ class RobinHoodMap {
   // --------------------------------------------------------------------------
   // Slot Structure
   // --------------------------------------------------------------------------
-  // Each slot tracks its displacement from ideal position. This enables the
-  // Robin Hood swap decision and early termination during lookup.
 
   struct Slot {
-    enum class State : std::uint8_t {
-      kEmpty,
-      kOccupied,
-    };
-
-    State state = State::kEmpty;
-    size_type displacement = 0;  // Distance from ideal position
     ManualLifetime<MapStorage<Key, Value>> storage;
-
-    auto isEmpty() const -> bool { return state == State::kEmpty; }
-    auto isOccupied() const -> bool { return state == State::kOccupied; }
 
     auto mutableData() -> std::pair<Key, Value>* {
       return &storage.get().mutable_pair;
@@ -117,21 +187,15 @@ class RobinHoodMap {
     }
 
     template <typename... Args>
-    void construct(size_type disp, Args&&... args) {
+    void construct(Args&&... args) {
       storage.construct();
       std::construct_at(&storage.get().mutable_pair,
                         std::forward<Args>(args)...);
-      displacement = disp;
-      state = State::kOccupied;
     }
 
     void destroy() {
-      if (state == State::kOccupied) {
-        std::destroy_at(&storage.get().mutable_pair);
-        storage.destruct();
-      }
-      state = State::kEmpty;
-      displacement = 0;
+      std::destroy_at(&storage.get().mutable_pair);
+      storage.destruct();
     }
   };
 
@@ -140,66 +204,78 @@ class RobinHoodMap {
   // --------------------------------------------------------------------------
 
   static constexpr size_type kLoadFactorNumerator = 7;
-  static constexpr size_type kLoadFactorDenominator = 10;
-  static constexpr size_type kMinCapacity = 8;
+  static constexpr size_type kLoadFactorDenominator = 8;
+  static constexpr size_type kMinCapacity = 64;  // Must be multiple of 64
 
   // --------------------------------------------------------------------------
   // Constructors
   // --------------------------------------------------------------------------
 
-  constexpr RobinHoodMap() : RobinHoodMap{kMinCapacity} {}
+  constexpr SwissTable64() : SwissTable64{kMinCapacity} {}
 
-  constexpr explicit RobinHoodMap(size_type initial_capacity)
-      : capacity_{std::max(initial_capacity, kMinCapacity)},
-        slots_{std::make_unique<Slot[]>(capacity_)} {}
+  constexpr explicit SwissTable64(size_type initial_capacity)
+      : capacity_{normalizeCapacity(std::max(initial_capacity, kMinCapacity))},
+        ctrl_{allocateControls(capacity_)},
+        slots_{std::make_unique<Slot[]>(capacity_)} {
+    resetControls();
+  }
 
-  constexpr RobinHoodMap(const RobinHoodMap& other)
+  constexpr SwissTable64(const SwissTable64& other)
       : capacity_{other.capacity_},
         size_{other.size_},
+        deleted_{other.deleted_},
+        ctrl_{allocateControls(capacity_)},
         slots_{std::make_unique<Slot[]>(capacity_)} {
+    std::memcpy(ctrl_.get(), other.ctrl_.get(), capacity_ + Group64::kWidth);
     for (size_type i = 0; i < capacity_; ++i) {
-      if (other.slots_[i].isOccupied()) {
-        slots_[i].construct(other.slots_[i].displacement,
-                            *other.slots_[i].data());
+      if (isOccupied(ctrl_[i])) {
+        slots_[i].construct(*other.slots_[i].data());
       }
     }
   }
 
-  constexpr RobinHoodMap(RobinHoodMap&& other) noexcept
+  constexpr SwissTable64(SwissTable64&& other) noexcept
       : capacity_{other.capacity_},
         size_{other.size_},
+        deleted_{other.deleted_},
+        ctrl_{std::move(other.ctrl_)},
         slots_{std::move(other.slots_)} {
-    other.size_ = 0;
     other.capacity_ = 0;
+    other.size_ = 0;
+    other.deleted_ = 0;
   }
 
-  constexpr auto operator=(const RobinHoodMap& other) -> RobinHoodMap& {
+  constexpr auto operator=(const SwissTable64& other) -> SwissTable64& {
     if (this != &other) {
-      RobinHoodMap tmp{other};
+      SwissTable64 tmp{other};
       swap(tmp);
     }
     return *this;
   }
 
-  constexpr auto operator=(RobinHoodMap&& other) noexcept -> RobinHoodMap& {
+  constexpr auto operator=(SwissTable64&& other) noexcept -> SwissTable64& {
     if (this != &other) {
-      RobinHoodMap tmp{std::move(other)};
+      SwissTable64 tmp{std::move(other)};
       swap(tmp);
     }
     return *this;
   }
 
-  constexpr ~RobinHoodMap() {
+  constexpr ~SwissTable64() {
     if (slots_) {
       for (size_type i = 0; i < capacity_; ++i) {
-        slots_[i].destroy();
+        if (isOccupied(ctrl_[i])) {
+          slots_[i].destroy();
+        }
       }
     }
   }
 
-  constexpr void swap(RobinHoodMap& other) noexcept {
+  constexpr void swap(SwissTable64& other) noexcept {
     std::swap(capacity_, other.capacity_);
     std::swap(size_, other.size_);
+    std::swap(deleted_, other.deleted_);
+    std::swap(ctrl_, other.ctrl_);
     std::swap(slots_, other.slots_);
     std::swap(hasher_, other.hasher_);
     std::swap(equal_, other.equal_);
@@ -220,8 +296,6 @@ class RobinHoodMap {
   // --------------------------------------------------------------------------
   // Lookup
   // --------------------------------------------------------------------------
-  // Robin Hood enables early termination: if we see an element with
-  // displacement less than what ours would be, our key can't be in the table.
 
   constexpr auto find(const Key& key) -> Value* {
     size_type idx = findSlot(key);
@@ -279,9 +353,6 @@ class RobinHoodMap {
   // --------------------------------------------------------------------------
   // Deletion
   // --------------------------------------------------------------------------
-  // Robin Hood uses backward-shift deletion instead of tombstones.
-  // After removing an element, we shift subsequent elements back if they
-  // have displacement > 0 (meaning they'd prefer to be closer to home).
 
   constexpr auto erase(const Key& key) -> bool {
     size_type idx = findSlot(key);
@@ -289,32 +360,23 @@ class RobinHoodMap {
       return false;
     }
 
-    // Destroy the element
     slots_[idx].destroy();
+    ctrl_[idx] = swiss64::kDeleted;
     --size_;
-
-    // Backward-shift: move subsequent elements back toward their ideal position
-    size_type hole = idx;
-    size_type next = (hole + 1) % capacity_;
-
-    while (slots_[next].isOccupied() && slots_[next].displacement > 0) {
-      // Move element from 'next' to 'hole', decrementing its displacement
-      slots_[hole].construct(slots_[next].displacement - 1,
-                             std::move(*slots_[next].mutableData()));
-      slots_[next].destroy();
-
-      hole = next;
-      next = (next + 1) % capacity_;
-    }
+    ++deleted_;
 
     return true;
   }
 
   constexpr void clear() {
     for (size_type i = 0; i < capacity_; ++i) {
-      slots_[i].destroy();
+      if (isOccupied(ctrl_[i])) {
+        slots_[i].destroy();
+      }
     }
     size_ = 0;
+    deleted_ = 0;
+    resetControls();
   }
 
   // --------------------------------------------------------------------------
@@ -328,7 +390,7 @@ class RobinHoodMap {
     using pointer = value_type*;
     using reference = value_type&;
 
-    constexpr Iterator(RobinHoodMap* map, size_type idx)
+    constexpr Iterator(SwissTable64* map, size_type idx)
         : map_{map}, idx_{idx} {
       advanceToOccupied();
     }
@@ -359,12 +421,12 @@ class RobinHoodMap {
 
    private:
     constexpr void advanceToOccupied() {
-      while (idx_ < map_->capacity_ && !map_->slots_[idx_].isOccupied()) {
+      while (idx_ < map_->capacity_ && !isOccupied(map_->ctrl_[idx_])) {
         ++idx_;
       }
     }
 
-    RobinHoodMap* map_;
+    SwissTable64* map_;
     size_type idx_;
   };
 
@@ -375,7 +437,7 @@ class RobinHoodMap {
     using pointer = const value_type*;
     using reference = const value_type&;
 
-    constexpr ConstIterator(const RobinHoodMap* map, size_type idx)
+    constexpr ConstIterator(const SwissTable64* map, size_type idx)
         : map_{map}, idx_{idx} {
       advanceToOccupied();
     }
@@ -406,12 +468,12 @@ class RobinHoodMap {
 
    private:
     constexpr void advanceToOccupied() {
-      while (idx_ < map_->capacity_ && !map_->slots_[idx_].isOccupied()) {
+      while (idx_ < map_->capacity_ && !isOccupied(map_->ctrl_[idx_])) {
         ++idx_;
       }
     }
 
-    const RobinHoodMap* map_;
+    const SwissTable64* map_;
     size_type idx_;
   };
 
@@ -420,72 +482,61 @@ class RobinHoodMap {
   constexpr auto begin() const -> ConstIterator { return {this, 0}; }
   constexpr auto end() const -> ConstIterator { return {this, capacity_}; }
 
-  // --------------------------------------------------------------------------
-  // Probe Statistics (for analysis)
-  // --------------------------------------------------------------------------
-
-  constexpr auto maxDisplacement() const -> size_type {
-    size_type max_disp = 0;
-    for (size_type i = 0; i < capacity_; ++i) {
-      if (slots_[i].isOccupied()) {
-        max_disp = std::max(max_disp, slots_[i].displacement);
-      }
-    }
-    return max_disp;
-  }
-
-  constexpr auto totalDisplacement() const -> size_type {
-    size_type total = 0;
-    for (size_type i = 0; i < capacity_; ++i) {
-      if (slots_[i].isOccupied()) {
-        total += slots_[i].displacement;
-      }
-    }
-    return total;
-  }
-
  private:
   // --------------------------------------------------------------------------
   // Internal Helpers
   // --------------------------------------------------------------------------
 
+  static constexpr auto isOccupied(std::uint8_t ctrl) -> bool {
+    return (ctrl & 0x80) == 0;
+  }
+
   constexpr auto needsResize() const -> bool {
-    return size_ * kLoadFactorDenominator >= capacity_ * kLoadFactorNumerator;
+    return (size_ + deleted_) * kLoadFactorDenominator >=
+           capacity_ * kLoadFactorNumerator;
   }
 
-  constexpr auto hashIndex(const Key& key) const -> size_type {
-    return hasher_(key) % capacity_;
+  // Normalize capacity to power of 2 (required for bitwise AND masking in ProbeSeq64)
+  // Must also be >= Group64::kWidth (64) for AVX-512 alignment
+  static constexpr auto normalizeCapacity(size_type cap) -> size_type {
+    if (cap <= Group64::kWidth) return Group64::kWidth;
+    // Round up to next power of 2: 1 << ceil(log2(cap))
+    return size_type{1} << (64 - std::countl_zero(cap - 1));
   }
 
-  // Find slot with early termination.
-  // If we see an element with displacement < what ours would be, stop.
+  static auto allocateControls(size_type capacity)
+      -> std::unique_ptr<std::uint8_t[]> {
+    return std::make_unique<std::uint8_t[]>(capacity + Group64::kWidth);
+  }
+
+  constexpr void resetControls() {
+    std::memset(ctrl_.get(), swiss64::kEmpty, capacity_ + Group64::kWidth);
+  }
+
+  // Lookup using 64-byte AVX-512 groups
   constexpr auto findSlot(const Key& key) const -> size_type {
-    size_type ideal = hashIndex(key);
-    size_type idx = ideal;
-    size_type disp = 0;
+    std::size_t hash = hasher_(key);
+    std::uint8_t h2_byte = swiss64::h2(hash);
+    ProbeSeq64 seq{hash, capacity_ - 1};
 
-    while (disp < capacity_) {
-      const Slot& slot = slots_[idx];
+    while (true) {
+      Group64 g = Group64::load(&ctrl_[seq.offset()]);
+      BitMask64 matches{g.match(h2_byte)};
 
-      if (slot.isEmpty()) {
-        return capacity_;  // Not found
+      while (matches) {
+        size_type idx = seq.offset(*matches);
+        if (equal_(slots_[idx].data()->first, key)) {
+          return idx;
+        }
+        ++matches;
       }
 
-      // Early termination: this element is "richer" than we would be,
-      // so we would have stolen its slot if we existed
-      if (slot.displacement < disp) {
+      if (g.matchEmpty()) {
         return capacity_;
       }
 
-      if (equal_(slot.data()->first, key)) {
-        return idx;
-      }
-
-      idx = (idx + 1) % capacity_;
-      ++disp;
+      seq.next();
     }
-
-    return capacity_;
   }
 
   constexpr auto insertSlot(const Key& key) -> std::pair<size_type, bool> {
@@ -497,103 +548,90 @@ class RobinHoodMap {
       resize(new_cap);
     }
 
-    size_type ideal = hashIndex(key);
-    size_type idx = ideal;
-    size_type disp = 0;
+    std::size_t hash = hasher_(key);
+    std::uint8_t h2_byte = swiss64::h2(hash);
+    ProbeSeq64 seq{hash, capacity_ - 1};
 
-    // The key and value we're currently trying to place
-    Key current_key = key;
-    Value current_value{};
-    bool is_original = true;  // Track if we're still looking for the original key
+    while (true) {
+      Group64 g = Group64::load(&ctrl_[seq.offset()]);
 
-    while (disp < capacity_) {
-      Slot& slot = slots_[idx];
-
-      if (slot.isEmpty()) {
-        // Found empty slot - insert here
-        slot.construct(disp, std::move(current_key), std::move(current_value));
-        ++size_;
-        // Return the index of the original key (might not be this slot if we swapped)
-        if (is_original) {
-          return {idx, true};
+      BitMask64 matches{g.match(h2_byte)};
+      while (matches) {
+        size_type idx = seq.offset(*matches);
+        if (equal_(slots_[idx].data()->first, key)) {
+          return {idx, false};
         }
-        // Find where the original key ended up
-        return {findSlot(key), true};
+        ++matches;
       }
 
-      // Check if this is the key we're looking for (only for original key)
-      if (is_original && equal_(slot.data()->first, current_key)) {
-        return {idx, false};  // Key already exists
+      BitMask64 available{g.matchEmptyOrDeleted()};
+      if (available) {
+        size_type idx = seq.offset(*available);
+
+        if (ctrl_[idx] == swiss64::kDeleted) {
+          --deleted_;
+        }
+
+        ctrl_[idx] = h2_byte;
+        slots_[idx].construct(key, Value{});
+        ++size_;
+        return {idx, true};
       }
 
-      // Robin Hood: if we've traveled further than the occupant, swap
-      if (disp > slot.displacement) {
-        // Swap our current key/value with the occupant
-        std::swap(current_key, slot.mutableData()->first);
-        std::swap(current_value, slot.mutableData()->second);
-        std::swap(disp, slot.displacement);
-        is_original = false;  // Now inserting a displaced element
-      }
-
-      idx = (idx + 1) % capacity_;
-      ++disp;
+      seq.next();
     }
-
-    assert(false && "insertSlot: table full despite load factor check");
-    std::unreachable();
   }
 
   constexpr void resize(size_type new_capacity) {
-    new_capacity = std::max(new_capacity, kMinCapacity);
+    new_capacity = normalizeCapacity(std::max(new_capacity, kMinCapacity));
 
     constexpr size_type kMaxCapacity = size_type{1} << 60;
     assert(new_capacity <= kMaxCapacity && "resize: capacity exceeds maximum");
 
+    auto old_ctrl = std::move(ctrl_);
     auto old_slots = std::move(slots_);
     size_type old_capacity = capacity_;
 
     capacity_ = new_capacity;
+    ctrl_ = allocateControls(capacity_);
     slots_ = std::make_unique<Slot[]>(capacity_);
     size_ = 0;
+    deleted_ = 0;
+    resetControls();
 
     for (size_type i = 0; i < old_capacity; ++i) {
-      if (old_slots[i].isOccupied()) {
+      if (isOccupied(old_ctrl[i])) {
         auto& [key, value] = *old_slots[i].mutableData();
         insertWithValue(std::move(key), std::move(value));
       }
     }
 
     for (size_type i = 0; i < old_capacity; ++i) {
-      old_slots[i].destroy();
+      if (isOccupied(old_ctrl[i])) {
+        old_slots[i].destroy();
+      }
     }
   }
 
-  // Insert with a known value (used during resize)
   constexpr void insertWithValue(Key key, Value value) {
-    size_type ideal = hashIndex(key);
-    size_type idx = ideal;
-    size_type disp = 0;
+    std::size_t hash = hasher_(key);
+    std::uint8_t h2_byte = swiss64::h2(hash);
+    ProbeSeq64 seq{hash, capacity_ - 1};
 
-    while (disp < capacity_) {
-      Slot& slot = slots_[idx];
+    while (true) {
+      Group64 g = Group64::load(&ctrl_[seq.offset()]);
+      BitMask64 available{g.matchEmptyOrDeleted()};
 
-      if (slot.isEmpty()) {
-        slot.construct(disp, std::move(key), std::move(value));
+      if (available) {
+        size_type idx = seq.offset(*available);
+        ctrl_[idx] = h2_byte;
+        slots_[idx].construct(std::move(key), std::move(value));
         ++size_;
         return;
       }
 
-      if (disp > slot.displacement) {
-        std::swap(key, slot.mutableData()->first);
-        std::swap(value, slot.mutableData()->second);
-        std::swap(disp, slot.displacement);
-      }
-
-      idx = (idx + 1) % capacity_;
-      ++disp;
+      seq.next();
     }
-
-    std::unreachable();
   }
 
   // --------------------------------------------------------------------------
@@ -602,6 +640,9 @@ class RobinHoodMap {
 
   size_type capacity_ = kMinCapacity;
   size_type size_ = 0;
+  size_type deleted_ = 0;
+
+  std::unique_ptr<std::uint8_t[]> ctrl_ = nullptr;
   std::unique_ptr<Slot[]> slots_ = nullptr;
 
   [[no_unique_address]] Hash hasher_{};

@@ -1,63 +1,66 @@
 #pragma once
 
 // ============================================================================
-// Robin Hood Hash Map
+// Graveyard Hashing
 // ============================================================================
 //
-// Robin Hood hashing is a refinement of linear probing that dramatically
-// reduces probe length variance. The key insight: "steal from the rich,
-// give to the poor."
+// Graveyard Hashing is a variant of linear probing that strategically maintains
+// tombstones at ~50% of free slots to combat primary clustering.
 //
-// THE ROBIN HOOD PRINCIPLE
-// ------------------------
-// Each element has a "displacement" - how far it is from its ideal position.
-// An element at its ideal slot has displacement 0, one slot away has 1, etc.
+// THE PROBLEM WITH LINEAR PROBING
+// --------------------------------
+// Linear probing suffers from "primary clustering": long runs of occupied slots
+// form and grow over time. Once a cluster forms, any key that hashes into or
+// near it must probe through the entire cluster, making operations slow.
 //
-// During insertion, if the inserting element has traveled FURTHER than the
-// current occupant (larger displacement), we swap them. The displaced element
-// continues probing. This ensures no element gets TOO far from home.
+// Example of primary clustering:
+//   [A][B][C][D][E][F][G][ ][ ]...
 //
-// EXAMPLE: Insert key with hash=5, table has occupant at slot 6 with disp=0
+// Any new key hashing to slots 0-6 must probe past all occupied slots.
+// The cluster grows monotonically - it can only get longer, never shorter.
 //
-//   Inserting at slot 5: occupied, our disp=0, theirs=? → probe to 6
-//   Inserting at slot 6: occupied, our disp=1, theirs=0 → 1 > 0, SWAP!
-//   Now we're inserting the displaced element (disp=1) at slot 7...
+// THE GRAVEYARD INSIGHT
+// ---------------------
+// Tombstones break up clusters! Consider:
+//   [A][B][†][D][E][†][G][ ][ ]...
 //
-// WHY IT WORKS
-// ------------
-// Standard linear probing: some elements have displacement 0, others 10+
-// Robin Hood: everyone has displacement ~2-3 (variance minimized)
+// Now keys hashing to slots 2 or 5 can stop their probe early when inserting.
+// The tombstones act as "speed bumps" that prevent clusters from coalescing
+// into one giant cluster.
 //
-// Expected maximum probe length:
-//   Linear probing: O(log n) average, O(n) worst case
-//   Robin Hood: O(log log n) expected maximum!
+// Key insight from the paper: maintain tombstones at ~50% of free slots.
+// This is the sweet spot - enough tombstones to break clusters, but not so
+// many that they slow down searches (tombstones must be skipped during search).
 //
-// EARLY TERMINATION
-// -----------------
-// During lookup, if we see an element with displacement LESS than what ours
-// would be at that position, we know our key isn't in the table. It would
-// have stolen that slot during insertion.
+// STRATEGY
+// --------
+// 1. On DELETE: mark slot as tombstone (natural tombstone creation)
+// 2. On INSERT reusing tombstone: just reuse it, don't create new tombstones
+// 3. During REBUILD: place tombstones at evenly spaced "primitive positions"
+//    - Target ~50% of free slots as tombstones
+//    - Evenly spaced distribution prevents clustering
+// 4. When tombstones exceed 60% of free slots: rehash at same capacity
+//    - This resets the distribution without growing the table
 //
-// BACKWARD-SHIFT DELETION
-// -----------------------
-// Robin Hood doesn't use tombstones. Instead, when deleting:
-//   1. Remove the element, leaving a hole
-//   2. Shift subsequent elements backward if they have displacement > 0
-//   3. Stop when we hit an empty slot or element at its ideal position
+// WHY THIS WORKS
+// --------------
+// Traditional linear probing: tombstones accumulate until resize
+// Graveyard hashing: tombstones are actively maintained as a cluster-busting tool
 //
-// This keeps the table clean but makes deletion O(n) worst case.
+// The ~50% target is based on:
+//   - Too few tombstones: clusters still form
+//   - Too many tombstones: search slows down (must skip many tombstones)
+//   - ~50%: optimal tradeoff between cluster prevention and search speed
 //
-// MISSING FEATURES
-// ----------------
-// - Hash caching: Store computed hash values with elements to avoid
-//   rehashing during displacement comparisons and resizing. Trades
-//   memory (8 bytes/entry) for CPU cycles.
+// PERFORMANCE
+// -----------
+// Compared to standard linear probing:
+//   - INSERT: similar or better (tombstones break up clusters)
+//   - SEARCH: similar (tombstones are skipped)
+//   - DELETE: slightly more work (may create synthetic tombstone)
 //
-// - SIMD matching: Modern Robin Hood implementations use SIMD to match
-//   multiple hash fingerprints in parallel (like Swiss Tables).
-//
-// - Memory-efficient displacement: Track displacement in upper bits of
-//   stored hash rather than recomputing during probing.
+// The key win is preventing worst-case scenarios where clusters dominate
+// the table and probe sequences become extremely long.
 //
 // ============================================================================
 
@@ -74,10 +77,18 @@
 
 namespace tempura {
 
+// ============================================================================
+// GraveyardMap
+// ============================================================================
+
 template <typename Key, typename Value, Hasher<Key> Hash = std::hash<Key>,
           typename KeyEqual = std::equal_to<Key>>
-class RobinHoodMap {
+class GraveyardMap {
  public:
+  // --------------------------------------------------------------------------
+  // Type Aliases
+  // --------------------------------------------------------------------------
+
   using key_type = Key;
   using mapped_type = Value;
   using value_type = std::pair<const Key, Value>;
@@ -88,40 +99,38 @@ class RobinHoodMap {
   // --------------------------------------------------------------------------
   // Slot Structure
   // --------------------------------------------------------------------------
-  // Each slot tracks its displacement from ideal position. This enables the
-  // Robin Hood swap decision and early termination during lookup.
 
   struct Slot {
     enum class State : std::uint8_t {
-      kEmpty,
-      kOccupied,
+      kEmpty,      // Never used, or cleaned during resize
+      kOccupied,   // Contains a valid key-value pair
+      kTombstone,  // Deleted slot - breaks up clusters
     };
 
     State state = State::kEmpty;
-    size_type displacement = 0;  // Distance from ideal position
     ManualLifetime<MapStorage<Key, Value>> storage;
 
     auto isEmpty() const -> bool { return state == State::kEmpty; }
     auto isOccupied() const -> bool { return state == State::kOccupied; }
+    auto isTombstone() const -> bool { return state == State::kTombstone; }
 
+    // Internal access (mutable) - for moves during resize
     auto mutableData() -> std::pair<Key, Value>* {
       return &storage.get().mutable_pair;
     }
 
+    // User-facing access (const key) - prevents key mutation
     auto data() -> std::pair<const Key, Value>* {
       return &storage.get().const_pair;
     }
-
     auto data() const -> const std::pair<const Key, Value>* {
       return &storage.get().const_pair;
     }
 
     template <typename... Args>
-    void construct(size_type disp, Args&&... args) {
+    void construct(Args&&... args) {
       storage.construct();
-      std::construct_at(&storage.get().mutable_pair,
-                        std::forward<Args>(args)...);
-      displacement = disp;
+      std::construct_at(&storage.get().mutable_pair, std::forward<Args>(args)...);
       state = State::kOccupied;
     }
 
@@ -131,7 +140,14 @@ class RobinHoodMap {
         storage.destruct();
       }
       state = State::kEmpty;
-      displacement = 0;
+    }
+
+    void markTombstone() {
+      if (state == State::kOccupied) {
+        std::destroy_at(&storage.get().mutable_pair);
+        storage.destruct();
+      }
+      state = State::kTombstone;
     }
   };
 
@@ -139,57 +155,74 @@ class RobinHoodMap {
   // Constants
   // --------------------------------------------------------------------------
 
+  // Load factor threshold: resize when (size + tombstones) * 10 >= capacity * 7
   static constexpr size_type kLoadFactorNumerator = 7;
   static constexpr size_type kLoadFactorDenominator = 10;
+
+  // Tombstone target: aim for deleted ≈ (capacity - size) / 2
+  // Lower bound: deleted * 10 < free * 4 (40%)
+  // Upper bound: deleted * 10 > free * 6 (60%)
+  static constexpr size_type kTombstoneLowNumerator = 4;
+  static constexpr size_type kTombstoneHighNumerator = 6;
+  static constexpr size_type kTombstoneDenominator = 10;
+
   static constexpr size_type kMinCapacity = 8;
 
   // --------------------------------------------------------------------------
   // Constructors
   // --------------------------------------------------------------------------
 
-  constexpr RobinHoodMap() : RobinHoodMap{kMinCapacity} {}
+  constexpr GraveyardMap() : GraveyardMap{kMinCapacity} {}
 
-  constexpr explicit RobinHoodMap(size_type initial_capacity)
+  constexpr explicit GraveyardMap(size_type initial_capacity)
       : capacity_{std::max(initial_capacity, kMinCapacity)},
         slots_{std::make_unique<Slot[]>(capacity_)} {}
 
-  constexpr RobinHoodMap(const RobinHoodMap& other)
+  // Copy constructor: deep copy all occupied slots
+  constexpr GraveyardMap(const GraveyardMap& other)
       : capacity_{other.capacity_},
         size_{other.size_},
+        tombstone_count_{other.tombstone_count_},
         slots_{std::make_unique<Slot[]>(capacity_)} {
     for (size_type i = 0; i < capacity_; ++i) {
       if (other.slots_[i].isOccupied()) {
-        slots_[i].construct(other.slots_[i].displacement,
-                            *other.slots_[i].data());
+        slots_[i].construct(*other.slots_[i].data());
+      } else {
+        slots_[i].state = other.slots_[i].state;
       }
     }
   }
 
-  constexpr RobinHoodMap(RobinHoodMap&& other) noexcept
+  // Move constructor: steal resources
+  constexpr GraveyardMap(GraveyardMap&& other) noexcept
       : capacity_{other.capacity_},
         size_{other.size_},
+        tombstone_count_{other.tombstone_count_},
         slots_{std::move(other.slots_)} {
     other.size_ = 0;
     other.capacity_ = 0;
+    other.tombstone_count_ = 0;
   }
 
-  constexpr auto operator=(const RobinHoodMap& other) -> RobinHoodMap& {
+  // Copy assignment using copy-and-swap
+  constexpr auto operator=(const GraveyardMap& other) -> GraveyardMap& {
     if (this != &other) {
-      RobinHoodMap tmp{other};
+      GraveyardMap tmp{other};
       swap(tmp);
     }
     return *this;
   }
 
-  constexpr auto operator=(RobinHoodMap&& other) noexcept -> RobinHoodMap& {
+  // Move assignment using swap
+  constexpr auto operator=(GraveyardMap&& other) noexcept -> GraveyardMap& {
     if (this != &other) {
-      RobinHoodMap tmp{std::move(other)};
+      GraveyardMap tmp{std::move(other)};
       swap(tmp);
     }
     return *this;
   }
 
-  constexpr ~RobinHoodMap() {
+  constexpr ~GraveyardMap() {
     if (slots_) {
       for (size_type i = 0; i < capacity_; ++i) {
         slots_[i].destroy();
@@ -197,9 +230,10 @@ class RobinHoodMap {
     }
   }
 
-  constexpr void swap(RobinHoodMap& other) noexcept {
+  constexpr void swap(GraveyardMap& other) noexcept {
     std::swap(capacity_, other.capacity_);
     std::swap(size_, other.size_);
+    std::swap(tombstone_count_, other.tombstone_count_);
     std::swap(slots_, other.slots_);
     std::swap(hasher_, other.hasher_);
     std::swap(equal_, other.equal_);
@@ -209,19 +243,30 @@ class RobinHoodMap {
   // Capacity
   // --------------------------------------------------------------------------
 
-  constexpr auto size() const noexcept -> size_type { return size_; }
-  constexpr auto capacity() const noexcept -> size_type { return capacity_; }
-  constexpr auto empty() const noexcept -> bool { return size_ == 0; }
+  constexpr auto size() const noexcept -> size_type {
+    return size_;
+  }
+
+  constexpr auto capacity() const noexcept -> size_type {
+    return capacity_;
+  }
+
+  constexpr auto empty() const noexcept -> bool {
+    return size_ == 0;
+  }
 
   constexpr auto loadFactor() const noexcept -> double {
-    return static_cast<double>(size_) / static_cast<double>(capacity_);
+    return static_cast<double>(size_ + tombstone_count_) /
+           static_cast<double>(capacity_);
+  }
+
+  constexpr auto tombstoneCount() const noexcept -> size_type {
+    return tombstone_count_;
   }
 
   // --------------------------------------------------------------------------
   // Lookup
   // --------------------------------------------------------------------------
-  // Robin Hood enables early termination: if we see an element with
-  // displacement less than what ours would be, our key can't be in the table.
 
   constexpr auto find(const Key& key) -> Value* {
     size_type idx = findSlot(key);
@@ -279,33 +324,20 @@ class RobinHoodMap {
   // --------------------------------------------------------------------------
   // Deletion
   // --------------------------------------------------------------------------
-  // Robin Hood uses backward-shift deletion instead of tombstones.
-  // After removing an element, we shift subsequent elements back if they
-  // have displacement > 0 (meaning they'd prefer to be closer to home).
 
   constexpr auto erase(const Key& key) -> bool {
     size_type idx = findSlot(key);
     if (idx == capacity_) {
-      return false;
+      return false;  // Key not found
     }
 
-    // Destroy the element
-    slots_[idx].destroy();
+    slots_[idx].markTombstone();
     --size_;
+    ++tombstone_count_;
 
-    // Backward-shift: move subsequent elements back toward their ideal position
-    size_type hole = idx;
-    size_type next = (hole + 1) % capacity_;
-
-    while (slots_[next].isOccupied() && slots_[next].displacement > 0) {
-      // Move element from 'next' to 'hole', decrementing its displacement
-      slots_[hole].construct(slots_[next].displacement - 1,
-                             std::move(*slots_[next].mutableData()));
-      slots_[next].destroy();
-
-      hole = next;
-      next = (next + 1) % capacity_;
-    }
+    // Check if we need more tombstones to maintain target ratio
+    // This should rarely trigger since deletion naturally creates tombstones
+    maintainTombstones();
 
     return true;
   }
@@ -315,6 +347,7 @@ class RobinHoodMap {
       slots_[i].destroy();
     }
     size_ = 0;
+    tombstone_count_ = 0;
   }
 
   // --------------------------------------------------------------------------
@@ -328,18 +361,14 @@ class RobinHoodMap {
     using pointer = value_type*;
     using reference = value_type&;
 
-    constexpr Iterator(RobinHoodMap* map, size_type idx)
+    constexpr Iterator(GraveyardMap* map, size_type idx)
         : map_{map}, idx_{idx} {
       advanceToOccupied();
     }
 
-    constexpr auto operator*() const -> reference {
-      return *map_->slots_[idx_].data();
-    }
+    constexpr auto operator*() const -> reference { return *map_->slots_[idx_].data(); }
 
-    constexpr auto operator->() const -> pointer {
-      return map_->slots_[idx_].data();
-    }
+    constexpr auto operator->() const -> pointer { return map_->slots_[idx_].data(); }
 
     constexpr auto operator++() -> Iterator& {
       ++idx_;
@@ -364,7 +393,7 @@ class RobinHoodMap {
       }
     }
 
-    RobinHoodMap* map_;
+    GraveyardMap* map_;
     size_type idx_;
   };
 
@@ -375,18 +404,14 @@ class RobinHoodMap {
     using pointer = const value_type*;
     using reference = const value_type&;
 
-    constexpr ConstIterator(const RobinHoodMap* map, size_type idx)
+    constexpr ConstIterator(const GraveyardMap* map, size_type idx)
         : map_{map}, idx_{idx} {
       advanceToOccupied();
     }
 
-    constexpr auto operator*() const -> reference {
-      return *map_->slots_[idx_].data();
-    }
+    constexpr auto operator*() const -> reference { return *map_->slots_[idx_].data(); }
 
-    constexpr auto operator->() const -> pointer {
-      return map_->slots_[idx_].data();
-    }
+    constexpr auto operator->() const -> pointer { return map_->slots_[idx_].data(); }
 
     constexpr auto operator++() -> ConstIterator& {
       ++idx_;
@@ -411,37 +436,20 @@ class RobinHoodMap {
       }
     }
 
-    const RobinHoodMap* map_;
+    const GraveyardMap* map_;
     size_type idx_;
   };
 
   constexpr auto begin() -> Iterator { return {this, 0}; }
+
   constexpr auto end() -> Iterator { return {this, capacity_}; }
-  constexpr auto begin() const -> ConstIterator { return {this, 0}; }
-  constexpr auto end() const -> ConstIterator { return {this, capacity_}; }
 
-  // --------------------------------------------------------------------------
-  // Probe Statistics (for analysis)
-  // --------------------------------------------------------------------------
-
-  constexpr auto maxDisplacement() const -> size_type {
-    size_type max_disp = 0;
-    for (size_type i = 0; i < capacity_; ++i) {
-      if (slots_[i].isOccupied()) {
-        max_disp = std::max(max_disp, slots_[i].displacement);
-      }
-    }
-    return max_disp;
+  constexpr auto begin() const -> ConstIterator {
+    return {this, 0};
   }
 
-  constexpr auto totalDisplacement() const -> size_type {
-    size_type total = 0;
-    for (size_type i = 0; i < capacity_; ++i) {
-      if (slots_[i].isOccupied()) {
-        total += slots_[i].displacement;
-      }
-    }
-    return total;
+  constexpr auto end() const -> ConstIterator {
+    return {this, capacity_};
   }
 
  private:
@@ -450,39 +458,32 @@ class RobinHoodMap {
   // --------------------------------------------------------------------------
 
   constexpr auto needsResize() const -> bool {
-    return size_ * kLoadFactorDenominator >= capacity_ * kLoadFactorNumerator;
+    return (size_ + tombstone_count_) * kLoadFactorDenominator >=
+           capacity_ * kLoadFactorNumerator;
   }
 
   constexpr auto hashIndex(const Key& key) const -> size_type {
     return hasher_(key) % capacity_;
   }
 
-  // Find slot with early termination.
-  // If we see an element with displacement < what ours would be, stop.
   constexpr auto findSlot(const Key& key) const -> size_type {
-    size_type ideal = hashIndex(key);
-    size_type idx = ideal;
-    size_type disp = 0;
+    size_type idx = hashIndex(key);
+    size_type probes = 0;
 
-    while (disp < capacity_) {
+    while (probes < capacity_) {
       const Slot& slot = slots_[idx];
 
       if (slot.isEmpty()) {
-        return capacity_;  // Not found
-      }
-
-      // Early termination: this element is "richer" than we would be,
-      // so we would have stolen its slot if we existed
-      if (slot.displacement < disp) {
         return capacity_;
       }
 
-      if (equal_(slot.data()->first, key)) {
+      if (slot.isOccupied() && equal_(slot.data()->first, key)) {
         return idx;
       }
 
+      // Collision or tombstone: continue probing
       idx = (idx + 1) % capacity_;
-      ++disp;
+      ++probes;
     }
 
     return capacity_;
@@ -497,50 +498,97 @@ class RobinHoodMap {
       resize(new_cap);
     }
 
-    size_type ideal = hashIndex(key);
-    size_type idx = ideal;
-    size_type disp = 0;
+    size_type idx = hashIndex(key);
+    size_type first_tombstone = capacity_;
+    size_type probes = 0;
 
-    // The key and value we're currently trying to place
-    Key current_key = key;
-    Value current_value{};
-    bool is_original = true;  // Track if we're still looking for the original key
-
-    while (disp < capacity_) {
+    while (probes < capacity_) {
       Slot& slot = slots_[idx];
 
       if (slot.isEmpty()) {
-        // Found empty slot - insert here
-        slot.construct(disp, std::move(current_key), std::move(current_value));
-        ++size_;
-        // Return the index of the original key (might not be this slot if we swapped)
-        if (is_original) {
-          return {idx, true};
+        size_type insert_idx = (first_tombstone != capacity_) ? first_tombstone : idx;
+
+        if (first_tombstone != capacity_) {
+          // Reusing a tombstone - decrement count
+          --tombstone_count_;
         }
-        // Find where the original key ended up
-        return {findSlot(key), true};
+
+        slots_[insert_idx].construct(key, Value{});
+        ++size_;
+
+        maintainTombstones();
+        return {insert_idx, true};
       }
 
-      // Check if this is the key we're looking for (only for original key)
-      if (is_original && equal_(slot.data()->first, current_key)) {
-        return {idx, false};  // Key already exists
+      if (slot.isTombstone() && first_tombstone == capacity_) {
+        first_tombstone = idx;
       }
 
-      // Robin Hood: if we've traveled further than the occupant, swap
-      if (disp > slot.displacement) {
-        // Swap our current key/value with the occupant
-        std::swap(current_key, slot.mutableData()->first);
-        std::swap(current_value, slot.mutableData()->second);
-        std::swap(disp, slot.displacement);
-        is_original = false;  // Now inserting a displaced element
+      if (slot.isOccupied() && equal_(slot.data()->first, key)) {
+        return {idx, false};
       }
 
       idx = (idx + 1) % capacity_;
-      ++disp;
+      ++probes;
     }
 
     assert(false && "insertSlot: table full despite load factor check");
     std::unreachable();
+  }
+
+  // Place tombstones at evenly spaced primitive positions
+  constexpr void placePrimitiveTombstones() {
+    size_type free_slots = capacity_ - size_;
+    size_type target_tombstones = free_slots / 2;
+
+    if (target_tombstones == 0) return;
+
+    size_type spacing = capacity_ / target_tombstones;
+    size_type placed = 0;
+
+    for (size_type pos = spacing / 2; pos < capacity_ && placed < target_tombstones; pos += spacing) {
+      if (slots_[pos].isEmpty()) {
+        slots_[pos].markTombstone();
+        ++tombstone_count_;
+        ++placed;
+      }
+    }
+  }
+
+  // Maintain tombstone count at target level
+  constexpr void maintainTombstones() {
+    size_type free_slots = capacity_ - size_;
+
+    // If we have too many tombstones (> 60% of free slots), rehash
+    // Rehashing at same capacity clears tombstones without growing
+    if (tombstone_count_ * kTombstoneDenominator >
+        free_slots * kTombstoneHighNumerator) {
+      rehashSameCapacity();
+    }
+  }
+
+  // Rehash at same capacity to clean up tombstones
+  constexpr void rehashSameCapacity() {
+    auto old_slots = std::move(slots_);
+    size_type old_capacity = capacity_;
+
+    slots_ = std::make_unique<Slot[]>(capacity_);
+    size_ = 0;
+    tombstone_count_ = 0;
+
+    // Re-insert all occupied elements
+    for (size_type i = 0; i < old_capacity; ++i) {
+      if (old_slots[i].isOccupied()) {
+        auto& [key, value] = *old_slots[i].mutableData();
+        size_type idx = insertSlotNoResize(key);
+        slots_[idx].mutableData()->second = std::move(value);
+      }
+    }
+
+    // Clean up old slots
+    for (size_type i = 0; i < old_capacity; ++i) {
+      old_slots[i].destroy();
+    }
   }
 
   constexpr void resize(size_type new_capacity) {
@@ -555,42 +603,37 @@ class RobinHoodMap {
     capacity_ = new_capacity;
     slots_ = std::make_unique<Slot[]>(capacity_);
     size_ = 0;
+    tombstone_count_ = 0;
 
+    // Re-insert all occupied elements
     for (size_type i = 0; i < old_capacity; ++i) {
       if (old_slots[i].isOccupied()) {
         auto& [key, value] = *old_slots[i].mutableData();
-        insertWithValue(std::move(key), std::move(value));
+        size_type idx = insertSlotNoResize(key);
+        slots_[idx].mutableData()->second = std::move(value);
       }
     }
 
+    // Clean up old slots
     for (size_type i = 0; i < old_capacity; ++i) {
       old_slots[i].destroy();
     }
+
+    // Place tombstones at evenly spaced positions
+    placePrimitiveTombstones();
   }
 
-  // Insert with a known value (used during resize)
-  constexpr void insertWithValue(Key key, Value value) {
-    size_type ideal = hashIndex(key);
-    size_type idx = ideal;
-    size_type disp = 0;
+  constexpr auto insertSlotNoResize(const Key& key) -> size_type {
+    size_type idx = hashIndex(key);
 
-    while (disp < capacity_) {
+    for (size_type probes = 0; probes < capacity_; ++probes) {
       Slot& slot = slots_[idx];
-
       if (slot.isEmpty()) {
-        slot.construct(disp, std::move(key), std::move(value));
+        slot.construct(key, Value{});
         ++size_;
-        return;
+        return idx;
       }
-
-      if (disp > slot.displacement) {
-        std::swap(key, slot.mutableData()->first);
-        std::swap(value, slot.mutableData()->second);
-        std::swap(disp, slot.displacement);
-      }
-
       idx = (idx + 1) % capacity_;
-      ++disp;
     }
 
     std::unreachable();
@@ -602,6 +645,7 @@ class RobinHoodMap {
 
   size_type capacity_ = kMinCapacity;
   size_type size_ = 0;
+  size_type tombstone_count_ = 0;
   std::unique_ptr<Slot[]> slots_ = nullptr;
 
   [[no_unique_address]] Hash hasher_{};

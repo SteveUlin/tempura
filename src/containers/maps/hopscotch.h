@@ -41,6 +41,20 @@
 // The bitmap makes lookup very fast - we skip slots that don't belong to us.
 // The bounded neighborhood ensures cache-friendly access patterns.
 //
+// MISSING FEATURES
+// ----------------
+// - Concurrent hopscotch: The original paper describes lock-free operations
+//   using CAS on bitmaps. Our implementation is single-threaded.
+//
+// - Configurable neighborhood size: Currently hardcoded to 32 (uint32_t bitmap).
+//   Larger neighborhoods (64 with uint64_t) trade memory for higher load factors.
+//
+// - SIMD bitmap scanning: Use popcount/ctz intrinsics for faster bit scanning.
+//   Current implementation uses standard library functions.
+//
+// - Adaptive hopping: Track hop distances and trigger early rehash when
+//   hopping becomes expensive.
+//
 // ============================================================================
 
 #include <bit>

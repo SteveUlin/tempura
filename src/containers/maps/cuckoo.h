@@ -45,6 +45,21 @@
 //
 // We use a maximum displacement count as a simpler cycle detection.
 //
+// MISSING FEATURES
+// ----------------
+// - Stash: Modern cuckoo implementations use a small stash (4-8 entries) for
+//   items that fail insertion. This allows higher load factors (~95%) without
+//   rehashing. See: "MemC3: Compact and Concurrent MemCache with Dumber Caching
+//   and Smarter Hashing" (NSDI 2013)
+//
+// - Bucketized cuckoo: Instead of 2 single slots, use 2 buckets of 4+ slots.
+//   Dramatically increases load factor (95%+) and reduces eviction chains.
+//
+// - Path-based insertion: BFS to find augmenting path instead of random walk.
+//   Guarantees insertion when possible, avoids false "table full" detection.
+//
+// - d-ary cuckoo: Use d>2 hash functions for better load factors
+//
 // ============================================================================
 
 #include <cassert>
