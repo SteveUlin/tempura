@@ -59,7 +59,8 @@ class Poisson {
     return static_cast<T>(k) * log(λ_) - λ_ - lgamma(static_cast<T>(k + IntT{1}));
   }
 
-  // CDF via regularized upper incomplete gamma: P(X ≤ k) = Q(k+1, λ)
+  // P(X ≤ k) = 1 - P(k+1, λ) where P is the regularized lower incomplete gamma.
+  // This identity connects discrete Poisson to continuous gamma waiting times.
   constexpr auto cdf(IntT k) const -> T {
     if (k < IntT{0}) {
       return T{0};

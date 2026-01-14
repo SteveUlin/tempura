@@ -19,7 +19,10 @@ concept AnyOptional = std::same_as<T, std::optional<typename T::value_type>>;
 
 }  // namespace detail
 
-// Precision scales roughly as 1/√n where n is the number of samples.
+// Monte Carlo integrator using importance sampling.
+// Accumulates samples incrementally, tracking running mean and variance.
+// Precision scales as 1/√n (Central Limit Theorem).
+// The tape stores all (input, output) pairs for diagnostics and reweighting.
 template <std::invocable<> Sampler,
           std::invocable<std::invoke_result_t<Sampler>> Func>
 class MonteCarloIntegrator {

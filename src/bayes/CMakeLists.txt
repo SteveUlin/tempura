@@ -126,6 +126,34 @@ add_test(NAME bayes_rng_tests_test COMMAND bayes_rng_tests_test)
 set_tests_properties(bayes_rng_tests_test PROPERTIES LABELS "bayes;sampling;quality")
 
 # ============================================================================
+# Estimation / MCMC Tests
+# ============================================================================
+
+# Metropolis-Hastings MCMC
+add_executable(bayes_metropolis_hastings_test estimation/metropolis_hastings_test.cpp)
+target_link_libraries(bayes_metropolis_hastings_test PRIVATE bayes unit)
+add_test(NAME bayes_metropolis_hastings_test COMMAND bayes_metropolis_hastings_test)
+set_tests_properties(bayes_metropolis_hastings_test PROPERTIES LABELS "bayes;estimation;mcmc")
+
+# Metropolis-Hastings 2D example
+add_executable(bayes_metropolis_hastings_2d_test estimation/metropolis_hastings_2d_example.cpp)
+target_link_libraries(bayes_metropolis_hastings_2d_test PRIVATE bayes unit)
+add_test(NAME bayes_metropolis_hastings_2d_test COMMAND bayes_metropolis_hastings_2d_test)
+set_tests_properties(bayes_metropolis_hastings_2d_test PROPERTIES LABELS "bayes;estimation;mcmc")
+
+# Metropolis-Hastings tuple example
+add_executable(bayes_metropolis_hastings_tuple_test estimation/metropolis_hastings_tuple_example.cpp)
+target_link_libraries(bayes_metropolis_hastings_tuple_test PRIVATE bayes unit)
+add_test(NAME bayes_metropolis_hastings_tuple_test COMMAND bayes_metropolis_hastings_tuple_test)
+set_tests_properties(bayes_metropolis_hastings_tuple_test PROPERTIES LABELS "bayes;estimation;mcmc")
+
+# Range-based MCMC API
+add_executable(bayes_mcmc_test estimation/mcmc_test.cpp)
+target_link_libraries(bayes_mcmc_test PRIVATE bayes unit)
+add_test(NAME bayes_mcmc_test COMMAND bayes_mcmc_test)
+set_tests_properties(bayes_mcmc_test PROPERTIES LABELS "bayes;estimation;mcmc")
+
+# ============================================================================
 # Benchmarks and Analysis Tools (not formal tests)
 # ============================================================================
 

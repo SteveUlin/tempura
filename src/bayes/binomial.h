@@ -24,7 +24,8 @@ class Binomial {
     assert(p >= T{0} && p <= T{1} && "requires 0 ≤ p ≤ 1");
   }
 
-  // Direct implementation: n independent Bernoulli trials
+  // Direct simulation: O(n) but exact. Normal approximation would be O(1)
+  // but introduces bias for small n or extreme p.
   template <std::uniform_random_bit_generator Generator>
   constexpr auto sample(Generator& g) -> IntT {
     constexpr T scale =
@@ -73,7 +74,8 @@ class Binomial {
     return log_binom_coef + log_p_term + log_1mp_term;
   }
 
-  // Direct summation (can optimize with incomplete beta later)
+  // Direct summation in log-space. For large n, could use incomplete beta:
+  // F(k; n, p) = I_{1-p}(n-k, k+1), but direct sum is numerically stable.
   constexpr auto cdf(IntT k) const -> T {
     if (k < IntT{0}) return T{0};
     if (k >= n_) return T{1};

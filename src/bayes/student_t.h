@@ -79,7 +79,7 @@ class StudentT {
 
  private:
   T ν_;
-  T log_normalizer_;  // log Γ((ν+1)/2) - log Γ(ν/2) - ½ log(νπ)
+  T log_normalizer_;  // Precomputed: avoids lgamma calls in logProb()
 };
 
 }  // namespace tempura::bayes

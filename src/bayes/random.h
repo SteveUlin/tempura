@@ -48,7 +48,7 @@ enum class ShiftDirection : bool { Left, Right };
 
 // 64-bit Xorshift
 // state: x
-// intialize: x ≠ 0
+// initialize: x ≠ 0
 // update:
 //   x ← x ∧ (x >> a₁)
 //   x ← x ∧ (x << a₂)
@@ -103,7 +103,7 @@ class XorShift {
 
 // Multiply With Carry
 // state: x
-// intialize: x ≠ 0
+// initialize: x ≠ 0
 // update:
 //   x ← a (x & [2³² - 1]) + (x >> 32)
 // period: (2³²a - 2) / 2  where a is prime
@@ -204,13 +204,8 @@ inline auto makeRandom(uint64_t seed = kDefaultRandomSeed) {
   };
 }
 
-// Multiplicative Linear Congruential Generator (commented out - less useful)
-//
-// state: x
-// initialize: x ≠ 0
-// update x = a * x mod 2⁶⁴
-// period: 2⁶⁴
-//
+// Multiplicative Linear Congruential Generator
+// Kept for reference; less useful than combined generators above.
 // Top 32 bits are mostly random, bottom 32 bits are not.
 
 // template <uint_fast64_t a, uint_fast64_t m = 0>
