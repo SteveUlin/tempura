@@ -80,3 +80,6 @@ target_link_libraries(ode_demo PRIVATE ode)
 add_executable(io_uring_demo io_uring_demo.cpp)
 target_link_libraries(io_uring_demo PRIVATE io_uring_sender task threadpool)
 
+add_executable(mcmc_visual mcmc_visual.cpp)
+target_link_libraries(mcmc_visual PRIVATE bayes plot)
+
