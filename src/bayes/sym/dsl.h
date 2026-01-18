@@ -3,6 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 
 #include "prob/log_prob.h"
@@ -217,6 +218,122 @@ constexpr auto operator|(Var, Dist dist) {
 }
 
 // =============================================================================
+// DeterministicStatement - Variable computed from expression (not sampled)
+// =============================================================================
+// Usage: y_hat << alpha + beta * x
+// Creates a deterministic relationship - y_hat is defined as alpha + beta * x.
+// Deterministic nodes contribute 0 to log-probability since they're derived,
+// not sampled.
+
+template <Symbolic Var, Symbolic Expr>
+struct DeterministicStatement {
+  using variable = Var;
+  using expression = Expr;
+
+  [[no_unique_address]] Expr expr;
+
+  // Deterministic nodes contribute 0 to log-probability
+  constexpr auto logProb() const { return Constant<0>{}; }
+
+  // Get the defining expression
+  constexpr auto getExpr() const { return expr; }
+};
+
+// Operator << creates deterministic statements: y_hat << alpha + beta * x
+template <Symbolic Var, Symbolic Expr>
+constexpr auto operator<<(Var, Expr expr) {
+  return DeterministicStatement<Var, Expr>{expr};
+}
+
+// Type trait to detect DeterministicStatement
+template <typename T>
+constexpr bool is_deterministic_statement = false;
+
+template <Symbolic Var, Symbolic Expr>
+constexpr bool is_deterministic_statement<DeterministicStatement<Var, Expr>> =
+    true;
+
+// =============================================================================
+// Symbolic substitution for deterministic variables
+// =============================================================================
+// Substitutes a single symbol with an expression throughout a symbolic tree.
+// Used to replace deterministic variable symbols with their defining expressions.
+
+namespace detail {
+
+// Base case: symbol matches target - replace with expression
+template <typename Unique, Symbolic Replacement>
+constexpr auto substituteSymbol(Symbol<Unique>, Symbol<Unique>, Replacement r) {
+  return r;
+}
+
+// Symbol doesn't match - return unchanged
+template <typename U1, typename U2, Symbolic Replacement>
+  requires(!__is_same(Symbol<U1>, Symbol<U2>))
+constexpr auto substituteSymbol(Symbol<U1> s, Symbol<U2>, Replacement) {
+  return s;
+}
+
+// Constant - return unchanged
+template <auto V, Symbolic Target, Symbolic Replacement>
+constexpr auto substituteSymbol(Constant<V>, Target, Replacement) {
+  return Constant<V>{};
+}
+
+// Fraction - return unchanged
+template <long long N, long long D, Symbolic Target, Symbolic Replacement>
+constexpr auto substituteSymbol(Fraction<N, D>, Target, Replacement) {
+  return Fraction<N, D>{};
+}
+
+// Literal - return unchanged
+template <typename T, Symbolic Target, Symbolic Replacement>
+constexpr auto substituteSymbol(Literal<T> lit, Target, Replacement) {
+  return lit;
+}
+
+// Expression - recursively substitute in arguments
+template <typename Op, Symbolic... Args, Symbolic Target, Symbolic Replacement>
+constexpr auto substituteSymbol(Expression<Op, Args...> expr, Target target,
+                                Replacement replacement) {
+  return std::apply(
+      [&](auto... args) {
+        return Expression<Op, decltype(substituteSymbol(args, target,
+                                                        replacement))...>{
+            substituteSymbol(args, target, replacement)...};
+      },
+      expr.args_);
+}
+
+// Apply deterministic substitutions from statements tuple, index-based recursion
+template <std::size_t Idx, Symbolic Expr, typename... Stmts>
+constexpr auto applyDeterministicSubsImpl(Expr e, const std::tuple<Stmts...>& stmts) {
+  if constexpr (Idx >= sizeof...(Stmts)) {
+    return e;
+  } else {
+    using StmtType = std::tuple_element_t<Idx, std::tuple<Stmts...>>;
+    if constexpr (is_deterministic_statement<StmtType>) {
+      // Get the statement and substitute
+      auto& stmt = std::get<Idx>(stmts);
+      auto substituted =
+          substituteSymbol(e, typename StmtType::variable{}, stmt.getExpr());
+      return applyDeterministicSubsImpl<Idx + 1>(substituted, stmts);
+    } else {
+      // Not a deterministic statement, skip
+      return applyDeterministicSubsImpl<Idx + 1>(e, stmts);
+    }
+  }
+}
+
+// Apply all deterministic substitutions from a tuple of statements
+template <Symbolic Expr, typename... Stmts>
+constexpr auto applyDeterministicSubs(Expr e, const std::tuple<Stmts...>& stmts) {
+  return applyDeterministicSubsImpl<0>(e, stmts);
+}
+
+}  // namespace detail
+
+// =============================================================================
 // Joint - A joint distribution over variables
 // =============================================================================
 
@@ -226,10 +343,17 @@ struct Joint {
 
   constexpr Joint(Statements... stmts) : statements{stmts...} {}
 
-  // Total log-probability: sum of all statement log-probs
-  constexpr auto logProb() const {
+  // Total log-probability: sum of all statement log-probs (raw, no substitution)
+  constexpr auto logProbRaw() const {
     return std::apply(
         [](auto&... stmt) { return (stmt.logProb() + ...); }, statements);
+  }
+
+  // Total log-probability with deterministic variables substituted
+  // This expands deterministic variable symbols to their defining expressions
+  constexpr auto logProb() const {
+    auto raw = logProbRaw();
+    return detail::applyDeterministicSubs(raw, statements);
   }
 
   // Observe: condition on values, returns a ConditionedJoint

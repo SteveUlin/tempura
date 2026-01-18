@@ -28,6 +28,18 @@ target_link_libraries(bayes_sym INTERFACE
 add_library(tempura::bayes_sym ALIAS bayes_sym)
 
 # ============================================================================
+# Tests
+# ============================================================================
+
+add_executable(constraints_test constraints_test.cc)
+target_link_libraries(constraints_test PRIVATE bayes_sym)
+add_test(NAME bayes_sym_constraints_test COMMAND constraints_test)
+
+add_executable(dsl_test dsl_test.cc)
+target_link_libraries(dsl_test PRIVATE bayes_sym)
+add_test(NAME bayes_sym_dsl_test COMMAND dsl_test)
+
+# ============================================================================
 # Examples
 # ============================================================================
 

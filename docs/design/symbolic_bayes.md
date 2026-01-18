@@ -450,284 +450,469 @@ auto sample(ModelInstance<Model> model,
 
 ### The Goal
 
-We want models to read clearly and express their statistical structure without cryptic operators. The syntax should make the role of each variable obvious—is it a parameter we infer, or data we observe?
+We want models to read clearly and express their statistical structure. The syntax should:
+1. Be valid C++ without macro tricks
+2. Visually resemble statistical notation
+3. Support flexible role assignment (same variable can be observed OR inferred depending on context)
+4. Encode constraints that are intrinsic to variables
+
+### Design Philosophy: Roles Are Contextual, Not Intrinsic
+
+After studying how other PPLs handle variable roles, we adopt a key insight:
+
+**A random variable's role (observed vs inferred) is a property of how the model is USED, not an intrinsic property of the variable itself.**
+
+The same variable `y` might be:
+- **Observed** in `model.condition(y = data)` for posterior inference
+- **Sampled** in `model.priorPredictive()` for prior checks
+- **Partially observed** in `model.condition(y[known_idx] = partial_data)` for missing data
+
+Making this a compile-time type distinction (like `Param<T>` vs `Data<T>`) reduces flexibility without proportional safety benefits. This is why:
+- **PyMC** uses runtime `observed=` argument
+- **Edward/TFP** binds variables to data at inference time
+- **Turing.jl** determines roles when the model function is called
+- **Stan's** block separation is a language construct, not a type distinction
+
+### What SHOULD Be Types
+
+However, some things genuinely deserve type-level encoding:
+
+| Property | Type-Level? | Why |
+|----------|-------------|-----|
+| **Constraint** (σ > 0) | ✓ Yes | Intrinsic to the variable—σ is ALWAYS positive |
+| **Dimensionality** | ✓ Yes | Intrinsic—β is ALWAYS a 3-vector |
+| **Deterministic vs Stochastic** | ✓ Yes | Derived quantities are computed, never sampled |
+| **Observed vs Inferred** | ✗ No | Contextual—depends on usage |
+
+### Syntax: The `|` Operator
+
+We use `|` (pipe) to associate variables with distributions:
 
 ```cpp
+constexpr Symbol mu;
+constexpr Symbol sigma;
+constexpr Symbol y;
+
 auto model = Model{
-    param(μ) = Normal(0_c, 10_c),
-    param(σ) = HalfNormal(5_c),
-    data(y)  = Normal(μ, σ)
+    mu    | Normal(0.0, 10.0),     // mu has Normal prior
+    sigma | HalfNormal(5.0),       // sigma has HalfNormal prior
+    y     | Normal(mu, sigma)      // y has Normal likelihood
 };
 ```
 
-This reads naturally: "parameter μ is Normal(0, 10), parameter σ is HalfNormal(5), data y is Normal(μ, σ)."
+**Why `|`?**
+- `~` is unary in C++, so `a ~ b` doesn't parse
+- `|` is binary and visually suggests conditioning: p(mu | ...)
+- Same solution used by [AutoPPL](https://github.com/JamesYang007/autoppl) with `|=`
+- Reads naturally: "mu given Normal(0, 10)"
 
-### Why This Design?
+### Role Assignment at Usage Time
 
-We considered many operator-based approaches to mimic the statistical `~` notation:
+```cpp
+// Define model structure (no roles yet)
+auto model = Model{
+    mu    | Normal(0.0, 10.0),
+    sigma | HalfNormal(5.0),
+    y     | Normal(mu, sigma)
+};
 
-| Syntax | Problem |
-|--------|---------|
-| `μ ~ Normal(...)` | `~` is unary in C++, doesn't parse |
-| `μ \| ~Normal(...)` | Works, but looks like line noise |
-| `μ % Normal(...)` | `%` suggests modulo, not distribution |
-| `μ << Normal(...)` | Suggests bit shifting or streaming |
-| `Normal(...) >> μ` | Reversed from how statisticians think |
+// Usage 1: Standard posterior inference
+// y is observed, (mu, sigma) are inferred
+auto posterior = model
+    .observe(y = data)
+    .infer(mu, sigma);
 
-None of these read as naturally as they should. Operator overloading forces us to repurpose symbols that carry wrong connotations.
+// Usage 2: Prior predictive (all variables sampled)
+auto prior_pred = model
+    .infer(mu, sigma, y);  // No observations, sample everything
 
-**The explicit approach wins because:**
+// Usage 3: Missing data imputation
+// Some y values observed, some inferred
+auto imputation = model
+    .observe(y[known_idx] = known_data)
+    .infer(mu, sigma, y[missing_idx]);
 
-1. `param()` and `data()` make roles unambiguous—no guessing which variables get inferred
-2. `=` genuinely means "is defined as"—that's exactly the right semantics
-3. No obscure operators to explain to new users
-4. Easy to extend with new roles: `latent()`, `hyperprior()`, `transformed()`
-5. IDE autocomplete and refactoring work correctly
-6. Error messages reference real function names, not cryptic operators
+// Usage 4: Semi-supervised learning
+// Some labels observed, others inferred
+auto semisup = model
+    .observe(y[labeled_idx] = labels)
+    .infer(mu, sigma, y[unlabeled_idx]);
+```
 
-### Implementation
+This flexibility is impossible with rigid `Param<T>` vs `Data<T>` types.
 
-The DSL requires three components: role wrappers, distribution builders, and statements.
+### Constraint Types
+
+Constraints ARE intrinsic to variables and deserve type-level encoding. A variable `sigma` that represents a standard deviation is ALWAYS positive, regardless of whether it's observed or inferred.
 
 ```cpp
 namespace tempura::bayes::sym {
 
-// ============================================================================
-// ROLE WRAPPERS - Capture the variable and its role in the model
-// ============================================================================
+// =============================================================================
+// CONSTRAINT TYPES - Encode domain restrictions with automatic transforms
+// =============================================================================
 
-enum class Role { Parameter, Data, Latent, Hyperprior };
+// Unconstrained (default)
+struct Unconstrained {
+    static constexpr auto transform(double x) { return x; }
+    static constexpr auto inverse(double y) { return y; }
+    static constexpr auto logJacobian(double) { return 0.0; }
+};
 
-template <Symbolic Var, Role R>
-struct RoleSpec {
-    // Assignment creates a statement binding variable to distribution
-    template <typename Dist>
-    constexpr auto operator=(Dist dist) const {
-        return Statement<Var, Dist, R>{};
+// Positive reals: R → R+ via exp
+struct Positive {
+    static constexpr auto transform(double x) { return std::exp(x); }
+    static constexpr auto inverse(double y) { return std::log(y); }
+    static constexpr auto logJacobian(double x) { return x; }  // log|d(exp(x))/dx| = x
+};
+
+// Unit interval: R → [0,1] via logistic
+struct UnitInterval {
+    static constexpr auto transform(double x) {
+        return 1.0 / (1.0 + std::exp(-x));
+    }
+    static constexpr auto inverse(double y) {
+        return std::log(y / (1.0 - y));
+    }
+    static constexpr auto logJacobian(double x) {
+        double p = transform(x);
+        return std::log(p * (1.0 - p));
     }
 };
 
-// Role wrapper functions - these are the user-facing API
-template <Symbolic Var>
-constexpr auto param(Var) {
-    return RoleSpec<Var, Role::Parameter>{};
-}
+// Bounded interval: R → [a,b]
+template <auto Lower, auto Upper>
+struct Bounded {
+    static constexpr double a = Lower;
+    static constexpr double b = Upper;
 
-template <Symbolic Var>
-constexpr auto data(Var) {
-    return RoleSpec<Var, Role::Data>{};
-}
-
-template <Symbolic Var>
-constexpr auto latent(Var) {
-    return RoleSpec<Var, Role::Latent>{};
-}
-
-// ============================================================================
-// DISTRIBUTION BUILDERS - Lightweight types that construct log-prob expressions
-// ============================================================================
-
-template <Symbolic Mu, Symbolic Sigma>
-struct NormalDist {
-    [[no_unique_address]] Mu μ;
-    [[no_unique_address]] Sigma σ;
-
-    // Generate log-probability expression for variable x
-    template <Symbolic X>
-    constexpr auto logProbFor(X x) const {
-        return logNormal(x, μ, σ);
+    static constexpr auto transform(double x) {
+        double p = 1.0 / (1.0 + std::exp(-x));
+        return a + (b - a) * p;
     }
-
-    // Chain constraints with |
-    template <typename Constraint>
-    constexpr auto operator|(Constraint c) const {
-        return ConstrainedDist{*this, c};
+    static constexpr auto inverse(double y) {
+        double p = (y - a) / (b - a);
+        return std::log(p / (1.0 - p));
+    }
+    static constexpr auto logJacobian(double x) {
+        double p = 1.0 / (1.0 + std::exp(-x));
+        return std::log((b - a) * p * (1.0 - p));
     }
 };
 
-template <Symbolic Sigma>
-struct HalfNormalDist {
-    [[no_unique_address]] Sigma σ;
-
-    template <Symbolic X>
-    constexpr auto logProbFor(X x) const {
-        return logHalfNormal(x, σ);
-    }
-
-    template <typename Constraint>
-    constexpr auto operator|(Constraint c) const {
-        return ConstrainedDist{*this, c};
-    }
+// K-simplex: R^(K-1) → Δ^K via stick-breaking
+template <size_t K>
+struct Simplex {
+    // Transform from K-1 unconstrained to K simplex
+    static auto transform(std::span<const double, K-1> x) -> std::array<double, K>;
+    static auto inverse(std::span<const double, K> y) -> std::array<double, K-1>;
+    static auto logJacobian(std::span<const double, K-1> x) -> double;
 };
 
-// Factory functions return distribution builders
-template <Symbolic Mu, Symbolic Sigma>
-constexpr auto Normal(Mu μ, Sigma σ) {
-    return NormalDist<Mu, Sigma>{μ, σ};
-}
+// Correlation matrix: R^(D*(D-1)/2) → Corr(D) via Cholesky
+template <size_t D>
+struct CorrMatrix {
+    static constexpr size_t num_unconstrained = D * (D - 1) / 2;
+    // LKJ-style parameterization
+};
 
-template <Symbolic Sigma>
-constexpr auto HalfNormal(Sigma σ) {
-    return HalfNormalDist<Sigma>{σ};
-}
+}  // namespace tempura::bayes::sym
+```
 
-template <Symbolic Alpha, Symbolic Beta>
-constexpr auto Beta(Alpha α, Beta β) {
-    return BetaDist<Alpha, Beta>{α, β};
-}
+### Constrained Symbols
 
-// ============================================================================
-// STATEMENT - Binds a variable to a distribution with a role
-// ============================================================================
+Constraints attach to symbols, creating new types:
 
-template <Symbolic Var, typename Dist, Role R>
+```cpp
+// Unconstrained symbol (default)
+constexpr Symbol mu;
+
+// Constrained symbols - constraint is part of the type
+constexpr Symbol<Positive> sigma;        // σ > 0 always
+constexpr Symbol<UnitInterval> p;        // p ∈ [0,1] always
+constexpr Symbol<Bounded<-1, 1>> rho;    // ρ ∈ [-1,1] always
+constexpr Symbol<Simplex<3>> probs;      // Σprobs = 1 always
+
+auto model = Model{
+    mu    | Normal(0, 10),
+    sigma | HalfNormal(5),       // HalfNormal is consistent with Positive
+    p     | Beta(1, 1),          // Beta is consistent with UnitInterval
+    y     | Normal(mu, sigma)
+};
+
+// During inference:
+// - Sampler operates on unconstrained parameters
+// - Model transforms to constrained space
+// - Jacobian adjustment added to log-prob automatically
+```
+
+**Why constraint on Symbol, not on Distribution?**
+
+Because the constraint belongs to the variable, not the prior. Consider:
+- `sigma | HalfNormal(5)` — HalfNormal implies positivity
+- `sigma | Gamma(2, 1)` — Gamma also implies positivity
+- `sigma | TruncatedNormal(0, 5, lower=0)` — Also positive
+
+The constraint `σ > 0` is a property of σ, not of which prior we choose. The library verifies consistency: assigning `Normal(0, 1)` to a `Symbol<Positive>` would require truncation or error.
+
+### Deterministic Nodes (Derived Quantities)
+
+Deterministic quantities are fundamentally different from random variables—they're computed, not sampled. This deserves a distinct type:
+
+```cpp
+// Derived<Expr> - a deterministic function of other variables
+template <typename Expr>
+struct Derived {
+    Expr expr;
+
+    // Cannot be observed (it's computed, not random)
+    // Cannot be sampled (it's deterministic)
+    // CAN appear in other expressions
+};
+
+// Usage: different operator to distinguish from stochastic
+constexpr Symbol alpha, beta, x, y;
+constexpr Symbol<Positive> sigma;
+
+auto model = Model{
+    alpha | Normal(0, 10),
+    beta  | Normal(0, 10),
+    sigma | HalfNormal(5),
+
+    // Deterministic: y_hat is computed, not sampled
+    y_hat << alpha + beta * x,     // << for deterministic assignment
+
+    y     | Normal(y_hat, sigma)   // Likelihood uses derived quantity
+};
+
+// y_hat cannot be in .observe() or .infer() — it's not a random variable
+auto posterior = model
+    .observe(x = x_data, y = y_data)
+    .infer(alpha, beta, sigma);   // y_hat is NOT listed
+```
+
+**Why `<<` for deterministic?**
+
+We need to distinguish:
+- `y | Normal(mu, sigma)` — y is a random variable with this distribution
+- `y_hat << alpha + beta * x` — y_hat is a computed value
+
+Using `<<` for deterministic:
+- Visually distinct from `|`
+- Suggests "assignment" or "flows from"
+- `<<` is left-associative binary operator in C++
+
+### Implementation Architecture
+
+```cpp
+namespace tempura::bayes::sym {
+
+// =============================================================================
+// STATEMENT - Variable with distribution (no role encoded)
+// =============================================================================
+
+template <Symbolic Var, typename Dist>
 struct Statement {
     using variable = Var;
     using distribution = Dist;
-    static constexpr Role role = R;
 
-    // Extract the log-probability expression
-    static constexpr auto logProb() {
-        return Dist{}.logProbFor(Var{});
-    }
+    [[no_unique_address]] Dist dist;
 
-    // Check if this is observed data
-    static constexpr bool isObserved() {
-        return R == Role::Data;
-    }
-
-    // Check if this is an inferred parameter
-    static constexpr bool isParameter() {
-        return R == Role::Parameter || R == Role::Latent;
+    constexpr auto logProb() const {
+        return dist.logProbFor(Var{});
     }
 };
 
-}  // namespace tempura::bayes::sym
-```
+// Operator | creates statements
+template <Symbolic Var, typename Dist>
+constexpr auto operator|(Var, Dist dist) {
+    return Statement<Var, Dist>{dist};
+}
 
-**Why RoleSpec returns a type with operator=?** Because we need to capture both the variable and its role before we know the distribution. The `param(μ)` call returns a lightweight spec; `= Normal(...)` completes it.
+// =============================================================================
+// DETERMINISTIC STATEMENT - Variable computed from expression
+// =============================================================================
 
-**Why store distribution as a type, not a value?** Because everything happens at compile time. The distribution's parameters (which may be other symbols) are encoded in the type. No runtime storage needed.
+template <Symbolic Var, Symbolic Expr>
+struct DeterministicStatement {
+    using variable = Var;
+    using expression = Expr;
 
-### Model Composition
+    [[no_unique_address]] Expr expr;
 
-Multiple statements combine into a complete model:
+    // No logProb contribution — deterministic nodes don't add to joint
+    constexpr auto logProb() const { return Constant<0>{}; }
+};
 
-```cpp
-namespace tempura::bayes::sym {
+// Operator << creates deterministic statements
+template <Symbolic Var, Symbolic Expr>
+constexpr auto operator<<(Var, Expr expr) {
+    return DeterministicStatement<Var, Expr>{expr};
+}
+
+// =============================================================================
+// MODEL - Collection of statements
+// =============================================================================
 
 template <typename... Statements>
 struct Model {
-    // Total log-probability is sum of all statement log-probs
-    static constexpr auto logProb() {
-        return (Statements::logProb() + ...);
+    std::tuple<Statements...> statements;
+
+    // Joint log-probability
+    constexpr auto logProb() const {
+        return std::apply(
+            [](auto&... stmt) { return (stmt.logProb() + ...); },
+            statements
+        );
     }
 
-    // Count statements by role
-    static constexpr std::size_t numParameters() {
-        return ((Statements::isParameter() ? 1 : 0) + ...);
-    }
-
-    static constexpr std::size_t numObserved() {
-        return ((Statements::isObserved() ? 1 : 0) + ...);
-    }
-
-    // Extract parameter symbols as a type list
-    using parameters = FilterByRole<Role::Parameter, Statements...>;
-
-    // Extract data symbols as a type list
-    using observations = FilterByRole<Role::Data, Statements...>;
-
-    // Bind observed data, returning a callable for inference
-    template <typename... Bindings>
-    static constexpr auto observe(Bindings... bindings) {
-        return ModelInstance<Model, Bindings...>{bindings...};
+    // Condition on observations
+    template <typename... Binders>
+    constexpr auto observe(Binders... binders) const {
+        return ConditionedModel{*this, binders...};
     }
 };
 
-// Deduction guide: Model{stmt1, stmt2, ...} deduces Model<Stmt1, Stmt2, ...>
-template <typename... Statements>
-Model(Statements...) -> Model<Statements...>;
+// =============================================================================
+// CONDITIONED MODEL - Ready for inference
+// =============================================================================
+
+template <typename ModelT, typename... Binders>
+struct ConditionedModel {
+    ModelT model;
+    std::tuple<Binders...> observations;
+
+    // Specify inference targets and their order
+    template <Symbolic... Params>
+    constexpr auto infer(Params...) const {
+        return Posterior<ModelT, std::tuple<Binders...>, Params...>{
+            model, observations
+        };
+    }
+};
 
 }  // namespace tempura::bayes::sym
 ```
 
-**Why fold expression `(Statements::logProb() + ...)`?** Because the joint log-probability of independent statements is their sum. The fold expands at compile time to a single symbolic expression representing the entire model's log-density.
+### Vectorized Observations
 
-**Why `FilterByRole` instead of runtime filtering?** Because we need the parameter types at compile time to compute gradients. The filter is a template metafunction that extracts symbols matching a role.
-
-### Complete Example
+Real models have N data points, not just one. We need runtime-sized observation support:
 
 ```cpp
-#include "bayes/symbolic.h"
+constexpr Symbol mu;
+constexpr Symbol<Positive> sigma;
+constexpr Symbol y;  // Will be vectorized
+
+auto model = Model{
+    mu    | Normal(0, 10),
+    sigma | HalfNormal(5),
+    y     | Normal(mu, sigma)   // Single statement, but y can be vector
+};
+
+// Option 1: Pass vector of observations
+std::vector<double> data = loadData();  // N observations
+auto posterior = model
+    .observe(y = data)      // y binds to entire vector
+    .infer(mu, sigma);
+
+// logProb internally computes: Σᵢ logNormal(data[i], mu, sigma)
+```
+
+**Implementation approach:**
+
+When `y = vector_data` is passed to `.observe()`:
+1. Detect that the bound value is a range/container
+2. For statements involving `y`, sum the log-prob over all elements
+3. Gradient computation sums the per-element gradients
+
+```cpp
+// Pseudo-implementation
+template <typename ModelT, typename... Binders>
+struct ConditionedModel {
+    // ...
+
+    template <typename ParamValues>
+    auto logProb(ParamValues params) const {
+        double total = 0.0;
+
+        // For each observation in vectorized data
+        for (size_t i = 0; i < data_size_; ++i) {
+            auto bindings = makeBindings(params, observations_, i);
+            total += evaluate(model_.logProb(), bindings);
+        }
+
+        return total;
+    }
+};
+```
+
+### Partial Observation (Missing Data)
+
+Support observing only some indices:
+
+```cpp
+constexpr Symbol y;
+std::vector<double> known_values = {1.2, 2.5, 3.1};
+std::vector<size_t> known_idx = {0, 2, 5};
+std::vector<size_t> missing_idx = {1, 3, 4};
+
+auto posterior = model
+    .observe(y[known_idx] = known_values)     // Observe some
+    .infer(mu, sigma, y[missing_idx]);        // Infer others + params
+
+// This enables:
+// - Missing data imputation
+// - Semi-supervised learning
+// - Selective conditioning
+```
+
+### Complete Example (Updated)
+
+```cpp
+#include "bayes/sym/dsl.h"
 
 using namespace tempura::bayes::sym;
 using namespace tempura::symbolic3;
 
 int main() {
-    // Define symbols
-    constexpr Symbol μ, σ, y;
+    // Define symbols with constraints
+    constexpr Symbol mu;
+    constexpr Symbol<Positive> sigma;  // Constraint is type-level
+    constexpr Symbol y;
 
-    // Define model with explicit roles
-    constexpr auto model = Model{
-        param(μ) = Normal(0_c, 10_c),
-        param(σ) = HalfNormal(5_c),
-        data(y)  = Normal(μ, σ)
+    // Define model structure
+    auto model = Model{
+        mu    | Normal(0.0, 10.0),
+        sigma | HalfNormal(5.0),
+        y     | Normal(mu, sigma)
     };
 
-    // Model knows its structure at compile time
-    static_assert(model.numParameters() == 2);
-    static_assert(model.numObserved() == 1);
+    // Load data
+    std::vector<double> observations = {1.2, 2.5, 1.8, 3.1, 2.2};
 
-    // Extract log-probability as a symbolic expression
-    constexpr auto log_joint = model.logProb();
+    // Condition and specify inference targets
+    auto posterior = model
+        .observe(y = observations)
+        .infer(mu, sigma);
 
-    // Compute gradients symbolically (happens at compile time)
-    constexpr auto grad_μ = diff_simplified(log_joint, μ);
-    constexpr auto grad_σ = diff_simplified(log_joint, σ);
+    // Evaluate at a point (internally handles constraint transforms)
+    double lp = posterior.logProb(2.0, 1.5);  // mu=2.0, sigma=1.5
+    auto grad = posterior.gradient(2.0, 1.5);
 
-    // Bind observed data
-    auto instance = model.observe(y = 2.5);
-
-    // Run inference
+    // Run HMC (operates in unconstrained space automatically)
     std::mt19937_64 rng{42};
-    auto samples = instance.sample<HMC>(
+    auto samples = posterior.sample<HMC>(
+        rng,
         10000,
-        {.step_size = 0.1, .num_leapfrog = 10, .warmup = 1000}
+        {.warmup = 1000, .step_size = 0.1, .num_leapfrog = 10}
     );
 
-    // Analyze posterior
-    auto [μ_mean, μ_std] = summarize(samples, μ);
-    auto [σ_mean, σ_std] = summarize(samples, σ);
+    // Samples are in constrained space (sigma > 0 guaranteed)
+    for (auto& [mu_val, sigma_val] : samples) {
+        assert(sigma_val > 0);  // Always true
+    }
 }
 ```
-
-### Constraints
-
-Parameters often have constrained domains. We express constraints by chaining with `|`:
-
-```cpp
-auto model = Model{
-    param(μ) = Normal(0_c, 10_c),
-    param(σ) = HalfNormal(5_c) | Positive{},
-    param(ρ) = Uniform(-1_c, 1_c) | Bounded{-1, 1},
-    param(p) = Beta(1_c, 1_c) | UnitInterval{},
-    data(y)  = Normal(μ, σ)
-};
-```
-
-**Why chain constraints separately?** Because some distributions imply constraints (HalfNormal is positive by definition) while others don't. Explicit constraints let users state their intent clearly. The library can verify consistency: `Normal(...) | Positive{}` triggers a transform, while `HalfNormal(...) | Positive{}` is redundant but valid.
-
-Constraints trigger automatic parameter transforms during inference:
-
-| Constraint | Transform | Jacobian |
-|------------|-----------|----------|
-| `Positive{}` | exp(x) | x |
-| `Bounded{a, b}` | a + (b-a)·sigmoid(x) | log((x-a)(b-x)/(b-a)) |
-| `UnitInterval{}` | sigmoid(x) | log(x(1-x)) |
-| `Simplex{}` | stick-breaking | sum of log-Jacobians |
-
-The sampler works in unconstrained space; the model evaluates in constrained space with Jacobian corrections.
 
 ### Hierarchical Models
 
@@ -902,86 +1087,151 @@ int main() {
 
 ## Implementation Plan
 
-### Phase 1: Core Primitives (Foundation)
+### Current State
 
-**Goal:** Establish log-probability expressions that integrate with symbolic3.
+The basic DSL infrastructure exists in `bayes/sym/dsl.h`:
+- ✅ `Symbol` type with unique identity via stateless lambdas
+- ✅ `Statement<Var, Dist>` binding variables to distributions
+- ✅ `Joint<Statements...>` combining statements
+- ✅ `Posterior` with `logProb()` and `gradient()` methods
+- ✅ Basic distribution wrappers (Normal, HalfNormal, Beta, etc.)
+- ✅ Integration with `symbolic3` for symbolic differentiation
 
-1. **Add log-probability functions** for common distributions:
-   - `logNormal`, `logHalfNormal`, `logTruncatedNormal`
-   - `logBeta`, `logGamma`, `logExponential`
-   - `logBernoulli`, `logBinomial`, `logPoisson`
-   - `logUniform`, `logCauchy`, `logStudentT`
+### Phase 1: Constraint System (High Priority)
 
-2. **Add special function symbols** for normalization constants:
-   - `logGammaFn(x)` - log of gamma function
-   - `logBetaFn(a, b)` - log of beta function
-   - Ensure `diff()` handles these correctly (derivatives exist in closed form)
+**Goal:** Enable automatic parameter transforms for constrained variables.
 
-3. **Verify gradient correctness** with static_assert tests:
-   ```cpp
-   constexpr Symbol x, μ, σ;
-   constexpr auto lp = logNormal(x, μ, σ);
-   constexpr auto dlp_dμ = diff_simplified(lp, μ);
-   // Should equal (x - μ) / (σ * σ)
-   static_assert(/* structural equality check */);
-   ```
+1. **Implement constraint types:**
+   - `Unconstrained` (identity transform)
+   - `Positive` (exp transform)
+   - `UnitInterval` (logistic transform)
+   - `Bounded<Lower, Upper>` (scaled logistic)
 
-**Why start here?** Because everything else depends on correct log-probability expressions. If these are wrong, inference produces garbage. We verify correctness at compile time before building anything on top.
+2. **Extend Symbol to accept constraint:**
+   - `Symbol<Positive>` carries constraint in type
+   - Default: `Symbol<Unconstrained>` or just `Symbol`
 
-### Phase 2: Model Definition (Structure)
+3. **Add Jacobian handling in Posterior:**
+   - `logProb()` adds Jacobian adjustment for constrained params
+   - `gradient()` includes Jacobian derivative
+   - Sampler operates in unconstrained space
 
-**Goal:** Enable users to define models declaratively.
+4. **Verify consistency:**
+   - `Symbol<Positive>` with `HalfNormal` → OK (consistent)
+   - `Symbol<Positive>` with `Normal` → Error or auto-truncate
 
-4. **Implement ModelBuilder** for capturing parameter symbols
-5. **Implement Model** type with pre-computed gradients
-6. **Add parameter ordering** to ensure consistent array indexing
+**Deliverables:**
+- `src/bayes/sym/constraints.h` - Constraint types
+- Updated `dsl.h` with constraint-aware Symbol
+- Tests verifying transform correctness
 
-**Why pre-compute gradients in the Model type?** Because we know the parameters at model definition time. Computing `gradient(log_prob, params...)` once and storing the result types avoids redundant work at instantiation time.
+### Phase 2: Deterministic Nodes (Medium Priority)
 
-### Phase 3: Model Instantiation (Binding)
+**Goal:** Support computed quantities that aren't random variables.
 
-**Goal:** Connect models to observed data and provide callable interfaces.
+5. **Implement `DeterministicStatement`:**
+   - `y_hat << expr` creates deterministic binding
+   - No log-prob contribution (returns 0)
+   - Expression substituted when evaluating likelihood
 
-7. **Implement ModelInstance** with `logProb()` and `gradient()` methods
-8. **Implement parameter packing/unpacking** between arrays and symbolic bindings
-9. **Add constraint handling** (e.g., σ > 0 via log-transform)
+6. **Add `<<` operator for deterministic assignment:**
+   - Syntactically distinct from `|` for stochastic
 
-**Why handle constraints here?** Because many parameters have restricted domains. The sampler works in unconstrained space (all of R^n), but the model uses constrained parameters. The instance layer applies transformations automatically—users specify `σ > 0`, and we internally sample `log(σ)`.
+7. **Prevent invalid operations:**
+   - Cannot `.observe()` a deterministic node
+   - Cannot `.infer()` a deterministic node
+   - Static assertion with clear error message
 
-### Phase 4: MCMC Integration (Inference)
+**Deliverables:**
+- `DeterministicStatement` in `dsl.h`
+- `operator<<` for Symbols
+- Tests for linear regression model with `y_hat`
 
-**Goal:** Run actual inference on symbolic models.
+### Phase 3: Vectorized Observations (High Priority)
 
-10. **Implement ChainAdapter** for Metropolis-Hastings
-11. **Implement HMCAdapter** with leapfrog integration
-12. **Add warmup/thinning/convergence diagnostics**
+**Goal:** Handle N data points efficiently.
 
-**Why HMC before simpler methods work?** Because HMC is where symbolic gradients shine. Metropolis-Hastings doesn't use gradients—it works equally well with runtime computation. HMC's performance depends critically on efficient gradient evaluation, so it demonstrates the value of the symbolic approach.
+8. **Support vector binding in `.observe()`:**
+   - `y = std::vector<double>` binds to entire dataset
+   - Detect container/range types at compile time
 
-### Phase 5: Conjugacy Detection (Optimization)
+9. **Sum log-prob over observations:**
+   - For statements involving vectorized symbols
+   - Efficient evaluation (avoid re-evaluating param log-probs)
 
-**Goal:** Automatically use closed-form posteriors when possible.
+10. **Sum gradients correctly:**
+    - Gradient of sum = sum of gradients
+    - Only data-dependent terms contribute per observation
 
-13. **Define patterns** for common conjugate pairs:
-    - Normal-Normal (known variance)
-    - Beta-Binomial, Beta-Bernoulli
-    - Gamma-Poisson, Gamma-Exponential
-    - Dirichlet-Multinomial
+**Deliverables:**
+- Updated `Posterior::logProb()` with vectorized support
+- Updated `Posterior::gradient()` with vectorized support
+- Benchmark comparing to manual loop
 
-14. **Implement pattern matching** using `extractBindings`
-15. **Add closed-form update functions** for each conjugate pair
-16. **Wire conjugacy detection into `infer()`** dispatch
+### Phase 4: Algorithm Integration (Medium Priority)
 
-**Why defer conjugacy?** Because it's an optimization, not a correctness requirement. MCMC works for all models. Conjugacy makes some models faster. We build the general solution first, then add the fast paths.
+**Goal:** Seamless connection between DSL models and inference algorithms.
 
-### Phase 6: Ergonomics (Polish)
+11. **Add `.toHMC()` method on Posterior:**
+    ```cpp
+    auto hmc = posterior.toHMC({.epsilon = 0.1, .L = 20});
+    auto samples = hmc.sample(rng, 5000);
+    ```
 
-**Goal:** Make the library pleasant to use.
+12. **Add `.toADVI()` method:**
+    ```cpp
+    auto advi = posterior.toADVI();
+    auto approx = advi.fit(rng, 1000);
+    ```
 
-17. **Add model DSL syntax** with `~` operator if feasible
-18. **Support vector-valued observations** (multiple data points)
-19. **Add model validation** (all parameters have priors, no cycles)
-20. **Improve error messages** for common mistakes
+13. **Handle constraint transforms in algorithms:**
+    - HMC operates on unconstrained params
+    - Samples returned in constrained space
+    - Mass matrix adapts to unconstrained scale
+
+**Deliverables:**
+- `Posterior::toHMC()` factory method
+- `Posterior::toADVI()` factory method
+- Example showing full workflow
+
+### Phase 5: Partial Observation (Lower Priority)
+
+**Goal:** Support missing data and semi-supervised learning.
+
+14. **Indexed symbol binding:**
+    - `y[indices] = values` binds subset
+    - `y[other_indices]` remains unbound (inferred)
+
+15. **Mixed observation/inference:**
+    - Some elements of a symbol observed
+    - Other elements become parameters
+
+16. **Data augmentation MCMC:**
+    - Sample missing values alongside parameters
+
+**Deliverables:**
+- Indexed binding syntax
+- Test with missing data imputation
+
+### Phase 6: Advanced Features (Future)
+
+17. **Simplex and CorrMatrix constraints**
+18. **Plate notation for hierarchical models**
+19. **Conjugacy detection via pattern matching**
+20. **Prior/posterior predictive derived from model**
+
+---
+
+## Summary of Design Decisions
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| Param vs Data typing | Roles contextual | Enables missing data, semi-supervised, model reuse |
+| Constraint typing | Type-level | Intrinsic property, enables auto-transform |
+| Stochastic operator | `\|` (pipe) | Valid C++, suggests conditioning |
+| Deterministic operator | `<<` | Visually distinct, valid C++ |
+| Vectorized data | Runtime detection | N unknown at compile time |
+| Algorithm integration | Factory methods | Clean API, encapsulates details |
 
 ---
 
