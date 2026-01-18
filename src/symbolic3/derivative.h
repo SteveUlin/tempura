@@ -108,8 +108,16 @@ struct DiffStrategy {
       if constexpr (is_constant<E>) {
         return Constant<0>{};
       }
-      // Case 2: Symbol matching var → 1
-      else if constexpr (match(expr, var)) {
+      // Case 1b: Literal (runtime constant) → 0
+      else if constexpr (is_literal<E>) {
+        return Constant<0>{};
+      }
+      // Case 1c: Fraction → 0
+      else if constexpr (is_fraction<E>) {
+        return Constant<0>{};
+      }
+      // Case 2: Symbol matching var → 1 (same type means same symbol)
+      else if constexpr (std::is_same_v<E, V>) {
         return Constant<1>{};
       }
       // Case 3: Different symbol → 0
@@ -165,111 +173,103 @@ struct DiffStrategy {
 
     // Addition: d/dx(f + g) = df/dx + dg/dx
     template <typename Lhs, typename Rhs, typename Context>
-    static constexpr auto diff_add(
-        [[maybe_unused]] Expression<AddOp, Lhs, Rhs> expr, V var,
-        [[maybe_unused]] Context ctx) {
-      // Extract arguments at compile-time
-      constexpr Lhs lhs{};
-      constexpr Rhs rhs{};
+    static constexpr auto diff_add(Expression<AddOp, Lhs, Rhs> expr, V var,
+                                   [[maybe_unused]] Context ctx) {
+      auto lhs = expr.template arg<0>();
+      auto rhs = expr.template arg<1>();
       return diff(lhs, var) + diff(rhs, var);
     }
 
     // Subtraction: d/dx(f - g) = df/dx - dg/dx
     template <typename Lhs, typename Rhs, typename Context>
-    static constexpr auto diff_sub(
-        [[maybe_unused]] Expression<SubOp, Lhs, Rhs> expr, V var,
-        [[maybe_unused]] Context ctx) {
-      constexpr Lhs lhs{};
-      constexpr Rhs rhs{};
+    static constexpr auto diff_sub(Expression<SubOp, Lhs, Rhs> expr, V var,
+                                   [[maybe_unused]] Context ctx) {
+      auto lhs = expr.template arg<0>();
+      auto rhs = expr.template arg<1>();
       return diff(lhs, var) - diff(rhs, var);
     }
 
     // Negation: d/dx(-f) = -df/dx
     template <typename Arg, typename Context>
-    static constexpr auto diff_neg([[maybe_unused]] Expression<NegOp, Arg> expr,
-                                   V var, [[maybe_unused]] Context ctx) {
-      constexpr Arg arg{};
+    static constexpr auto diff_neg(Expression<NegOp, Arg> expr, V var,
+                                   [[maybe_unused]] Context ctx) {
+      auto arg = expr.template arg<0>();
       return -diff(arg, var);
     }
 
     // Multiplication (product rule): d/dx(f * g) = df/dx * g + f * dg/dx
     template <typename Lhs, typename Rhs, typename Context>
-    static constexpr auto diff_mul(
-        [[maybe_unused]] Expression<MulOp, Lhs, Rhs> expr, V var,
-        [[maybe_unused]] Context ctx) {
-      constexpr Lhs lhs{};
-      constexpr Rhs rhs{};
+    static constexpr auto diff_mul(Expression<MulOp, Lhs, Rhs> expr, V var,
+                                   [[maybe_unused]] Context ctx) {
+      auto lhs = expr.template arg<0>();
+      auto rhs = expr.template arg<1>();
       return diff(lhs, var) * rhs + lhs * diff(rhs, var);
     }
 
     // Division (quotient rule): d/dx(f / g) = (df/dx * g - f * dg/dx) / g²
     template <typename Lhs, typename Rhs, typename Context>
-    static constexpr auto diff_div(
-        [[maybe_unused]] Expression<DivOp, Lhs, Rhs> expr, V var,
-        [[maybe_unused]] Context ctx) {
-      constexpr Lhs lhs{};
-      constexpr Rhs rhs{};
-      return (diff(lhs, var) * rhs - lhs * diff(rhs, var)) /
-             (rhs * rhs);
+    static constexpr auto diff_div(Expression<DivOp, Lhs, Rhs> expr, V var,
+                                   [[maybe_unused]] Context ctx) {
+      auto lhs = expr.template arg<0>();
+      auto rhs = expr.template arg<1>();
+      return (diff(lhs, var) * rhs - lhs * diff(rhs, var)) / (rhs * rhs);
     }
 
     // Power rule: d/dx(f^n) = n * f^(n-1) * df/dx
     template <typename Base, typename Exp, typename Context>
-    static constexpr auto diff_pow(
-        [[maybe_unused]] Expression<PowOp, Base, Exp> expr, V var,
-        [[maybe_unused]] Context ctx) {
-      constexpr Base base{};
-      constexpr Exp exponent{};
+    static constexpr auto diff_pow(Expression<PowOp, Base, Exp> expr, V var,
+                                   [[maybe_unused]] Context ctx) {
+      auto base = expr.template arg<0>();
+      auto exponent = expr.template arg<1>();
       // General power rule: handles both constant and variable exponents
       return exponent * pow(base, exponent - Constant<1>{}) * diff(base, var);
     }
 
     // Exponential: d/dx(e^f) = e^f * df/dx
     template <typename Arg, typename Context>
-    static constexpr auto diff_exp([[maybe_unused]] Expression<ExpOp, Arg> expr,
-                                   V var, [[maybe_unused]] Context ctx) {
-      constexpr Arg arg{};
+    static constexpr auto diff_exp(Expression<ExpOp, Arg> expr, V var,
+                                   [[maybe_unused]] Context ctx) {
+      auto arg = expr.template arg<0>();
       return exp(arg) * diff(arg, var);
     }
 
     // Logarithm: d/dx(log(f)) = (1/f) * df/dx
     template <typename Arg, typename Context>
-    static constexpr auto diff_log([[maybe_unused]] Expression<LogOp, Arg> expr,
-                                   V var, [[maybe_unused]] Context ctx) {
-      constexpr Arg arg{};
+    static constexpr auto diff_log(Expression<LogOp, Arg> expr, V var,
+                                   [[maybe_unused]] Context ctx) {
+      auto arg = expr.template arg<0>();
       return (Constant<1>{} / arg) * diff(arg, var);
     }
 
     // Sine: d/dx(sin(f)) = cos(f) * df/dx
     template <typename Arg, typename Context>
-    static constexpr auto diff_sin([[maybe_unused]] Expression<SinOp, Arg> expr,
-                                   V var, [[maybe_unused]] Context ctx) {
-      constexpr Arg arg{};
+    static constexpr auto diff_sin(Expression<SinOp, Arg> expr, V var,
+                                   [[maybe_unused]] Context ctx) {
+      auto arg = expr.template arg<0>();
       return cos(arg) * diff(arg, var);
     }
 
     // Cosine: d/dx(cos(f)) = -sin(f) * df/dx
     template <typename Arg, typename Context>
-    static constexpr auto diff_cos([[maybe_unused]] Expression<CosOp, Arg> expr,
-                                   V var, [[maybe_unused]] Context ctx) {
-      constexpr Arg arg{};
+    static constexpr auto diff_cos(Expression<CosOp, Arg> expr, V var,
+                                   [[maybe_unused]] Context ctx) {
+      auto arg = expr.template arg<0>();
       return -sin(arg) * diff(arg, var);
     }
 
     // Tangent: d/dx(tan(f)) = (1/cos²(f)) * df/dx
     template <typename Arg, typename Context>
-    static constexpr auto diff_tan([[maybe_unused]] Expression<TanOp, Arg> expr,
-                                   V var, [[maybe_unused]] Context ctx) {
-      constexpr Arg arg{};
+    static constexpr auto diff_tan(Expression<TanOp, Arg> expr, V var,
+                                   [[maybe_unused]] Context ctx) {
+      auto arg = expr.template arg<0>();
       return (Constant<1>{} / pow(cos(arg), Constant<2>{})) * diff(arg, var);
     }
 
     // Square root: d/dx(√f) = (1/(2√f)) * df/dx
     template <typename Arg, typename Context>
-    static constexpr auto diff_sqrt(
-        [[maybe_unused]] Expression<SqrtOp, Arg> expr, V var,
-        [[maybe_unused]] Context ctx) {
-      constexpr Arg arg{};
+    static constexpr auto diff_sqrt(Expression<SqrtOp, Arg> expr, V var,
+                                    [[maybe_unused]] Context ctx) {
+      auto arg = expr.template arg<0>();
       return (Constant<1>{} / (Constant<2>{} * sqrt(arg))) * diff(arg, var);
     }
   };

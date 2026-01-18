@@ -22,12 +22,12 @@ auto main() -> int {
   static_assert(!std::is_same_v<decltype(sigma), decltype(y)>);
 
   // =========================================================================
-  // Define joint distribution
+  // Define joint distribution - now supports plain numeric literals!
   // =========================================================================
   auto joint = Joint{
-      mu | Normal(0_c, 10_c),       // mu ~ Normal(0, 10)
-      sigma | HalfNormal(5_c),      // sigma ~ HalfNormal(5)
-      y | Normal(mu, sigma)         // y ~ Normal(mu, sigma)
+      mu    | Normal(0.0, 10.0),       // mu ~ Normal(0, 10)
+      sigma | HalfNormal(5.0),      // sigma ~ HalfNormal(5)
+      y     | Normal(mu, sigma)         // y ~ Normal(mu, sigma)
   };
 
   std::println("Joint distribution defined with 3 variables.");
@@ -111,9 +111,9 @@ auto main() -> int {
   constexpr Symbol mu2;  // need new symbol since mu is in scope
 
   auto joint2 = Joint{
-      mu2 | Normal(0_c, 10_c),
-      y1 | Normal(mu2, 1_c),   // y1 ~ Normal(mu, 1)
-      y2 | Normal(mu2, 1_c)    // y2 ~ Normal(mu, 1)
+      mu2 | Normal(0.0, 10.0),
+      y1  | Normal(mu2, 1.0),   // y1 ~ Normal(mu, 1)
+      y2  | Normal(mu2, 1.0)    // y2 ~ Normal(mu, 1)
   };
 
   auto posterior3 = joint2

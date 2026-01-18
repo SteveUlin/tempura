@@ -1,7 +1,9 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <tuple>
+#include <utility>
 
 #include "prob/log_prob.h"
 #include "symbolic3/core.h"
@@ -40,6 +42,23 @@ using namespace tempura::prob;
 // Var - Just use Symbol directly (each declaration is unique)
 // =============================================================================
 // Usage: constexpr Symbol mu;  (not Var, since alias doesn't work)
+
+// =============================================================================
+// wrapSymbolic - Wrap arithmetic types as Literal, pass through Symbolic types
+// =============================================================================
+// Enables Normal(0, 10) syntax instead of Normal(0_c, 10_c)
+
+template <typename T>
+concept SymbolicOrArithmetic = Symbolic<T> || std::is_arithmetic_v<T>;
+
+template <typename T>
+constexpr auto wrapSymbolic(T x) {
+  if constexpr (Symbolic<T>) {
+    return x;
+  } else {
+    return Literal{x};
+  }
+}
 
 // =============================================================================
 // Distributions - Lightweight builders that generate log-probability expressions
@@ -109,35 +128,63 @@ struct CauchyDist {
   }
 };
 
-// Factory functions
-template <Symbolic Mu, Symbolic Sigma>
-constexpr auto Normal(Mu mu, Sigma sigma) {
-  return NormalDist<Mu, Sigma>{mu, sigma};
-}
-
-template <Symbolic Sigma>
-constexpr auto HalfNormal(Sigma sigma) {
-  return HalfNormalDist<Sigma>{sigma};
-}
-
-template <Symbolic Lambda>
-constexpr auto Exponential(Lambda lambda) {
-  return ExponentialDist<Lambda>{lambda};
-}
-
 template <Symbolic Alpha, Symbolic Bet>
+struct GammaDist {
+  [[no_unique_address]] Alpha alpha;
+  [[no_unique_address]] Bet beta;
+
+  template <Symbolic X>
+  constexpr auto logProbFor(X x) const {
+    return logGamma(x, alpha, beta);
+  }
+};
+
+// Factory functions - accept both Symbolic and arithmetic types
+template <SymbolicOrArithmetic Mu, SymbolicOrArithmetic Sigma>
+constexpr auto Normal(Mu mu, Sigma sigma) {
+  auto mu_s = wrapSymbolic(mu);
+  auto sigma_s = wrapSymbolic(sigma);
+  return NormalDist<decltype(mu_s), decltype(sigma_s)>{mu_s, sigma_s};
+}
+
+template <SymbolicOrArithmetic Sigma>
+constexpr auto HalfNormal(Sigma sigma) {
+  auto sigma_s = wrapSymbolic(sigma);
+  return HalfNormalDist<decltype(sigma_s)>{sigma_s};
+}
+
+template <SymbolicOrArithmetic Lambda>
+constexpr auto Exponential(Lambda lambda) {
+  auto lambda_s = wrapSymbolic(lambda);
+  return ExponentialDist<decltype(lambda_s)>{lambda_s};
+}
+
+template <SymbolicOrArithmetic Alpha, SymbolicOrArithmetic Bet>
 constexpr auto Beta(Alpha alpha, Bet beta) {
-  return BetaDist<Alpha, Bet>{alpha, beta};
+  auto alpha_s = wrapSymbolic(alpha);
+  auto beta_s = wrapSymbolic(beta);
+  return BetaDist<decltype(alpha_s), decltype(beta_s)>{alpha_s, beta_s};
 }
 
-template <Symbolic A, Symbolic B>
+template <SymbolicOrArithmetic A, SymbolicOrArithmetic B>
 constexpr auto Uniform(A a, B b) {
-  return UniformDist<A, B>{a, b};
+  auto a_s = wrapSymbolic(a);
+  auto b_s = wrapSymbolic(b);
+  return UniformDist<decltype(a_s), decltype(b_s)>{a_s, b_s};
 }
 
-template <Symbolic X0, Symbolic Gamma>
+template <SymbolicOrArithmetic X0, SymbolicOrArithmetic Gamma>
 constexpr auto Cauchy(X0 x0, Gamma gamma) {
-  return CauchyDist<X0, Gamma>{x0, gamma};
+  auto x0_s = wrapSymbolic(x0);
+  auto gamma_s = wrapSymbolic(gamma);
+  return CauchyDist<decltype(x0_s), decltype(gamma_s)>{x0_s, gamma_s};
+}
+
+template <SymbolicOrArithmetic Alpha, SymbolicOrArithmetic Bet>
+constexpr auto Gamma(Alpha alpha, Bet beta) {
+  auto alpha_s = wrapSymbolic(alpha);
+  auto beta_s = wrapSymbolic(beta);
+  return GammaDist<decltype(alpha_s), decltype(beta_s)>{alpha_s, beta_s};
 }
 
 // Forward declarations

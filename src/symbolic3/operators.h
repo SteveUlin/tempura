@@ -49,25 +49,25 @@ struct NotOp {};
 
 // Addition - binary operation (canonical form will be applied by strategies)
 template <Symbolic L, Symbolic R>
-constexpr auto operator+(L, R) {
-  return Expression<AddOp, L, R>{};
+constexpr auto operator+(L lhs, R rhs) {
+  return Expression<AddOp, L, R>{lhs, rhs};
 }
 
 template <Symbolic L, Symbolic R>
-constexpr auto operator-(L, R) {
-  return Expression<SubOp, L, R>{};
+constexpr auto operator-(L lhs, R rhs) {
+  return Expression<SubOp, L, R>{lhs, rhs};
 }
 
 // Multiplication - binary operation (canonical form will be applied by
 // strategies)
 template <Symbolic L, Symbolic R>
-constexpr auto operator*(L, R) {
-  return Expression<MulOp, L, R>{};
+constexpr auto operator*(L lhs, R rhs) {
+  return Expression<MulOp, L, R>{lhs, rhs};
 }
 
 template <Symbolic L, Symbolic R>
-constexpr auto operator/(L, R) {
-  return Expression<DivOp, L, R>{};
+constexpr auto operator/(L lhs, R rhs) {
+  return Expression<DivOp, L, R>{lhs, rhs};
 }
 
 // ============================================================================
@@ -75,8 +75,8 @@ constexpr auto operator/(L, R) {
 // ============================================================================
 
 template <Symbolic S>
-constexpr auto operator-(S) {
-  return Expression<NegOp, S>{};
+constexpr auto operator-(S s) {
+  return Expression<NegOp, S>{s};
 }
 
 // ============================================================================
@@ -84,53 +84,53 @@ constexpr auto operator-(S) {
 // ============================================================================
 
 template <Symbolic S>
-constexpr auto sin(S) {
-  return Expression<SinOp, S>{};
+constexpr auto sin(S s) {
+  return Expression<SinOp, S>{s};
 }
 
 template <Symbolic S>
-constexpr auto cos(S) {
-  return Expression<CosOp, S>{};
+constexpr auto cos(S s) {
+  return Expression<CosOp, S>{s};
 }
 
 template <Symbolic S>
-constexpr auto tan(S) {
-  return Expression<TanOp, S>{};
+constexpr auto tan(S s) {
+  return Expression<TanOp, S>{s};
 }
 
 template <Symbolic S>
-constexpr auto sinh(S) {
-  return Expression<SinhOp, S>{};
+constexpr auto sinh(S s) {
+  return Expression<SinhOp, S>{s};
 }
 
 template <Symbolic S>
-constexpr auto cosh(S) {
-  return Expression<CoshOp, S>{};
+constexpr auto cosh(S s) {
+  return Expression<CoshOp, S>{s};
 }
 
 template <Symbolic S>
-constexpr auto tanh(S) {
-  return Expression<TanhOp, S>{};
+constexpr auto tanh(S s) {
+  return Expression<TanhOp, S>{s};
 }
 
 template <Symbolic S>
-constexpr auto exp(S) {
-  return Expression<ExpOp, S>{};
+constexpr auto exp(S s) {
+  return Expression<ExpOp, S>{s};
 }
 
 template <Symbolic S>
-constexpr auto log(S) {
-  return Expression<LogOp, S>{};
+constexpr auto log(S s) {
+  return Expression<LogOp, S>{s};
 }
 
 template <Symbolic S>
-constexpr auto sqrt(S) {
-  return Expression<SqrtOp, S>{};
+constexpr auto sqrt(S s) {
+  return Expression<SqrtOp, S>{s};
 }
 
 template <Symbolic L, Symbolic R>
-constexpr auto pow(L, R) {
-  return Expression<PowOp, L, R>{};
+constexpr auto pow(L lhs, R rhs) {
+  return Expression<PowOp, L, R>{lhs, rhs};
 }
 
 // ============================================================================
@@ -202,14 +202,14 @@ struct LogBetaOp {
 
 // Symbolic log-gamma function: logΓ(x)
 template <Symbolic S>
-constexpr auto logGammaFn(S) {
-  return Expression<LogGammaOp, S>{};
+constexpr auto logGammaFn(S s) {
+  return Expression<LogGammaOp, S>{s};
 }
 
 // Symbolic log-beta function: log B(α, β)
 template <Symbolic A, Symbolic B>
-constexpr auto logBetaFn(A, B) {
-  return Expression<LogBetaOp, A, B>{};
+constexpr auto logBetaFn(A a, B b) {
+  return Expression<LogBetaOp, A, B>{a, b};
 }
 
 // ============================================================================

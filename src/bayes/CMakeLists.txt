@@ -158,6 +158,24 @@ target_link_libraries(bayes_mcmc_test PRIVATE bayes unit)
 add_test(NAME bayes_mcmc_test COMMAND bayes_mcmc_test)
 set_tests_properties(bayes_mcmc_test PROPERTIES LABELS "bayes;estimation;mcmc")
 
+# Hamiltonian Monte Carlo (HMC)
+add_executable(bayes_hmc_test estimation/hmc_test.cc)
+target_link_libraries(bayes_hmc_test PRIVATE bayes unit)
+add_test(NAME bayes_hmc_test COMMAND bayes_hmc_test)
+set_tests_properties(bayes_hmc_test PROPERTIES LABELS "bayes;estimation;mcmc")
+
+# Automatic Differentiation Variational Inference (ADVI)
+add_executable(bayes_advi_test estimation/advi_test.cc)
+target_link_libraries(bayes_advi_test PRIVATE bayes unit)
+add_test(NAME bayes_advi_test COMMAND bayes_advi_test)
+set_tests_properties(bayes_advi_test PROPERTIES LABELS "bayes;estimation;vi")
+
+# Dual Averaging Step Size Adaptation
+add_executable(bayes_dual_averaging_test estimation/dual_averaging_test.cc)
+target_link_libraries(bayes_dual_averaging_test PRIVATE bayes unit)
+add_test(NAME bayes_dual_averaging_test COMMAND bayes_dual_averaging_test)
+set_tests_properties(bayes_dual_averaging_test PROPERTIES LABELS "bayes;estimation;mcmc")
+
 # ============================================================================
 # Benchmarks and Analysis Tools (not formal tests)
 # ============================================================================

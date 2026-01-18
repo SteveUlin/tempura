@@ -1,5 +1,9 @@
 #pragma once
 
+#include <cstddef>
+#include <tuple>
+#include <type_traits>
+
 #include "meta/tags.h"  // For TypeList
 #include "meta/type_id.h"
 #include "meta/type_list.h"  // For Get_t
@@ -40,6 +44,15 @@ struct Constant : SymbolicTag {
   static constexpr auto value = val;
 };
 
+// Runtime numeric literal - holds a value that's known at construction time
+// but not encoded in the type. Enables Natural(0, 10) syntax.
+template <typename T>
+  requires std::is_arithmetic_v<T>
+struct Literal : SymbolicTag {
+  T value;
+  constexpr Literal(T v) : value{v} {}
+};
+
 // Constexpr GCD using Euclidean algorithm (no STL dependencies)
 constexpr long long gcd_impl(long long a, long long b) {
   return b == 0 ? a : gcd_impl(b, a % b);
@@ -70,11 +83,26 @@ struct Fraction : SymbolicTag {
   }
 };
 
-// Expression node: operation + arguments encoded entirely in type system
+// Expression node: operation + arguments
+// Stores arguments to support stateful nodes like Literal<T>.
+// For stateless nodes (Symbol, Constant, Fraction), storage has no overhead
+// due to empty base optimization via [[no_unique_address]].
 template <typename Op, Symbolic... Args>
 struct Expression : SymbolicTag {
+  [[no_unique_address]] std::tuple<Args...> args_;
+
   constexpr Expression() = default;
-  constexpr Expression(Op, Args...) {}
+  constexpr Expression(Op, Args... a) : args_{a...} {}
+
+  // Only enable this constructor when there are arguments (avoids conflict with default ctor)
+  constexpr explicit Expression(Args... a)
+    requires(sizeof...(Args) > 0)
+      : args_{a...} {}
+
+  template <std::size_t I>
+  constexpr auto arg() const {
+    return std::get<I>(args_);
+  }
 };
 
 // Pattern matching wildcards
@@ -102,6 +130,12 @@ constexpr bool is_fraction = false;
 
 template <long long N, long long D>
 constexpr bool is_fraction<Fraction<N, D>> = true;
+
+template <typename T>
+constexpr bool is_literal = false;
+
+template <typename U>
+constexpr bool is_literal<Literal<U>> = true;
 
 template <typename T>
 constexpr bool is_expression = false;

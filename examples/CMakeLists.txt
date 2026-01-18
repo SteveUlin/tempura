@@ -89,3 +89,15 @@ target_link_libraries(block_graphics_demo PRIVATE bayes plot)
 add_executable(scorer_comparison scorer_comparison.cpp)
 target_link_libraries(scorer_comparison PRIVATE plot)
 
+add_executable(bayes_reports_example bayes_reports_example.cc)
+target_link_libraries(bayes_reports_example PRIVATE bayes plot)
+
+add_executable(hmc_example hmc_example.cc)
+target_link_libraries(hmc_example PRIVATE bayes bayes_sym plot)
+
+add_executable(hierarchical_model_example hierarchical_model_example.cc)
+target_link_libraries(hierarchical_model_example PRIVATE bayes plot)
+
+add_executable(predictive_checks_example predictive_checks_example.cc)
+target_link_libraries(predictive_checks_example PRIVATE bayes plot)
+

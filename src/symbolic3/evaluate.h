@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstddef>
+#include <utility>
+
 #include "symbolic3/core.h"
 #include "symbolic3/operators.h"
 
@@ -63,6 +66,12 @@ constexpr auto evaluate(Fraction<N, D>, const BinderPack<Binders...>&) {
   return Fraction<N, D>::to_double();
 }
 
+// Literal evaluation - return stored value
+template <typename T, typename... Binders>
+constexpr auto evaluate(Literal<T> lit, const BinderPack<Binders...>&) {
+  return lit.value;
+}
+
 // Symbol evaluation - lookup in binder pack
 template <typename unique, typename... Binders>
 constexpr auto evaluate(Symbol<unique>, const BinderPack<Binders...>& binders) {
@@ -72,9 +81,17 @@ constexpr auto evaluate(Symbol<unique>, const BinderPack<Binders...>& binders) {
 // Compound expression evaluation - recursively evaluate subexpressions
 // Then apply the operator directly (operators are callable in symbolic3)
 template <typename Op, Symbolic... Args, typename... Binders>
-constexpr auto evaluate(Expression<Op, Args...>,
+constexpr auto evaluate(Expression<Op, Args...> expr,
                         const BinderPack<Binders...>& binders) {
-  return Op{}(evaluate(Args{}, binders)...);
+  return evaluateImpl(expr, binders, std::index_sequence_for<Args...>{});
+}
+
+// Helper to expand expression arguments
+template <typename Op, Symbolic... Args, typename... Binders, std::size_t... Is>
+constexpr auto evaluateImpl(Expression<Op, Args...> expr,
+                            const BinderPack<Binders...>& binders,
+                            std::index_sequence<Is...>) {
+  return Op{}(evaluate(expr.template arg<Is>(), binders)...);
 }
 
 }  // namespace tempura::symbolic3
