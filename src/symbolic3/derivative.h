@@ -135,8 +135,14 @@ struct DiffStrategy {
       // Dispatch on operator type
       if constexpr (std::same_as<Op, AddOp>) {
         return diff_add(expr, var, ctx);
+      } else if constexpr (std::same_as<Op, SubOp>) {
+        return diff_sub(expr, var, ctx);
+      } else if constexpr (std::same_as<Op, NegOp>) {
+        return diff_neg(expr, var, ctx);
       } else if constexpr (std::same_as<Op, MulOp>) {
         return diff_mul(expr, var, ctx);
+      } else if constexpr (std::same_as<Op, DivOp>) {
+        return diff_div(expr, var, ctx);
       } else if constexpr (std::same_as<Op, PowOp>) {
         return diff_pow(expr, var, ctx);
       } else if constexpr (std::same_as<Op, ExpOp>) {
@@ -168,6 +174,24 @@ struct DiffStrategy {
       return diff(lhs, var) + diff(rhs, var);
     }
 
+    // Subtraction: d/dx(f - g) = df/dx - dg/dx
+    template <typename Lhs, typename Rhs, typename Context>
+    static constexpr auto diff_sub(
+        [[maybe_unused]] Expression<SubOp, Lhs, Rhs> expr, V var,
+        [[maybe_unused]] Context ctx) {
+      constexpr Lhs lhs{};
+      constexpr Rhs rhs{};
+      return diff(lhs, var) - diff(rhs, var);
+    }
+
+    // Negation: d/dx(-f) = -df/dx
+    template <typename Arg, typename Context>
+    static constexpr auto diff_neg([[maybe_unused]] Expression<NegOp, Arg> expr,
+                                   V var, [[maybe_unused]] Context ctx) {
+      constexpr Arg arg{};
+      return -diff(arg, var);
+    }
+
     // Multiplication (product rule): d/dx(f * g) = df/dx * g + f * dg/dx
     template <typename Lhs, typename Rhs, typename Context>
     static constexpr auto diff_mul(
@@ -176,6 +200,17 @@ struct DiffStrategy {
       constexpr Lhs lhs{};
       constexpr Rhs rhs{};
       return diff(lhs, var) * rhs + lhs * diff(rhs, var);
+    }
+
+    // Division (quotient rule): d/dx(f / g) = (df/dx * g - f * dg/dx) / g²
+    template <typename Lhs, typename Rhs, typename Context>
+    static constexpr auto diff_div(
+        [[maybe_unused]] Expression<DivOp, Lhs, Rhs> expr, V var,
+        [[maybe_unused]] Context ctx) {
+      constexpr Lhs lhs{};
+      constexpr Rhs rhs{};
+      return (diff(lhs, var) * rhs - lhs * diff(rhs, var)) /
+             (rhs * rhs);
     }
 
     // Power rule: d/dx(f^n) = n * f^(n-1) * df/dx

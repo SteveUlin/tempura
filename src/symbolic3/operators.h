@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cmath>
+
 #include "meta/function_objects.h"
 #include "symbolic3/core.h"
 
@@ -150,7 +152,65 @@ constexpr Constant<-1> neg_one_c{};
 
 // Mathematical constants (as zero-arg expressions)
 constexpr Expression<PiOp> π{};
+constexpr Expression<PiOp> pi{};  // ASCII alias
 constexpr Expression<EOp> e{};
+
+// ============================================================================
+// Derived Constants - useful for probability distributions
+// ============================================================================
+//
+// These are symbolic expressions built from primitives. They simplify
+// correctly and evaluate to the expected numeric values.
+
+// log(2) - used in HalfNormal, etc.
+inline constexpr auto log2 = log(Constant<2>{});
+
+// log(π) - used in Cauchy, etc.
+inline constexpr auto logPi = log(π);
+
+// log(2π) = log(2) + log(π)
+inline constexpr auto log2Pi = log(Constant<2>{} * π);
+
+// log(√(2π)) = ½ log(2π)
+inline constexpr auto logSqrt2Pi = Fraction<1, 2>{} * log(Constant<2>{} * π);
+
+// ============================================================================
+// Special Functions - symbolic placeholders for transcendental functions
+// ============================================================================
+//
+// These functions don't have closed-form symbolic derivatives in general,
+// but we can still represent them symbolically and evaluate them numerically.
+
+// Operator types for special functions
+struct LogGammaOp {
+  // lgamma(x) - log of gamma function
+  template <typename T>
+  constexpr auto operator()(T x) const {
+    return std::lgamma(static_cast<double>(x));
+  }
+};
+
+struct LogBetaOp {
+  // log(B(a,b)) = lgamma(a) + lgamma(b) - lgamma(a+b)
+  template <typename T, typename U>
+  constexpr auto operator()(T a, U b) const {
+    return std::lgamma(static_cast<double>(a)) +
+           std::lgamma(static_cast<double>(b)) -
+           std::lgamma(static_cast<double>(a) + static_cast<double>(b));
+  }
+};
+
+// Symbolic log-gamma function: logΓ(x)
+template <Symbolic S>
+constexpr auto logGammaFn(S) {
+  return Expression<LogGammaOp, S>{};
+}
+
+// Symbolic log-beta function: log B(α, β)
+template <Symbolic A, Symbolic B>
+constexpr auto logBetaFn(A, B) {
+  return Expression<LogBetaOp, A, B>{};
+}
 
 // ============================================================================
 // Type Predicates for Operations
