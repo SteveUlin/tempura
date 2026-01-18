@@ -83,3 +83,9 @@ target_link_libraries(io_uring_demo PRIVATE io_uring_sender task threadpool)
 add_executable(mcmc_visual mcmc_visual.cpp)
 target_link_libraries(mcmc_visual PRIVATE bayes plot)
 
+add_executable(block_graphics_demo block_graphics_demo.cpp)
+target_link_libraries(block_graphics_demo PRIVATE bayes plot)
+
+add_executable(scorer_comparison scorer_comparison.cpp)
+target_link_libraries(scorer_comparison PRIVATE plot)
+
