@@ -45,10 +45,10 @@ auto main() -> int {
     //   y ~ Normal(y_hat, sigma)
     auto joint = Joint{
         alpha | Normal(0.0, 10.0),
-        beta | Normal(0.0, 10.0),
+        beta  | Normal(0.0, 10.0),
         sigma | HalfNormal(5.0),
         y_hat << alpha + beta * x,
-        y | Normal(y_hat, sigma)
+        y     | Normal(y_hat, sigma)
     };
 
     // Fix x=2.0, observe y=5.5, infer alpha, beta, sigma

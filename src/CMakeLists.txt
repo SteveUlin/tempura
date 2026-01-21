@@ -39,10 +39,12 @@
 # add_subdirectory(bigint)
 add_subdirectory(cache)
 add_subdirectory(containers)
+add_subdirectory(dag)
 add_subdirectory(probabilistic)
 add_subdirectory(hash)
 add_subdirectory(modular)
 add_subdirectory(symbolic3)  # Combinator-based symbolic system (canonical)
+add_subdirectory(symbolic4)  # AST-as-types with pluggable interpreters
 add_subdirectory(bayes)
 add_subdirectory(matrix2)
 add_subdirectory(matrix3)
@@ -161,6 +163,14 @@ target_include_directories(plot INTERFACE
 target_link_libraries(plot INTERFACE tempura_flags)
 add_library(tempura::plot ALIAS plot)
 
+add_library(csv INTERFACE csv.h)
+target_include_directories(csv INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
+  $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(csv INTERFACE tempura_flags)
+add_library(tempura::csv ALIAS csv)
+
 # Profiler is a shared library (not INTERFACE)
 add_library(profiler SHARED)
 target_sources(profiler PUBLIC profiler.h profiler.cpp)
@@ -220,6 +230,12 @@ if(TEMPURA_BUILD_TESTS)
   target_link_libraries(plot_test unit plot)
   add_test(NAME plot_test COMMAND plot_test)
   set_property(TEST plot_test PROPERTY LABELS base)
+
+  add_executable(csv_test csv_test.cpp)
+  target_link_libraries(csv_test unit csv)
+  add_test(NAME csv_test COMMAND csv_test)
+  set_property(TEST csv_test PROPERTY LABELS base)
 endif()
 
 
+add_subdirectory(bayes3)

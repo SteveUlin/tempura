@@ -53,11 +53,37 @@ Detailed workflow documentation for improving distribution implementations. Used
 - Style guidelines
 - Before/after examples
 
+## Agents
+
+### `plan` (Plan Agent)
+
+Software architect agent for designing implementation plans before writing code.
+
+**Key principles:**
+- **Context first** - Refuses to plan without understanding "why"
+- **Asks questions liberally** - Uses AskUserQuestion to clarify ambiguities
+- **Explores before proposing** - Deep codebase investigation
+- **Presents alternatives** - Shows 2-3 approaches with tradeoffs
+
+**Activated automatically when:**
+- User requests feature implementation
+- Architectural changes are needed
+- Complex refactoring tasks
+
+**Output:** Writes structured plan to `.claude/plans/<name>.md`
+
+### `commit-and-integrate`
+
+Two-step workflow: creates a clean commit, then integrates to main branch.
+
 ## Directory Structure
 
 ```
 .claude/
 ├── README.md                              # This file
+├── agents/
+│   ├── commit-and-integrate.md            # Commit + integrate workflow
+│   └── plan.md                            # Planning agent
 ├── commands/
 │   └── improve-dist.md                    # Slash command for distribution improvement
 ├── hooks/

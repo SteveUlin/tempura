@@ -1720,4 +1720,154 @@ inline auto heatmap(const std::vector<Point>& points,
   return result;
 }
 
+// =============================================================================
+// Distribution Visualization Utilities
+// =============================================================================
+
+namespace detail {
+
+// Vertical eighth blocks for sparkline histograms: index 0-8 maps to empty through full
+constexpr const char* kVerticalEighths[] = {" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"};
+
+}  // namespace detail
+
+// Compact 2-row sparkline histogram using vertical eighth blocks (▁▂▃▄▅▆▇█)
+// Returns two strings: top row and bottom row
+// With 2 rows x 8 levels = 16 height levels total
+//
+// Usage:
+//   auto [top, bottom] = sparklineHistogram(pdf, 0.0, 1.0, 60);
+//   std::println("{}", top);
+//   std::println("{}", bottom);
+inline auto sparklineHistogram(const std::function<double(double)>& pdf,
+                               double x_min, double x_max, int num_bins)
+    -> std::pair<std::string, std::string> {
+  if (num_bins <= 0 || x_max <= x_min) {
+    return {"", ""};
+  }
+
+  // Sample the PDF at bin centers
+  std::vector<double> values(static_cast<size_t>(num_bins));
+  double max_val = 0;
+  for (int i = 0; i < num_bins; ++i) {
+    double x = x_min + (x_max - x_min) * (static_cast<double>(i) + 0.5) /
+                           static_cast<double>(num_bins);
+    values[static_cast<size_t>(i)] = pdf(x);
+    max_val = std::max(max_val, values[static_cast<size_t>(i)]);
+  }
+
+  if (max_val <= 0) {
+    return {std::string(static_cast<size_t>(num_bins), ' '),
+            std::string(static_cast<size_t>(num_bins), ' ')};
+  }
+
+  // Normalize to 0-16 range (2 rows x 8 levels)
+  std::string top_row, bottom_row;
+  top_row.reserve(static_cast<size_t>(num_bins) * 4);  // UTF-8 chars up to 4 bytes
+  bottom_row.reserve(static_cast<size_t>(num_bins) * 4);
+
+  for (int i = 0; i < num_bins; ++i) {
+    int h = static_cast<int>(values[static_cast<size_t>(i)] / max_val * 15.99);
+    if (h >= 8) {
+      bottom_row += detail::kVerticalEighths[8];      // Full block on bottom
+      top_row += detail::kVerticalEighths[h - 8 + 1]; // Remainder on top (1-8)
+    } else if (h > 0) {
+      bottom_row += detail::kVerticalEighths[h];      // Partial block on bottom
+      top_row += " ";                                 // Empty on top
+    } else {
+      bottom_row += " ";
+      top_row += " ";
+    }
+  }
+
+  return {top_row, bottom_row};
+}
+
+// Credible interval bar visualization
+// Shows a horizontal bar representing a confidence/credible interval
+// with the mean/estimate marked with a vertical bar character
+//
+// Parameters:
+//   ci_low, ci_high: The bounds of the credible interval
+//   mean: The point estimate (marked with '|')
+//   x_min, x_max: The display range for the bar
+//   width: Character width of the bar
+//   color: Optional color for the bar
+//   fill_char: Character used to fill the interval (default '=')
+//
+// Returns: A string containing the colored bar
+inline auto credibleIntervalBar(double ci_low, double ci_high, double mean,
+                                double x_min, double x_max, int width,
+                                const RGB& color = colors::kDefault,
+                                char fill_char = '=') -> std::string {
+  if (width <= 0 || x_max <= x_min) {
+    return "";
+  }
+
+  // Map interval bounds to character positions
+  auto to_pos = [&](double x) -> int {
+    return static_cast<int>((x - x_min) / (x_max - x_min) *
+                            static_cast<double>(width));
+  };
+
+  int pos_low = std::clamp(to_pos(ci_low), 0, width - 1);
+  int pos_high = std::clamp(to_pos(ci_high), 0, width - 1);
+  int pos_mean = std::clamp(to_pos(mean), 0, width - 1);
+
+  // Build the bar
+  std::string bar(static_cast<size_t>(width), ' ');
+  for (int i = pos_low; i <= pos_high; ++i) {
+    bar[static_cast<size_t>(i)] = fill_char;
+  }
+  bar[static_cast<size_t>(pos_mean)] = '|';  // Mark the mean
+
+  return color.wrap(bar);
+}
+
+// Credible interval bar with custom mean marker
+inline auto credibleIntervalBar(double ci_low, double ci_high, double mean,
+                                double x_min, double x_max, int width,
+                                const RGB& color, char fill_char,
+                                char mean_char) -> std::string {
+  if (width <= 0 || x_max <= x_min) {
+    return "";
+  }
+
+  auto to_pos = [&](double x) -> int {
+    return static_cast<int>((x - x_min) / (x_max - x_min) *
+                            static_cast<double>(width));
+  };
+
+  int pos_low = std::clamp(to_pos(ci_low), 0, width - 1);
+  int pos_high = std::clamp(to_pos(ci_high), 0, width - 1);
+  int pos_mean = std::clamp(to_pos(mean), 0, width - 1);
+
+  std::string bar(static_cast<size_t>(width), ' ');
+  for (int i = pos_low; i <= pos_high; ++i) {
+    bar[static_cast<size_t>(i)] = fill_char;
+  }
+  bar[static_cast<size_t>(pos_mean)] = mean_char;
+
+  return color.wrap(bar);
+}
+
+// Options for credible interval visualization
+struct CredibleIntervalOptions {
+  double x_min = 0.0;
+  double x_max = 1.0;
+  int width = 60;
+  RGB color = colors::kDefault;
+  char fill_char = '=';
+  char mean_char = '|';
+};
+
+// Credible interval bar with options struct
+inline auto credibleIntervalBar(double ci_low, double ci_high, double mean,
+                                const CredibleIntervalOptions& opts)
+    -> std::string {
+  return credibleIntervalBar(ci_low, ci_high, mean, opts.x_min, opts.x_max,
+                             opts.width, opts.color, opts.fill_char,
+                             opts.mean_char);
+}
+
 }  // namespace tempura

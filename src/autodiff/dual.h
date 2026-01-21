@@ -1,7 +1,10 @@
 #pragma once
 
 #include <cmath>
+#include <concepts>
+#include <numbers>
 #include <ostream>
+#include <type_traits>
 
 #include "function_traits.h"
 
@@ -91,6 +94,20 @@ constexpr auto operator+(Dual<T, G> lhs, const Dual<T, G>& rhs) -> Dual<T, G> {
   return lhs;
 }
 
+// Mixed type: Dual + scalar
+template <typename T, typename G, typename U>
+  requires(!std::same_as<std::remove_cvref_t<U>, Dual<T, G>>)
+constexpr auto operator+(const Dual<T, G>& lhs, const U& rhs) {
+  return Dual{lhs.value + rhs, lhs.gradient};
+}
+
+// Mixed type: scalar + Dual
+template <typename T, typename G, typename U>
+  requires(!std::same_as<std::remove_cvref_t<U>, Dual<T, G>>)
+constexpr auto operator+(const U& lhs, const Dual<T, G>& rhs) {
+  return Dual{lhs + rhs.value, rhs.gradient};
+}
+
 template <typename T, typename G>
 constexpr auto operator+(const Dual<T, G>& dual) -> Dual<T, G> {
   return dual;
@@ -110,14 +127,18 @@ constexpr auto operator-(Dual<T, G> lhs, const Dual<T, G>& rhs) -> Dual<T, G> {
   return lhs;
 }
 
+// Mixed type: Dual - scalar
 template <typename T, typename G, typename U>
+  requires(!std::same_as<std::remove_cvref_t<U>, Dual<T, G>>)
 constexpr auto operator-(const Dual<T, G>& lhs, const U& rhs) {
-  return lhs - Dual<U, G>{rhs};
+  return Dual{lhs.value - rhs, lhs.gradient};
 }
 
-template <typename T, typename G, typename U, typename H>
-constexpr auto operator-(const Dual<T, G>& lhs, const Dual<U, H>& rhs) {
-  return Dual{lhs.value - rhs.value, lhs.gradient - rhs.gradient};
+// Mixed type: scalar - Dual
+template <typename T, typename G, typename U>
+  requires(!std::same_as<std::remove_cvref_t<U>, Dual<T, G>>)
+constexpr auto operator-(const U& lhs, const Dual<T, G>& rhs) {
+  return Dual{lhs - rhs.value, -rhs.gradient};
 }
 
 template <typename T, typename G>
@@ -135,9 +156,17 @@ constexpr auto operator*=(Dual<T, G>& lhs,
   return lhs;
 }
 
+// Mixed type: scalar * Dual
 template <typename T, typename U, typename G>
 constexpr auto operator*(T lhs, const Dual<U, G>& rhs) -> Dual<T, G> {
   return Dual{lhs * rhs.value, lhs * rhs.gradient};
+}
+
+// Mixed type: Dual * scalar
+template <typename T, typename G, typename U>
+  requires(!std::same_as<std::remove_cvref_t<U>, Dual<T, G>>)
+constexpr auto operator*(const Dual<T, G>& lhs, const U& rhs) {
+  return Dual{lhs.value * rhs, lhs.gradient * rhs};
 }
 
 template <typename T, typename G>
@@ -159,6 +188,21 @@ template <typename T, typename G>
 constexpr auto operator/(Dual<T, G> lhs, const Dual<T, G>& rhs) -> Dual<T, G> {
   lhs /= rhs;
   return lhs;
+}
+
+// Mixed type: Dual / scalar
+template <typename T, typename G, typename U>
+  requires(!std::same_as<std::remove_cvref_t<U>, Dual<T, G>>)
+constexpr auto operator/(const Dual<T, G>& lhs, const U& rhs) {
+  return Dual{lhs.value / rhs, lhs.gradient / rhs};
+}
+
+// Mixed type: scalar / Dual
+template <typename T, typename G, typename U>
+  requires(!std::same_as<std::remove_cvref_t<U>, Dual<T, G>>)
+constexpr auto operator/(const U& lhs, const Dual<T, G>& rhs) {
+  // d/dx (c / x) = -c / x^2
+  return Dual{lhs / rhs.value, -lhs * rhs.gradient / (rhs.value * rhs.value)};
 }
 
 // -- Power Functions --
@@ -259,6 +303,50 @@ auto atan(Dual<T, G> dual) -> Dual<T, G> {
   using std::atan;
   dual.gradient *= 1 / (1 + dual.value * dual.value);
   dual.value = atan(dual.value);
+  return dual;
+}
+
+// -- Special Functions --
+
+// Digamma function ψ(x) = d/dx ln(Γ(x))
+// Uses recurrence relation to shift to large x, then asymptotic expansion.
+template <std::floating_point T>
+constexpr auto digamma(T x) -> T {
+  // Handle negative values via reflection: ψ(1-x) - ψ(x) = π·cot(πx)
+  if (x < T{0.5}) {
+    using std::tan;
+    return digamma(T{1} - x) - std::numbers::pi_v<T> / tan(std::numbers::pi_v<T> * x);
+  }
+
+  // Shift to large x using recurrence: ψ(x+1) = ψ(x) + 1/x
+  T result = T{0};
+  while (x < T{7}) {
+    result -= T{1} / x;
+    x += T{1};
+  }
+
+  // Asymptotic expansion for large x (Bernoulli number series)
+  // ψ(x) ≈ ln(x) - 1/(2x) - 1/(12x²) + 1/(120x⁴) - 1/(252x⁶) + ...
+  using std::log;
+  T inv_x = T{1} / x;
+  T inv_x2 = inv_x * inv_x;
+
+  result += log(x);
+  result -= inv_x / T{2};
+  result -= inv_x2 / T{12};
+  result += inv_x2 * inv_x2 / T{120};
+  result -= inv_x2 * inv_x2 * inv_x2 / T{252};
+  result += inv_x2 * inv_x2 * inv_x2 * inv_x2 / T{240};
+
+  return result;
+}
+
+// lgamma for Dual: d/dx lgamma(x) = digamma(x)
+template <typename T, typename G>
+auto lgamma(Dual<T, G> dual) -> Dual<T, G> {
+  using std::lgamma;
+  dual.gradient *= digamma(dual.value);
+  dual.value = lgamma(dual.value);
   return dual;
 }
 

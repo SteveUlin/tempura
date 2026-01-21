@@ -1,4 +1,5 @@
 add_subdirectory(idioms)
+add_subdirectory(stat_rethinking)
 
 # Examples use target-based includes via target_link_libraries()
 # (Include paths come from the libraries they link to)

@@ -124,9 +124,9 @@ auto main() -> int {
   constexpr Symbol y;
 
   auto joint = Joint{
-      mu | Normal(0.0, 5.0),     // mu ~ Normal(0, 5)
+      mu    | Normal(0.0, 5.0),     // mu ~ Normal(0, 5)
       sigma | HalfNormal(2.0),   // sigma ~ HalfNormal(2)
-      y | Normal(mu, sigma)      // y ~ Normal(mu, sigma)
+      y     | Normal(mu, sigma)      // y ~ Normal(mu, sigma)
   };
 
   // Observe y = 3.5 and infer mu, sigma
