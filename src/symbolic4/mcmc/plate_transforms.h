@@ -118,13 +118,20 @@ class GradientResult {
   auto size() const -> std::size_t { return grad_.size(); }
 
   // Query gradient by RandomVar
-  // Returns the gradient for that parameter (for scalar params)
+  // Returns double for scalar params, std::span<const double> for indexed params
   template <typename RV>
     requires requires { typename RV::id_type; }
-  auto operator[](const RV& /*rv*/) const -> double {
+  auto operator[](const RV& /*rv*/) const {
     constexpr std::size_t idx = findSymbolIndex<RV>();
     static_assert(idx < std::tuple_size_v<SymbolsTuple>, "Symbol not found in posterior");
-    return grad_[offsets_[idx]];
+
+    using SpecType = std::tuple_element_t<idx, SpecsTuple>;
+    if constexpr (!SpecType::is_indexed) {
+      return grad_[offsets_[idx]];
+    } else {
+      return std::span<const double>(grad_.data() + offsets_[idx],
+                                      std::get<idx>(specs_).size());
+    }
   }
 
   // Get offset for a RandomVar (useful for indexed params)
@@ -151,11 +158,22 @@ class GradientResult {
   SpecsTuple specs_;
   std::array<std::size_t, std::tuple_size_v<SymbolsTuple>> offsets_;
 
-  // Find the index of RV's unconstrained symbol in our symbols tuple
+  // Find the index of RV's symbol in our symbols tuple
+  // Tries unconstrained_symbol_type first (scalar params use Symbol<Id>),
+  // then falls back to symbol_type (indexed params where both are IndexedSymbol)
   template <typename RV>
   static constexpr std::size_t findSymbolIndex() {
-    using SymType = typename RV::unconstrained_symbol_type;
-    return plate_detail::SymbolIndexIn<SymType, SymbolsTuple>::value;
+    if constexpr (requires { typename RV::unconstrained_symbol_type; }) {
+      constexpr auto idx = plate_detail::SymbolIndexIn<
+          typename RV::unconstrained_symbol_type, SymbolsTuple>::value;
+      if constexpr (idx < std::tuple_size_v<SymbolsTuple>) {
+        return idx;
+      } else {
+        return plate_detail::SymbolIndexIn<typename RV::symbol_type, SymbolsTuple>::value;
+      }
+    } else {
+      return plate_detail::SymbolIndexIn<typename RV::symbol_type, SymbolsTuple>::value;
+    }
   }
 
   void computeOffsets() {
@@ -698,9 +716,10 @@ class PlateTransformedPosterior {
         offset += 1;
       } else {
         // Indexed param - expect IndexedBinding with vector<double> values
+        // Apply inverse transform so users can pass constrained-space init values
         auto binding = bindings[SymType{}];
         for (std::size_t i = 0; i < n; ++i) {
-          z[offset + i] = binding.at(i);
+          z[offset + i] = spec.transform.inverse(binding.at(i));
         }
         offset += n;
       }

@@ -1,14 +1,20 @@
-# symbolic4 - Compile-Time Symbolic Algebra with Symbol Lookups
+# symbolic4 - Staged Computation via Compile-Time Expression Graphs
 
 ## Vision
 
-symbolic4 is a compile-time symbolic algebra library where **mathematical operations
-return indexed symbolic objects, and `operator[]` with symbols extracts components
-on demand**. This is lazy evaluation at the type level — the library computes only
-the components you ask for, and the return type encodes the mathematical structure.
+symbolic4 is a **staged computation framework**: expression graphs are built and
+optimized at compile time as C++ types, then evaluated over runtime data of arbitrary
+size. The expression is the program. Rewrite rules are the optimizer. Evaluation is
+the runtime.
+
+**Mathematical operations return typed symbolic objects, and `operator[]` extracts
+components on demand.** This is lazy evaluation at the type level — the library
+computes only what you ask for, and the return type encodes the structure.
 
 The driving application is probabilistic programming (making MCMC "boring"), but the
-core idea generalizes: the gradient of different objects should be different types.
+core infrastructure — expression algebra, strategy-based rewriting, and typed
+monoidal reductions — is domain-independent. Any domain with a term algebra,
+equational laws, and evaluation against runtime data fits the same architecture.
 
 ```cpp
 Symbol<struct Mu> mu;
@@ -46,14 +52,32 @@ evaluate(g[mu], mu = 3.0, sigma = 1.0);  // 6.0
 The same pattern extends to indexed reductions, vector-valued functions, and
 (eventually) tensor fields and differential forms.
 
-## Core Design Principle: Types ARE the Representation
+## Core Design: Two-Stage Computation
 
-Expressions are encoded entirely in C++ types at compile time:
+### Stage 1 — Compile time: build, differentiate, optimize
+
+Expressions are encoded entirely in C++ types:
 - `x + y` creates `Expression<AddOp, Atom<X,Free>, Atom<Y,Free>>`
 - No runtime AST, no heap allocation, no type tags
-- Full compiler optimization and constexpr support
+- Symbolic differentiation, simplification, and rewriting happen here
+- The compiler sees and optimizes the entire computation structure
 
-**Symbol lookup** (`operator[]` dispatched by type) is the central API pattern:
+### Stage 2 — Runtime: bind data, evaluate over dimensions
+
+The compiled expression graph executes over runtime-sized data:
+- Plates loop over runtime-determined observation counts
+- Matrices carry runtime-sized dimensions via `DynamicDense`
+- `ReduceOver` folds over runtime-length dimension indices
+- MCMC runs thousands of evaluations with different parameter values
+
+**This is not a "compile-time only" library.** The expression *structure* is static,
+but it processes arbitrarily large runtime data — the same execution model as SQL
+query plans (optimizer produces a fixed plan, executor streams rows through it) or
+GPU shader programs (compiled once, executed on millions of data points).
+
+### Symbol lookup ties both stages together
+
+`operator[]` dispatched by type is the central API pattern:
 - `bindings[x]` — look up a value for symbol x
 - `samples[alpha]` — extract draws for parameter alpha
 - `samples[expr]` — evaluate any symbolic expression across all draws
@@ -91,11 +115,20 @@ RandomVar/IndexedRandomVar work directly in expressions without `.constrainedExp
 
 ### Atoms (leaf nodes)
 
-`Atom<Id, Effect>` with four effects:
+`Atom<Id, Effect>` — the universal leaf node. `Id` is a unique type for identity,
+`Effect` determines behavior. The effect system is **open** — domains add their own.
+
+**Core effects** (domain-independent, defined in `core.h`):
 - `Free` — Variable needing binding (`Symbol<X>`)
 - `Embedded<T>` — Runtime literal value
-- `Sample<D>` — Random variable from distribution D
 - `Compute<E>` — Deterministic function
+
+**Probabilistic effects** (domain-specific, should live in `distributions/`):
+- `Sample<D>` — Random variable from distribution D
+- `IndexedSample<D, DimsList>` — Indexed random variable
+
+Currently `Sample` and `IndexedSample` are defined in `core.h` — this is a known
+coupling that should be resolved (see `migration/phase7.md`).
 
 ### Expressions (internal nodes)
 
@@ -186,48 +219,118 @@ if constexpr (is_reduce_over_v<E>) {
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│ User API                                                        │
-│   grad(f)[mu]   grad(grad(f))[mu,σ]   infer(y)   samples[α]    │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-┌─────────────────────────────────────────────────────────────────┐
-│ Probabilistic Layer                                             │
-│   distributions/  RandomVar<Dist,Id>  plates  collectLogProbs   │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-┌─────────────────────────────────────────────────────────────────┐
-│ MCMC Layer                                                      │
-│   transforms  support inference  TransformedPosterior  HMC      │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-┌─────────────────────────────────────────────────────────────────┐
-│ Strategy Layer (expr → expr)                                    │
-│   differentiate()  simplify()  Recursive  Innermost  All        │
-├─────────────────────────────────────────────────────────────────┤
-│ Evaluation Layer (expr → value, direct recursion)               │
-│   eval()  evalIndexed()  toString()                             │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-┌─────────────────────────────────────────────────────────────────┐
-│ Expression Algebra                                              │
-│   Atom<Id,Effect>   Expression<Op,Args...>                      │
-│   ReduceOver<ROp,DimTag,Expr>   Grad<Expr>                      │
-└─────────────────────────────────────────────────────────────────┘
+╔═══════════════════════════════════════════════════════════════════╗
+║ Domain: Probabilistic Programming (first application)            ║
+║                                                                   ║
+║  User API                                                         ║
+║    infer(y)   posterior.sample()   samples[expr]   grad(f)[mu]    ║
+║                                                                   ║
+║  Probabilistic Layer                                              ║
+║    distributions/  RandomVar<Dist,Id>  collectLogProbs  model()   ║
+║                                                                   ║
+║  MCMC Layer                                                       ║
+║    TransformedPosterior  HMC  support inference                   ║
+║                                                                   ║
+║  Domain Transforms (probabilistic-specific)                       ║
+║    exp/logit for support types  Cholesky  Jacobian corrections    ║
+╠═══════════════════════════════════════════════════════════════════╣
+║ Domain-Independent Infrastructure                                 ║
+║                                                                   ║
+║  Strategy Layer (expr → expr)                                     ║
+║    differentiate()  simplify()  Recursive  Innermost  All         ║
+║                                                                   ║
+║  Evaluation Layer (expr → value)                                  ║
+║    evaluate()  toString()  extensible terminal dispatch            ║
+║                                                                   ║
+║  Binding Layer (symbol → value, heterogeneous)                    ║
+║    BinderPack  SymbolicState  IndexedBinding                      ║
+║    compressed tuples with type-dispatched operator[]               ║
+║                                                                   ║
+║  Indexed / Reduction Layer                                        ║
+║    ReduceOver<ROp, DimTag, Expr>  dimension tags                  ║
+║    monoidal folds: Sum, Product, Max, LogSumExp                   ║
+║                                                                   ║
+║  Expression Algebra                                               ║
+║    Atom<Id,Effect>   Expression<Op,Args...>   Grad<Expr>          ║
+║    Constant<V>  Fraction<N,D>  CompressedTuple                    ║
+║                                                                   ║
+║  Numeric Backend (matrix3)                                        ║
+║    Dense  DynamicDense  InlineDense  LU  multiply  transpose      ║
+╚═══════════════════════════════════════════════════════════════════╝
 ```
+
+The bottom half is a general-purpose staged computation engine. The top half is its
+first domain application. A query optimizer, circuit synthesizer, or policy engine
+would replace the top half while reusing everything below the line.
+
+### Design Principle: Compressed Tuples with Symbolic Lookup
+
+The BinderPack pattern — multiple inheritance from typed slots, `using...` to pull
+`operator[]` overloads into scope — is the **canonical lookup pattern** for this
+codebase. Each symbol maps to its own typed storage. No type erasure, no flat arrays
+with manual offset computation.
+
+```cpp
+// The pattern: heterogeneous container, symbol-typed access
+container[mu]       // → double&       (scalar parameter)
+container[z_a]      // → span<double>  (indexed parameter)
+container[Sigma]    // → DynamicDense& (matrix parameter)
+container[expr]     // → evaluate expr at container's values
+```
+
+**Three properties make this work:**
+1. **`[[no_unique_address]]`** — empty symbol types cost zero bytes
+2. **Overload resolution as dispatch** — `operator[](SymType)` resolves at compile
+   time, no runtime map or index computation
+3. **Heterogeneous return types** — each symbol can return a different type (double,
+   span, matrix), because each slot defines its own `operator[]`
+
+**Current problem:** The MCMC layer (ParameterState, GradientResult, Samples)
+rolls its own flat-array containers with type-to-index lookup, losing heterogeneity.
+This forces the constraint-transform asymmetry between scalar and indexed params
+and prevents matrix params from fitting naturally. Phase 7 unifies all containers
+on the BinderPack pattern. See `migration/phase7.md`.
+
+### Runtime Dependency Rule
+
+Infrastructure headers must not include domain headers. Arrows point down only:
+
+```
+distributions/, mcmc/ ──→ core.h, indexed/, strategy/, interpreter/
+                          (never the reverse)
+```
+
+Currently violated by: `indexed_eval.h` includes `distributions/indexed_node.h`
+and `constraints.h`. Fix planned in phase 7.
 
 ## File Organization
 
+**Domain-independent infrastructure** (reusable across domains):
+
 | Directory | Purpose |
 |-----------|---------|
-| `core.h`, `operators.h`, `constants.h` | Expression system, ops, compile-time constants |
-| `strategy/` | Stratego-style rewrite framework (diff, simplify, combinators) |
-| `interpreter/` | eval, simplify, to_string (transitioning to direct recursion) |
+| `core.h`, `operators.h`, `constants.h` | Expression algebra: Atom, Expression, Op functors |
+| `strategy/` | Stratego-style rewriting: rules, combinators, traversals, diff |
+| `interpreter/` | Evaluation: eval, simplify, to_string (direct recursion) |
+| `indexed/` | Typed dimensions, ReduceOver, plates, indexed evaluation |
+| `compressed.h` | Zero-overhead storage for stateless expression nodes |
+
+**Probabilistic programming domain** (first application):
+
+| Directory | Purpose |
+|-----------|---------|
 | `distributions/` | Distribution wrappers, RandomVar, log-prob collection |
-| `indexed/` | ReduceOver, plates, indexed evaluation, dimension tags |
 | `mcmc/` | Transforms, posteriors, HMC adapter, samples |
-| `matrix/` | Multivariate support (MVN, LKJ) |
-| `migration/` | Phased plan for strategy unification |
+| `matrix/` | Multivariate support (MVN, LKJ, Cholesky) |
+| `constraints.h` | Support-driven transforms (Real, Positive, Unit) |
+| `model.h`, `infer.h` | Model building and auto-discovery |
+
+**Planning / documentation**:
+
+| Directory | Purpose |
+|-----------|---------|
+| `migration/` | Strategy unification plan (phases 1–5 done, phase 6 pending) |
+| `matrix_algebra/` | Matrix algebra extension plan (Track A numeric + Track B symbolic) |
 
 ## Case Studies: Statistical Rethinking Examples
 
@@ -375,6 +478,23 @@ posterior.sample(config, {sigma = 0.5, a = -2.0, z_b = zeros}, rng);
 `indexed_eval.h` uses `std::unordered_map<std::type_index, SizeT>` — the only
 RTTI in the codebase. Low priority — works correctly, just aesthetically unclean.
 
+### Constraint transform asymmetry (scalar vs indexed)
+Scalar params: expression contains `Sample<D>` atom, evaluator applies `exp(z)` at
+eval time. Indexed params: posterior pre-transforms `z → x` before binding, expression
+uses raw `IndexedSymbol` with no transform. This forces two separate posteriors, two
+gradient paths, and the `lookupByAtomId` hack. Fix: make transforms a binding concern
+(phase 7), not an evaluation concern.
+
+### Evaluator coupled to distributions
+`indexed_eval.h` imports `distributions/indexed_node.h` and `constraints.h` to handle
+`Sample`/`IndexedSample` atoms. Should be extensible via terminal handler policy. Fix
+planned in phase 7.
+
+### MCMC containers bypass BinderPack
+ParameterState, GradientResult, Samples each roll their own type-to-index + flat array
+lookup. Loses heterogeneous return types, forces offset arithmetic, prevents matrix
+params from fitting naturally. Fix: unify on compressed-tuple symbolic lookup (phase 7).
+
 ## Mathematical Direction
 
 The symbol-lookup pattern extends naturally into deeper mathematics:
@@ -384,10 +504,18 @@ The symbol-lookup pattern extends naturally into deeper mathematics:
 - `grad(grad(f))[x, y]` — Hessian components (rank 2 tensor)
 - Indexed reductions: Sum, Product, LogSumExp
 
+**Level 1.5 (matrix algebra): Symbolic matrices unified with scalars**
+- `MatrixSymbol<Id, RowDim, ColDim, Structure>` with compile-time structure tags
+- `(A * B)[i, j]` decomposes to `SumOver<K>(A[i,k] * B[k,j])` — Einstein summation IS ReduceOver
+- `trace(A)`, `logDet(A)` — matrix→scalar boundary connects to existing expression system
+- `grad(f)[matrix_sym]` returns matrix gradient respecting structure
+- Cholesky, inverse, eigendecomposition in matrix3 (numeric backend)
+- See `matrix_algebra/README.md` for full plan (Track A numeric + Track B symbolic)
+
 **Level 2: Tensor algebra for Riemannian methods**
 - Fisher information metric: `fisher(model)[x, y]`
 - Metric tensors for Riemannian HMC
-- Einstein summation via typed indices
+- General Einstein summation (Level 1.5 provides the typed-index foundation)
 
 **Level 3: Differential forms for variational methods**
 - `d(omega)` — exterior derivative (generalizes grad, curl, div)
@@ -397,14 +525,51 @@ The symbol-lookup pattern extends naturally into deeper mathematics:
 For now, focus on Level 1 — it covers all practical MCMC needs. The design
 should not preclude Levels 2-3 but shouldn't over-engineer toward them.
 
+## Extensibility Beyond Mathematics
+
+The domain-independent infrastructure (expression algebra + strategy rewriting +
+typed monoidal reductions) works for any domain with three properties:
+
+1. **A term algebra** — domain objects composed from typed operators
+2. **Equational laws** — rewrite rules that transform/optimize terms
+3. **Evaluation against runtime data** — bind symbols to values, fold over dimensions
+
+### Strong fits (same paradigm, different Op/Rule/Binding types)
+
+| Domain | Expressions | Rewrite rules | Reductions |
+|--------|------------|---------------|------------|
+| **Query optimization** | SELECT/JOIN/WHERE nodes | Predicate pushdown, join reorder | GROUP BY aggregations (Sum, Count, Max) |
+| **Circuit synthesis** | AND/OR/NOT gates | De Morgan, constant prop | Critical path (MaxReduce over delays) |
+| **Policy engines** | Allow/Deny predicates | Contradiction elimination, DNF normalization | Policy combination (all-must-pass, any-pass) |
+| **Compiler IR** | Load/Store/Add/Mul | Peephole opts, constant folding | — |
+| **Chemical reactions** | Species + stoichiometry | Reaction rules | Conservation laws (SumOver species) |
+
+### The runtime dimension system enables scale
+
+Plates already demonstrate: **static expression graph, runtime data of arbitrary
+size**. A query plan is a static expression evaluated over millions of rows. A
+circuit simulation is a static netlist evaluated over streaming input vectors. The
+monoidal reduction splitting property (`SumOver<All> → SumOver<Shards>(SumOver<Within>)`)
+is valid for any associative ReduceOp, enabling parallel evaluation without
+changing the expression.
+
+### What doesn't fit
+
+Domains requiring **runtime graph construction** — where the expression topology
+depends on runtime input. Neural architecture search, data-driven behavior trees,
+dynamic protocol parsing. The boundary: if the expression type can't be determined
+at compile time, this framework isn't the right tool.
+
 ## Roadmap
 
 | Priority | Feature | See |
 |----------|---------|-----|
+| ~~Done~~ | ~~Strategy migration (phases 1–5)~~ | `migration/README.md` |
 | **Now** | Relax operator `requires` clause | `operators.h:156` |
-| **Now** | Strategy migration (phases 1–5) | `migration/README.md` |
+| **Next** | Decouple infrastructure from domain (phase 7) | `migration/phase7.md` |
 | **Next** | Symbol-forward MCMC (phase 6) | `migration/phase6.md` |
-| **Next** | `Grad<Expr>` with typed rank via nesting | `migration/phase4.md` |
-| **Later** | Simplex/Cholesky auto-transforms | `mcmc/support.h` TODO |
+| **Next** | Matrix algebra: Track A (Cholesky, inverse in matrix3) | `matrix_algebra/track_a_numeric.md` |
+| **Later** | Matrix algebra: Track B (symbolic matrix types + ops) | `matrix_algebra/track_b_symbolic.md` |
+| **Later** | `Grad<Expr>` with typed rank via nesting | `migration/phase4.md` |
 | **Later** | MCMC diagnostics (ESS, R-hat) via `diag[alpha].ess` | — |
 | **Later** | Riemannian HMC with Fisher metric | — |

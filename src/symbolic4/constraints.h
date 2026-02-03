@@ -38,6 +38,21 @@ constexpr auto applyNumeric(double z) -> double {
 }
 
 // ============================================================================
+// Numeric: inverse constraint transform (constrained → unconstrained)
+// ============================================================================
+
+template <typename Support>
+constexpr auto inverseNumeric(double x) -> double {
+  if constexpr (is_positive_support_v<Support>) {
+    return std::log(x);  // Positive: z = log(x)
+  } else if constexpr (is_unit_support_v<Support>) {
+    return std::log(x / (1.0 - x));  // Unit: z = logit(x)
+  } else {
+    return x;  // Real: z = x (no transform)
+  }
+}
+
+// ============================================================================
 // Symbolic: return the constrained expression for a given variable
 // ============================================================================
 
@@ -69,3 +84,33 @@ constexpr auto logJacobian(Z z) {
 }
 
 }  // namespace tempura::symbolic4::constraints
+
+namespace tempura::symbolic4 {
+
+// ============================================================================
+// ConstrainedParamSymbol - A Free symbol that applies inverse transform on bind
+// ============================================================================
+//
+// Used by the MCMC layer to bind constrained values (e.g., sigma=2.0) to
+// free symbols while applying the inverse transform (e.g., z=log(2.0)).
+// This ensures eval.h's forward transform round-trips correctly.
+//
+// Behaves exactly like Symbol<Id> for differentiation and expression traversal,
+// but operator= applies inverseNumeric before creating the binding.
+//
+// ============================================================================
+
+template <typename Id, typename Support>
+struct ConstrainedParamSymbol {
+  using symbol_type = Symbol<Id>;
+
+  // For differentiation: return the underlying Free symbol
+  constexpr auto sym() const { return symbol_type{}; }
+
+  // Bind constrained value: applies inverse transform
+  constexpr auto operator=(double value) const {
+    return symbol_type{} = constraints::inverseNumeric<Support>(value);
+  }
+};
+
+}  // namespace tempura::symbolic4

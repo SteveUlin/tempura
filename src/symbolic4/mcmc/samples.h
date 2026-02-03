@@ -14,8 +14,10 @@
 #include <vector>
 
 #include "matrix3/matrix.h"
+#include "symbolic4/constraints.h"
 #include "symbolic4/distributions/indexed_node.h"
 #include "symbolic4/distributions/random_var.h"
+#include "symbolic4/interpreter/eval.h"
 #include "symbolic4/mcmc/state.h"
 
 // ============================================================================
@@ -81,6 +83,19 @@ class Samples {
     return result;
   }
 
+  // Evaluate a symbolic expression across all draws
+  // Usage: samples[alpha + beta] returns vector<double> of per-draw evaluations
+  template <Symbolic E>
+  auto operator[](E expr) const -> std::vector<double> {
+    std::vector<double> result;
+    result.reserve(draws_.size());
+    for (std::size_t i = 0; i < draws_.size(); ++i) {
+      auto bindings = drawBindings(i, std::index_sequence_for<Params...>{});
+      result.push_back(evaluate(expr, bindings));
+    }
+    return result;
+  }
+
   // Access single draw as ParameterState
   auto operator[](std::size_t i) const -> StateType {
     return StateType{draws_[i]};
@@ -129,6 +144,16 @@ class Samples {
 
  private:
   std::vector<ArrayType> draws_;
+
+  // Build bindings for draw i: bind each param's ConstrainedParamSymbol to
+  // the stored constrained value. ConstrainedParamSymbol::operator= applies
+  // the inverse transform, so evaluate() sees proper unconstrained values.
+  template <std::size_t... Is>
+  auto drawBindings(std::size_t i, std::index_sequence<Is...>) const {
+    return BinderPack{
+        (ConstrainedParamSymbol<typename Params::id_type,
+                                typename Params::support_type>{} = draws_[i][Is])...};
+  }
 };
 
 // ============================================================================

@@ -39,10 +39,11 @@ namespace tempura::symbolic4 {
 // ============================================================================
 //
 // For distributions with constrained support (Positive, Unit), RandomVar
-// automatically handles parameter transforms and Jacobians:
-//   - Internal symbol z is unconstrained (what HMC samples)
-//   - sym() returns the constrained expression (exp(z), sigmoid(z), etc.)
-//   - logProb() includes the Jacobian correction
+// separates user-facing and MCMC-internal concerns:
+//   - sym() returns the Sample atom (constrained at eval time via eval.h)
+//   - logProb() works in constrained space (no Jacobian)
+//   - operator= applies inverse transform (sigma=2.0 → z=log(2))
+//   - unconstrainedExpr() / jacobian() are available for MCMC internals
 //
 // ============================================================================
 
@@ -106,30 +107,28 @@ struct RandomVar {
   // Implicit conversion to constrained expression (for use in other distributions)
   constexpr auto operator*() const { return constrainedExpr(); }
 
-  // Get log-probability for this RV: log p(x | params) + log |dx/dz|
-  // Uses unconstrainedExpr() which applies the transform symbolically
-  // Includes Jacobian correction for constrained distributions
+  // Get log-probability in constrained space: log p(x | params)
+  // No Jacobian — this is the user-facing API working in constrained space.
+  // MCMC adds Jacobian corrections separately via its transform system.
   constexpr auto logProb() const {
-    return dist_.logProbFor(unconstrainedExpr()) + jacobian();
+    return dist_.logProbFor(sym());
   }
 
-  // Get unnormalized log-probability (with Jacobian)
+  // Get unnormalized log-probability in constrained space (no Jacobian)
   constexpr auto unnormalizedLogProb() const {
-    return dist_.unnormalizedLogProbFor(unconstrainedExpr()) + jacobian();
+    return dist_.unnormalizedLogProbFor(sym());
   }
 
   // Access the distribution
   constexpr const auto& dist() const { return dist_; }
 
-  // Enable binding syntax: rv = value
-  // For constrained distributions, value should be in constrained space,
-  // but we bind to the unconstrained symbol
+  // Enable binding syntax: rv = value (value is in constrained space)
+  // Applies inverse transform so eval.h's forward transform round-trips correctly:
+  //   sigma = 2.0  →  bind z = log(2.0)  →  eval exp(log(2.0)) = 2.0
   template <typename T>
     requires std::is_arithmetic_v<T>
   constexpr auto operator=(T value) const {
-    // Note: For constrained distributions, we need to transform the value
-    // This is handled at evaluation time; here we bind the unconstrained symbol
-    return unconstrainedSym() = value;
+    return unconstrainedSym() = constraints::inverseNumeric<support_type>(static_cast<double>(value));
   }
 };
 

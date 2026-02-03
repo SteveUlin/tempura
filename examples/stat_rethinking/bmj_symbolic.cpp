@@ -147,7 +147,7 @@ Model: logit(p[L]) = a + sigma * z_b[L]
 
   // Likelihood - plate over countries
   // p[i] = sigmoid(a + sigma * z_b[i])
-  auto p = 1_c / (1_c + exp(-(a.constrainedExpr() + sigma.constrainedExpr() * z_b.sym())));
+  auto p = 1_c / (1_c + exp(-(a + sigma * z_b)));
   auto k = plate<Countries>(binomial(n, p));
 
   // Build posterior - auto-discovers a, sigma, z_b from k's expression tree
@@ -168,7 +168,7 @@ Model: logit(p[L]) = a + sigma * z_b[L]
 
   auto samples = posterior.sample(
       HmcConfig{.epsilon = 0.01, .steps = 20, .warmup = 500, .draws = 2000},
-      BinderPack{a = -2.0, sigma = std::log(0.5), z_b = z_b_init},
+      BinderPack{a = -2.0, sigma = 0.5, z_b = z_b_init},
       rng);
 
   std::println("Collected {} samples\n", samples.size());
@@ -181,15 +181,15 @@ Model: logit(p[L]) = a + sigma * z_b[L]
   auto a_draws = samples[a];
   auto sigma_draws = samples[sigma];
 
-  // Transform to constrained space for reporting
-  std::vector<double> global_mean_samples, sigma_constrained;
+  // Samples are already in constrained space (transforms applied during sampling)
+  // sigma_draws are exp(z), a_draws are unconstrained (Real support)
+  std::vector<double> global_mean_samples;
   for (std::size_t i = 0; i < a_draws.size(); ++i) {
     global_mean_samples.push_back(invLogit(a_draws[i]));
-    sigma_constrained.push_back(std::exp(sigma_draws[i]));
   }
 
   auto global_summary = summarize(global_mean_samples);
-  auto sigma_summary = summarize(sigma_constrained);
+  auto sigma_summary = summarize(sigma_draws);
 
   std::println("=== POSTERIOR ESTIMATES ===\n");
   std::println("Global intercept: inv_logit(a) = {:.1f}% [{:.1f}%, {:.1f}%]",
@@ -204,7 +204,7 @@ Model: logit(p[L]) = a + sigma * z_b[L]
   // b[L] = sigma * z_b[L], so p[L] = logistic(a + sigma * z_b[L])
   std::vector<std::vector<double>> p_samples(kNumCountries);
   for (std::size_t draw = 0; draw < samples.size(); ++draw) {
-    double sigma_val = sigma_constrained[draw];
+    double sigma_val = sigma_draws[draw];
     for (std::size_t country = 0; country < kNumCountries; ++country) {
       double b_val = sigma_val * z_b_draws[draw, country];
       double prob = invLogit(a_draws[draw] + b_val);

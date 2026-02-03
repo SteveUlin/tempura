@@ -103,19 +103,15 @@ constexpr auto collectFromExprImpl(Visited visited, E expr) {
     }
   } else if constexpr (is_random_var_atom_v<E>) {
     // Found a scalar random variable!
+    // Use the Sample atom directly — constrained-space formulation matching rv.logProb()
     using IdType = get_id_t<E>;
 
     if constexpr (id_set_contains_v<IdType, Visited>) {
       return std::pair{Constant<0>{}, visited};
     } else {
       using NewVisited = id_set_insert_t<IdType, Visited>;
-      using Dist = std::decay_t<decltype(expr.effect_.dist_)>;
-      using Support = typename Dist::support_type;
 
-      auto z = Symbol<IdType>{};
-      auto constrained = constraints::expr<Support>(z);
-      auto jacobian = constraints::logJacobian<Support>(z);
-      auto logprob = expr.effect_.dist_.logProbFor(constrained) + jacobian;
+      auto logprob = expr.effect_.dist_.logProbFor(E{expr.effect_});
 
       auto [parent_logprobs, final_visited] =
           collectFromExprImpl(NewVisited{}, logprob);

@@ -874,12 +874,25 @@ constexpr auto extractParam(T t) {
   }
 }
 
+// Extract Free symbol for differentiation
 template <typename T>
-constexpr auto extractSym(T t) {
+constexpr auto extractDiffSym(T t) {
   auto param = extractParam(t);
   if constexpr (IsRandomVar<decltype(param)>) {
-    // Use freeSym() for binding compatibility (returns Atom<Id, Free>)
     return param.freeSym();
+  } else {
+    return param;
+  }
+}
+
+// Extract binding symbol: ConstrainedParamSymbol for RandomVars (applies inverse on bind)
+template <typename T>
+constexpr auto extractBindSym(T t) {
+  auto param = extractParam(t);
+  if constexpr (IsRandomVar<decltype(param)>) {
+    using Id = typename decltype(param)::id_type;
+    using Support = typename decltype(param)::support_type;
+    return ConstrainedParamSymbol<Id, Support>{};
   } else {
     return param;
   }
@@ -901,15 +914,16 @@ constexpr auto wrapTransform(T t) {
 template <Symbolic LogProbExpr, typename... TransformedParams>
 constexpr auto makeTransformedPosterior(LogProbExpr lp, TransformedParams... params) {
   auto transforms = std::make_tuple(detail::wrapTransform(params)...);
-  auto param_symbols = std::make_tuple(detail::extractSym(params)...);
+  auto bind_symbols = std::make_tuple(detail::extractBindSym(params)...);
+  auto diff_symbols = std::make_tuple(detail::extractDiffSym(params)...);
 
   auto grad_exprs = [&]<std::size_t... Is>(std::index_sequence<Is...>) {
-    return std::make_tuple(simplify(diff(lp, std::get<Is>(param_symbols)))...);
+    return std::make_tuple(simplify(diff(lp, std::get<Is>(diff_symbols)))...);
   }(std::make_index_sequence<sizeof...(TransformedParams)>{});
 
   return TransformedPosteriorBuilder<LogProbExpr, decltype(transforms),
-                                      decltype(param_symbols), decltype(grad_exprs)>{
-      lp, transforms, param_symbols, grad_exprs};
+                                      decltype(bind_symbols), decltype(grad_exprs)>{
+      lp, transforms, bind_symbols, grad_exprs};
 }
 
 }  // namespace tempura::symbolic4

@@ -33,10 +33,9 @@ namespace tempura::symbolic4 {
 // ============================================================================
 //
 // Expressions built from RandomVars contain Atom<Id, Sample<Dist>> nodes.
-// These represent the *constrained* value of the random variable.
-// When Var is Atom<Id, Free> and we see Atom<Id, Sample<D>>:
-//   - Same Id: derivative is the constraint transform's derivative
-//     (1 for real support, exp(z) for positive, sigmoid'(z) for unit)
+// In the constrained-space API, Sample atoms act as identity w.r.t. their
+// corresponding Free variable. When Var is Atom<Id, Free>:
+//   - Same Id: d/dx[x] = 1
 //   - Different Id: derivative is 0 (constant w.r.t. Var)
 //
 // ============================================================================
@@ -51,22 +50,11 @@ struct SampleDerivative {
 };
 
 // Atom<Id, Sample<D>> differentiated w.r.t. Atom<Id, Free>:
-// The Sample atom represents constrainedExpr(z) where z = Atom<Id, Free>.
-// d/dz[constrainedExpr(z)] depends on the distribution's support.
+// In constrained-space formulation, the Sample atom IS the variable.
+// d/dx[x] = 1 regardless of support type.
 template <typename Id, typename Dist>
 struct SampleDerivative<Atom<Id, Sample<Dist>>, Atom<Id, Free>> {
-  static constexpr auto compute() {
-    using Support = typename Dist::support_type;
-    auto z = Atom<Id, Free>{};
-    if constexpr (is_positive_support_v<Support>) {
-      return exp(z);  // d/dz[exp(z)] = exp(z)
-    } else if constexpr (is_unit_support_v<Support>) {
-      auto s = 1_c / (1_c + exp(-z));
-      return s * (1_c - s);  // d/dz[sigmoid(z)] = sigmoid(z)(1-sigmoid(z))
-    } else {
-      return Constant<1>{};  // d/dz[z] = 1 (unconstrained)
-    }
-  }
+  static constexpr auto compute() { return Constant<1>{}; }
 };
 
 // Check if T is a Sample atom

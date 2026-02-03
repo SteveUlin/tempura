@@ -48,12 +48,22 @@ Phase 5: Cleanup                     ← deduplicate, remove RTTI, extract share
 
 Phase 6: Symbol-Forward MCMC         ← INDEPENDENT of phases 1-5
                                         samples[expr], grad spans, constrained init
+
+Phase 7: Decouple Infrastructure     ← INDEPENDENT of phase 6, parallel ok
+    │                                   open effects, extensible eval, symbolic state
+    ├── 7.0 SymbolicSlot/State       ← new file, no dependencies
+    ├── 7.1 Open effect system       ← refactor core.h, no dependencies
+    ├── 7.3 TransformPack            ← new file, no dependencies
+    ├── 7.2 Extensible eval          ← depends on 7.1
+    ├── 7.4 Unify posteriors         ← depends on 7.0, 7.2, 7.3
+    ├── 7.5 Remove lookupByAtomId    ← depends on 7.2, 7.3
+    └── 7.6 Diff cleanup            ← depends on 7.3
 ```
 
 **Standalone fix (any time, no dependencies):** Relax operator `requires` clause
 in `operators.h` so RandomVar/IndexedRandomVar work directly in expressions.
 
-Each phase has its own detailed task file: `phase1.md` through `phase6.md`.
+Each phase has its own detailed task file: `phase1.md` through `phase7.md`.
 
 ## Key Design Decisions
 

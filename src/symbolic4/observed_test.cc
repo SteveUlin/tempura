@@ -83,9 +83,11 @@ auto main() -> int {
 
     double result = evaluateIndexed(lp, BinderPack{binding});
 
-    // Unnormalized log Beta(x; 2, 3) = log(x) + 2*log(1-x)
-    auto expected_at = [](double x) {
-      return std::log(x) + 2.0 * std::log(1.0 - x);
+    // Full normalized log Beta(x; 2, 3) = log(x) + 2*log(1-x) - lbeta(2, 3)
+    // lbeta(2,3) = lgamma(2) + lgamma(3) - lgamma(5)
+    double log_normalizer = std::lgamma(2.0) + std::lgamma(3.0) - std::lgamma(5.0);
+    auto expected_at = [log_normalizer](double x) {
+      return std::log(x) + 2.0 * std::log(1.0 - x) - log_normalizer;
     };
     double expected = expected_at(0.3) + expected_at(0.5) + expected_at(0.7);
     expectNear(expected, result, 1e-10);
@@ -109,9 +111,10 @@ auto main() -> int {
     // Evaluate with both scalar and observed bindings
     double result = evaluateIndexed(lp, BinderPack{alpha = 2.0, binding});
 
-    // alpha=2, beta=3: log(x) + 2*log(1-x)
-    auto expected_at = [](double x) {
-      return std::log(x) + 2.0 * std::log(1.0 - x);
+    // alpha=2, beta=3: full normalized log Beta
+    double log_normalizer = std::lgamma(2.0) + std::lgamma(3.0) - std::lgamma(5.0);
+    auto expected_at = [log_normalizer](double x) {
+      return std::log(x) + 2.0 * std::log(1.0 - x) - log_normalizer;
     };
     double expected = expected_at(0.3) + expected_at(0.5) + expected_at(0.7);
     expectNear(expected, result, 1e-10);
