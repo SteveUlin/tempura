@@ -1,9 +1,7 @@
 #pragma once
 
-#include <cmath>
-
+#include "symbolic4/constraints.h"
 #include "symbolic4/core.h"
-#include "symbolic4/distributions/wrappers.h"      // For support type traits
 #include "symbolic4/indexed/reduce_over.h"         // For is_reduce_over_v
 
 // ============================================================================
@@ -39,18 +37,6 @@ namespace tempura::symbolic4 {
 
 namespace eval_detail {
 
-// Apply constraint transform based on support type
-template <typename Support>
-constexpr auto applyConstraint(double z) -> double {
-  if constexpr (is_positive_support_v<Support>) {
-    return std::exp(z);  // Positive: x = exp(z)
-  } else if constexpr (is_unit_support_v<Support>) {
-    return 1.0 / (1.0 + std::exp(-z));  // Unit: x = sigmoid(z)
-  } else {
-    return z;  // Real: x = z (no transform)
-  }
-}
-
 // Forward declaration for mutual recursion
 template <Symbolic E, typename Bindings>
 constexpr auto evalImpl(E expr, Bindings& ctx) -> double;
@@ -78,7 +64,7 @@ constexpr auto evalImpl(E expr, Bindings& ctx) -> double {
     // Apply constraint transform based on distribution support
     using Dist = get_distribution_t<typename E::effect_type>;
     using Support = typename Dist::support_type;
-    return applyConstraint<Support>(z);
+    return constraints::applyNumeric<Support>(z);
   } else if constexpr (is_atom_v<E>) {
     return ctx[expr];
   } else if constexpr (is_expression_v<E>) {

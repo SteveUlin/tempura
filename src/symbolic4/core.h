@@ -457,6 +457,14 @@ struct IsRandomVarAtom<Atom<Id, Sample<D>>> : std::true_type {};
 template <typename T>
 constexpr bool is_random_var_atom_v = IsRandomVarAtom<T>::value;
 
+// Do two atoms share the same Id (regardless of effect)?
+// Useful when bindings use Atom<Id, Free> but expressions contain Atom<Id, Sample<D>>.
+template <typename A, typename B>
+constexpr bool same_atom_id_v = false;
+
+template <typename Id, typename E1, typename E2>
+constexpr bool same_atom_id_v<Atom<Id, E1>, Atom<Id, E2>> = true;
+
 // Is this effect an IndexedSample?
 template <typename E>
 struct IsIndexedSampleEffect : std::false_type {};

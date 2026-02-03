@@ -3,6 +3,7 @@
 #include <type_traits>
 #include <utility>  // For std::pair
 
+#include "symbolic4/constraints.h"
 #include "symbolic4/core.h"
 #include "symbolic4/distributions/indexed_node.h"
 #include "symbolic4/distributions/random_var.h"
@@ -75,32 +76,6 @@ constexpr auto collectFromExpr(Visited visited, Expression<Op, Args...> expr,
   return collectFromChildrenImpl(visited, Constant<0>{}, expr.template arg<Is>()...);
 }
 
-// Helper to compute constrained expression and Jacobian from distribution
-template <typename Support, typename IdType>
-constexpr auto constrainedExprFor() {
-  auto z = Symbol<IdType>{};
-  if constexpr (is_positive_support_v<Support>) {
-    return exp(z);
-  } else if constexpr (is_unit_support_v<Support>) {
-    return 1_c / (1_c + exp(-z));
-  } else {
-    return z;
-  }
-}
-
-template <typename Support, typename IdType>
-constexpr auto jacobianFor() {
-  auto z = Symbol<IdType>{};
-  if constexpr (is_positive_support_v<Support>) {
-    return z;  // log|d(exp(z))/dz| = z
-  } else if constexpr (is_unit_support_v<Support>) {
-    auto s = 1_c / (1_c + exp(-z));
-    return log(s) + log(1_c - s);  // log(s(1-s))
-  } else {
-    return 0_c;
-  }
-}
-
 // Main implementation: collect log-probs from any RandomVarSymbol atoms
 template <typename Visited, Symbolic E>
 constexpr auto collectFromExprImpl(Visited visited, E expr) {
@@ -137,8 +112,9 @@ constexpr auto collectFromExprImpl(Visited visited, E expr) {
       using Dist = std::decay_t<decltype(expr.effect_.dist_)>;
       using Support = typename Dist::support_type;
 
-      auto constrained = constrainedExprFor<Support, IdType>();
-      auto jacobian = jacobianFor<Support, IdType>();
+      auto z = Symbol<IdType>{};
+      auto constrained = constraints::expr<Support>(z);
+      auto jacobian = constraints::logJacobian<Support>(z);
       auto logprob = expr.effect_.dist_.logProbFor(constrained) + jacobian;
 
       auto [parent_logprobs, final_visited] =

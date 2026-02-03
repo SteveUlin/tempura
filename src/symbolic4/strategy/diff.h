@@ -43,16 +43,6 @@ namespace tempura::symbolic4 {
 
 namespace diff_detail {
 
-// Check if two atoms share the same Id regardless of effect type
-template <typename T, typename Var>
-struct IsSameAtomId : std::false_type {};
-
-template <typename Id, typename E1, typename E2>
-struct IsSameAtomId<Atom<Id, E1>, Atom<Id, E2>> : std::true_type {};
-
-template <typename T, typename Var>
-constexpr bool is_same_atom_id_v = IsSameAtomId<T, Var>::value;
-
 // Compute the derivative of a Sample atom w.r.t. the matching Free variable.
 // For constrained distributions, this is the derivative of the constraint transform.
 template <typename T, typename Var>
@@ -141,7 +131,7 @@ struct DiffRecursive {
       }
     } else if constexpr (diff_detail::is_sample_atom_v<E>) {
       // Sample atom: compute derivative based on Id match with Var
-      if constexpr (diff_detail::is_same_atom_id_v<E, Var>) {
+      if constexpr (same_atom_id_v<E, Var>) {
         return diff_detail::SampleDerivative<E, Var>::compute();
       } else {
         return Constant<0>{};  // Different Id: constant w.r.t. Var
@@ -252,7 +242,7 @@ constexpr auto makeDiff() {
 // ============================================================================
 
 template <Symbolic E, typename Var>
-constexpr auto differentiate(E expr, Var) {
+constexpr auto diff(E expr, Var) {
   constexpr auto d = makeDiff<Var>();
   return simplify(d.apply(expr));
 }
@@ -261,10 +251,10 @@ constexpr auto differentiate(E expr, Var) {
 // recursing into the inner expression and rebuilding.
 // No standalone overload needed — d/dx(Σf) = Σ(d/dx f) is automatic.
 
-// Backward-compatible alias: call sites use diff(expr, var) unchanged
+// Long-form alias
 template <Symbolic E, typename Var>
-constexpr auto diff(E expr, Var v) {
-  return differentiate(expr, v);
+constexpr auto differentiate(E expr, Var v) {
+  return diff(expr, v);
 }
 
 }  // namespace tempura::symbolic4

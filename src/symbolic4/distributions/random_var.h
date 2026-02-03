@@ -1,5 +1,6 @@
 #pragma once
 
+#include "symbolic4/constraints.h"
 #include "symbolic4/core.h"
 #include "symbolic4/distributions/wrappers.h"
 
@@ -32,39 +33,6 @@
 // ============================================================================
 
 namespace tempura::symbolic4 {
-
-// ============================================================================
-// Transform helpers based on support type
-// ============================================================================
-
-namespace transform_detail {
-
-// Constrained value expression from unconstrained symbol
-template <typename Support, typename Z>
-constexpr auto constrainedExpr(Z z) {
-  if constexpr (is_positive_support_v<Support>) {
-    return exp(z);
-  } else if constexpr (is_unit_support_v<Support>) {
-    return 1_c / (1_c + exp(-z));  // sigmoid
-  } else {
-    return z;  // unbounded: no transform
-  }
-}
-
-// Jacobian expression: log |dx/dz|
-template <typename Support, typename Z>
-constexpr auto jacobianExpr(Z z) {
-  if constexpr (is_positive_support_v<Support>) {
-    return z;  // log|d(exp(z))/dz| = log(exp(z)) = z
-  } else if constexpr (is_unit_support_v<Support>) {
-    auto s = 1_c / (1_c + exp(-z));
-    return log(s) + log(1_c - s);  // log(s(1-s))
-  } else {
-    return 0_c;  // no Jacobian needed
-  }
-}
-
-}  // namespace transform_detail
 
 // ============================================================================
 // RandomVar - A random variable in a probabilistic model
@@ -120,12 +88,12 @@ struct RandomVar {
   // Static version for use when instance isn't available (e.g., in transforms)
   // Returns the unconstrained symbol (constraint applied at eval time)
   static constexpr auto unconstrainedExpr() {
-    return transform_detail::constrainedExpr<support_type>(unconstrainedSym());
+    return constraints::expr<support_type>(unconstrainedSym());
   }
 
   // Get the Jacobian expression: log |dx/dz|
   static constexpr auto jacobian() {
-    return transform_detail::jacobianExpr<support_type>(unconstrainedSym());
+    return constraints::logJacobian<support_type>(unconstrainedSym());
   }
 
   // Get the symbol representing this random variable (with distribution info)

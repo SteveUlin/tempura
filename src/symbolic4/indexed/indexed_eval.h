@@ -1,12 +1,11 @@
 #pragma once
 
-#include <cmath>
 #include <unordered_map>
 #include <typeindex>
 
+#include "symbolic4/constraints.h"
 #include "symbolic4/core.h"
 #include "symbolic4/distributions/indexed_node.h"  // For make_indexed_symbol_t, IndexedRandomVar
-#include "symbolic4/distributions/wrappers.h"  // For support type traits
 #include "symbolic4/indexed/data.h"
 #include "symbolic4/indexed/dim.h"
 #include "symbolic4/indexed/sum_over.h"
@@ -38,25 +37,6 @@ namespace tempura::symbolic4 {
 
 namespace indexed_eval_detail {
 
-// Apply constraint transform based on support type (same as eval.h)
-template <typename Support>
-constexpr auto applyConstraint(double z) -> double {
-  if constexpr (is_positive_support_v<Support>) {
-    return std::exp(z);  // Positive: x = exp(z)
-  } else if constexpr (is_unit_support_v<Support>) {
-    return 1.0 / (1.0 + std::exp(-z));  // Unit: x = sigmoid(z)
-  } else {
-    return z;  // Real: x = z (no transform)
-  }
-}
-
-// Check if two atoms have the same Id (regardless of effect type)
-template <typename Atom, typename Binding>
-struct HasSameAtomId : std::false_type {};
-
-template <typename Id, typename E1, typename E2>
-struct HasSameAtomId<Atom<Id, E1>, TypeValueBinder<Atom<Id, E2>, double>> : std::true_type {};
-
 // Get the symbol type from a binder
 template <typename Binder>
 struct BinderSymbol;
@@ -66,6 +46,13 @@ struct BinderSymbol<TypeValueBinder<S, V>> {
   using type = S;
 };
 
+// Check if a binder's symbol matches the given atom by Id (uses same_atom_id_v from core.h)
+template <typename AtomT, typename Binder>
+struct BinderMatchesAtom : std::false_type {};
+
+template <typename Id, typename E1, typename E2, typename V>
+struct BinderMatchesAtom<Atom<Id, E1>, TypeValueBinder<Atom<Id, E2>, V>> : std::true_type {};
+
 // Look up value in BinderPack by matching atom Id (not exact type)
 template <typename T, typename... Binders>
 auto lookupByAtomId([[maybe_unused]] T term, const BinderPack<Binders...>& pack) -> double {
@@ -73,9 +60,8 @@ auto lookupByAtomId([[maybe_unused]] T term, const BinderPack<Binders...>& pack)
   bool found = false;
 
   auto try_lookup = [&]<typename B>(const B& binder) {
-    if constexpr (HasSameAtomId<T, B>::value) {
+    if constexpr (BinderMatchesAtom<T, B>::value) {
       if (!found) {
-        // Use the binder's symbol type to call operator[]
         using BinderSym = typename BinderSymbol<B>::type;
         result = binder[BinderSym{}];
         found = true;
@@ -167,7 +153,7 @@ struct IndexedEval {
       // Apply constraint transform based on distribution support
       using Dist = get_distribution_t<typename T::effect_type>;
       using Support = typename Dist::support_type;
-      return indexed_eval_detail::applyConstraint<Support>(z);
+      return constraints::applyNumeric<Support>(z);
     } else if constexpr (is_atom_v<T>) {
       // Regular Free symbol - look up in scalar bindings (no transform)
       return indexed_eval_detail::lookupByAtomId(term, ctx.scalars);
@@ -184,46 +170,19 @@ struct IndexedEval {
   }
 
  private:
-  // Look up an IndexedSymbol value using current dimension indices
+  // Look up an IndexedSymbol value using current dimension indices.
+  // Pack-expansion calls binding.at(idx0, idx1, ...) for any ndims.
   template <typename Sym>
   static auto lookupIndexedSymbol([[maybe_unused]] Sym sym, context_type& ctx) -> double {
     const auto& binding = ctx.indexed[sym];
-
-    if constexpr (Sym::ndims == 1) {
-      // Single dimension - use the first (only) dimension's index
-      using Dim0 = detail::At<0, typename Sym::dims_list>;
-      SizeT i = ctx.dim_indices.template get<Dim0>();
-      return binding.at(i);
-    } else if constexpr (Sym::ndims == 2) {
-      // Two dimensions
-      using Dim0 = detail::At<0, typename Sym::dims_list>;
-      using Dim1 = detail::At<1, typename Sym::dims_list>;
-      SizeT i = ctx.dim_indices.template get<Dim0>();
-      SizeT j = ctx.dim_indices.template get<Dim1>();
-      return binding.at(i, j);
-    } else if constexpr (Sym::ndims == 3) {
-      using Dim0 = detail::At<0, typename Sym::dims_list>;
-      using Dim1 = detail::At<1, typename Sym::dims_list>;
-      using Dim2 = detail::At<2, typename Sym::dims_list>;
-      SizeT i = ctx.dim_indices.template get<Dim0>();
-      SizeT j = ctx.dim_indices.template get<Dim1>();
-      SizeT k = ctx.dim_indices.template get<Dim2>();
-      return binding.at(i, j, k);
-    } else {
-      // Generic N-D case
-      std::array<SizeT, Sym::ndims> indices;
-      fillIndices<Sym, 0>(indices, ctx.dim_indices);
-      return binding.at(indices);
-    }
+    return lookupAtIndices<Sym>(binding, ctx.dim_indices,
+                                std::make_index_sequence<Sym::ndims>{});
   }
 
-  template <typename Sym, SizeT I, SizeT N = Sym::ndims>
-  static void fillIndices(std::array<SizeT, N>& arr, const DimIndexMap& dim_indices) {
-    if constexpr (I < N) {
-      using DimI = detail::At<I, typename Sym::dims_list>;
-      arr[I] = dim_indices.template get<DimI>();
-      fillIndices<Sym, I + 1>(arr, dim_indices);
-    }
+  template <typename Sym, typename Binding, SizeT... Is>
+  static auto lookupAtIndices(const Binding& binding, const DimIndexMap& dim_indices,
+                              std::index_sequence<Is...>) -> double {
+    return binding.at(dim_indices.template get<detail::At<Is, typename Sym::dims_list>>()...);
   }
 };
 

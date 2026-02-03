@@ -77,11 +77,11 @@ composed via `recursive()`, `innermost()`, etc.
 
 | Phase | What | Status |
 |-------|------|--------|
-| 1 | ReduceOver + make strategies ReduceOver-aware | Pending |
-| 2 | Migrate diff() → strategy-based differentiate() | Pending (blocked by 1) |
-| 3 | Kill cata — direct recursion for eval/toString | Pending (blocked by 2) |
-| 4 | Grad<Expr>, new reductions, new combinators | Pending (blocked by 3) |
-| 5 | Deduplicate constraints, kill RTTI, cleanup | Pending (blocked by 4) |
+| 1 | ReduceOver + make strategies ReduceOver-aware | ✓ Done |
+| 2 | Migrate diff() → strategy-based | ✓ Done |
+| 3 | Kill cata — direct recursion for eval/toString | ✓ Done |
+| 4 | Grad<Expr>, new reductions, new combinators | ✓ Done |
+| 5 | Deduplicate constraints, cleanup | ✓ Done |
 | 6 | Symbol-forward MCMC: `samples[expr]`, init API, grad spans | Pending (independent) |
 
 **Standalone fix (no phase dependency):** Relax `operators.h` `requires` clause so
@@ -362,31 +362,18 @@ posterior.sample(config, {sigma = 0.5, a = -2.0, z_b = zeros}, rng);
 // posterior internally: z_sigma = log(0.5)
 ```
 
-## Known Rough Edges (to fix during migration)
+## Known Rough Edges
 
-### Constraint transform duplication (4 copies)
-`applyConstraint` logic appears independently in `eval.h`, `indexed_eval.h`,
-`collect_log_prob.h`, and `random_var.h`. Consolidate into `constraints.h`.
-
-### Atom ID matching duplication (3 copies)
-"Two atoms share the same Id regardless of effect" is reimplemented in `diff.h`,
-`indexed_eval.h`, and `collect_log_prob.h`. Extract to `same_atom_id_v` in `core.h`.
+### ✓ Fixed: Constraint transform duplication → `constraints.h`
+### ✓ Fixed: Atom ID matching duplication → `same_atom_id_v` in `core.h`
+### ✓ Fixed: Hardcoded ndims {1,2,3} → pack-expansion in `indexed_eval.h`
+### ✓ Fixed: SumOver operator overloads → ReduceOver with full operator support
+### ✓ Fixed: Hardcoded arity {0,1,2,3} → variadic implementations
+### ✓ Fixed: toString can't render SumOver → direct recursion with ReduceOver awareness
 
 ### DimIndexMap uses runtime RTTI
 `indexed_eval.h` uses `std::unordered_map<std::type_index, SizeT>` — the only
-RTTI in the codebase. Replace with compile-time typed dimension index pack.
-
-### SumOver operator overloads incomplete
-Only `operator+` is defined. Missing `*`, `-`, `/`. Trap: `2 * SumOver<...>` fails.
-Fix when generalizing to ReduceOver.
-
-### Hardcoded arity {0,1,2,3}
-`All<S>`, `substituteRecImpl`, and `collectFromChildren` have explicit overloads
-for 0-3 children. Replace with variadic implementations.
-
-### toString can't render SumOver/IndexedSymbol
-The standard fold sees SumOver as a terminal and prints "?". Fix when moving
-toString to direct recursion with ReduceOver awareness.
+RTTI in the codebase. Low priority — works correctly, just aesthetically unclean.
 
 ## Mathematical Direction
 
