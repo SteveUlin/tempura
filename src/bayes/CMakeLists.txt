@@ -169,6 +169,12 @@ target_link_libraries(bayes_hmc_test PRIVATE bayes unit)
 add_test(NAME bayes_hmc_test COMMAND bayes_hmc_test)
 set_tests_properties(bayes_hmc_test PROPERTIES LABELS "bayes;estimation;mcmc")
 
+# Hamiltonian Monte Carlo Dynamic (runtime-sized dimension)
+add_executable(bayes_hmc_dynamic_test estimation/hmc_dynamic_test.cc)
+target_link_libraries(bayes_hmc_dynamic_test PRIVATE bayes unit)
+add_test(NAME bayes_hmc_dynamic_test COMMAND bayes_hmc_dynamic_test)
+set_tests_properties(bayes_hmc_dynamic_test PROPERTIES LABELS "bayes;estimation;mcmc")
+
 # Automatic Differentiation Variational Inference (ADVI)
 add_executable(bayes_advi_test estimation/advi_test.cc)
 target_link_libraries(bayes_advi_test PRIVATE bayes unit)

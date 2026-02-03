@@ -4,6 +4,7 @@
 #include "symbolic4/constants.h"
 #include "symbolic4/core.h"
 #include "symbolic4/distributions/wrappers.h"  // For support type traits
+#include "symbolic4/indexed/dim.h"  // For IndexedSymbol
 #include "symbolic4/operators.h"
 #include "symbolic4/scheme/cata.h"
 
@@ -70,6 +71,18 @@ struct SampleAtomDerivative<Atom<Id, Sample<Dist>>, Atom<Id, Free>> {
   }
 };
 
+// Check if T is an indexed sample atom with same Id as Var (an IndexedSymbol)
+// Atom<Id, IndexedSample<D, DimsList>> vs IndexedSymbol<Id, Dims...>
+template <typename T, typename Var>
+struct IsSameIndexedId : std::false_type {};
+
+template <typename Id, typename D, typename DimsList, typename... Dims>
+struct IsSameIndexedId<Atom<Id, IndexedSample<D, DimsList>>, IndexedSymbol<Id, Dims...>>
+    : std::true_type {};
+
+template <typename T, typename Var>
+constexpr bool is_same_indexed_id_v = IsSameIndexedId<T, Var>::value;
+
 // Structural check for SumOver without including sum_over.h
 // SumOver<DimTag, Expr> has: dim_tag typedef, expr_type typedef, expr() method, rebuild()
 template <typename T>
@@ -108,6 +121,10 @@ struct Diff {
       // Sample atom with same Id as Var: apply chain rule for constraint transform
       // d/dz[transform(z)] = transform'(z)
       return diff_detail::SampleAtomDerivative<T, Var>::derivative();
+    } else if constexpr (diff_detail::is_same_indexed_id_v<T, Var>) {
+      // Indexed sample atom with same Id as Var (IndexedSymbol)
+      // No constraint transform for indexed params (handled at bind-time), derivative = 1
+      return Constant<1>{};
     } else if constexpr (diff_detail::is_same_atom_id_v<T, Var>) {
       // Same Id but not a Sample atom - treat as identity
       return Constant<1>{};

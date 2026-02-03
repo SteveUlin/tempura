@@ -1,18 +1,237 @@
-# symbolic4 - Making MCMC Boring
+# symbolic4 - Compile-Time Symbolic Algebra with Symbol Lookups
 
 ## Vision
 
-The goal is to make MCMC "boring" - users define models declaratively, and the library handles all the plumbing:
-- Automatic parameter transforms (log, logit) based on distribution support
-- Automatic Jacobian corrections for change of variables
-- Symbolic gradients via automatic differentiation
-- Compile-time expression optimization
+symbolic4 is a compile-time symbolic algebra library where **mathematical operations
+return indexed symbolic objects, and `operator[]` with symbols extracts components
+on demand**. This is lazy evaluation at the type level — the library computes only
+the components you ask for, and the return type encodes the mathematical structure.
 
-Users write `auto posterior = infer(y)` and get a working HMC-ready posterior.
+The driving application is probabilistic programming (making MCMC "boring"), but the
+core idea generalizes: the gradient of different objects should be different types.
+
+```cpp
+Symbol<struct Mu> mu;
+Symbol<struct Sigma> sigma;
+
+auto f = mu*mu + log(sigma);
+
+// grad(f) returns a rank-1 covector — takes exactly one index
+auto g = grad(f);
+g[mu]             // ∂f/∂μ = 2μ         (scalar expression)
+g[sigma]          // ∂f/∂σ = 1/σ        (scalar expression)
+
+// Hessian = grad of grad — a rank-2 tensor, takes two indices
+auto H = grad(grad(f));
+H[mu, sigma]      // ∂²f/∂μ∂σ = 0       (C++26 multidim operator[])
+H[sigma, sigma]   // ∂²f/∂σ² = -1/σ²
+H[mu]             // ∂f/∂μ row — still a covector (Grad), needs one more index
+
+// Each grad() adds one rank. Each index peels one off.
+// grad(scalar)       → rank 1 covector    → [x] extracts scalar
+// grad(grad(scalar)) → rank 2 tensor      → [x, y] extracts scalar
+// grad³(scalar)      → rank 3 tensor      → [x, y, z] extracts scalar
+
+// For MCMC: the posterior knows its parameters
+auto posterior = infer(y).bind(y = data);
+auto g = posterior.grad();
+g[mu]           // scalar gradient expression
+g[theta]        // indexed gradient (a family over plates)
+
+// Evaluate at a point
+evaluate(g[mu], mu = 3.0, sigma = 1.0);  // 6.0
+```
+
+The same pattern extends to indexed reductions, vector-valued functions, and
+(eventually) tensor fields and differential forms.
+
+## Core Design Principle: Types ARE the Representation
+
+Expressions are encoded entirely in C++ types at compile time:
+- `x + y` creates `Expression<AddOp, Atom<X,Free>, Atom<Y,Free>>`
+- No runtime AST, no heap allocation, no type tags
+- Full compiler optimization and constexpr support
+
+**Symbol lookup** (`operator[]` dispatched by type) is the central API pattern:
+- `bindings[x]` — look up a value for symbol x
+- `samples[alpha]` — extract draws for parameter alpha
+- `samples[expr]` — evaluate any symbolic expression across all draws
+- `grad(f)[x]` — partial derivative (covector component)
+- `grad(grad(f))[x, y]` — Hessian entry (rank-2 tensor, C++26 multidim `operator[]`)
+
+## Active Migration: Strategy Unification
+
+**See `migration/README.md` for the full execution plan.**
+
+We are transitioning from a split cata/strategy architecture to:
+- **Strategies** (`strategy/`) for all expression→expression transforms (diff, simplify)
+- **Direct recursion** for all interpretations (eval, toString)
+- **ReduceOver<ROp, DimTag, Expr>** as the unified reduction node (replaces SumOver)
+- **Grad<Expr>** with typed rank via nesting (`grad(grad(f))` = rank 2)
+- **Deleting** `scheme/cata.h` and the `interpreter/diff.h` cata-based differentiator
+
+When modifying files, prefer the strategy system over cata. Do not add new
+cata-based interpreters. New expression transforms should be rewrite rules
+composed via `recursive()`, `innermost()`, etc.
+
+| Phase | What | Status |
+|-------|------|--------|
+| 1 | ReduceOver + make strategies ReduceOver-aware | Pending |
+| 2 | Migrate diff() → strategy-based differentiate() | Pending (blocked by 1) |
+| 3 | Kill cata — direct recursion for eval/toString | Pending (blocked by 2) |
+| 4 | Grad<Expr>, new reductions, new combinators | Pending (blocked by 3) |
+| 5 | Deduplicate constraints, kill RTTI, cleanup | Pending (blocked by 4) |
+| 6 | Symbol-forward MCMC: `samples[expr]`, init API, grad spans | Pending (independent) |
+
+**Standalone fix (no phase dependency):** Relax `operators.h` `requires` clause so
+RandomVar/IndexedRandomVar work directly in expressions without `.constrainedExpr()`/`.sym()`.
+
+## Expression Algebra
+
+### Atoms (leaf nodes)
+
+`Atom<Id, Effect>` with four effects:
+- `Free` — Variable needing binding (`Symbol<X>`)
+- `Embedded<T>` — Runtime literal value
+- `Sample<D>` — Random variable from distribution D
+- `Compute<E>` — Deterministic function
+
+### Expressions (internal nodes)
+
+`Expression<Op, Args...>` where operators are callable functors serving dual roles:
+- AST construction: `x + y` builds the type
+- Evaluation: `AddOp{}(3.0, 4.0)` returns `7.0`
+
+### Reductions (indexed operations)
+
+`ReduceOver<ReduceOp, DimTag, Expr>` — a monoidal fold over an indexed family.
+`SumOver<DimTag, Expr>` is an alias for `ReduceOver<SumReduce, DimTag, Expr>`.
+
+Each ReduceOp defines: `identity()`, `combine(a, b)`, `symbol()`.
+
+| ReduceOp | Identity | Combine | Diff rule |
+|----------|----------|---------|-----------|
+| SumReduce | 0 | a + b | ∂Σf = Σ∂f (linearity) |
+| ProdReduce | 1 | a × b | ∂Πf = Π·Σ(∂f/f) (log-derivative) |
+| MaxReduce | −∞ | max(a,b) | ∂max f = ∂f(argmax) (subgradient) |
+| LogSumExpReduce | −∞ | log(eᵃ+eᵇ) | Σ softmax(f)·∂f |
+
+Derived reductions (not monoids): Mean = Sum/N, Variance = Mean(x²) − Mean(x)².
+
+### Gradient objects (typed rank via nesting)
+
+`Grad<Expr>` wraps an expression and computes derivatives on demand via `operator[]`.
+**Each `grad()` adds exactly one covariant index** — the rank is encoded in the type:
+
+- `Grad<Scalar>` — rank 1 (covector). `g[x]` → scalar.
+- `Grad<Grad<Scalar>>` — rank 2 (matrix). `H[x, y]` → scalar via C++26 multidim `operator[]`.
+- `Grad<Grad<Grad<Scalar>>>` — rank 3. `T[x, y, z]` → scalar.
+
+Single indexing on a higher-rank object peels one level:
+- `H[x]` on `Grad<Grad<F>>` → `Grad<∂f/∂x>` (a covector — the x-row of the Hessian)
+
+The rank is **not** determined by how many arguments you pass to `operator[]`.
+It is determined by the **type** — how many `Grad` layers are nested.
+
+### RandomVar
+
+`RandomVar<Dist, Id>` pairs a distribution with a unique identity, enabling:
+- Symbolic log-probability computation
+- Automatic parent discovery via expression traversal
+- Transform inference from distribution support
+
+## Transform System: Strategies + Direct Recursion
+
+### Strategies (expression → expression)
+
+Stratego-inspired rewriting framework. Strategies are types with `apply(E) → E'`.
+
+**Primitives:** `Id`, `Fail`, `Seq` (`>>`), `Choice` (`|`), `Try`, `All`
+**Traversals:** `BottomUp`, `TopDown`, `Innermost` (fixpoint), `Outermost`
+**Recursive rules:** `recursive(rrule(pattern, replacement_with_rec))`
+
+Used for: **differentiation** (`strategy/diff.h`), **simplification** (`simplify.h`)
+
+Differentiation rules read like mathematics:
+```cpp
+auto diff = recursive(
+    rrule(f_ + g_,    rec(f_) + rec(g_))
+  | rrule(f_ * g_,    rec(f_) * g_ + f_ * rec(g_))
+  | rrule(sin(f_),    cos(f_) * rec(f_))
+  | rrule(exp(f_),    exp(f_) * rec(f_))
+  | rrule(log(f_),    rec(f_) / f_)
+  | rule(Var{}, 1_c)
+  | rule(AnySymbol{}, 0_c)
+  | rule(AnyConstant{}, 0_c)
+);
+```
+
+### Direct recursion (expression → value)
+
+Simple `if constexpr` dispatch for evaluation, toString, collectLogProbs.
+No Interpreter pattern, no cata apparatus. Handles ReduceOver natively:
+
+```cpp
+if constexpr (is_reduce_over_v<E>) {
+  using ROp = typename E::reduce_op;
+  double accum = ROp::identity();
+  for (SizeT i = 0; i < size; ++i)
+    accum = ROp::combine(accum, eval(expr.expr(), ctx));
+  return accum;
+}
+```
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ User API                                                        │
+│   grad(f)[mu]   grad(grad(f))[mu,σ]   infer(y)   samples[α]    │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────────┐
+│ Probabilistic Layer                                             │
+│   distributions/  RandomVar<Dist,Id>  plates  collectLogProbs   │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────────┐
+│ MCMC Layer                                                      │
+│   transforms  support inference  TransformedPosterior  HMC      │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────────┐
+│ Strategy Layer (expr → expr)                                    │
+│   differentiate()  simplify()  Recursive  Innermost  All        │
+├─────────────────────────────────────────────────────────────────┤
+│ Evaluation Layer (expr → value, direct recursion)               │
+│   eval()  evalIndexed()  toString()                             │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────────┐
+│ Expression Algebra                                              │
+│   Atom<Id,Effect>   Expression<Op,Args...>                      │
+│   ReduceOver<ROp,DimTag,Expr>   Grad<Expr>                      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## File Organization
+
+| Directory | Purpose |
+|-----------|---------|
+| `core.h`, `operators.h`, `constants.h` | Expression system, ops, compile-time constants |
+| `strategy/` | Stratego-style rewrite framework (diff, simplify, combinators) |
+| `interpreter/` | eval, simplify, to_string (transitioning to direct recursion) |
+| `distributions/` | Distribution wrappers, RandomVar, log-prob collection |
+| `indexed/` | ReduceOver, plates, indexed evaluation, dimension tags |
+| `mcmc/` | Transforms, posteriors, HMC adapter, samples |
+| `matrix/` | Multivariate support (MVN, LKJ) |
+| `migration/` | Phased plan for strategy unification |
 
 ## Case Studies: Statistical Rethinking Examples
 
-The `examples/stat_rethinking/` directory contains implementations of homework problems from Richard McElreath's Statistical Rethinking 2025 course. **These examples are the litmus test for API completeness.**
+The `examples/stat_rethinking/` directory contains implementations of homework
+problems from Richard McElreath's Statistical Rethinking 2025 course.
+**These examples are the litmus test for API completeness.**
 
 | Example | Status | What It Tests |
 |---------|--------|---------------|
@@ -22,38 +241,7 @@ The `examples/stat_rethinking/` directory contains implementations of homework p
 | `bmj_weekend_submissions.cpp` | Manual | Poisson regression |
 | `bmj_symbolic.cpp` | Symbolic | Simpler model using symbolic4 API |
 
-### Current Pain Points (from examples)
-
-The examples reveal what users currently have to do manually:
-
-```cpp
-// User WANTS to write:
-auto y = plate<Obs>(normal(alpha + beta * x, sigma));
-auto posterior = model(alpha, beta, sigma, y)
-    .observe(y = data)
-    .build();
-
-// User ACTUALLY writes:
-auto full_log_prob = [&](const State& theta) {
-  double lp = 0.0;
-  // Manual prior computation
-  lp += -0.5 * theta[0] * theta[0] / 100.0;
-  // Manual likelihood loop
-  for (size_t i = 0; i < N; ++i) {
-    double mu = theta[0] + theta[1] * x[i];
-    lp += -0.5 * pow((y[i] - mu) / theta[2], 2) - log(theta[2]);
-  }
-  return lp;
-};
-
-auto full_gradient = [&](const State& theta) {
-  // Hand-derive and implement gradients...
-};
-```
-
 ### What "Complete" Looks Like
-
-When the API is complete, `bangladesh_contraception.cpp` should look like:
 
 ```cpp
 // Hyperpriors
@@ -61,192 +249,173 @@ auto a_bar = normal(0, 1);
 auto sigma_a = exponential(1);
 
 // Varying intercepts (non-centered)
+// RandomVars work directly in expressions — no .constrainedExpr()/.sym() needed
 auto z_a = plate<Districts>(normal(0, 1));
-auto a = a_bar + sigma_a * z_a;  // Deterministic transform
-
-// Ordered monotonic effect
-auto delta = dirichlet({2, 2, 2});
-auto bK = orderedMonotonic(delta);
+auto a = a_bar + sigma_a * z_a;
 
 // Likelihood
-auto y = plate<Obs>(bernoulli(logistic(a[district] + bK * children)));
+auto y = plate<Obs>(bernoulli(logistic(a[district] + beta * x)));
 
 // One line to get posterior
-auto posterior = infer(y).observe(y = data).build();
-auto samples = hmc(posterior, 2000, 500);
+auto posterior = infer(y).bind(x = x_data, y = y_data);
+
+// Gradients via symbol lookup
+auto g = posterior.grad();
+g[a_bar]     // scalar gradient
+g[sigma_a]   // scalar gradient (through log transform)
+g[z_a]       // std::span<const double> — indexed gradient family over Districts
+
+// Sample — init values in CONSTRAINED space (posterior handles inverse)
+auto samples = posterior.sample(
+    HmcConfig{.epsilon = 0.01, .steps = 20, .warmup = 500, .draws = 1000},
+    BinderPack{a_bar = 0.0, sigma_a = 1.0, z_a = zeros(n_districts)},
+    rng);
+
+// Symbol lookup on raw parameters
+mean(samples[a_bar]);    // posterior mean
+samples[z_a];            // matrix: draws × districts
+
+// Symbol lookup on DERIVED quantities — evaluate model expressions across draws
+samples[a]               // a = a_bar + sigma_a * z_a, evaluated per-draw
+samples[logistic(a)]     // transformed quantities, no manual loops
 ```
 
 ### API Gaps to Close
 
-1. **Data-dependent likelihoods**: `plate<Obs>(normal(mu, sigma))` with external covariates `x[i]`
-2. **Automatic gradient derivation**: From symbolic log-prob through data sums
-3. **Non-centered parameterization**: Built into plate notation
-4. **Ordered monotonic effects**: Simplex → cumulative transform
-5. **Varying effects syntax**: `a[district]` indexing into plates
-6. **State layout automation**: No manual index management
+1. **RandomVars in expressions**: `a + sigma * z_b` without `.constrainedExpr()`/`.sym()`
+2. **`samples[expr]`**: Evaluate derived symbolic quantities across draws
+3. **Constrained init**: `sample(config, {sigma = 0.5}, rng)` — not `sigma = log(0.5)`
+4. **Indexed gradient spans**: `grad[z_b]` → `span<const double>`, not manual offset/size
+5. **Data-dependent likelihoods**: `plate<Obs>(normal(mu, sigma))` with external covariates `x[i]`
+6. **Non-centered parameterization**: Built into plate notation
+7. **Ordered monotonic effects**: Simplex → cumulative transform
+8. **Varying effects syntax**: `a[district]` indexing into plates
 
-## Architecture Overview
+## Symbol-Lookup-Forward MCMC
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     User-Facing APIs                             │
-│  model(mu, sigma, y).posterior().observe(y=3.5).build()         │
-│  infer(y)  // auto-discovers mu, sigma                          │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-┌─────────────────────────────────────────────────────────────────┐
-│                    Probabilistic Layer                           │
-│  distributions/   RandomVar<Dist,Id>   plates   collectLogProbs │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-┌─────────────────────────────────────────────────────────────────┐
-│                      MCMC Layer                                  │
-│  transforms   support inference   TransformedPosterior   HMC    │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-┌─────────────────────────────────────────────────────────────────┐
-│                   Interpreter Layer                              │
-│  eval.h   diff.h   simplify.h   to_string.h                     │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-┌─────────────────────────────────────────────────────────────────┐
-│                      Core Layer                                  │
-│  Atom<Id,Effect>   Expression<Op,Args...>   scheme/cata.h       │
-└─────────────────────────────────────────────────────────────────┘
-```
+The symbol-lookup pattern should extend through the entire MCMC pipeline:
+model definition → posterior → sampling → post-processing. Currently, several
+places force users out of the symbolic world into manual computation.
 
-## Key Design Principle: Types ARE the Representation
+### Principle: Container IS the Binding Context, Expression IS the Query
 
-Expressions are encoded entirely in C++ types at compile time:
-- `x + y` creates `Expression<AddOp, Atom<X,Free>, Atom<Y,Free>>`
-- No runtime AST, no heap allocation, no type tags
-- Full compiler optimization and constexpr support
+A symbolic expression is a function of its free symbols. Every MCMC container
+(samples, state, gradients) binds symbols to values. So `container[expr]`
+means "evaluate this function at the values I hold."
 
-## Core Abstractions
+### Operator constraint fix (`operators.h`)
 
-### Atoms (leaf nodes)
-`Atom<Id, Effect>` with four effects:
-- `Free` - Variable needing binding (`Symbol<X>`)
-- `Embedded<T>` - Runtime literal value
-- `Sample<D>` - Random variable from distribution D
-- `Compute<E>` - Deterministic function
+The binary operators have `requires(Symbolic<L> || Symbolic<R>)` which prevents
+two `SymbolicLike`-but-not-`Symbolic` operands (e.g., two RandomVars) from
+combining. Since `SymbolicLike` already excludes `int`/`double`, the extra
+constraint is unnecessary. Relaxing it enables:
 
-### Expressions (internal nodes)
-`Expression<Op, Args...>` where operators are callable functors serving dual roles:
-- AST construction: `x + y` builds the type
-- Evaluation: `AddOp{}(3.0, 4.0)` returns `7.0`
-
-### RandomVar
-`RandomVar<Dist, Id>` pairs a distribution with a unique identity, enabling:
-- Symbolic log-probability computation
-- Automatic parent discovery via expression traversal
-- Transform inference from distribution support
-
-## File Organization
-
-| Directory | Purpose |
-|-----------|---------|
-| `core.h`, `operators.h` | Expression system, type traits |
-| `scheme/` | Recursion schemes (fold, para, cata) |
-| `distributions/` | Distribution wrappers, RandomVar, log-probs |
-| `interpreter/` | eval, diff, simplify, to_string |
-| `mcmc/` | Transforms, posteriors, HMC adapter |
-| `indexed/` | Plate notation for vectorized parameters |
-| `matrix/` | Multivariate support (MVN, LKJ) |
-
-## Usage Patterns
-
-### Current API (working but inconsistent)
 ```cpp
-auto alpha = normal(0.0, 10.0);
-auto beta = normal(0.0, 5.0);
-auto sigma = halfNormal(2.0);
-auto x = data<Obs>();
-auto y = plate<Obs>(normal(alpha + beta * x, sigma));
+// Before (current): manual extraction
+auto p = 1_c / (1_c + exp(-(a.constrainedExpr() + sigma.constrainedExpr() * z_b.sym())));
 
-auto posterior = infer(alpha, beta, sigma, y)
-    .bind(x = x_data, y = y_data);
-
-// Problem: flat arrays lose parameter identity
-using State = std::array<double, 3>;
-auto hmc = makeHMC<double, 3>(
-    [&](const State& z) { return posterior.logProb(z); },
-    [&](const State& z) { return State{...}; },  // Manual unpacking
-    epsilon, steps);
+// After (goal): RandomVars directly in expressions
+auto p = logistic(a + sigma * z_b);
 ```
 
-### Target API (binding-centric)
+### `samples[expr]` — evaluate derived quantities across draws
+
+The biggest win. Instead of manual loops re-implementing model formulas:
+
 ```cpp
-auto alpha = normal(0.0, 10.0);
-auto beta = normal(0.0, 5.0);
-auto sigma = halfNormal(2.0);
-auto x = data<Obs>();
-auto y = plate<Obs>(normal(alpha + beta * x, sigma));
+// Before: 15 lines of manual computation to get country probabilities
+for (std::size_t draw = 0; draw < samples.size(); ++draw) {
+    for (std::size_t country = 0; country < N; ++country) {
+        p_samples[country].push_back(invLogit(a_draws[draw] + sigma_val * z_b_draws[draw, country]));
+    }
+}
 
-auto posterior = infer(alpha, beta, sigma, y)
-    .bind(x = x_data, y = y_data);
-
-// Unified binding syntax throughout
-auto samples = posterior.sample(
-    hmc(epsilon = 0.01, steps = 20),
-    warmup = 500,
-    draws = 1000,
-    init = (alpha = 0.0, beta = 0.0, sigma = 0.0),
-    rng);
-
-// Samples queryable by symbol
-double mean_alpha = mean(samples[alpha]);
-double mean_beta = mean(samples[beta]);
+// After: expression already encodes the formula
+auto p = logistic(a + sigma * z_b);
+auto p_draws = samples[p];           // matrix: draws × countries
 ```
 
-### Hierarchical with plates (target)
+Implementation: for each draw, bind each parameter to that draw's values,
+evaluate the expression. Return type depends on whether expr is scalar or indexed.
+
+### `grad[indexed_param]` → span
+
+Currently `GradientResult::operator[]` returns a single `double`, even for
+indexed params. For `z_b` with 38 components, the user needs `offset()` +
+`paramSize()` and manual slicing. Fix: dispatch on spec type.
+
 ```cpp
-auto alpha = gamma(2.0, 0.1);
-auto theta = plate<Groups>(beta(alpha, 1.0));
-
-auto posterior = infer(alpha, theta, y)
-    .bind(y = y_data);  // Dimension auto-inferred
-
-auto samples = posterior.sample(
-    hmc(epsilon = 0.01, steps = 20),
-    init = (alpha = 1.0, theta = std::vector<double>(38, 0.5)),
-    rng);
-
-// Access indexed samples
-auto theta_samples = samples[theta];  // Matrix: draws × groups
+grad[alpha]     // double (scalar param)
+grad[z_b]       // std::span<const double> (indexed param, all 38 components)
 ```
 
-## Current Status
+### Init values in constrained space
 
-Working:
-- Core expression system with type-level AST
-- 15+ distributions with symbolic log-probs
-- Automatic differentiation via symbolic diff
-- Parameter transforms with Jacobian corrections
-- HMC sampling via bayes/ integration
-- Basic plate support with `data<Dim>()` and `plate<Dim>()`
-- `infer()` with `.bind()` for data and observations
-- `GradientResult` for symbol-queryable gradients
+Users currently pass unconstrained values (`sigma = std::log(0.5)`) because
+the posterior operates in unconstrained space internally. The posterior already
+has `inverse()` — apply it to init values so users can write:
 
-Gaps:
-- Simplex/Cholesky transforms not integrated into auto-transform
-- MCMC diagnostics (ESS, R-hat) not implemented
-- Binding-centric API not complete (see roadmap)
+```cpp
+posterior.sample(config, {sigma = 0.5, a = -2.0, z_b = zeros}, rng);
+// posterior internally: z_sigma = log(0.5)
+```
 
-## Roadmap: Binding-Centric API
+## Known Rough Edges (to fix during migration)
 
-See `mcmc/BINDING_API_PLAN.md` for detailed implementation plan.
+### Constraint transform duplication (4 copies)
+`applyConstraint` logic appears independently in `eval.h`, `indexed_eval.h`,
+`collect_log_prob.h`, and `random_var.h`. Consolidate into `constraints.h`.
 
-**Goal**: Unify all parameter interactions around binding syntax.
+### Atom ID matching duplication (3 copies)
+"Two atoms share the same Id regardless of effect" is reimplemented in `diff.h`,
+`indexed_eval.h`, and `collect_log_prob.h`. Extract to `same_atom_id_v` in `core.h`.
 
-| Step | Feature | Status |
-|------|---------|--------|
-| 1 | `ParameterState` class | 🔲 Not started |
-| 2 | `posterior(alpha = 0.5, ...)` evaluation | 🔲 Not started |
-| 3 | `gradientAt(alpha = 0.5, ...)` | 🔲 Not started |
-| 4 | `posterior.state(alpha, beta, ...)` | 🔲 Not started |
-| 5 | `Samples` container with symbol access | 🔲 Not started |
-| 6 | `posterior.sample(hmc(...), ...)` | 🔲 Not started |
-| 7 | Update examples to new API | 🔲 Not started |
+### DimIndexMap uses runtime RTTI
+`indexed_eval.h` uses `std::unordered_map<std::type_index, SizeT>` — the only
+RTTI in the codebase. Replace with compile-time typed dimension index pack.
 
-**Key insight**: The posterior already knows its parameters from `infer(alpha, beta, sigma, y)`. All subsequent operations should use this knowledge rather than requiring flat arrays with implicit ordering.
+### SumOver operator overloads incomplete
+Only `operator+` is defined. Missing `*`, `-`, `/`. Trap: `2 * SumOver<...>` fails.
+Fix when generalizing to ReduceOver.
+
+### Hardcoded arity {0,1,2,3}
+`All<S>`, `substituteRecImpl`, and `collectFromChildren` have explicit overloads
+for 0-3 children. Replace with variadic implementations.
+
+### toString can't render SumOver/IndexedSymbol
+The standard fold sees SumOver as a terminal and prints "?". Fix when moving
+toString to direct recursion with ReduceOver awareness.
+
+## Mathematical Direction
+
+The symbol-lookup pattern extends naturally into deeper mathematics:
+
+**Level 1 (current target): Multivariable calculus for MCMC**
+- `grad(f)[x]` — partial derivatives (rank 1 covector)
+- `grad(grad(f))[x, y]` — Hessian components (rank 2 tensor)
+- Indexed reductions: Sum, Product, LogSumExp
+
+**Level 2: Tensor algebra for Riemannian methods**
+- Fisher information metric: `fisher(model)[x, y]`
+- Metric tensors for Riemannian HMC
+- Einstein summation via typed indices
+
+**Level 3: Differential forms for variational methods**
+- `d(omega)` — exterior derivative (generalizes grad, curl, div)
+- Wedge products
+- Integration on manifolds
+
+For now, focus on Level 1 — it covers all practical MCMC needs. The design
+should not preclude Levels 2-3 but shouldn't over-engineer toward them.
+
+## Roadmap
+
+| Priority | Feature | See |
+|----------|---------|-----|
+| **Now** | Relax operator `requires` clause | `operators.h:156` |
+| **Now** | Strategy migration (phases 1–5) | `migration/README.md` |
+| **Next** | Symbol-forward MCMC (phase 6) | `migration/phase6.md` |
+| **Next** | `Grad<Expr>` with typed rank via nesting | `migration/phase4.md` |
+| **Later** | Simplex/Cholesky auto-transforms | `mcmc/support.h` TODO |
+| **Later** | MCMC diagnostics (ESS, R-hat) via `diag[alpha].ess` | — |
+| **Later** | Riemannian HMC with Fisher metric | — |

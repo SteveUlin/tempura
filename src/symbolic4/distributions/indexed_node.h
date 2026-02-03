@@ -77,6 +77,10 @@ struct IndexedRandomVar {
   using dist_type = Dist;
   using dims_list = DimsList;
   using symbol_type = detail::make_indexed_symbol_t<Id, DimsList>;
+  using discoverable_type = Atom<Id, IndexedSample<Dist, DimsList>>;
+
+  // Unconstrained symbol type (for HMC / gradient differentiation)
+  using unconstrained_symbol_type = symbol_type;
 
   // For backward compatibility: single-dim case exposes dim_tag
   using dim_tag = Head_t<DimsList>;
@@ -85,15 +89,15 @@ struct IndexedRandomVar {
 
   constexpr explicit IndexedRandomVar(Dist dist) : dist_{dist} {}
 
-  // Get the indexed symbol representing this plate
-  static constexpr auto sym() { return symbol_type{}; }
+  // Discoverable symbol (for use in expressions - carries dist info)
+  // Enables auto-discovery by collectLogProbs and discoverParams
+  constexpr auto sym() const { return discoverable_type{IndexedSample<Dist, DimsList>{dist_}}; }
 
-  // Free symbol for binding compatibility (same as sym() for IndexedSymbol)
-  // IndexedSymbol doesn't use effect types, so sym() and freeSym() are identical
+  // Free symbol for bindings (IndexedSymbol - no effect, just identity + dims)
   static constexpr auto freeSym() { return symbol_type{}; }
 
-  // Implicit conversion to symbol (for use in expressions)
-  constexpr operator symbol_type() const { return sym(); }
+  // Implicit conversion to discoverable symbol (for use in expressions)
+  constexpr operator discoverable_type() const { return sym(); }
 
   // Log-probability for ONE instance (symbolic template)
   constexpr auto instanceLogProb() const { return dist_.logProbFor(sym()); }
@@ -140,7 +144,7 @@ template <typename T>
 concept IsIndexedRandomVar = requires(const T& node) {
   typename T::id_type;
   typename T::dims_list;
-  { T::sym() };
+  { node.sym() };
   { node.logProb() };
   { node.dist() };
 };

@@ -422,5 +422,115 @@ auto main() -> int {
     }
   };
 
+  // ===========================================================================
+  // Non-centered parameterization
+  // ===========================================================================
+
+  "non-centered parameterization with infer"_test = [] {
+    struct Groups {};
+
+    // Hierarchical model with non-centered parameterization:
+    //   mu ~ Normal(0, 5)
+    //   sigma ~ Exponential(1)
+    //   z[i] ~ Normal(0, 1)           ← standard normal in z-space
+    //   theta[i] = mu + sigma * z[i]  ← deterministic transform
+    //   y[i] ~ Normal(theta[i], 1)
+    auto mu = normal(0.0, 5.0);
+    auto sigma = exponential(1.0);
+    auto z = plate<Groups>(normal(lit(0.0), lit(1.0)));
+
+    // Non-centered: theta = mu + sigma * z (used inline in likelihood)
+    auto theta_expr = mu.constrainedExpr() + sigma.constrainedExpr() * z.sym();
+    auto y = plate<Groups>(normal(theta_expr, lit(1.0)));
+
+    constexpr std::size_t kN = 5;
+    std::vector<double> y_data = {1.2, 2.3, 0.8, 1.5, 2.0};
+
+    auto posterior = infer(y)
+        .bind(y = indexed(y_data));
+
+    // State dim: mu (1 scalar) + sigma (1 scalar) + z (5 indexed) = 7
+    expectEq(posterior.stateDim(), 2 + kN);
+
+    // Evaluate log-prob at a test point
+    // State layout: [z_mu, z_sigma, z[0], ..., z[4]]
+    std::vector<double> state(2 + kN, 0.0);
+    double lp = posterior.logProb(state);
+    std::cout << "Non-centered logProb at zeros: " << lp << "\n";
+    expectTrue(std::isfinite(lp));
+
+    // Gradient matches finite differences
+    auto grad = posterior.gradient(state);
+    constexpr double eps = 1e-5;
+
+    for (std::size_t i = 0; i < state.size(); ++i) {
+      std::vector<double> z_plus = state;
+      std::vector<double> z_minus = state;
+      z_plus[i] += eps;
+      z_minus[i] -= eps;
+
+      double fd_grad = (posterior.logProb(z_plus) - posterior.logProb(z_minus)) / (2 * eps);
+      double tol = std::max(1e-4, std::abs(fd_grad) * 0.01);
+      expectNear(fd_grad, grad[i], tol);
+    }
+
+    std::cout << "Non-centered parameterization: all gradients match ✓\n";
+  };
+
+  "bmj-style non-centered model"_test = [] {
+    struct Countries {};
+
+    // BMJ model (non-centered):
+    //   a ~ Normal(-2, 1)
+    //   sigma ~ Exponential(1)
+    //   z_b[L] ~ Normal(0, 1)
+    //   p[L] = logistic(a + sigma * z_b[L])
+    //   k[L] ~ Binomial(n[L], p[L])
+    auto a = normal(-2.0, 1.0);
+    auto sigma = exponential(1.0);
+    auto z_b = plate<Countries>(normal(lit(0.0), lit(1.0)));
+
+    auto n = data<Countries>();
+
+    // p = sigmoid(a + sigma * z_b)
+    auto p = 1_c / (1_c + exp(-(a.constrainedExpr() + sigma.constrainedExpr() * z_b.sym())));
+    auto k = plate<Countries>(binomial(n, p));
+
+    // Small test data: 4 countries
+    constexpr std::size_t kNumCountries = 4;
+    std::vector<double> n_obs = {10.0, 20.0, 15.0, 8.0};
+    std::vector<double> k_obs = {2.0, 3.0, 1.0, 2.0};
+
+    auto posterior = infer(k)
+        .bind(n = indexed(n_obs), k = indexed(k_obs));
+
+    // State dim: a (1) + sigma (1) + z_b (4) = 6
+    expectEq(posterior.stateDim(), 2 + kNumCountries);
+
+    // Evaluate log-prob
+    std::vector<double> state(2 + kNumCountries, 0.0);
+    state[0] = -2.0;  // a ≈ -2 in unconstrained space
+    double lp = posterior.logProb(state);
+    std::cout << "BMJ non-centered logProb: " << lp << "\n";
+    expectTrue(std::isfinite(lp));
+
+    // Gradient matches finite differences
+    auto grad = posterior.gradient(state);
+    constexpr double eps = 1e-5;
+
+    for (std::size_t i = 0; i < state.size(); ++i) {
+      std::vector<double> z_plus = state;
+      std::vector<double> z_minus = state;
+      z_plus[i] += eps;
+      z_minus[i] -= eps;
+
+      double fd_grad = (posterior.logProb(z_plus) - posterior.logProb(z_minus)) / (2 * eps);
+      double tol = std::max(1e-4, std::abs(fd_grad) * 0.01);
+      expectNear(fd_grad, grad[i], tol);
+    }
+
+    std::cout << "BMJ non-centered: all gradients match ✓\n";
+  };
+
   return TestRegistry::result();
 }

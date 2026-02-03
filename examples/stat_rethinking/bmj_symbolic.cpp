@@ -1,17 +1,21 @@
-// BMJ Weekend Submissions - Symbolic Auto-Diff Implementation
+// BMJ Weekend Submissions - Using Non-Centered Parameterization
 // Statistical Rethinking 2025 - Homework B01
 //
-// Demonstrates symbolic4's SumOver and differentiate() for automatic gradients.
+// Demonstrates:
+// - Non-centered parameterization for hierarchical models
+// - Indexed latent parameters with plate<>()
+// - Automatic dynamic HMC for runtime-sized state
+// - Symbol-indexed sample access with DynamicSamples
 //
-// Model:
+// Model (non-centered):
 //   a ~ Normal(-2, 1)
 //   sigma ~ Exponential(1)
-//   b[L] ~ Normal(0, sigma)
+//   z_b[L] ~ Normal(0, 1)        # Standardized effects
+//   b[L] = sigma * z_b[L]        # Deterministic (not sampled)
 //   logit(p[L]) = a + b[L]
 //   k[L] ~ Binomial(n[L], p[L])
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <fstream>
 #include <numeric>
@@ -20,12 +24,12 @@
 #include <string>
 #include <vector>
 
-#include "bayes/estimation/hmc.h"
-#include "bayes/estimation/metropolis_hastings.h"
 #include "csv.h"
-#include "symbolic4/distributions/indexed_node.h"
-#include "symbolic4/strategy/diff.h"
-#include "symbolic4/symbolic4.h"
+#include "symbolic4/indexed/data.h"
+#include "symbolic4/indexed/indexed.h"
+#include "symbolic4/infer.h"
+#include "symbolic4/mcmc/samples.h"
+#include "symbolic4/mcmc/sampler.h"
 
 using namespace tempura;
 using namespace tempura::symbolic4;
@@ -71,66 +75,6 @@ auto loadData(const std::string& path) -> std::vector<CountryData> {
 }
 
 // ============================================================================
-// Model
-// ============================================================================
-//
-//   a ~ Normal(-2, 1)
-//   sigma ~ Exponential(1)
-//   b[i] ~ Normal(0, sigma)
-//   k[i] ~ Binomial(n[i], sigmoid(a + b[i]))
-//
-// ============================================================================
-
-struct Countries {};
-
-// Parameters
-inline auto a_rv = normal<struct A>(-2_c, 1_c);          // a ~ Normal(-2, 1)
-inline auto sigma_rv = exponential<struct Sigma>(1_c);  // sigma ~ Exp(1), auto Jacobian
-inline auto sigma = sigma_rv.constrainedExpr();         // exp(z_sigma)
-
-inline auto b_rv = plate<Countries, struct B>(normal(0_c, sigma));  // b[i] ~ Normal(0, sigma)
-
-// Data symbol
-constexpr IndexedSymbol<struct N, Countries> n_sym;
-
-// Derived quantity
-inline auto p = 1_c / (1_c + exp(-(a_rv.constrainedExpr() + b_rv.sym())));
-
-// Likelihood
-inline auto k_rv = plate<Countries, struct K>(binomial(n_sym, p));  // k[i] ~ Binomial(n[i], p[i])
-
-// Log-posterior - automatic!
-inline auto log_posterior = jointLogProb(a_rv, sigma_rv, b_rv, k_rv);
-
-// ============================================================================
-// Evaluation Helper
-// ============================================================================
-
-auto makeBindings(double a_val, double z_sigma_val,
-                  std::span<const double> b_vals,
-                  std::span<const double> k_vals,
-                  std::span<const double> n_vals) {
-  using BSym = decltype(b_rv.freeSym());
-  using KSym = decltype(k_rv.freeSym());
-  using NSym = decltype(n_sym);
-  return BinderPack{
-      a_rv.freeSym() = a_val,
-      sigma_rv.freeSym() = z_sigma_val,
-      IndexedBinding<BSym, 1>{b_vals},
-      IndexedBinding<KSym, 1>{k_vals},
-      IndexedBinding<NSym, 1>{n_vals}};
-}
-
-template <typename Expr>
-auto eval(Expr& expr, double a_val, double z_sigma_val,
-          std::span<const double> b_vals,
-          std::span<const double> k_vals,
-          std::span<const double> n_vals) -> double {
-  auto bindings = makeBindings(a_val, z_sigma_val, b_vals, k_vals, n_vals);
-  return evaluateIndexed(expr, bindings);
-}
-
-// ============================================================================
 // Summary Statistics
 // ============================================================================
 
@@ -139,12 +83,12 @@ struct Summary {
 };
 
 auto summarize(std::vector<double> samples) -> Summary {
-  double mean = std::accumulate(samples.begin(), samples.end(), 0.0) /
-                static_cast<double>(samples.size());
+  double mean_val = std::accumulate(samples.begin(), samples.end(), 0.0) /
+                    static_cast<double>(samples.size());
   std::ranges::sort(samples);
   auto lo_idx = static_cast<std::size_t>(0.055 * static_cast<double>(samples.size() - 1));
   auto hi_idx = static_cast<std::size_t>(0.945 * static_cast<double>(samples.size() - 1));
-  return {mean, samples[lo_idx], samples[hi_idx]};
+  return {mean_val, samples[lo_idx], samples[hi_idx]};
 }
 
 auto invLogit(double x) -> double { return 1.0 / (1.0 + std::exp(-x)); }
@@ -157,12 +101,13 @@ auto main() -> int {
   std::mt19937_64 rng{42};
 
   std::println(R"(
-=== BMJ WEEKEND SUBMISSIONS - SYMBOLIC AUTO-DIFF ===
+=== BMJ WEEKEND SUBMISSIONS - NON-CENTERED PARAMETERIZATION ===
 
-Model: logit(p[L]) = a + b[L]
+Model: logit(p[L]) = a + sigma * z_b[L]
   a ~ Normal(-2, 1)
   sigma ~ Exponential(1)
-  b[L] ~ Normal(0, sigma)
+  z_b[L] ~ Normal(0, 1)        # Non-centered: standard normal
+  b[L] = sigma * z_b[L]        # Deterministic transform
   k[L] ~ Binomial(n[L], p[L])
 )");
 
@@ -183,93 +128,68 @@ Model: logit(p[L]) = a + b[L]
     n_obs[i] = static_cast<double>(countries[i].total);
   }
 
-  // Gradients computed automatically via differentiate()
-  auto grad_a = differentiate(log_posterior, a_rv.freeSym());
-  auto grad_z_sigma = differentiate(log_posterior, sigma_rv.freeSym());
+  // --------------------------------------------------------------------------
+  // Define the model using non-centered parameterization
+  // --------------------------------------------------------------------------
+  struct Countries {};
 
-  std::println("Symbolic expressions:");
-  std::println("  log_posterior: {} bytes", sizeof(log_posterior));
-  std::println("  grad_a: {} bytes", sizeof(grad_a));
-  std::println("  grad_z_sigma: {} bytes\n", sizeof(grad_z_sigma));
+  // Priors (scalar)
+  auto a = normal(-2.0, 1.0);
+  auto sigma = exponential(1.0);
 
-  // Verify gradients via finite difference
-  std::vector<double> test_b(kNumCountries);
-  std::normal_distribution<double> normal_dist{0.0, 0.1};
-  for (auto& b_i : test_b) b_i = normal_dist(rng);
+  // Non-centered parameterization: z_b[L] ~ N(0, 1), b[L] = sigma * z_b[L]
+  // This decouples the geometry of sigma from the country effects,
+  // eliminating the "funnel" that makes centered parameterization hard to sample.
+  auto z_b = plate<Countries>(normal(lit(0.0), lit(1.0)));
 
-  double test_a = -2.0, test_z_sigma = std::log(0.5);
-  constexpr double kEps = 1e-6;
+  // Data symbols
+  auto n = data<Countries>();
 
-  double sym_grad_a = eval(grad_a, test_a, test_z_sigma, test_b, k_obs, n_obs);
-  double fd_grad_a = (eval(log_posterior, test_a + kEps, test_z_sigma, test_b, k_obs, n_obs) -
-                      eval(log_posterior, test_a - kEps, test_z_sigma, test_b, k_obs, n_obs)) /
-                     (2 * kEps);
+  // Likelihood - plate over countries
+  // p[i] = sigmoid(a + sigma * z_b[i])
+  auto p = 1_c / (1_c + exp(-(a.constrainedExpr() + sigma.constrainedExpr() * z_b.sym())));
+  auto k = plate<Countries>(binomial(n, p));
 
-  double sym_grad_ls = eval(grad_z_sigma, test_a, test_z_sigma, test_b, k_obs, n_obs);
-  double fd_grad_ls = (eval(log_posterior, test_a, test_z_sigma + kEps, test_b, k_obs, n_obs) -
-                       eval(log_posterior, test_a, test_z_sigma - kEps, test_b, k_obs, n_obs)) /
-                      (2 * kEps);
+  // Build posterior - auto-discovers a, sigma, z_b from k's expression tree
+  auto posterior = infer(k)
+      .bind(n = indexed(n_obs), k = indexed(k_obs));
 
-  std::println("Gradient verification:");
-  std::println("  grad_a:         symbolic={:.6f}  fin_diff={:.6f}  diff={:.2e}",
-               sym_grad_a, fd_grad_a, std::abs(sym_grad_a - fd_grad_a));
-  std::println("  grad_z_sigma: symbolic={:.6f}  fin_diff={:.6f}  diff={:.2e}\n",
-               sym_grad_ls, fd_grad_ls, std::abs(sym_grad_ls - fd_grad_ls));
+  std::println("Model built with infer() + bind()");
+  std::println("  State dimension: {} (2 scalar + {} indexed)",
+               posterior.stateDim(), kNumCountries);
 
-  // HMC Sampling
-  constexpr std::size_t kStateDim = 2 + 38;
-  using State = std::array<double, kStateDim>;
+  // --------------------------------------------------------------------------
+  // Run HMC sampling with dynamic HMC for indexed params
+  // --------------------------------------------------------------------------
+  std::println("\nRunning HMC: warmup 500, draws 2000...");
 
-  auto log_posterior_fn = [&](const State& state) {
-    return eval(log_posterior, state[0], state[1],
-                std::span{state.data() + 2, kNumCountries}, k_obs, n_obs);
-  };
+  // Initialize: a and sigma in unconstrained space, z_b values at 0 (N(0,1) space)
+  std::vector<double> z_b_init(kNumCountries, 0.0);
 
-  auto grad_fn = [&](const State& state) {
-    State grad{};
-    std::vector<double> b_vals(state.begin() + 2, state.end());
+  auto samples = posterior.sample(
+      HmcConfig{.epsilon = 0.01, .steps = 20, .warmup = 500, .draws = 2000},
+      BinderPack{a = -2.0, sigma = std::log(0.5), z_b = z_b_init},
+      rng);
 
-    // Symbolic gradients for scalar params
-    grad[0] = eval(grad_a, state[0], state[1], b_vals, k_obs, n_obs);
-    grad[1] = eval(grad_z_sigma, state[0], state[1], b_vals, k_obs, n_obs);
+  std::println("Collected {} samples\n", samples.size());
 
-    // Finite diff for indexed params (symbolic indexed gradients not yet supported)
-    constexpr double eps = 1e-7;
-    for (std::size_t i = 0; i < kNumCountries; ++i) {
-      double orig = b_vals[i];
-      b_vals[i] = orig + eps;
-      double lp_plus = eval(log_posterior, state[0], state[1], b_vals, k_obs, n_obs);
-      b_vals[i] = orig - eps;
-      double lp_minus = eval(log_posterior, state[0], state[1], b_vals, k_obs, n_obs);
-      grad[2 + i] = (lp_plus - lp_minus) / (2 * eps);
-      b_vals[i] = orig;
-    }
-    return grad;
-  };
+  // --------------------------------------------------------------------------
+  // Posterior summaries using symbol-indexed access
+  // --------------------------------------------------------------------------
 
-  auto hmc = bayes::makeHMC<double, kStateDim>(log_posterior_fn, grad_fn, 0.01, 20);
+  // Access scalar params - returns vector<double>
+  auto a_draws = samples[a];
+  auto sigma_draws = samples[sigma];
 
-  State initial{};
-  initial[0] = -2.0;
-  initial[1] = std::log(0.5);
-
-  bayes::Chain chain{hmc, rng, initial};
-
-  std::println("HMC: burn-in 500, collecting 2000 samples...");
-  chain.advance(500);
-  chain.resetStats();
-  auto [samples, acceptance_rate] = chain.takeWithStats(2000);
-  std::println("Acceptance rate: {:.1f}%\n", acceptance_rate * 100);
-
-  // Posterior summaries
-  std::vector<double> global_mean_samples, sigma_samples;
-  for (const auto& s : samples) {
-    global_mean_samples.push_back(invLogit(s[0]));
-    sigma_samples.push_back(std::exp(s[1]));
+  // Transform to constrained space for reporting
+  std::vector<double> global_mean_samples, sigma_constrained;
+  for (std::size_t i = 0; i < a_draws.size(); ++i) {
+    global_mean_samples.push_back(invLogit(a_draws[i]));
+    sigma_constrained.push_back(std::exp(sigma_draws[i]));
   }
 
   auto global_summary = summarize(global_mean_samples);
-  auto sigma_summary = summarize(sigma_samples);
+  auto sigma_summary = summarize(sigma_constrained);
 
   std::println("=== POSTERIOR ESTIMATES ===\n");
   std::println("Global intercept: inv_logit(a) = {:.1f}% [{:.1f}%, {:.1f}%]",
@@ -277,11 +197,18 @@ Model: logit(p[L]) = a + b[L]
   std::println("Between-country SD: sigma = {:.3f} [{:.3f}, {:.3f}]\n",
                sigma_summary.mean, sigma_summary.lo, sigma_summary.hi);
 
-  // Country rankings
+  // Access indexed params - z_b are the standardized effects (z-scores)
+  auto z_b_draws = samples[z_b];  // matrix: num_draws × num_countries
+
+  // Compute country-specific probabilities
+  // b[L] = sigma * z_b[L], so p[L] = logistic(a + sigma * z_b[L])
   std::vector<std::vector<double>> p_samples(kNumCountries);
-  for (const auto& s : samples) {
-    for (std::size_t i = 0; i < kNumCountries; ++i) {
-      p_samples[i].push_back(invLogit(s[0] + s[2 + i]));
+  for (std::size_t draw = 0; draw < samples.size(); ++draw) {
+    double sigma_val = sigma_constrained[draw];
+    for (std::size_t country = 0; country < kNumCountries; ++country) {
+      double b_val = sigma_val * z_b_draws[draw, country];
+      double prob = invLogit(a_draws[draw] + b_val);
+      p_samples[country].push_back(prob);
     }
   }
 

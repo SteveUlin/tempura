@@ -1,6 +1,10 @@
 #pragma once
 
+#include <array>
+#include <cassert>
 #include <cstddef>
+#include <cstdint>
+#include <span>
 #include <utility>
 #include <vector>
 
@@ -135,6 +139,58 @@ public:
   using ParentType::ParentType;
 
   constexpr Identity() : ParentType({}, {}, {}) {};
+};
+
+// Fully dynamic 2D matrix with runtime-determined dimensions.
+// Uses column-major (LayoutLeft) storage.
+template <typename Scalar>
+class DynamicDense
+    : public GenericMatrix<Extents<std::size_t, kDynamic, kDynamic>, LayoutLeft,
+                           RangeAccessor<std::vector<Scalar>>> {
+ public:
+  using ExtentsType = Extents<std::size_t, kDynamic, kDynamic>;
+  using ParentType =
+      GenericMatrix<ExtentsType, LayoutLeft,
+                    RangeAccessor<std::vector<Scalar>>>;
+  using MappingType = typename ParentType::MappingType;
+
+  // Construct with runtime dimensions
+  DynamicDense(std::size_t rows, std::size_t cols)
+      : ParentType{ExtentsType{rows, cols}, MappingType{ExtentsType{rows, cols}},
+                   std::vector<Scalar>(rows * cols)} {}
+
+  // Resize (reallocates if needed)
+  void resize(std::size_t rows, std::size_t cols) {
+    *this = DynamicDense(rows, cols);
+  }
+
+  // Reserve capacity without changing dimensions.
+  // Reserves space for max_rows * cols() elements.
+  void reserveRows(std::size_t max_rows) {
+    this->data().reserve(max_rows * this->cols());
+  }
+
+  // Append a row (grows the matrix).
+  // For column-major layout, this requires reshuffling data.
+  void pushRow(std::span<const Scalar> row) {
+    assert(row.size() == this->cols());
+    std::size_t old_rows = this->rows();
+    std::size_t num_cols = this->cols();
+    std::size_t new_rows = old_rows + 1;
+
+    // Create new matrix with one more row
+    DynamicDense new_mat(new_rows, num_cols);
+
+    // Copy existing data (column by column for column-major)
+    for (std::size_t j = 0; j < num_cols; ++j) {
+      for (std::size_t i = 0; i < old_rows; ++i) {
+        new_mat[i, j] = (*this)[i, j];
+      }
+      new_mat[old_rows, j] = row[j];
+    }
+
+    *this = std::move(new_mat);
+  }
 };
 
 }  // namespace tempura::matrix3

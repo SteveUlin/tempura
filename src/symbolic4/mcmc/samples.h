@@ -2,12 +2,19 @@
 
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <cmath>
 #include <cstddef>
 #include <iterator>
 #include <numeric>
+#include <span>
+#include <tuple>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
+#include "matrix3/matrix.h"
+#include "symbolic4/distributions/indexed_node.h"
 #include "symbolic4/distributions/random_var.h"
 #include "symbolic4/mcmc/state.h"
 
@@ -123,6 +130,162 @@ class Samples {
  private:
   std::vector<ArrayType> draws_;
 };
+
+// ============================================================================
+// DynamicSamples - Samples container for models with indexed latent params
+// ============================================================================
+//
+// For models where parameter dimensions are determined at runtime (plate models),
+// this container uses matrix3::DynamicDense for efficient storage.
+//
+// Usage:
+//   DynamicSamples<SymbolsTuple, SpecsTuple> samples(symbols, specs, state_dim);
+//   samples.push_back(draw_span);
+//
+//   // Scalar param: returns vector<double> of all draws
+//   auto mu_draws = samples[mu];
+//
+//   // Indexed param: returns DynamicDense<double> (draws × groups)
+//   auto theta_draws = samples[theta];  // matrix: num_draws × group_size
+//
+// ============================================================================
+
+namespace samples_detail {
+
+// Helper to find symbol index in tuple
+template <typename Sym, typename SymsTuple, std::size_t I = 0>
+struct SymbolIndex {
+  static constexpr std::size_t value = [] {
+    if constexpr (I >= std::tuple_size_v<SymsTuple>) {
+      return std::size_t(-1);
+    } else if constexpr (std::is_same_v<Sym, std::tuple_element_t<I, SymsTuple>>) {
+      return I;
+    } else {
+      return SymbolIndex<Sym, SymsTuple, I + 1>::value;
+    }
+  }();
+};
+
+// Get the symbol type used in the samples tuple for a parameter
+// - Scalar RandomVar: uses unconstrained_symbol_type (Atom<Id, Free>)
+// - IndexedRandomVar: uses symbol_type (IndexedSymbol<Id, Dims...>)
+template <typename P>
+using ParamSymbolType = std::conditional_t<
+    IsIndexedRandomVar<P>,
+    typename P::symbol_type,
+    typename P::unconstrained_symbol_type>;
+
+}  // namespace samples_detail
+
+template <typename SymbolsTuple, typename SpecsTuple>
+class DynamicSamples {
+ public:
+  static constexpr std::size_t NumSlots = std::tuple_size_v<SymbolsTuple>;
+
+  DynamicSamples(SymbolsTuple symbols, SpecsTuple specs, std::size_t state_dim)
+      : symbols_{symbols}, specs_{specs}, state_dim_{state_dim}, data_{0, state_dim} {
+    computeOffsets();
+  }
+
+  void push_back(std::span<const double> draw) {
+    assert(draw.size() == state_dim_);
+    data_.pushRow(draw);
+  }
+
+  void reserve(std::size_t num_draws) { data_.reserveRows(num_draws); }
+
+  auto size() const -> std::size_t { return data_.rows(); }
+
+  auto empty() const -> bool { return data_.rows() == 0; }
+
+  // Access all values for a scalar parameter (returns vector<double>)
+  template <typename P>
+    requires(IsRandomVar<P> && !IsIndexedRandomVar<P>)
+  auto operator[](const P& /*p*/) const -> std::vector<double> {
+    // RandomVar stores unconstrained symbols (Atom<Id, Free>) in the samples
+    using SymType = typename P::unconstrained_symbol_type;
+    constexpr std::size_t idx = samples_detail::SymbolIndex<SymType, SymbolsTuple>::value;
+    static_assert(idx < NumSlots, "Parameter not found in DynamicSamples");
+
+    std::size_t offset = offsets_[idx];
+    std::vector<double> result;
+    result.reserve(data_.rows());
+    for (std::size_t i = 0; i < data_.rows(); ++i) {
+      result.push_back(data_[i, offset]);
+    }
+    return result;
+  }
+
+  // Access all values for an indexed parameter (returns DynamicDense matrix)
+  template <typename P>
+    requires IsIndexedRandomVar<P>
+  auto operator[](const P& /*p*/) const -> matrix3::DynamicDense<double> {
+    // IndexedRandomVar's symbol_type is IndexedSymbol<Id, Dims...>
+    using SymType = typename P::symbol_type;
+    constexpr std::size_t idx = samples_detail::SymbolIndex<SymType, SymbolsTuple>::value;
+    static_assert(idx < NumSlots, "Parameter not found in DynamicSamples");
+
+    std::size_t offset = offsets_[idx];
+    std::size_t param_size = std::get<idx>(specs_).size();
+    std::size_t num_draws = data_.rows();
+
+    matrix3::DynamicDense<double> result(num_draws, param_size);
+    for (std::size_t i = 0; i < num_draws; ++i) {
+      for (std::size_t j = 0; j < param_size; ++j) {
+        result[i, j] = data_[i, offset + j];
+      }
+    }
+    return result;
+  }
+
+  // Raw access to underlying storage
+  auto data() const -> const matrix3::DynamicDense<double>& { return data_; }
+  auto data() -> matrix3::DynamicDense<double>& { return data_; }
+
+  // Get state dimension
+  auto stateDim() const -> std::size_t { return state_dim_; }
+
+  // Get offset for a parameter
+  template <typename P>
+  auto offset(const P& /*p*/) const -> std::size_t {
+    using SymType = samples_detail::ParamSymbolType<P>;
+    constexpr std::size_t idx = samples_detail::SymbolIndex<SymType, SymbolsTuple>::value;
+    static_assert(idx < NumSlots, "Parameter not found in DynamicSamples");
+    return offsets_[idx];
+  }
+
+  // Get size for a parameter
+  template <typename P>
+  auto paramSize(const P& /*p*/) const -> std::size_t {
+    using SymType = samples_detail::ParamSymbolType<P>;
+    constexpr std::size_t idx = samples_detail::SymbolIndex<SymType, SymbolsTuple>::value;
+    static_assert(idx < NumSlots, "Parameter not found in DynamicSamples");
+    return std::get<idx>(specs_).size();
+  }
+
+ private:
+  SymbolsTuple symbols_;
+  SpecsTuple specs_;
+  std::size_t state_dim_;
+  matrix3::DynamicDense<double> data_;  // (num_draws × state_dim)
+  std::array<std::size_t, NumSlots> offsets_;
+
+  void computeOffsets() {
+    computeOffsetsImpl(std::make_index_sequence<NumSlots>{});
+  }
+
+  template <std::size_t... Is>
+  void computeOffsetsImpl(std::index_sequence<Is...>) {
+    std::size_t running = 0;
+    ((offsets_[Is] = running, running += std::get<Is>(specs_).size()), ...);
+  }
+};
+
+// Factory function
+template <typename SymbolsTuple, typename SpecsTuple>
+auto makeDynamicSamples(SymbolsTuple symbols, SpecsTuple specs, std::size_t state_dim) {
+  return DynamicSamples<SymbolsTuple, SpecsTuple>{symbols, specs, state_dim};
+}
 
 // ============================================================================
 // Statistics helpers - operate on vector<double> from samples[param]

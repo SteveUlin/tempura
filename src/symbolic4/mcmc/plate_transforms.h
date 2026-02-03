@@ -238,6 +238,13 @@ struct IndexedParamSpec {
     }
     return sum;
   }
+
+  // Chain rule for gradient: convert d(logp)/dx to d(logp)/dz
+  // grad_x is the gradient w.r.t. constrained value x
+  // Returns grad_z = grad_x * dx/dz + d(logJacobian)/dz
+  auto chainRuleGrad(double grad_x, double z) const -> double {
+    return transform.chainRuleGrad(grad_x, z);
+  }
 };
 
 // ============================================================================
@@ -505,6 +512,28 @@ class PlateTransformedPosterior {
   using NonObservedSpecsTuple =
       typename ConcatNonObservedSpecs<std::make_index_sequence<NumParamSlots>>::type;
 
+  // Type-level filter to get non-observed symbols (matching specs filter)
+  template <std::size_t I>
+  struct MaybeSymbolType {
+    using SymType = std::decay_t<std::tuple_element_t<I, ParamSymbolsTuple>>;
+
+    using type = std::conditional_t<
+        IsSymbolInObsBindingsHelperFwd<SymType, ObsBindings>::value,
+        std::tuple<>,
+        std::tuple<SymType>>;
+  };
+
+  template <typename IndexSeq>
+  struct ConcatNonObservedSymbols;
+
+  template <std::size_t... Is>
+  struct ConcatNonObservedSymbols<std::index_sequence<Is...>> {
+    using type = decltype(std::tuple_cat(std::declval<typename MaybeSymbolType<Is>::type>()...));
+  };
+
+  using NonObservedSymbolsTuple =
+      typename ConcatNonObservedSymbols<std::make_index_sequence<NumParamSlots>>::type;
+
   // Check if all non-observed specs are scalar (for compile-time validation)
   static constexpr auto allParamsAreScalar() -> bool {
     return allParamsAreScalarImpl(std::make_index_sequence<std::tuple_size_v<NonObservedSpecsTuple>>{});
@@ -520,16 +549,25 @@ class PlateTransformedPosterior {
   using SamplesType =
       typename ExtractParamsFromSpecs<NonObservedSpecsTuple>::template apply<Samples>;
 
+  // Dynamic samples type for models with indexed latent params
+  using DynamicSamplesType = DynamicSamples<NonObservedSymbolsTuple, NonObservedSpecsTuple>;
+
+  // Main sample() method - dispatches to scalar or dynamic implementation
   template <typename... Binders, std::uniform_random_bit_generator RNG>
-  auto sample(HmcConfig config, BinderPack<Binders...> init, RNG& rng) const -> SamplesType {
-    // Number of non-observed params (compile-time for scalar params)
+  auto sample(HmcConfig config, BinderPack<Binders...> init, RNG& rng) const {
+    if constexpr (allParamsAreScalar()) {
+      return sampleScalar(config, init, rng);
+    } else {
+      return sampleDynamic(config, init, rng);
+    }
+  }
+
+ private:
+  // Scalar-only sampling (compile-time sized state)
+  template <typename... Binders, std::uniform_random_bit_generator RNG>
+  auto sampleScalar(HmcConfig config, BinderPack<Binders...> init, RNG& rng) const -> SamplesType {
     static constexpr std::size_t NumSampledParams = std::tuple_size_v<NonObservedSpecsTuple>;
     static_assert(NumSampledParams <= 64, "Too many parameters for sample()");
-
-    // Check that all params are scalar (indexed param support requires runtime-sized HMC)
-    static_assert(allParamsAreScalar(),
-        "sample() currently only supports scalar parameters. "
-        "Indexed parameters (from plate<>()) require a different HMC implementation.");
 
     // Convert init bindings to array
     std::array<double, NumSampledParams> z_arr{};
@@ -578,6 +616,129 @@ class PlateTransformedPosterior {
     }
 
     return samples;
+  }
+
+  // Dynamic sampling (runtime-sized state for indexed params)
+  template <typename... Binders, std::uniform_random_bit_generator RNG>
+  auto sampleDynamic(HmcConfig config, BinderPack<Binders...> init, RNG& rng) const
+      -> DynamicSamplesType {
+    // Get runtime state dimension
+    std::size_t dim = stateDim();
+
+    // Convert init bindings to vector
+    std::vector<double> z = initStateFromBindingsDynamic(init);
+    assert(z.size() == dim);
+
+    // Create dynamic HMC kernel
+    auto hmc = bayes::makeHMCDynamic(
+        [this](std::span<const double> state) { return this->logProb(state); },
+        [this](std::span<const double> state) { return this->gradient(state); },
+        config.epsilon, config.steps, dim);
+
+    double lp = hmc.logProb(z);
+
+    // Warmup
+    for (std::size_t i = 0; i < config.warmup; ++i) {
+      auto [next_z, next_lp, accepted] = hmc.step(z, lp, rng);
+      z = std::move(next_z);
+      lp = next_lp;
+    }
+
+    // Collect samples (transformed to constrained space)
+    // Build filtered symbols and specs tuples (excluding observed params)
+    auto non_observed_symbols = buildNonObservedSymbols(std::make_index_sequence<NumParamSlots>{});
+    auto non_observed_specs = buildNonObservedSpecs(std::make_index_sequence<NumParamSlots>{});
+    DynamicSamplesType samples(non_observed_symbols, non_observed_specs, dim);
+    samples.reserve(config.draws);
+
+    for (std::size_t i = 0; i < config.draws; ++i) {
+      auto [next_z, next_lp, accepted] = hmc.step(z, lp, rng);
+      z = std::move(next_z);
+      lp = next_lp;
+
+      // Transform to constrained space and add to samples
+      auto constrained = transform(std::span<const double>(z));
+      samples.push_back(std::span<const double>(constrained));
+    }
+
+    return samples;
+  }
+
+  // Initialize dynamic state from bindings (handles vector<double> for indexed params)
+  template <typename... Binders>
+  auto initStateFromBindingsDynamic(BinderPack<Binders...> bindings) const -> std::vector<double> {
+    std::size_t dim = stateDim();
+    std::vector<double> z(dim);
+    std::size_t offset = 0;
+    initStateFromBindingsDynamicImpl(bindings, z, offset,
+                                      std::make_index_sequence<NumParamSlots>{});
+    return z;
+  }
+
+  template <typename... Binders, std::size_t... Is>
+  void initStateFromBindingsDynamicImpl(BinderPack<Binders...> bindings,
+                                         std::vector<double>& z,
+                                         std::size_t& offset,
+                                         std::index_sequence<Is...>) const {
+    (extractBindingValueDynamic<Is>(bindings, z, offset), ...);
+  }
+
+  template <std::size_t I, typename... Binders>
+  void extractBindingValueDynamic(BinderPack<Binders...> bindings,
+                                   std::vector<double>& z,
+                                   std::size_t& offset) const {
+    using SymType = std::decay_t<std::tuple_element_t<I, ParamSymbolsTuple>>;
+    if constexpr (isSymbolObserved<SymType>()) {
+      return;  // Skip observed params
+    } else {
+      const auto& spec = std::get<I>(specs_);
+      std::size_t n = spec.size();
+
+      if constexpr (is_scalar_param_spec_v<std::decay_t<decltype(spec)>>) {
+        // Scalar param
+        z[offset] = static_cast<double>(bindings[SymType{}]);
+        offset += 1;
+      } else {
+        // Indexed param - expect IndexedBinding with vector<double> values
+        auto binding = bindings[SymType{}];
+        for (std::size_t i = 0; i < n; ++i) {
+          z[offset + i] = binding.at(i);
+        }
+        offset += n;
+      }
+    }
+  }
+
+  // Build filtered symbols tuple (excluding observed params)
+  template <std::size_t... Is>
+  auto buildNonObservedSymbols(std::index_sequence<Is...>) const -> NonObservedSymbolsTuple {
+    return std::tuple_cat(maybeIncludeSymbol<Is>()...);
+  }
+
+  template <std::size_t I>
+  auto maybeIncludeSymbol() const {
+    using SymType = std::decay_t<std::tuple_element_t<I, ParamSymbolsTuple>>;
+    if constexpr (isSymbolObserved<SymType>()) {
+      return std::tuple<>();
+    } else {
+      return std::make_tuple(std::get<I>(symbols_));
+    }
+  }
+
+  // Build filtered specs tuple (excluding observed params)
+  template <std::size_t... Is>
+  auto buildNonObservedSpecs(std::index_sequence<Is...>) const -> NonObservedSpecsTuple {
+    return std::tuple_cat(maybeIncludeSpec<Is>()...);
+  }
+
+  template <std::size_t I>
+  auto maybeIncludeSpec() const {
+    using SymType = std::decay_t<std::tuple_element_t<I, ParamSymbolsTuple>>;
+    if constexpr (isSymbolObserved<SymType>()) {
+      return std::tuple<>();
+    } else {
+      return std::make_tuple(std::get<I>(specs_));
+    }
   }
 
  private:
@@ -755,7 +916,9 @@ class PlateTransformedPosterior {
     return offsets;
   }
 
-  // Bind unconstrained value at a specific offset (doesn't modify offset)
+  // Bind value at a specific offset (doesn't modify offset)
+  // For scalar params: bind unconstrained value (expression contains transform like exp(z))
+  // For indexed params: bind CONSTRAINED value (expression uses IndexedSymbol directly)
   template <std::size_t I>
   auto maybeBindParamUnconstrainedAtOffset(std::span<const double> z, std::size_t offset) const {
     using SymType = std::decay_t<decltype(std::get<I>(symbols_))>;
@@ -767,15 +930,19 @@ class PlateTransformedPosterior {
       const auto& sym = std::get<I>(symbols_);
 
       if constexpr (is_scalar_param_spec_v<std::decay_t<decltype(spec)>>) {
+        // Scalar: bind unconstrained value (expression applies transform via Sample atom)
         double val = z[offset];
         return std::make_tuple(sym = val);
       } else {
-        // For indexed params, also bind unconstrained values
+        // Indexed: bind CONSTRAINED values (IndexedSymbol doesn't apply transforms)
+        // Transform each value from unconstrained to constrained space
         std::size_t n = spec.size();
-        unconstrained_values_[I].assign(z.begin() + static_cast<std::ptrdiff_t>(offset),
-                                         z.begin() + static_cast<std::ptrdiff_t>(offset + n));
+        constrained_values_[I].resize(n);
+        for (std::size_t i = 0; i < n; ++i) {
+          constrained_values_[I][i] = spec.transformValue(z[offset + i]);
+        }
         using SymType2 = std::decay_t<decltype(sym)>;
-        return std::make_tuple(IndexedBinding<SymType2, 1>{std::span<const double>(unconstrained_values_[I])});
+        return std::make_tuple(IndexedBinding<SymType2, 1>{std::span<const double>(constrained_values_[I])});
       }
     }
   }
@@ -816,7 +983,7 @@ class PlateTransformedPosterior {
   // AND the Jacobian term (from RandomVar::logProb()), the symbolic
   // differentiation gives us the complete d(log p + log|J|)/dz directly.
   template <std::size_t I, typename Bindings>
-  void maybeComputeAnalyticGrad(std::span<const double>, const Bindings& bindings,
+  void maybeComputeAnalyticGrad(std::span<const double> z, const Bindings& bindings,
                                 std::vector<double>& grad, std::size_t& offset) const {
     using SymType = std::decay_t<std::tuple_element_t<I, ParamSymbolsTuple>>;
     if constexpr (isSymbolObserved<SymType>()) {
@@ -835,9 +1002,21 @@ class PlateTransformedPosterior {
         offset += 1;
       } else {
         // Indexed parameter: gradient for each element
-        // For SumOver expressions, diff distributes into the sum
+        // Since we bind CONSTRAINED values (x) but HMC samples UNCONSTRAINED (z),
+        // we need: d(logp)/dz = d(logp)/dx * dx/dz + d(logJacobian)/dz
+        //
+        // For SumOver expressions, diff distributes into the sum.
+        // grad_expr is d(logp)/d(IndexedSymbol) = d(logp)/dx (since we bind x values)
         for (std::size_t i = 0; i < n; ++i) {
-          double grad_z = evaluateGradAtIndex<I>(grad_expr, bindings, i);
+          double z_i = z[offset + i];
+
+          // d(logp)/dx - gradient w.r.t. constrained value
+          double grad_x = evaluateGradAtIndex<I>(grad_expr, bindings, i);
+
+          // Apply chain rule: multiply by dx/dz and add Jacobian gradient
+          // For positive: dx/dz = exp(z), d(logJ)/dz = 1
+          // For unit: dx/dz = sigmoid(z)*(1-sigmoid(z)), d(logJ)/dz = 1 - 2*sigmoid(z)
+          double grad_z = spec.chainRuleGrad(grad_x, z_i);
           grad[offset + i] = grad_z;
         }
         offset += n;
@@ -848,12 +1027,11 @@ class PlateTransformedPosterior {
   // Evaluate gradient for indexed parameter at specific index
   template <std::size_t I, typename GradExpr, typename Bindings>
   double evaluateGradAtIndex(const GradExpr& grad_expr, const Bindings& bindings,
-                             [[maybe_unused]] std::size_t idx) const {
-    // For indexed parameters, the gradient expression contains SumOver
-    // We need to evaluate the total gradient contribution for element idx
-    // This is typically just evaluating the expression where the indexed
-    // symbol gets the value at idx (already in bindings)
-    return evaluateIndexed(grad_expr, bindings);
+                             std::size_t idx) const {
+    // For indexed parameters, the gradient expression is SumOver<DimTag, inner>
+    // We need d(logp)/d(b[idx]), which is just the inner expr evaluated at idx
+    // (not summed over all indices)
+    return evaluateAtIndex(grad_expr, bindings, idx);
   }
 
   // Finite differences fallback
@@ -956,6 +1134,7 @@ class PlateTransformedPosterior {
   // Mutable storage for indexed values (needed for lifetime management)
   mutable std::array<std::vector<double>, NumParamSlots> indexed_values_;
   mutable std::array<std::vector<double>, NumParamSlots> unconstrained_values_;
+  mutable std::array<std::vector<double>, NumParamSlots> constrained_values_;
 };
 
 // ============================================================================

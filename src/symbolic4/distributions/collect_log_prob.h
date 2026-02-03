@@ -136,8 +136,30 @@ constexpr auto collectFromExprImpl(Visited visited, E expr) {
     // SumOver<DimTag, Body> - recurse into body expression
     // Must check before is_terminal_v since SumOver is not an Expression
     return collectFromExprImpl(visited, expr.expr_);
+  } else if constexpr (is_indexed_random_var_atom_v<E>) {
+    // Found an indexed random variable (plate)!
+    using IdType = get_id_t<E>;
+
+    if constexpr (id_set_contains_v<IdType, Visited>) {
+      return std::pair{Constant<0>{}, visited};
+    } else {
+      using NewVisited = id_set_insert_t<IdType, Visited>;
+      using Dist = typename E::effect_type::dist_type;
+      using DimsList = typename E::effect_type::dims_list;
+
+      // Reconstruct IndexedRandomVar to get logProb() (which includes SumOver)
+      // No constraint transform — indexed params handle constraints at bind-time
+      auto rv = IndexedRandomVar<Dist, IdType, DimsList>{expr.effect_.dist_};
+      auto rv_logprob = rv.logProb();
+
+      // Recursively discover parents from the distribution's parameters
+      auto [parent_logprobs, final_visited] =
+          collectFromExprImpl(NewVisited{}, rv_logprob);
+
+      return std::pair{addNonZero(rv_logprob, parent_logprobs), final_visited};
+    }
   } else if constexpr (is_random_var_atom_v<E>) {
-    // Found a random variable!
+    // Found a scalar random variable!
     using IdType = get_id_t<E>;
 
     if constexpr (id_set_contains_v<IdType, Visited>) {
@@ -154,7 +176,12 @@ constexpr auto collectFromExprImpl(Visited visited, E expr) {
       auto constrained = constrainedExprFor<Support, IdType>();
       auto jacobian = jacobianFor<Support, IdType>();
       auto logprob = expr.effect_.dist_.logProbFor(constrained) + jacobian;
-      return std::pair{logprob, NewVisited{}};
+
+      // Recursively discover parents from the distribution's logProb expression
+      auto [parent_logprobs, final_visited] =
+          collectFromExprImpl(NewVisited{}, logprob);
+
+      return std::pair{addNonZero(logprob, parent_logprobs), final_visited};
     }
   } else if constexpr (is_terminal_v<E>) {
     // Non-RV terminal - return zero

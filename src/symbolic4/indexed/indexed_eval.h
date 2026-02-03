@@ -5,6 +5,7 @@
 #include <typeindex>
 
 #include "symbolic4/core.h"
+#include "symbolic4/distributions/indexed_node.h"  // For make_indexed_symbol_t, IndexedRandomVar
 #include "symbolic4/distributions/wrappers.h"  // For support type traits
 #include "symbolic4/indexed/data.h"
 #include "symbolic4/indexed/dim.h"
@@ -153,6 +154,12 @@ struct IndexedEval {
       // IndexedData - convert to its symbol and look up in indexed bindings
       using SymType = typename T::symbol_type;
       return lookupIndexedSymbol<SymType>(SymType{}, ctx);
+    } else if constexpr (is_indexed_random_var_atom_v<T>) {
+      // Atom<Id, IndexedSample<Dist, DimsList>> - look up via IndexedSymbol
+      using DimsList = typename T::effect_type::dims_list;
+      using IdType = typename T::id_type;
+      using LookupSym = detail::make_indexed_symbol_t<IdType, DimsList>;
+      return lookupIndexedSymbol<LookupSym>(LookupSym{}, ctx);
     } else if constexpr (is_random_var_atom_v<T>) {
       // Sample atom: Atom<Id, Sample<Dist>>
       // Look up by Free symbol (Atom<Id, Free>) and apply constraint transform
@@ -295,6 +302,46 @@ auto indexedFold(E expr, Ctx& ctx) -> double {
 }
 
 // ============================================================================
+// indexedFoldSingleIndex - Fold that evaluates SumOver at a single index
+// ============================================================================
+//
+// Unlike indexedFold which sums over all indices in a SumOver, this version
+// evaluates SumOver expressions at the current index (already set in context).
+// This is needed for computing element-wise gradients of indexed parameters.
+//
+// Example: For gradient of b[i], we want:
+//   d/d(b[i]) SumOver<Countries, f(b)} = d/d(b[i]) f(b[i])
+// Not the sum of all derivatives.
+//
+
+namespace detail {
+
+template <typename Interp, typename Op, typename Ctx, SizeT... Is, typename... Args>
+auto indexedFoldSingleIndexExpr([[maybe_unused]] Expression<Op, Args...> expr,
+                                Ctx& ctx, IndexSequence<Is...>) -> double {
+  return Interp::combine(ctx, Op{},
+      indexedFoldSingleIndex<Interp>(expr.template arg<Is>(), ctx)...);
+}
+
+}  // namespace detail
+
+template <typename Interp, Symbolic E, typename Ctx>
+auto indexedFoldSingleIndex(E expr, Ctx& ctx) -> double;
+
+template <typename Interp, Symbolic E, typename Ctx>
+auto indexedFoldSingleIndex(E expr, Ctx& ctx) -> double {
+  if constexpr (is_sum_over_v<E>) {
+    // For single-index mode: evaluate inner expression at current index (no summing)
+    // The dimension index should already be set in ctx.dim_indices
+    return indexedFoldSingleIndex<Interp>(expr.expr_, ctx);
+  } else if constexpr (is_expression_v<E>) {
+    return detail::indexedFoldSingleIndexExpr<Interp>(expr, ctx, MakeIndexSequence<E::arity>{});
+  } else {
+    return Interp::terminal(expr, ctx);
+  }
+}
+
+// ============================================================================
 // Binding separation helpers
 // ============================================================================
 
@@ -361,6 +408,59 @@ auto evaluateIndexed(E expr, BinderPack<Binders...> bindings) -> double {
 template <Symbolic E, typename... Args>
 auto evaluateIndexed(E expr, Args... binders) -> double {
   return evaluateIndexed(expr, BinderPack{binders...});
+}
+
+// ============================================================================
+// evaluateAtIndex - Evaluate expression at a specific index
+// ============================================================================
+//
+// For HMC with indexed params, we need gradients for individual elements.
+// This evaluates expressions containing SumOver at a specific index WITHOUT
+// summing - each SumOver just evaluates its body at the current index.
+//
+// Example: For grad_expr = SumOver<D, f> + SumOver<D, g> evaluated at index i:
+//   Returns f(i) + g(i), NOT Σⱼf(j) + Σⱼg(j)
+//
+template <Symbolic E, typename... Binders>
+auto evaluateAtIndex(E expr, BinderPack<Binders...> bindings, SizeT idx) -> double {
+  auto [scalar_tuple, indexed_tuple] = detail::SeparateBinders<Binders...>::separate(bindings);
+  auto scalars = detail::tupleToBinderPack(scalar_tuple);
+  auto indexed = detail::tupleToBinderPack(indexed_tuple);
+
+  using ScalarBindings = decltype(scalars);
+  using IndexedBindings = decltype(indexed);
+  using Interp = IndexedEval<ScalarBindings, IndexedBindings>;
+
+  typename Interp::context_type ctx{scalars, indexed, {}};
+
+  // Set the index for all dimension tags that might be present
+  // We need to infer the dimension tag from the expression or bindings
+  // For now, we use the first indexed binding's dimension to set the index
+  setDimensionIndex(ctx, indexed, idx);
+
+  // Use single-index fold - SumOver will NOT sum, just evaluate at current index
+  return indexedFoldSingleIndex<Interp>(expr, ctx);
+}
+
+// Helper to set dimension index from indexed bindings
+// Uses fold expression to find first indexed binding and set its dimension index
+template <typename Ctx, typename... Binders>
+void setDimensionIndex(Ctx& ctx, const BinderPack<Binders...>& pack, SizeT idx) {
+  bool found = false;
+  auto set_from_binding = [&]<typename B>(const B& binder) {
+    if constexpr (is_indexed_binding_v<B>) {
+      if (!found) {
+        using Sym = typename B::symbol_type;
+        if constexpr (Sym::ndims >= 1) {
+          using Dim0 = detail::At<0, typename Sym::dims_list>;
+          SizeT size = binder.size();
+          ctx.dim_indices.template set<Dim0>(idx, size);
+          found = true;
+        }
+      }
+    }
+  };
+  (set_from_binding(static_cast<const Binders&>(pack)), ...);
 }
 
 }  // namespace tempura::symbolic4

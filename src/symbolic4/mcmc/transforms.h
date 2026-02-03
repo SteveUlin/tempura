@@ -60,6 +60,11 @@ struct Unconstrained {
   // Symbolic: log|dx/dz| = 0
   template <Symbolic Z>
   static constexpr auto symbolicLogJacobian([[maybe_unused]] Z) { return lit(0.0); }
+
+  // Chain rule: grad_z = grad_x * dx/dz + d(logJ)/dz = grad_x * 1 + 0 = grad_x
+  static constexpr auto chainRuleGrad(double grad_x, [[maybe_unused]] double z) -> double {
+    return grad_x;
+  }
 };
 
 // Positive parameter: x = exp(z), z = log(x)
@@ -74,6 +79,12 @@ struct Positive {
 
   template <Symbolic Z>
   static constexpr auto symbolicLogJacobian(Z z) { return z; }
+
+  // Chain rule: grad_z = grad_x * dx/dz + d(logJ)/dz = grad_x * exp(z) + 1
+  static auto chainRuleGrad(double grad_x, double z) -> double {
+    double x = std::exp(z);
+    return grad_x * x + 1.0;
+  }
 };
 
 // (0,1) bounded: x = sigmoid(z) = 1/(1+exp(-z)), z = logit(x)
@@ -98,6 +109,15 @@ struct UnitInterval {
     auto x = lit(1.0) / (lit(1.0) + exp(-z));
     return log(x) + log(lit(1.0) - x);
   }
+
+  // Chain rule: grad_z = grad_x * dx/dz + d(logJ)/dz
+  // dx/dz = x(1-x), d(logJ)/dz = (1-x) - x = 1 - 2x
+  static auto chainRuleGrad(double grad_x, double z) -> double {
+    double x = transform(z);
+    double dx_dz = x * (1.0 - x);
+    double dlogJ_dz = 1.0 - 2.0 * x;
+    return grad_x * dx_dz + dlogJ_dz;
+  }
 };
 
 // Lower-bounded: x = a + exp(z), z = log(x - a)
@@ -109,6 +129,12 @@ struct LowerBounded {
   auto transform(double z) const -> double { return lower + std::exp(z); }
   auto inverse(double x) const -> double { return std::log(x - lower); }
   auto logJacobian(double z) const -> double { return z; }
+
+  // Same as Positive: dx/dz = exp(z), d(logJ)/dz = 1
+  auto chainRuleGrad(double grad_x, double z) const -> double {
+    double dx_dz = std::exp(z);
+    return grad_x * dx_dz + 1.0;
+  }
 };
 
 // Upper-bounded: x = b - exp(z), z = log(b - x)
@@ -120,6 +146,12 @@ struct UpperBounded {
   auto transform(double z) const -> double { return upper - std::exp(z); }
   auto inverse(double x) const -> double { return std::log(upper - x); }
   auto logJacobian(double z) const -> double { return z; }
+
+  // dx/dz = -exp(z), d(logJ)/dz = 1
+  auto chainRuleGrad(double grad_x, double z) const -> double {
+    double dx_dz = -std::exp(z);
+    return grad_x * dx_dz + 1.0;
+  }
 };
 
 // Interval (a,b): x = a + (b-a)*sigmoid(z)

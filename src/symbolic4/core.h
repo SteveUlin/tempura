@@ -245,6 +245,18 @@ struct Fraction : SymbolicTag {
 template <typename Id, typename ExprT>
 using DeterministicVar = Atom<Id, Compute<ExprT>>;
 
+// Indexed sample from distribution D over dimensions DimsList (for plate notation).
+// Mirrors Sample<D> but carries dimension info, enabling auto-discovery of
+// indexed latent parameters in expression trees.
+template <typename D, typename DimsList>
+struct IndexedSample {
+  [[no_unique_address]] D dist_;
+  using dist_type = D;
+  using dims_list = DimsList;
+  constexpr IndexedSample() = default;
+  constexpr IndexedSample(D d) : dist_{d} {}
+};
+
 // ============================================================================
 // Compound Expressions (internal nodes)
 // ============================================================================
@@ -444,6 +456,22 @@ struct IsRandomVarAtom<Atom<Id, Sample<D>>> : std::true_type {};
 
 template <typename T>
 constexpr bool is_random_var_atom_v = IsRandomVarAtom<T>::value;
+
+// Is this effect an IndexedSample?
+template <typename E>
+struct IsIndexedSampleEffect : std::false_type {};
+template <typename D, typename DimsList>
+struct IsIndexedSampleEffect<IndexedSample<D, DimsList>> : std::true_type {};
+template <typename E>
+constexpr bool is_indexed_sample_effect_v = IsIndexedSampleEffect<E>::value;
+
+// Is this atom an indexed random variable? (Atom<Id, IndexedSample<D, DimsList>>)
+template <typename T>
+struct IsIndexedRandomVarAtom : std::false_type {};
+template <typename Id, typename D, typename DimsList>
+struct IsIndexedRandomVarAtom<Atom<Id, IndexedSample<D, DimsList>>> : std::true_type {};
+template <typename T>
+constexpr bool is_indexed_random_var_atom_v = IsIndexedRandomVarAtom<T>::value;
 
 // Get the Distribution type from a Sample effect
 template <typename E>

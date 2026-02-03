@@ -22,7 +22,8 @@ class RangeAccessor {
     return self.data_[index];
   }
 
-  constexpr auto data(this auto&& self) -> decltype(auto) { return self.data_; }
+  // Parentheses around expression forces decltype(auto) to deduce reference type
+  constexpr auto data(this auto&& self) -> decltype(auto) { return (self.data_); }
 
  private:
   Range data_;

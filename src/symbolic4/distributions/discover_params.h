@@ -98,8 +98,36 @@ constexpr auto discoverFromExprImpl(Visited visited, Observed observed, E expr) 
     // SumOver<DimTag, Body> - recurse into body expression
     // Must check before is_terminal_v since SumOver is not an Expression
     return discoverFromExprImpl(visited, observed, expr.expr_);
+  } else if constexpr (is_indexed_random_var_atom_v<E>) {
+    // Found an indexed random variable atom: Atom<Id, IndexedSample<Dist, DimsList>>
+    using IdType = get_id_t<E>;
+
+    if constexpr (id_set_contains_v<IdType, Visited>) {
+      return std::pair{std::tuple<>{}, visited};
+    } else if constexpr (is_observed_id_v<IdType, Observed>) {
+      // Observed indexed RV - still traverse its distribution to find latent parents
+      using NewVisited = id_set_insert_t<IdType, Visited>;
+      using Dist = typename E::effect_type::dist_type;
+      using DimsList = typename E::effect_type::dims_list;
+      auto rv = IndexedRandomVar<Dist, IdType, DimsList>{expr.effect_.dist_};
+      auto rv_logprob = rv.logProb();
+      return discoverFromExprImpl(NewVisited{}, observed, rv_logprob);
+    } else {
+      // New latent indexed parameter - reconstruct IndexedRandomVar
+      using NewVisited = id_set_insert_t<IdType, Visited>;
+      using Dist = typename E::effect_type::dist_type;
+      using DimsList = typename E::effect_type::dims_list;
+
+      auto rv = IndexedRandomVar<Dist, IdType, DimsList>{expr.effect_.dist_};
+
+      // Also discover parents from distribution params (e.g., sigma in Normal(0, sigma))
+      auto rv_logprob = rv.logProb();
+      auto [parents, final_visited] = discoverFromExprImpl(NewVisited{}, observed, rv_logprob);
+
+      return std::pair{std::tuple_cat(std::make_tuple(rv), parents), final_visited};
+    }
   } else if constexpr (is_random_var_atom_v<E>) {
-    // Found a random variable atom: Atom<Id, Sample<Dist>>
+    // Found a scalar random variable atom: Atom<Id, Sample<Dist>>
     using IdType = get_id_t<E>;
 
     if constexpr (id_set_contains_v<IdType, Visited>) {
@@ -107,8 +135,12 @@ constexpr auto discoverFromExprImpl(Visited visited, Observed observed, E expr) 
       return std::pair{std::tuple<>{}, visited};
     } else if constexpr (is_observed_id_v<IdType, Observed>) {
       // This is an observed RV - don't include in params, but mark visited
+      // Still traverse to find latent parents
       using NewVisited = id_set_insert_t<IdType, Visited>;
-      return std::pair{std::tuple<>{}, NewVisited{}};
+      using DistType = std::decay_t<decltype(expr.effect_.dist_)>;
+      auto rv = RandomVar<DistType, IdType>{expr.effect_.dist_};
+      auto rv_logprob = rv.logProb();
+      return discoverFromExprImpl(NewVisited{}, observed, rv_logprob);
     } else {
       // New latent parameter - reconstruct the actual RandomVar!
       using NewVisited = id_set_insert_t<IdType, Visited>;
@@ -116,7 +148,12 @@ constexpr auto discoverFromExprImpl(Visited visited, Observed observed, E expr) 
 
       // Construct RandomVar<Dist, Id> - same type as original
       auto rv = RandomVar<DistType, IdType>{expr.effect_.dist_};
-      return std::pair{std::make_tuple(rv), NewVisited{}};
+
+      // Also discover parents from this RV's distribution parameters
+      auto rv_logprob = rv.logProb();
+      auto [parents, final_visited] = discoverFromExprImpl(NewVisited{}, observed, rv_logprob);
+
+      return std::pair{std::tuple_cat(std::make_tuple(rv), parents), final_visited};
     }
   } else if constexpr (is_terminal_v<E>) {
     // Non-RV terminal - nothing to discover
