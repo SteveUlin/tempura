@@ -1,7 +1,7 @@
 #pragma once
 
+#include "symbolic4/indexed/reduce_over.h"  // For is_reduce_over_v
 #include "symbolic4/operators.h"
-#include "symbolic4/scheme/cata.h"
 #include "symbolic4/simplify/ordering.h"
 
 // ============================================================================
@@ -9,67 +9,61 @@
 // ============================================================================
 //
 // Reorders children of commutative operations (Add, Mul) so that the smaller
-// child (by type ordering) comes first. This produces a canonical form where
-// x + y and y + x become the same type.
-//
-// Usage:
-//   auto expr = y + x;           // Expression<AddOp, Y, X>
-//   auto canon = canonicalize(expr);  // Expression<AddOp, X, Y>
-//
-// Runtime data (e.g., Literal values) is preserved through the transformation.
-//
-// This does NOT flatten nested operations. (a + b) + c stays as-is, it doesn't
-// become a ternary add. Each binary operation is independently canonicalized.
+// child (by type ordering) comes first. Uses direct recursion.
 //
 // ============================================================================
 
 namespace tempura::symbolic4 {
 
-struct Canonicalize {
-  // Terminals pass through unchanged (preserves Literal data)
-  template <typename T>
-  static constexpr auto terminal(T t) {
-    return t;
+namespace canon_detail {
+
+// Forward declaration
+template <Symbolic E>
+constexpr auto canonImpl(E expr);
+
+// Canonicalize an Expression by recursing into children then reordering
+template <typename Op, typename... Args, SizeT... Is>
+constexpr auto canonExpression(Expression<Op, Args...> expr, IndexSequence<Is...>) {
+  // Recursively canonicalize each child
+  auto canonicalized = Expression<Op, decltype(canonImpl(expr.template arg<Is>()))...>{
+      canonImpl(expr.template arg<Is>())...};
+  return canonicalized;
+}
+
+// Reorder commutative binary ops after canonicalizing children
+template <typename Op, typename L, typename R>
+constexpr auto canonBinary(L l, R r) {
+  if constexpr ((std::is_same_v<Op, AddOp> || std::is_same_v<Op, MulOp>) &&
+                compare(R{}, L{}) == Ordering::Less) {
+    return Expression<Op, R, L>{r, l};
+  } else {
+    return Expression<Op, L, R>{l, r};
   }
+}
 
-  // Combine: reorder commutative ops, reconstruct others
-  template <typename Op, typename... Cs>
-  static constexpr auto combine(Cs... cs) {
-    return Rule<Op, Cs...>::apply(cs...);
+template <Symbolic E>
+constexpr auto canonImpl(E expr) {
+  if constexpr (is_reduce_over_v<E>) {
+    auto inner = canonImpl(expr.expr());
+    return E::rebuild(inner);
+  } else if constexpr (is_expression_v<E>) {
+    if constexpr (E::arity == 2) {
+      // Binary: canonicalize children, then maybe reorder
+      auto l = canonImpl(expr.template arg<0>());
+      auto r = canonImpl(expr.template arg<1>());
+      using Op = typename E::op_type;
+      return canonBinary<Op>(l, r);
+    } else {
+      // Non-binary: just canonicalize children
+      return canonExpression(expr, MakeIndexSequence<E::arity>{});
+    }
+  } else {
+    // Terminal: pass through unchanged (preserves Literal data)
+    return expr;
   }
+}
 
-  // Default: reconstruct unchanged
-  template <typename Op, typename... Cs>
-  struct Rule {
-    static constexpr auto apply(Cs... cs) {
-      return Expression<Op, Cs...>{cs...};
-    }
-  };
-
-  // Addition: swap if right < left
-  template <typename L, typename R>
-  struct Rule<AddOp, L, R> {
-    static constexpr auto apply(L l, R r) {
-      if constexpr (compare(R{}, L{}) == Ordering::Less) {
-        return Expression<AddOp, R, L>{r, l};
-      } else {
-        return Expression<AddOp, L, R>{l, r};
-      }
-    }
-  };
-
-  // Multiplication: swap if right < left
-  template <typename L, typename R>
-  struct Rule<MulOp, L, R> {
-    static constexpr auto apply(L l, R r) {
-      if constexpr (compare(R{}, L{}) == Ordering::Less) {
-        return Expression<MulOp, R, L>{r, l};
-      } else {
-        return Expression<MulOp, L, R>{l, r};
-      }
-    }
-  };
-};
+}  // namespace canon_detail
 
 // ============================================================================
 // Convenience function
@@ -77,7 +71,7 @@ struct Canonicalize {
 
 template <Symbolic E>
 constexpr auto canonicalize(E expr) {
-  return fold<Canonicalize>(expr);
+  return canon_detail::canonImpl(expr);
 }
 
 }  // namespace tempura::symbolic4

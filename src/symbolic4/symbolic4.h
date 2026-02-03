@@ -5,8 +5,9 @@
 // Key design principles:
 // - Types ARE the representation (no runtime AST data structures)
 // - Everything is either Atom<Id, Effect> or Expression<Op, Args...>
-// - Recursion schemes (fold, para) provide pluggable tree traversal
-// - Identity tracking (let, fold_unique) enables DAG representation
+// - Direct recursion with if constexpr for evaluation/toString
+// - Strategy system (Stratego-inspired) for expression transforms
+// - Identity tracking (let, IdSet) enables DAG representation
 //
 // Usage:
 //   #include "symbolic4/symbolic4.h"
@@ -36,12 +37,6 @@
 
 // Identity tracking: let, LetNode, IdSet
 #include "symbolic4/let.h"
-
-// Recursion schemes
-#include "symbolic4/scheme/fold.h"         // catamorphism (fixed result type)
-#include "symbolic4/scheme/para.h"         // paramorphism (fixed result type)
-#include "symbolic4/scheme/transform.h"    // transform/paraTransform (varying result type)
-#include "symbolic4/scheme/fold_unique.h"  // catamorphism with DAG deduplication
 
 // Interpreters: evaluate, simplify, toString
 #include "symbolic4/interpreter/eval.h"

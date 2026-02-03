@@ -11,7 +11,6 @@
 #include "symbolic4/indexed/dim.h"
 #include "symbolic4/indexed/sum_over.h"
 #include "symbolic4/operators.h"
-#include "symbolic4/scheme/fold.h"
 
 // ============================================================================
 // indexed_eval.h - Evaluation for multi-dimensional indexed expressions
@@ -283,17 +282,18 @@ auto indexedFold(E expr, Ctx& ctx) -> double;
 
 template <typename Interp, Symbolic E, typename Ctx>
 auto indexedFold(E expr, Ctx& ctx) -> double {
-  if constexpr (is_sum_over_v<E>) {
-    // Handle SumOver - loop over dimension and sum
+  if constexpr (is_reduce_over_v<E>) {
+    // Handle ReduceOver - loop over dimension with ROp::identity/combine
+    using ROp = typename E::reduce_op;
     using DimTag = typename E::dim_tag;
     auto size = getDimensionSize<DimTag>(ctx.indexed);
 
-    double total = 0.0;
+    double accum = ROp::identity();
     for (SizeT i = 0; i < size; ++i) {
       ctx.dim_indices.template set<DimTag>(i, size);
-      total += indexedFold<Interp>(expr.expr_, ctx);
+      accum = ROp::combine(accum, indexedFold<Interp>(expr.expr_, ctx));
     }
-    return total;
+    return accum;
   } else if constexpr (is_expression_v<E>) {
     return detail::indexedFoldExpression<Interp>(expr, ctx, MakeIndexSequence<E::arity>{});
   } else {
@@ -330,8 +330,8 @@ auto indexedFoldSingleIndex(E expr, Ctx& ctx) -> double;
 
 template <typename Interp, Symbolic E, typename Ctx>
 auto indexedFoldSingleIndex(E expr, Ctx& ctx) -> double {
-  if constexpr (is_sum_over_v<E>) {
-    // For single-index mode: evaluate inner expression at current index (no summing)
+  if constexpr (is_reduce_over_v<E>) {
+    // For single-index mode: evaluate inner expression at current index (no reduction)
     // The dimension index should already be set in ctx.dim_indices
     return indexedFoldSingleIndex<Interp>(expr.expr_, ctx);
   } else if constexpr (is_expression_v<E>) {

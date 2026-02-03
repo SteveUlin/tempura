@@ -13,29 +13,14 @@
 // collect_log_prob.h - Automatic log-probability collection via DAG traversal
 // ============================================================================
 //
-// Problem: Manual listing of random variables is tedious and error-prone.
+// Traverses expression trees to discover all RandomVarSymbol atoms and sum
+// their log-probabilities. Uses direct recursion with variadic children.
 //
-// Current approach (joint.h):
+// Usage:
 //   auto mu = normal(0.0, 10.0);
 //   auto sigma = halfNormal(5.0);
 //   auto y = normal(mu, sigma);
-//   auto joint = logProb(mu, sigma, y);  // Must list all RVs!
-//
-// New approach (this file):
-//   auto joint = collectLogProbs(y);     // Auto-discovers mu, sigma from y
-//
-// How it works:
-//   1. Traverse the expression tree of y's log-probability
-//   2. Detect RandomVarSymbol atoms (Atom<Id, Sample<Dist>>)
-//   3. For each discovered RV, compute its log-probability
-//   4. Sum all log-probabilities
-//   5. Use IdSet to deduplicate (same RV symbol may appear multiple times)
-//
-// Key insight:
-//   When y = normal(mu, sigma) is created, mu.sym() and sigma.sym() appear
-//   in y's log-probability expression. These symbols carry their distributions
-//   via the Sample<Dist> effect. We extract the distribution and compute
-//   logProbFor(sym) to get each term.
+//   auto joint = collectLogProbs(y);  // Auto-discovers mu, sigma from y
 //
 // ============================================================================
 
@@ -69,37 +54,25 @@ constexpr auto addNonZero(A a, B b) {
 template <typename Visited, Symbolic E>
 constexpr auto collectFromExprImpl(Visited visited, E expr);
 
-// Collect from expression children (variadic), threading visited set
-template <typename Visited, typename Op>
-constexpr auto collectFromChildren(Visited visited, Op) {
-  return std::pair{Constant<0>{}, visited};
+// Variadic child processing: thread visited set through each child sequentially
+// Base case: no children
+template <typename Visited, typename Accum>
+constexpr auto collectFromChildrenImpl(Visited v, Accum a) {
+  return std::pair{a, v};
 }
 
-template <typename Visited, typename Op, typename Child>
-constexpr auto collectFromChildren(Visited visited, Op, Child child) {
-  return collectFromExprImpl(visited, child);
+// Recursive case: process first child, then rest
+template <typename Visited, typename Accum, typename C0, typename... Rest>
+constexpr auto collectFromChildrenImpl(Visited v, Accum a, C0 c0, Rest... rest) {
+  auto [r, v2] = collectFromExprImpl(v, c0);
+  return collectFromChildrenImpl(v2, addNonZero(a, r), rest...);
 }
 
-template <typename Visited, typename Op, typename C1, typename C2>
-constexpr auto collectFromChildren(Visited visited, Op, C1 c1, C2 c2) {
-  auto [r1, v1] = collectFromExprImpl(visited, c1);
-  auto [r2, v2] = collectFromExprImpl(v1, c2);
-  return std::pair{addNonZero(r1, r2), v2};
-}
-
-template <typename Visited, typename Op, typename C1, typename C2, typename C3>
-constexpr auto collectFromChildren(Visited visited, Op, C1 c1, C2 c2, C3 c3) {
-  auto [r1, v1] = collectFromExprImpl(visited, c1);
-  auto [r2, v2] = collectFromExprImpl(v1, c2);
-  auto [r3, v3] = collectFromExprImpl(v2, c3);
-  return std::pair{addNonZero(addNonZero(r1, r2), r3), v3};
-}
-
-// Dispatch expression children
+// Dispatch expression children via index sequence
 template <typename Visited, typename Op, SizeT... Is, typename... Args>
 constexpr auto collectFromExpr(Visited visited, Expression<Op, Args...> expr,
                                IndexSequence<Is...>) {
-  return collectFromChildren(visited, Op{}, expr.template arg<Is>()...);
+  return collectFromChildrenImpl(visited, Constant<0>{}, expr.template arg<Is>()...);
 }
 
 // Helper to compute constrained expression and Jacobian from distribution
@@ -129,13 +102,11 @@ constexpr auto jacobianFor() {
 }
 
 // Main implementation: collect log-probs from any RandomVarSymbol atoms
-// Returns pair{result, updated_visited_set}
 template <typename Visited, Symbolic E>
 constexpr auto collectFromExprImpl(Visited visited, E expr) {
-  if constexpr (is_sum_over_v<E>) {
-    // SumOver<DimTag, Body> - recurse into body expression
-    // Must check before is_terminal_v since SumOver is not an Expression
-    return collectFromExprImpl(visited, expr.expr_);
+  if constexpr (is_reduce_over_v<E>) {
+    // ReduceOver<ROp, DimTag, Body> - recurse into body expression
+    return collectFromExprImpl(visited, expr.expr());
   } else if constexpr (is_indexed_random_var_atom_v<E>) {
     // Found an indexed random variable (plate)!
     using IdType = get_id_t<E>;
@@ -147,12 +118,9 @@ constexpr auto collectFromExprImpl(Visited visited, E expr) {
       using Dist = typename E::effect_type::dist_type;
       using DimsList = typename E::effect_type::dims_list;
 
-      // Reconstruct IndexedRandomVar to get logProb() (which includes SumOver)
-      // No constraint transform — indexed params handle constraints at bind-time
       auto rv = IndexedRandomVar<Dist, IdType, DimsList>{expr.effect_.dist_};
       auto rv_logprob = rv.logProb();
 
-      // Recursively discover parents from the distribution's parameters
       auto [parent_logprobs, final_visited] =
           collectFromExprImpl(NewVisited{}, rv_logprob);
 
@@ -163,31 +131,25 @@ constexpr auto collectFromExprImpl(Visited visited, E expr) {
     using IdType = get_id_t<E>;
 
     if constexpr (id_set_contains_v<IdType, Visited>) {
-      // Already collected this RV's log-prob - skip to avoid double counting
       return std::pair{Constant<0>{}, visited};
     } else {
-      // First time seeing this RV - add its log-prob and mark as visited
       using NewVisited = id_set_insert_t<IdType, Visited>;
       using Dist = std::decay_t<decltype(expr.effect_.dist_)>;
       using Support = typename Dist::support_type;
 
-      // Compute log-prob using constrained expression + Jacobian
-      // This matches what RandomVar::logProb() computes
       auto constrained = constrainedExprFor<Support, IdType>();
       auto jacobian = jacobianFor<Support, IdType>();
       auto logprob = expr.effect_.dist_.logProbFor(constrained) + jacobian;
 
-      // Recursively discover parents from the distribution's logProb expression
       auto [parent_logprobs, final_visited] =
           collectFromExprImpl(NewVisited{}, logprob);
 
       return std::pair{addNonZero(logprob, parent_logprobs), final_visited};
     }
   } else if constexpr (is_terminal_v<E>) {
-    // Non-RV terminal - return zero
     return std::pair{Constant<0>{}, visited};
   } else {
-    // Expression - recurse into children
+    // Expression - recurse into children (variadic)
     return collectFromExpr(visited, expr, MakeIndexSequence<E::arity>{});
   }
 }
@@ -197,12 +159,6 @@ constexpr auto collectFromExprImpl(Visited visited, E expr) {
 // ============================================================================
 // collectLogProbsFromExpr - Collect log-probs from an expression
 // ============================================================================
-//
-// Traverses the given expression and collects log-probabilities from all
-// RandomVarSymbol nodes found. Returns the sum of all log-probs.
-//
-// This is a lower-level function that works on arbitrary expressions.
-// For user-facing API, see collectLogProbs below.
 
 template <Symbolic E>
 constexpr auto collectLogProbsFromExpr(E expr) {
@@ -213,28 +169,12 @@ constexpr auto collectLogProbsFromExpr(E expr) {
 // ============================================================================
 // collectLogProbs - Auto-discover log-probs from a RandomVar
 // ============================================================================
-//
-// Given a RandomVar (like y = normal(mu, sigma)), automatically discovers
-// all parent RandomVars (mu, sigma) by traversing y's log-probability
-// expression, and returns the joint log-probability.
-//
-// Usage:
-//   auto mu = normal(0.0, 10.0);
-//   auto sigma = halfNormal(5.0);
-//   auto y = normal(mu, sigma);
-//   auto joint = collectLogProbs(y);
-//   // Returns: logProb(y) + logProb(mu) + logProb(sigma)
 
 template <typename RV>
   requires IsRandomVar<RV> && (!IsIndexedRandomVar<RV>)
 constexpr auto collectLogProbs(const RV& rv) {
-  // Start with rv's own log-probability
   auto rv_logprob = rv.logProb();
-
-  // Collect log-probs from any RandomVarSymbols appearing in rv's distribution
   auto parent_logprobs = collectLogProbsFromExpr(rv_logprob);
-
-  // Sum rv's log-prob with all discovered parent log-probs
   return collect_detail::addNonZero(rv_logprob, parent_logprobs);
 }
 
@@ -257,11 +197,9 @@ constexpr auto collectLogProbsWithVisited(Visited visited, const RV& rv) {
   using IdType = typename RV::id_type;
 
   if constexpr (id_set_contains_v<IdType, Visited>) {
-    // Already counted this RV - only collect from its expression (for parents)
     auto rv_logprob = rv.logProb();
     return collect_detail::collectFromExprImpl(visited, rv_logprob);
   } else {
-    // First time seeing this RV - add it and its parents
     using NewVisited = id_set_insert_t<IdType, Visited>;
     auto rv_logprob = rv.logProb();
     auto [parent_logprobs, final_visited] =

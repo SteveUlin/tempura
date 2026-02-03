@@ -7,7 +7,7 @@
 #   - tempura_flags: Compiler settings
 #
 # Key Design: Everything is an Atom<Id, Effect>. Types ARE the representation.
-# Recursion schemes (fold, para) provide pluggable tree traversal.
+# Strategy-based rewriting and direct recursion for all transforms.
 # ============================================================================
 
 add_library(symbolic4 INTERFACE)
@@ -50,29 +50,6 @@ target_link_libraries(symbolic4_operators_test PRIVATE symbolic4 unit)
 add_test(NAME symbolic4_operators_test COMMAND symbolic4_operators_test)
 set_tests_properties(symbolic4_operators_test PROPERTIES LABELS "symbolic4;operators")
 
-# scheme/fold.h tests
-add_executable(symbolic4_fold_test scheme/fold_test.cc)
-target_link_libraries(symbolic4_fold_test PRIVATE symbolic4 unit)
-add_test(NAME symbolic4_fold_test COMMAND symbolic4_fold_test)
-set_tests_properties(symbolic4_fold_test PROPERTIES LABELS "symbolic4;scheme;fold")
-
-# scheme/para.h tests
-add_executable(symbolic4_para_test scheme/para_test.cc)
-target_link_libraries(symbolic4_para_test PRIVATE symbolic4 unit)
-add_test(NAME symbolic4_para_test COMMAND symbolic4_para_test)
-set_tests_properties(symbolic4_para_test PROPERTIES LABELS "symbolic4;scheme;para")
-
-# scheme/transform.h tests
-add_executable(symbolic4_transform_test scheme/transform_test.cc)
-target_link_libraries(symbolic4_transform_test PRIVATE symbolic4 unit)
-add_test(NAME symbolic4_transform_test COMMAND symbolic4_transform_test)
-set_tests_properties(symbolic4_transform_test PROPERTIES LABELS "symbolic4;scheme;transform")
-
-# scheme/fold_unique.h tests
-add_executable(symbolic4_fold_unique_test scheme/fold_unique_test.cc)
-target_link_libraries(symbolic4_fold_unique_test PRIVATE symbolic4 unit)
-add_test(NAME symbolic4_fold_unique_test COMMAND symbolic4_fold_unique_test)
-set_tests_properties(symbolic4_fold_unique_test PROPERTIES LABELS "symbolic4;scheme;fold_unique")
 
 # interpreter/eval.h tests
 add_executable(symbolic4_eval_test interpreter/eval_test.cc)
@@ -200,11 +177,6 @@ target_link_libraries(symbolic4_indexed_eval_test PRIVATE symbolic4 unit)
 add_test(NAME symbolic4_indexed_eval_test COMMAND symbolic4_indexed_eval_test)
 set_tests_properties(symbolic4_indexed_eval_test PROPERTIES LABELS "symbolic4;indexed;indexed_eval")
 
-# scheme/cata.h tests
-add_executable(symbolic4_cata_test scheme/cata_test.cc)
-target_link_libraries(symbolic4_cata_test PRIVATE symbolic4 unit)
-add_test(NAME symbolic4_cata_test COMMAND symbolic4_cata_test)
-set_tests_properties(symbolic4_cata_test PROPERTIES LABELS "symbolic4;scheme;cata")
 
 # mcmc/posterior.h tests
 add_executable(symbolic4_posterior_test mcmc/posterior_test.cc)
