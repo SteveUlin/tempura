@@ -1,8 +1,7 @@
 // Tests for symbolic4/distributions
 #include "symbolic4/distributions/distributions.h"
-#include "symbolic4/interpreter/diff.h"
 #include "symbolic4/interpreter/eval.h"
-#include "symbolic4/interpreter/simplify.h"
+#include "symbolic4/strategy/diff.h"
 #include "unit.h"
 
 #include <cmath>

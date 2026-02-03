@@ -3,8 +3,7 @@
 #include "symbolic4/distributions/multivariate.h"
 #include "symbolic4/distributions/indexed_node.h"
 #include "symbolic4/indexed/indexed.h"
-#include "symbolic4/indexed/sum_over_diff.h"
-#include "symbolic4/interpreter/simplify.h"
+#include "symbolic4/strategy/diff.h"
 #include "unit.h"
 
 #include <cmath>
@@ -144,10 +143,12 @@ auto main() -> int {
     static_assert(IsIndexedRandomVar<decltype(theta)>);
   };
 
-  "IndexedStochasticNode::sym returns IndexedSymbol"_test = [] {
+  "IndexedStochasticNode::freeSym returns IndexedSymbol"_test = [] {
     struct Obs {};
     auto theta = plate<Obs>(beta(lit(2.0), lit(3.0)));
-    auto sym = theta.sym();
+    // sym() returns Atom<Id, IndexedSample<...>> (discoverable type)
+    // freeSym() returns IndexedSymbol<Id, Dims...> (the symbol type)
+    auto sym = theta.freeSym();
 
     static_assert(is_indexed_symbol_v<decltype(sym)>);
   };
@@ -306,8 +307,9 @@ auto main() -> int {
     static_assert(is_indexed_random_var_v<NodeType>);
     static_assert(std::is_same_v<DimsType, TypeList<Countries, Years>>);
 
-    // sym() should be IndexedSymbol<Id, Countries, Years>
-    auto sym = theta.sym();
+    // freeSym() returns IndexedSymbol<Id, Countries, Years>
+    // (sym() returns discoverable_type for auto-discovery, not IndexedSymbol)
+    auto sym = theta.freeSym();
     static_assert(sym.ndims == 2);
     static_assert(sym.has_dim<Countries>);
     static_assert(sym.has_dim<Years>);

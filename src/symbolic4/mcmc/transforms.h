@@ -13,7 +13,7 @@
 #include "symbolic4/core.h"
 #include "symbolic4/matrix/eval.h"
 #include "symbolic4/distributions/random_var.h"
-#include "symbolic4/interpreter/diff.h"
+#include "symbolic4/strategy/diff.h"
 #include "symbolic4/interpreter/eval.h"
 #include "symbolic4/interpreter/simplify.h"
 

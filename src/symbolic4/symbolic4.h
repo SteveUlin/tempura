@@ -43,12 +43,14 @@
 #include "symbolic4/scheme/transform.h"    // transform/paraTransform (varying result type)
 #include "symbolic4/scheme/fold_unique.h"  // catamorphism with DAG deduplication
 
-// Interpreters: evaluate, diff, simplify, toString
+// Interpreters: evaluate, simplify, toString
 #include "symbolic4/interpreter/eval.h"
-#include "symbolic4/interpreter/diff.h"
 #include "symbolic4/interpreter/simplify.h"
 #include "symbolic4/interpreter/partial_eval_exact.h"
 #include "symbolic4/interpreter/to_string.h"
+
+// Strategy-based differentiation
+#include "symbolic4/strategy/diff.h"
 
 // Probabilistic programming: distributions, random variables, model
 #include "symbolic4/distributions/distributions.h"

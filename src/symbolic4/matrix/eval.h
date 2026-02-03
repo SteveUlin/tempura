@@ -12,6 +12,7 @@
 #include "symbolic4/matrix/diff.h"
 #include "symbolic4/matrix/ops.h"
 #include "symbolic4/matrix/types.h"
+#include "symbolic4/operators.h"
 #include "symbolic4/scheme/cata.h"
 
 // ============================================================================

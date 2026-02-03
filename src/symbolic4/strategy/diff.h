@@ -2,6 +2,7 @@
 
 #include "symbolic4/constants.h"
 #include "symbolic4/core.h"
+#include "symbolic4/distributions/wrappers.h"
 #include "symbolic4/indexed/reduce_over.h"
 #include "symbolic4/interpreter/simplify.h"
 #include "symbolic4/operators.h"
@@ -28,7 +29,112 @@
 namespace tempura::symbolic4 {
 
 // ============================================================================
-// Diff - Creates a differentiation strategy for a given variable
+// Sample atom handling for differentiation
+// ============================================================================
+//
+// Expressions built from RandomVars contain Atom<Id, Sample<Dist>> nodes.
+// These represent the *constrained* value of the random variable.
+// When Var is Atom<Id, Free> and we see Atom<Id, Sample<D>>:
+//   - Same Id: derivative is the constraint transform's derivative
+//     (1 for real support, exp(z) for positive, sigmoid'(z) for unit)
+//   - Different Id: derivative is 0 (constant w.r.t. Var)
+//
+// ============================================================================
+
+namespace diff_detail {
+
+// Check if two atoms share the same Id regardless of effect type
+template <typename T, typename Var>
+struct IsSameAtomId : std::false_type {};
+
+template <typename Id, typename E1, typename E2>
+struct IsSameAtomId<Atom<Id, E1>, Atom<Id, E2>> : std::true_type {};
+
+template <typename T, typename Var>
+constexpr bool is_same_atom_id_v = IsSameAtomId<T, Var>::value;
+
+// Compute the derivative of a Sample atom w.r.t. the matching Free variable.
+// For constrained distributions, this is the derivative of the constraint transform.
+template <typename T, typename Var>
+struct SampleDerivative {
+  static constexpr auto compute() { return Constant<0>{}; }
+};
+
+// Atom<Id, Sample<D>> differentiated w.r.t. Atom<Id, Free>:
+// The Sample atom represents constrainedExpr(z) where z = Atom<Id, Free>.
+// d/dz[constrainedExpr(z)] depends on the distribution's support.
+template <typename Id, typename Dist>
+struct SampleDerivative<Atom<Id, Sample<Dist>>, Atom<Id, Free>> {
+  static constexpr auto compute() {
+    using Support = typename Dist::support_type;
+    auto z = Atom<Id, Free>{};
+    if constexpr (is_positive_support_v<Support>) {
+      return exp(z);  // d/dz[exp(z)] = exp(z)
+    } else if constexpr (is_unit_support_v<Support>) {
+      auto s = 1_c / (1_c + exp(-z));
+      return s * (1_c - s);  // d/dz[sigmoid(z)] = sigmoid(z)(1-sigmoid(z))
+    } else {
+      return Constant<1>{};  // d/dz[z] = 1 (unconstrained)
+    }
+  }
+};
+
+// Check if T is a Sample atom
+template <typename T>
+struct IsSampleAtom : std::false_type {};
+
+template <typename Id, typename D>
+struct IsSampleAtom<Atom<Id, Sample<D>>> : std::true_type {};
+
+template <typename T>
+constexpr bool is_sample_atom_v = IsSampleAtom<T>::value;
+
+}  // namespace diff_detail
+
+// ============================================================================
+// DiffRecursive - Recursive with Sample atom awareness
+// ============================================================================
+//
+// Wraps the standard Recursive rule set but intercepts Sample atoms before
+// the pattern-based rules. This keeps Sample-specific logic out of the
+// general strategy framework.
+//
+// ============================================================================
+
+template <typename Rules, typename Var>
+struct DiffRecursive {
+  [[no_unique_address]] Recursive<Rules> inner;
+
+  constexpr explicit DiffRecursive(Rules r) : inner{r} {}
+
+  template <Symbolic E>
+  constexpr auto apply(E expr) const {
+    if constexpr (is_reduce_over_v<E>) {
+      // ReduceOver: recurse into inner expression, rebuild
+      auto inner_result = apply(expr.expr());
+      return expr.rebuild(inner_result);
+    } else if constexpr (diff_detail::is_sample_atom_v<E>) {
+      // Sample atom: compute derivative based on Id match with Var
+      if constexpr (diff_detail::is_same_atom_id_v<E, Var>) {
+        return diff_detail::SampleDerivative<E, Var>::compute();
+      } else {
+        return Constant<0>{};  // Different Id: constant w.r.t. Var
+      }
+    } else {
+      // Delegate to standard recursive rules (which handle normal atoms,
+      // expressions, constants, etc.)
+      auto result = detail::applyRecursiveRule(inner.rules, expr, *this);
+      if constexpr (isSame<decltype(result), Never>) {
+        return expr;  // No rule matched, return unchanged
+      } else {
+        return result;
+      }
+    }
+  }
+};
+
+// ============================================================================
+// makeDiff - Creates a differentiation strategy for a given variable
 // ============================================================================
 
 template <typename Var>
@@ -37,7 +143,7 @@ constexpr auto makeDiff() {
   constexpr auto f_ = PatternVar<struct DiffF_>{};
   constexpr auto g_ = PatternVar<struct DiffG_>{};
 
-  return recursive(
+  auto rules =
       // -----------------------------------------------------------------------
       // Binary operations
       // -----------------------------------------------------------------------
@@ -110,8 +216,9 @@ constexpr auto makeDiff() {
     | rule(AnySymbol{}, 0_c)     // d/dx[y] = 0 (other symbols)
     | rule(AnyConstant{}, 0_c)   // d/dx[c] = 0 (includes Fraction)
     | rule(AnyFraction{}, 0_c)   // d/dx[n/d] = 0 (explicit for clarity)
-    | rule(AnyLiteral{}, 0_c)    // d/dx[lit] = 0
-  );
+    | rule(AnyLiteral{}, 0_c);   // d/dx[lit] = 0
+
+  return DiffRecursive<decltype(rules), Var>{rules};
 }
 
 // ============================================================================
@@ -120,12 +227,18 @@ constexpr auto makeDiff() {
 
 template <Symbolic E, typename Var>
 constexpr auto differentiate(E expr, Var) {
-  constexpr auto diff = makeDiff<Var>();
-  return simplify(diff.apply(expr));
+  constexpr auto d = makeDiff<Var>();
+  return simplify(d.apply(expr));
 }
 
-// ReduceOver support: Recursive::apply() in recursive.h generically handles
-// all ReduceOver nodes by recursing into the inner expression and rebuilding.
+// ReduceOver support: DiffRecursive::apply() handles ReduceOver nodes by
+// recursing into the inner expression and rebuilding.
 // No standalone overload needed — d/dx(Σf) = Σ(d/dx f) is automatic.
+
+// Backward-compatible alias: call sites use diff(expr, var) unchanged
+template <Symbolic E, typename Var>
+constexpr auto diff(E expr, Var v) {
+  return differentiate(expr, v);
+}
 
 }  // namespace tempura::symbolic4

@@ -80,12 +80,6 @@ target_link_libraries(symbolic4_eval_test PRIVATE symbolic4 unit)
 add_test(NAME symbolic4_eval_test COMMAND symbolic4_eval_test)
 set_tests_properties(symbolic4_eval_test PROPERTIES LABELS "symbolic4;interpreter;eval")
 
-# interpreter/diff.h tests
-add_executable(symbolic4_diff_test interpreter/diff_test.cc)
-target_link_libraries(symbolic4_diff_test PRIVATE symbolic4 unit)
-add_test(NAME symbolic4_diff_test COMMAND symbolic4_diff_test)
-set_tests_properties(symbolic4_diff_test PROPERTIES LABELS "symbolic4;interpreter;diff")
-
 # interpreter/to_string.h tests
 add_executable(symbolic4_to_string_test interpreter/to_string_test.cc)
 target_link_libraries(symbolic4_to_string_test PRIVATE symbolic4 unit)
