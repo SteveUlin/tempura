@@ -94,7 +94,11 @@ constexpr bool is_observed_id_v = IsObservedId<Id, ObservedSet>::value;
 // Returns pair{tuple_of_RandomVars, updated_visited_set}
 template <typename Visited, typename Observed, Symbolic E>
 constexpr auto discoverFromExprImpl(Visited visited, Observed observed, E expr) {
-  if constexpr (is_random_var_atom_v<E>) {
+  if constexpr (is_sum_over_v<E>) {
+    // SumOver<DimTag, Body> - recurse into body expression
+    // Must check before is_terminal_v since SumOver is not an Expression
+    return discoverFromExprImpl(visited, observed, expr.expr_);
+  } else if constexpr (is_random_var_atom_v<E>) {
     // Found a random variable atom: Atom<Id, Sample<Dist>>
     using IdType = get_id_t<E>;
 
@@ -117,9 +121,6 @@ constexpr auto discoverFromExprImpl(Visited visited, Observed observed, E expr) 
   } else if constexpr (is_terminal_v<E>) {
     // Non-RV terminal - nothing to discover
     return std::pair{std::tuple<>{}, visited};
-  } else if constexpr (is_sum_over_v<E>) {
-    // SumOver<DimTag, Body> - recurse into body expression
-    return discoverFromExprImpl(visited, observed, expr.expr_);
   } else {
     // Expression - recurse into children
     return discoverFromExpr(visited, observed, expr, MakeIndexSequence<E::arity>{});

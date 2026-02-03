@@ -3,6 +3,7 @@
 #include "symbolic4/compressed.h"
 #include "symbolic4/constants.h"
 #include "symbolic4/core.h"
+#include "symbolic4/distributions/wrappers.h"  // For support type traits
 #include "symbolic4/operators.h"
 #include "symbolic4/scheme/cata.h"
 
@@ -39,6 +40,36 @@ struct IsSameAtomId<Atom<Id, E1>, Atom<Id, E2>> : std::true_type {};
 template <typename T, typename Var>
 constexpr bool is_same_atom_id_v = IsSameAtomId<T, Var>::value;
 
+// Check if T is a Sample atom with the same Id as Var
+// and return the derivative of the constraint transform
+template <typename T, typename Var>
+struct SampleAtomDerivative {
+  static constexpr bool is_sample = false;
+  static constexpr auto derivative() { return Constant<1>{}; }
+};
+
+// Specialization for Sample atoms matching Free atom Var
+template <typename Id, typename Dist>
+struct SampleAtomDerivative<Atom<Id, Sample<Dist>>, Atom<Id, Free>> {
+  static constexpr bool is_sample = true;
+
+  static constexpr auto derivative() {
+    using Support = typename Dist::support_type;
+    auto z = Atom<Id, Free>{};
+    if constexpr (is_positive_support_v<Support>) {
+      // d/dz [exp(z)] = exp(z)
+      return exp(z);
+    } else if constexpr (is_unit_support_v<Support>) {
+      // d/dz [sigmoid(z)] = sigmoid(z) * (1 - sigmoid(z))
+      auto s = 1_c / (1_c + exp(-z));
+      return s * (1_c - s);
+    } else {
+      // Unconstrained: d/dz [z] = 1
+      return Constant<1>{};
+    }
+  }
+};
+
 // Structural check for SumOver without including sum_over.h
 // SumOver<DimTag, Expr> has: dim_tag typedef, expr_type typedef, expr() method, rebuild()
 template <typename T>
@@ -61,12 +92,24 @@ struct Diff {
   // Note: We check both exact type match and same-Id-different-effect match
   // to handle RandomVarSymbol (Atom<Id, Sample<D>>) vs Symbol (Atom<Id, Free>)
   //
+  // For Sample atoms with constrained support (positive, unit interval), the
+  // Sample represents the transformed value (exp(z), sigmoid(z)), so the
+  // derivative must include the transform's derivative (chain rule).
+  //
   // Special case: SumOver is treated as a "terminal" by cata/para because it's
   // not an Expression<Op, Args...>, but we need to distribute differentiation
   // into the sum: d/dx(Σᵢ f(x,i)) = Σᵢ d/dx(f(x,i))
   template <typename T>
   static constexpr auto terminal(T t) {
-    if constexpr (std::is_same_v<T, Var> || diff_detail::is_same_atom_id_v<T, Var>) {
+    if constexpr (std::is_same_v<T, Var>) {
+      // Exact match: d/dz[z] = 1
+      return Constant<1>{};
+    } else if constexpr (diff_detail::SampleAtomDerivative<T, Var>::is_sample) {
+      // Sample atom with same Id as Var: apply chain rule for constraint transform
+      // d/dz[transform(z)] = transform'(z)
+      return diff_detail::SampleAtomDerivative<T, Var>::derivative();
+    } else if constexpr (diff_detail::is_same_atom_id_v<T, Var>) {
+      // Same Id but not a Sample atom - treat as identity
       return Constant<1>{};
     } else if constexpr (diff_detail::IsSumOverLike<T>) {
       // SumOver is treated as a "terminal" by cata/para because it's not an

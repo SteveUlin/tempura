@@ -6,6 +6,7 @@
 #include "symbolic4/core.h"
 #include "symbolic4/distributions/indexed_node.h"
 #include "symbolic4/distributions/random_var.h"
+#include "symbolic4/indexed/sum_over.h"
 #include "symbolic4/let.h"  // For IdSet
 
 // ============================================================================
@@ -131,7 +132,11 @@ constexpr auto jacobianFor() {
 // Returns pair{result, updated_visited_set}
 template <typename Visited, Symbolic E>
 constexpr auto collectFromExprImpl(Visited visited, E expr) {
-  if constexpr (is_random_var_atom_v<E>) {
+  if constexpr (is_sum_over_v<E>) {
+    // SumOver<DimTag, Body> - recurse into body expression
+    // Must check before is_terminal_v since SumOver is not an Expression
+    return collectFromExprImpl(visited, expr.expr_);
+  } else if constexpr (is_random_var_atom_v<E>) {
     // Found a random variable!
     using IdType = get_id_t<E>;
 
