@@ -2,7 +2,7 @@
 
 #include "symbolic4/constants.h"
 #include "symbolic4/core.h"
-#include "symbolic4/indexed/sum_over.h"
+#include "symbolic4/indexed/reduce_over.h"
 #include "symbolic4/interpreter/simplify.h"
 #include "symbolic4/operators.h"
 #include "symbolic4/strategy/recursive.h"
@@ -124,16 +124,8 @@ constexpr auto differentiate(E expr, Var) {
   return simplify(diff.apply(expr));
 }
 
-// ============================================================================
-// SumOver support: d/dx(SumOver<D, E>) = SumOver<D, d/dx(E)>
-// ============================================================================
-// Differentiation distributes over summation. We recursively differentiate
-// the inner expression and wrap the result in a new SumOver.
-
-template <typename DimTag, Symbolic E, typename Var>
-constexpr auto differentiate(SumOver<DimTag, E> sum, Var) {
-  auto inner_diff = differentiate(sum.expr_, Var{});
-  return SumOver<DimTag, decltype(inner_diff)>{inner_diff};
-}
+// ReduceOver support: Recursive::apply() in recursive.h generically handles
+// all ReduceOver nodes by recursing into the inner expression and rebuilding.
+// No standalone overload needed — d/dx(Σf) = Σ(d/dx f) is automatic.
 
 }  // namespace tempura::symbolic4

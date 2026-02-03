@@ -1,7 +1,7 @@
 #pragma once
 
 #include "symbolic4/core.h"
-#include "symbolic4/indexed/sum_over.h"
+#include "symbolic4/indexed/reduce_over.h"
 #include "symbolic4/strategy/combinator.h"
 #include "symbolic4/strategy/pattern.h"
 #include "symbolic4/strategy/rule.h"
@@ -153,58 +153,28 @@ constexpr auto substituteRecImpl(Atom<Id, Effect> atom, Context, Self const&) {
   return atom;
 }
 
-// Expression: recursively substitute, handling potential Never from recursive calls
-template <typename Op, typename Context, typename Self>
-constexpr auto substituteRecImpl(Expression<Op>, Context, Self const&) {
+// Expression: variadic recursive substitution via index sequence
+template <typename Op, typename... Args, typename Context, typename Self>
+constexpr auto substituteRecImpl(Expression<Op, Args...> expr, Context const& ctx,
+                                  Self const& self) {
+  return substituteRecExpr<Op>(expr, ctx, self, MakeIndexSequence<sizeof...(Args)>{});
+}
+
+template <typename Op, typename Expr, typename Context, typename Self>
+constexpr auto substituteRecExpr(Expr, Context, Self const&, IndexSequence<>) {
   return Expression<Op>{};
 }
 
-template <typename Op, typename Arg0, typename Context, typename Self>
-constexpr auto substituteRecImpl(Expression<Op, Arg0> expr, Context const& ctx,
-                                  Self const& self) {
-  auto r0 = substituteRec(expr.template arg<0>(), ctx, self);
-  if constexpr (isSame<decltype(r0), Never>) {
+template <typename Op, typename Expr, typename Context, typename Self, SizeT... Is>
+constexpr auto substituteRecExpr(Expr expr, Context const& ctx, Self const& self,
+                                  IndexSequence<Is...>) {
+  auto results = CompressedTuple{substituteRec(expr.template arg<Is>(), ctx, self)...};
+  // decltype on function call gives value type; decltype on get<> would give reference
+  if constexpr ((isSame<decltype(substituteRec(expr.template arg<Is>(), ctx, self)), Never> || ...)) {
     return Never{};
   } else {
-    return Expression<Op, decltype(r0)>{r0};
-  }
-}
-
-template <typename Op, typename Arg0, typename Arg1, typename Context, typename Self>
-constexpr auto substituteRecImpl(Expression<Op, Arg0, Arg1> expr, Context const& ctx,
-                                  Self const& self) {
-  auto r0 = substituteRec(expr.template arg<0>(), ctx, self);
-  if constexpr (isSame<decltype(r0), Never>) {
-    return Never{};
-  } else {
-    auto r1 = substituteRec(expr.template arg<1>(), ctx, self);
-    if constexpr (isSame<decltype(r1), Never>) {
-      return Never{};
-    } else {
-      return Expression<Op, decltype(r0), decltype(r1)>{r0, r1};
-    }
-  }
-}
-
-template <typename Op, typename Arg0, typename Arg1, typename Arg2,
-          typename Context, typename Self>
-constexpr auto substituteRecImpl(Expression<Op, Arg0, Arg1, Arg2> expr,
-                                  Context const& ctx, Self const& self) {
-  auto r0 = substituteRec(expr.template arg<0>(), ctx, self);
-  if constexpr (isSame<decltype(r0), Never>) {
-    return Never{};
-  } else {
-    auto r1 = substituteRec(expr.template arg<1>(), ctx, self);
-    if constexpr (isSame<decltype(r1), Never>) {
-      return Never{};
-    } else {
-      auto r2 = substituteRec(expr.template arg<2>(), ctx, self);
-      if constexpr (isSame<decltype(r2), Never>) {
-        return Never{};
-      } else {
-        return Expression<Op, decltype(r0), decltype(r1), decltype(r2)>{r0, r1, r2};
-      }
-    }
+    return Expression<Op, decltype(substituteRec(expr.template arg<Is>(), ctx, self))...>{
+        get<Is>(results)...};
   }
 }
 
@@ -288,11 +258,10 @@ struct Recursive {
 
   template <Symbolic E>
   constexpr auto apply(E expr) const {
-    // Special handling for SumOver: recurse into inner expression
-    if constexpr (is_sum_over_v<E>) {
-      auto inner_result = apply(expr.expr_);
-      using DimTag = typename E::dim_tag;
-      return SumOver<DimTag, decltype(inner_result)>{inner_result};
+    // Generic handling for any ReduceOver: recurse into inner expression, rebuild
+    if constexpr (is_reduce_over_v<E>) {
+      auto inner_result = apply(expr.expr());
+      return expr.rebuild(inner_result);
     } else {
       auto result = detail::applyRecursiveRule(rules, expr, *this);
       if constexpr (isSame<decltype(result), Never>) {

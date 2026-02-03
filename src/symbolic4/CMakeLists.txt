@@ -290,6 +290,12 @@ target_link_libraries(symbolic4_strategy_diff_test PRIVATE symbolic4 unit)
 add_test(NAME symbolic4_strategy_diff_test COMMAND symbolic4_strategy_diff_test)
 set_tests_properties(symbolic4_strategy_diff_test PROPERTIES LABELS "symbolic4;strategy;diff")
 
+# strategy/reduce_over.h + strategy integration tests
+add_executable(symbolic4_reduce_over_test strategy/reduce_over_test.cc)
+target_link_libraries(symbolic4_reduce_over_test PRIVATE symbolic4 unit)
+add_test(NAME symbolic4_reduce_over_test COMMAND symbolic4_reduce_over_test)
+set_tests_properties(symbolic4_reduce_over_test PROPERTIES LABELS "symbolic4;strategy;reduce_over")
+
 # strategy/recursive.h tests
 add_executable(symbolic4_recursive_test strategy/recursive_test.cc)
 target_link_libraries(symbolic4_recursive_test PRIVATE symbolic4 unit)

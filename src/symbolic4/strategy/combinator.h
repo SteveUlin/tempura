@@ -2,6 +2,7 @@
 
 #include "meta/utility.h"
 #include "symbolic4/core.h"
+#include "symbolic4/indexed/reduce_over.h"
 #include "symbolic4/strategy/pattern.h"
 
 // ============================================================================
@@ -205,66 +206,33 @@ struct All {
 
   template <Symbolic E>
   constexpr auto apply(E e) const {
-    if constexpr (!is_expression_v<E>) {
+    if constexpr (is_reduce_over_v<E>) {
+      // ReduceOver has one child: the body expression
+      auto r = s.apply(e.expr());
+      if constexpr (isSame<decltype(r), Never>) {
+        return Never{};
+      } else {
+        return e.rebuild(r);
+      }
+    } else if constexpr (!is_expression_v<E>) {
       return e;  // Atoms/constants have no children
     } else {
-      return applyToChildren(e);
+      return applyToChildren<typename E::op_type>(e, MakeIndexSequence<E::arity>{});
     }
   }
 
  private:
-  // Nullary expression (no arguments)
-  template <typename Op>
-  constexpr auto applyToChildren(Expression<Op> e) const {
-    return e;
-  }
-
-  // Unary expression
-  template <typename Op, Symbolic A0>
-  constexpr auto applyToChildren(Expression<Op, A0> e) const {
-    auto r0 = s.apply(e.template arg<0>());
-    if constexpr (isSame<decltype(r0), Never>) {
+  // Variadic: apply s to each child, collect into tuple, build Expression
+  template <typename Op, typename Expr, SizeT... Is>
+  constexpr auto applyToChildren(Expr e, IndexSequence<Is...>) const {
+    // Apply s to all children, collecting results in a tuple
+    auto results = CompressedTuple{s.apply(e.template arg<Is>())...};
+    // Check if any result is Never
+    if constexpr ((isSame<decltype(s.apply(e.template arg<Is>())), Never> || ...)) {
       return Never{};
     } else {
-      return Expression<Op, decltype(r0)>{r0};
-    }
-  }
-
-  // Binary expression
-  template <typename Op, Symbolic A0, Symbolic A1>
-  constexpr auto applyToChildren(Expression<Op, A0, A1> e) const {
-    auto r0 = s.apply(e.template arg<0>());
-    if constexpr (isSame<decltype(r0), Never>) {
-      return Never{};
-    } else {
-      auto r1 = s.apply(e.template arg<1>());
-      if constexpr (isSame<decltype(r1), Never>) {
-        return Never{};
-      } else {
-        return Expression<Op, decltype(r0), decltype(r1)>{r0, r1};
-      }
-    }
-  }
-
-  // Ternary expression
-  template <typename Op, Symbolic A0, Symbolic A1, Symbolic A2>
-  constexpr auto applyToChildren(Expression<Op, A0, A1, A2> e) const {
-    auto r0 = s.apply(e.template arg<0>());
-    if constexpr (isSame<decltype(r0), Never>) {
-      return Never{};
-    } else {
-      auto r1 = s.apply(e.template arg<1>());
-      if constexpr (isSame<decltype(r1), Never>) {
-        return Never{};
-      } else {
-        auto r2 = s.apply(e.template arg<2>());
-        if constexpr (isSame<decltype(r2), Never>) {
-          return Never{};
-        } else {
-          return Expression<Op, decltype(r0), decltype(r1), decltype(r2)>{
-              r0, r1, r2};
-        }
-      }
+      return Expression<Op, decltype(s.apply(e.template arg<Is>()))...>{
+          get<Is>(results)...};
     }
   }
 };
