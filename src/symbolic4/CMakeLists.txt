@@ -310,6 +310,12 @@ target_link_libraries(plate_infer_test PRIVATE symbolic4 tempura::prob unit)
 add_test(NAME plate_infer_test COMMAND plate_infer_test)
 set_tests_properties(plate_infer_test PROPERTIES LABELS "symbolic4;plate;infer")
 
+# grad.h tests
+add_executable(symbolic4_grad_test grad_test.cc)
+target_link_libraries(symbolic4_grad_test PRIVATE symbolic4 unit)
+add_test(NAME symbolic4_grad_test COMMAND symbolic4_grad_test)
+set_tests_properties(symbolic4_grad_test PROPERTIES LABELS "symbolic4;grad")
+
 # Demo executable to see toString output
 add_executable(symbolic4_to_string_demo interpreter/to_string_demo.cc)
 target_link_libraries(symbolic4_to_string_demo PRIVATE symbolic4)

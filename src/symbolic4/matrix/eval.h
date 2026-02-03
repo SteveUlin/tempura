@@ -257,9 +257,18 @@ inline auto evalQuadFormCholDerivL(const DynamicVector& x,
 
 namespace matrix_eval_impl {
 
-// Forward declaration
+// Forward declarations
 template <Symbolic E, typename Bindings>
 auto matrixEvalImpl(E expr, Bindings& ctx);
+
+template <typename Op, typename... Rs>
+auto matrixEvalCombine(Rs... children);
+
+inline auto matrixEvalCombineSub(const DynamicVector& a, const DynamicVector& b);
+
+template <typename A, typename B>
+  requires(!std::is_same_v<A, DynamicVector>)
+auto matrixEvalCombineSub(A a, B b);
 
 // Helper: evaluate Expression children and apply Op
 template <typename Op, typename... Args, typename Bindings, SizeT... Is>

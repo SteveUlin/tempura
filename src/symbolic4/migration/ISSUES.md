@@ -39,20 +39,36 @@ Items are added as we go, checked off when resolved.
 - [ ] **`IsSameAtomId` duplication** — defined in both `interpreter/diff.h` and
   `indexed/indexed_eval.h`. Phase 5 should consolidate to `same_atom_id_v` in `core.h`.
 
-## Phase 3 Issues (anticipated)
+## Phase 3 Issues
 
-- [ ] **`fold_unique.h`** provides LetNode-aware DAG folding with `IdSet` deduplication.
-  Check if `collect_log_prob.h` depends on `foldUnique()` before deleting scheme/.
-- [ ] **`partial_eval.h`** may use fold — needs rewrite or strategy conversion.
-- [ ] **`toString` for ReduceOver** — currently renders as "?" for SumOver.
-  Direct recursion rewrite should use `ROp::symbol()` for proper rendering.
+- [x] **Phase 3 completed.** eval.h, to_string.h, partial_eval.h, partial_eval_exact.h
+  all rewritten to direct recursion. scheme/ directory deleted (5 test targets removed).
+- [x] **`fold_unique.h`** — only used within scheme/ tests, no external deps. Safely deleted.
+- [x] **`partial_eval.h`** — rewritten as strategy-based `bottomup(EvalIfGround{})`.
+- [x] **`toString` for ReduceOver** — now renders via `ROp::symbol()` (e.g., "Σ(body)").
+- [x] **`partial_eval_exact.h`** — fixed `decltype(E::value)` in `if constexpr` condition.
+  `if constexpr` discards the body but NOT the condition — `decltype(E::value)` must be
+  guarded by a separate `if constexpr (is_constant_v<E>)` branch first.
 
-## Phase 4 Issues (anticipated)
+## Phase 4 Issues
 
-- [ ] **Differentiation through ProdReduce** — needs `d/dx Πf = Π·Σ(∂f/f)` rule.
-  Currently `Recursive::apply()` just recurses into body (correct only for SumReduce).
-- [ ] **`one(s)` combinator** — needs `rebuildWith<I>()` helper to replace single child
+- [x] **Grad<Expr> created** (`grad.h`). `grad(f)[x]` returns derivative, `hessian(f)[x,y]`
+  returns Hessian entry. C++26 multidim `operator[]`.
+- [x] **H[x] partial indexing removed** — single-indexing rank-2+ Grad is now a compile error
+  (ambiguous intent). Use `H[x, y]` for scalar entry, `H.row(x)` for explicit row extraction.
+- [x] **`is_grad_v` const-qualification** — `constexpr auto g = grad(f)` produces `const Grad<E>`.
+  `IsGrad` struct trait needed const/volatile specializations (same pattern as `IsExpression`).
+  Variable template partial specialization alone was insufficient.
+- [x] **Differentiation through ProdReduce** — implemented `d/dx Πf = Π·Σ(∂f/f)` rule
+  in `DiffRecursive::apply()`. Dispatches on `ReduceOp` type.
+- [x] **Differentiation through LogSumExpReduce** — implemented
+  `d/dx LSE(f) = Σ softmax(f)·∂f` where `softmax(f_i) = exp(f_i - LSE(f))`.
+- [ ] **`one(s)` combinator** — deferred. Needs `rebuildWith<I>()` helper to replace single child
   in an expression. Not trivial with variadic Expression.
+- [ ] **MeanOver/VarOver** — deferred. Needs `DimSizeSymbol<DimTag>` design first.
+- [ ] **Reduction-aware simplification** — deferred. Nice to have but not core.
+- [ ] **`random_var_test` failure** — pre-existing (line 130: `logProb` evaluates wrong for
+  beta-distributed RV). Same root cause as indexed_test Beta dist issue.
 
 ## Phase 5 Issues (anticipated)
 

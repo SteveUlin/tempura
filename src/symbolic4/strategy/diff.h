@@ -110,9 +110,35 @@ struct DiffRecursive {
   template <Symbolic E>
   constexpr auto apply(E expr) const {
     if constexpr (is_reduce_over_v<E>) {
-      // ReduceOver: recurse into inner expression, rebuild
-      auto inner_result = apply(expr.expr());
-      return expr.rebuild(inner_result);
+      using ROp = typename E::reduce_op;
+      using DimTag = typename E::dim_tag;
+
+      if constexpr (isSame<ROp, SumReduce>) {
+        // Linear: d/dx Sigma_i f_i = Sigma_i d/dx f_i
+        auto inner_result = apply(expr.expr());
+        return expr.rebuild(inner_result);
+
+      } else if constexpr (isSame<ROp, ProdReduce>) {
+        // Log-derivative trick:
+        // d/dx Prod_i f_i = (Prod_i f_i) * Sigma_i (d/dx f_i / f_i)
+        auto body = expr.expr();
+        auto dbody = apply(body);
+        auto ratio = dbody / body;
+        return expr * ReduceOver<SumReduce, DimTag, decltype(ratio)>{ratio};
+
+      } else if constexpr (isSame<ROp, LogSumExpReduce>) {
+        // d/dx LSE_i(f_i) = Sigma_i softmax(f_i) * d/dx f_i
+        // where softmax(f_i) = exp(f_i - LSE(f)) = exp(f_i) / Sigma exp(f_i)
+        auto body = expr.expr();
+        auto dbody = apply(body);
+        auto weights = exp(body - expr);  // softmax weights
+        auto weighted = weights * dbody;
+        return ReduceOver<SumReduce, DimTag, decltype(weighted)>{weighted};
+
+      } else {
+        // MaxReduce: not differentiable symbolically, return unchanged
+        return expr;
+      }
     } else if constexpr (diff_detail::is_sample_atom_v<E>) {
       // Sample atom: compute derivative based on Id match with Var
       if constexpr (diff_detail::is_same_atom_id_v<E, Var>) {

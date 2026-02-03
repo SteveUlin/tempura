@@ -25,9 +25,10 @@ g[sigma]          // ∂f/∂σ = 1/σ        (scalar expression)
 auto H = grad(grad(f));
 H[mu, sigma]      // ∂²f/∂μ∂σ = 0       (C++26 multidim operator[])
 H[sigma, sigma]   // ∂²f/∂σ² = -1/σ²
-H[mu]             // ∂f/∂μ row — still a covector (Grad), needs one more index
+H.row(mu)         // ∂f/∂μ row — explicit rank-1 covector extraction
+// H[mu] is a compile error — partial indexing must be explicit via .row()
 
-// Each grad() adds one rank. Each index peels one off.
+// Each grad() adds one rank. Full indexing extracts scalars.
 // grad(scalar)       → rank 1 covector    → [x] extracts scalar
 // grad(grad(scalar)) → rank 2 tensor      → [x, y] extracts scalar
 // grad³(scalar)      → rank 3 tensor      → [x, y, z] extracts scalar
@@ -127,8 +128,9 @@ Derived reductions (not monoids): Mean = Sum/N, Variance = Mean(x²) − Mean(x)
 - `Grad<Grad<Scalar>>` — rank 2 (matrix). `H[x, y]` → scalar via C++26 multidim `operator[]`.
 - `Grad<Grad<Grad<Scalar>>>` — rank 3. `T[x, y, z]` → scalar.
 
-Single indexing on a higher-rank object peels one level:
-- `H[x]` on `Grad<Grad<F>>` → `Grad<∂f/∂x>` (a covector — the x-row of the Hessian)
+Partial indexing on higher-rank objects requires explicit `.row()`:
+- `H[x]` on `Grad<Grad<F>>` → **compile error** (ambiguous intent)
+- `H.row(x)` on `Grad<Grad<F>>` → `Grad<∂f/∂x>` (explicit row extraction)
 
 The rank is **not** determined by how many arguments you pass to `operator[]`.
 It is determined by the **type** — how many `Grad` layers are nested.
