@@ -102,3 +102,6 @@ target_link_libraries(hierarchical_model_example PRIVATE bayes plot)
 add_executable(predictive_checks_example predictive_checks_example.cc)
 target_link_libraries(predictive_checks_example PRIVATE bayes plot)
 
+add_executable(hmc_symbolic4_example hmc_symbolic4_example.cc)
+target_link_libraries(hmc_symbolic4_example PRIVATE bayes symbolic4 plot)
+

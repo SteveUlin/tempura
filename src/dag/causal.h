@@ -7,8 +7,8 @@
 #include <string_view>
 #include <vector>
 
+#include "dag/ascii_dag.h"
 #include "dag/dag.h"
-#include "dag/unicode_render.h"
 
 namespace tempura::dag {
 

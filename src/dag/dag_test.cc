@@ -1,6 +1,6 @@
+#include "dag/ascii_dag.h"
 #include "dag/causal.h"
 #include "dag/dag.h"
-#include "dag/unicode_render.h"
 #include "unit.h"
 
 #include <iostream>

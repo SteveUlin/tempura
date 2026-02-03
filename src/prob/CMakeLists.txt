@@ -82,3 +82,28 @@ add_executable(student_t_test student_t_test.cc)
 target_link_libraries(student_t_test PRIVATE prob unit)
 add_test(NAME prob_student_t COMMAND student_t_test)
 set_tests_properties(prob_student_t PROPERTIES LABELS "prob")
+
+add_executable(dirichlet_test dirichlet_test.cc)
+target_link_libraries(dirichlet_test PRIVATE prob unit)
+add_test(NAME prob_dirichlet COMMAND dirichlet_test)
+set_tests_properties(prob_dirichlet PROPERTIES LABELS "prob")
+
+add_executable(categorical_test categorical_test.cc)
+target_link_libraries(categorical_test PRIVATE prob unit)
+add_test(NAME prob_categorical COMMAND categorical_test)
+set_tests_properties(prob_categorical PROPERTIES LABELS "prob")
+
+add_executable(multinomial_test multinomial_test.cc)
+target_link_libraries(multinomial_test PRIVATE prob unit)
+add_test(NAME prob_multinomial COMMAND multinomial_test)
+set_tests_properties(prob_multinomial PROPERTIES LABELS "prob")
+
+add_executable(discrete_test discrete_test.cc)
+target_link_libraries(discrete_test PRIVATE prob unit)
+add_test(NAME prob_discrete COMMAND discrete_test)
+set_tests_properties(prob_discrete PROPERTIES LABELS "prob")
+
+add_executable(transforms_test transforms_test.cc)
+target_link_libraries(transforms_test PRIVATE prob unit)
+add_test(NAME prob_transforms COMMAND transforms_test)
+set_tests_properties(prob_transforms PROPERTIES LABELS "prob")

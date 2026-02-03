@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <limits>
 
 namespace tempura {
 
@@ -302,6 +303,153 @@ struct PowOp {
   constexpr auto operator()(auto a, auto b) const {
     using namespace std;
     return pow(a, b);
+  }
+};
+
+// Special functions for probability distributions
+struct LgammaOp {
+  // Log-gamma function: log(Γ(x))
+  // Essential for Beta, Gamma, Dirichlet, Binomial normalization constants
+  constexpr auto operator()(auto a) const {
+    using namespace std;
+    return lgamma(a);
+  }
+};
+
+struct DigammaOp {
+  // Digamma function: ψ(x) = d/dx[lgamma(x)] = Γ'(x)/Γ(x)
+  // Needed for gradients through lgamma
+  // Using asymptotic expansion for x > 6, recurrence for small x
+  constexpr auto operator()(auto x) const {
+    // For x <= 0, digamma has poles at negative integers
+    if (x <= 0) return std::numeric_limits<decltype(x)>::quiet_NaN();
+
+    // Use recurrence ψ(x+1) = ψ(x) + 1/x to shift x to larger values
+    auto result = decltype(x){0};
+    auto y = x;
+    while (y < 6) {
+      result -= 1.0 / y;
+      y += 1;
+    }
+
+    // Asymptotic expansion for large x:
+    // ψ(x) ≈ log(x) - 1/(2x) - 1/(12x²) + 1/(120x⁴) - 1/(252x⁶) + ...
+    auto y2 = y * y;
+    result += std::log(y) - 0.5 / y - 1.0 / (12.0 * y2) + 1.0 / (120.0 * y2 * y2) -
+              1.0 / (252.0 * y2 * y2 * y2);
+    return result;
+  }
+};
+
+struct AbsOp {
+  constexpr auto operator()(auto a) const {
+    using namespace std;
+    return abs(a);
+  }
+};
+
+struct Log1pOp {
+  // log(1+x) - numerically stable for small x
+  constexpr auto operator()(auto a) const {
+    using namespace std;
+    return log1p(a);
+  }
+};
+
+struct Expm1Op {
+  // exp(x)-1 - numerically stable for small x
+  constexpr auto operator()(auto a) const {
+    using namespace std;
+    return expm1(a);
+  }
+};
+
+struct FloorOp {
+  constexpr auto operator()(auto a) const {
+    using namespace std;
+    return floor(a);
+  }
+};
+
+struct CeilOp {
+  constexpr auto operator()(auto a) const {
+    using namespace std;
+    return ceil(a);
+  }
+};
+
+struct ErfOp {
+  // Error function - for Normal CDF
+  constexpr auto operator()(auto a) const {
+    using namespace std;
+    return erf(a);
+  }
+};
+
+struct ErfcOp {
+  // Complementary error function: 1 - erf(x)
+  constexpr auto operator()(auto a) const {
+    using namespace std;
+    return erfc(a);
+  }
+};
+
+struct Log10Op {
+  constexpr auto operator()(auto a) const {
+    using namespace std;
+    return log10(a);
+  }
+};
+
+struct Log2Op {
+  constexpr auto operator()(auto a) const {
+    using namespace std;
+    return log2(a);
+  }
+};
+
+struct Exp2Op {
+  constexpr auto operator()(auto a) const {
+    using namespace std;
+    return exp2(a);
+  }
+};
+
+struct CbrtOp {
+  // Cube root
+  constexpr auto operator()(auto a) const {
+    using namespace std;
+    return cbrt(a);
+  }
+};
+
+struct HypotOp {
+  // sqrt(x² + y²) without overflow
+  constexpr auto operator()(auto a, auto b) const {
+    using namespace std;
+    return hypot(a, b);
+  }
+};
+
+struct FmaOp {
+  // Fused multiply-add: a*b + c
+  constexpr auto operator()(auto a, auto b, auto c) const {
+    using namespace std;
+    return fma(a, b, c);
+  }
+};
+
+struct MaxOp {
+  constexpr auto operator()(auto a, auto b) const {
+    using namespace std;
+    return fmax(a, b);
+  }
+};
+
+struct MinOp {
+  constexpr auto operator()(auto a, auto b) const {
+    using namespace std;
+    return fmin(a, b);
   }
 };
 

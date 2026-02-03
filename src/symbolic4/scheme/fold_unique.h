@@ -1,102 +1,170 @@
 #pragma once
 
+#include <type_traits>
+#include <utility>
+
 #include "symbolic4/core.h"
 #include "symbolic4/let.h"
 
-// fold_unique: catamorphism that tracks visited identities
-// When traversing a DAG (where LetNodes share subexpressions), we want to
-// compute each unique subexpression only once.
+// ============================================================================
+// fold_unique.h - Catamorphism with identity tracking for DAG traversal
+// ============================================================================
+//
+// What problem does this solve?
+//
+// Regular fold treats expressions as trees, visiting every node. But LetNode
+// creates DAGs (Directed Acyclic Graphs) where subexpressions are shared:
+//
+//   TEMPURA_LET(t, x * x);       // t = x*x, computed once
+//   auto expr = t.sym() + t.sym() + t.sym();  // References t three times
+//
+// A naive tree fold would evaluate x*x three times. fold_unique tracks which
+// LetNode Ids have been visited and returns cached results for revisits.
+//
+// Interpreter Interface:
+//
+// fold_unique requires an interpreter I that provides:
+//   - terminal(term, visited) -> result_type
+//       Process a leaf node (Symbol, Constant, Literal, etc.)
+//
+//   - combine(visited, Op, child_results...) -> result_type
+//       Combine results from an Expression's children
+//
+//   - identity(visited) -> result_type
+//       What to return when revisiting an already-processed LetNode
+//       For counting: return 0 (don't count again)
+//
+//   - on_let(visited, let_node, inner_result) -> result_type  [optional]
+//       Called after processing a LetNode for the first time
+//       Default: just returns inner_result
+//
+// Context (Visited Set):
+//
+// Uses IdSet<...> from let.h for compile-time tracking. The visited set is
+// threaded through functionally - each call returns both the result AND the
+// updated visited set as std::pair. This enables full constexpr evaluation.
+//
+// ============================================================================
 
 namespace tempura::symbolic4 {
 
 // ============================================================================
-// fold_unique - Catamorphism with identity tracking
+// Interpreter trait detection
 // ============================================================================
-// Like fold, but the context tracks which LetNode identities have been visited.
-// When a LetNode is encountered:
-//   - If its Id is NOT in the visited set: compute it, add Id to set, cache result
-//   - If its Id IS in the visited set: retrieve cached result
-//
-// The interpreter must define:
-//   - terminal(term, ctx) -> result
-//   - combine(ctx, op, child_results...) -> result
-//   - on_let(ctx, let_node, inner_result) -> result  (for LetNode handling)
-
-template <typename I, Symbolic E, typename Ctx>
-constexpr auto fold_unique(E expr, Ctx& ctx);
 
 namespace detail {
 
-template <typename I, typename Op, typename Ctx, SizeT... Is, typename... Args>
-constexpr auto foldUniqueExpression(Expression<Op, Args...> expr, Ctx& ctx,
-                                     IndexSequence<Is...>) {
-  return I::combine(ctx, Op{},
-                    fold_unique<I>(expr.template arg<Is>(), ctx)...);
+// Detect if interpreter has on_let method
+template <typename I, typename Visited, typename Let, typename R,
+          typename = void>
+struct HasOnLet : std::false_type {};
+
+template <typename I, typename Visited, typename Let, typename R>
+struct HasOnLet<
+    I, Visited, Let, R,
+    std::void_t<decltype(I::on_let(kDeclVal<Visited>(), kDeclVal<Let>(),
+                                   kDeclVal<R>()))>> : std::true_type {};
+
+template <typename I, typename Visited, typename Let, typename R>
+constexpr bool has_on_let_v = HasOnLet<I, Visited, Let, R>::value;
+
+}  // namespace detail
+
+// ============================================================================
+// foldUnique - Main entry point (constexpr)
+// ============================================================================
+//
+// Traverses expression DAG, tracking visited LetNode Ids at compile time.
+// Returns std::pair{result, updated_visited_set}.
+
+template <typename I, Symbolic E, typename Visited = IdSet<>>
+constexpr auto foldUnique(E expr, Visited visited = {});
+
+// Forward declare for recursion
+namespace detail {
+
+// Fold children left-to-right, threading visited set through.
+//
+// Why explicit arity overloads instead of variadic fold?
+// Variadic pack expansion can't easily thread state between elements in constexpr
+// context. A fold expression like `(foldUnique<I>(args, visited), ...)` would use
+// the same `visited` for all children. We need sequential evaluation where each
+// child's result updates the visited set for the next child.
+
+template <typename I, typename Op, typename Visited>
+constexpr auto foldChildren(Visited visited) {
+  // Nullary operator
+  return std::pair{I::combine(visited, Op{}), visited};
+}
+
+template <typename I, typename Op, typename Visited, typename Child>
+constexpr auto foldChildren(Visited visited, Child child) {
+  auto [r, v] = foldUnique<I>(child, visited);
+  return std::pair{I::combine(v, Op{}, r), v};
+}
+
+template <typename I, typename Op, typename Visited, typename C1, typename C2>
+constexpr auto foldChildren(Visited visited, C1 c1, C2 c2) {
+  auto [r1, v1] = foldUnique<I>(c1, visited);
+  auto [r2, v2] = foldUnique<I>(c2, v1);
+  return std::pair{I::combine(v2, Op{}, r1, r2), v2};
+}
+
+template <typename I, typename Op, typename Visited, typename C1, typename C2,
+          typename C3>
+constexpr auto foldChildren(Visited visited, C1 c1, C2 c2, C3 c3) {
+  auto [r1, v1] = foldUnique<I>(c1, visited);
+  auto [r2, v2] = foldUnique<I>(c2, v1);
+  auto [r3, v3] = foldUnique<I>(c3, v2);
+  return std::pair{I::combine(v3, Op{}, r1, r2, r3), v3};
+}
+
+// Dispatch expression based on arity
+template <typename I, typename Op, typename Visited, SizeT... Is,
+          typename... Args>
+constexpr auto foldExpression(Expression<Op, Args...> expr, Visited visited,
+                              IndexSequence<Is...>) {
+  return foldChildren<I, Op>(visited, expr.template arg<Is>()...);
 }
 
 }  // namespace detail
 
-template <typename I, Symbolic E, typename Ctx>
-constexpr auto fold_unique(E expr, Ctx& ctx) {
+template <typename I, Symbolic E, typename Visited>
+constexpr auto foldUnique(E expr, Visited visited) {
+  using ResultType = typename I::result_type;
+
   if constexpr (is_let_node_v<E>) {
-    // LetNode: check if already visited
     using Id = get_let_id_t<E>;
 
-    if constexpr (id_set_contains_v<Id, typename Ctx::visited_set>) {
-      // Already computed - return cached result
-      return ctx.template get_cached<Id>();
+    if constexpr (id_set_contains_v<Id, Visited>) {
+      // Already visited - return identity, visited unchanged
+      return std::pair{I::identity(visited), visited};
     } else {
-      // Not yet computed - evaluate and cache
-      auto result = fold_unique<I>(expr.expr(), ctx);
-      ctx.template cache<Id>(result);
-      return I::on_let(ctx, expr, result);
+      // First visit - mark as visited, then process inner
+      using NewVisited = id_set_insert_t<Id, Visited>;
+      auto [inner_result, final_visited] =
+          foldUnique<I>(expr.expr(), NewVisited{});
+
+      if constexpr (detail::has_on_let_v<I, decltype(final_visited), E,
+                                         ResultType>) {
+        return std::pair{I::on_let(final_visited, expr, inner_result),
+                         final_visited};
+      } else {
+        return std::pair{inner_result, final_visited};
+      }
     }
   } else if constexpr (is_terminal_v<E>) {
-    return I::terminal(expr, ctx);
+    return std::pair{I::terminal(expr, visited), visited};
   } else {
-    return detail::foldUniqueExpression<I>(expr, ctx,
-                                           MakeIndexSequence<E::arity>{});
+    return detail::foldExpression<I>(expr, visited,
+                                     MakeIndexSequence<E::arity>{});
   }
 }
 
-// ============================================================================
-// UniqueContext - Context that tracks visited identities
-// ============================================================================
-// Template over a cache type that stores computed values.
-// The cache maps Id types to their computed results.
-
-template <typename VisitedSet, typename Cache>
-struct UniqueContext {
-  using visited_set = VisitedSet;
-  Cache cache;
-
-  template <typename Id>
-  constexpr auto get_cached() const {
-    return cache.template get<Id>();
-  }
-
-  template <typename Id, typename T>
-  constexpr void cache_result(T value) {
-    cache.template set<Id>(value);
-  }
-};
-
-// Simple compile-time cache for homogeneous values (all same type)
-template <typename T>
-struct SimpleCache {
-  // For demonstration - in practice, you'd use a type-indexed map
-  // This is a simplified version that works when all values are the same type
-  T value{};
-
-  template <typename Id>
-  constexpr auto get() const {
-    return value;
-  }
-
-  template <typename Id>
-  constexpr void set(T v) {
-    value = v;
-  }
-};
+// Convenience: just return the result value
+template <typename I, Symbolic E>
+constexpr auto foldUniqueValue(E expr) -> typename I::result_type {
+  return foldUnique<I>(expr, IdSet<>{}).first;
+}
 
 }  // namespace tempura::symbolic4

@@ -1,10 +1,10 @@
 // Statistical Rethinking 2025 - Week 1 Homework
 // https://github.com/rmcelreath/stat_rethinking_2025/tree/main/homework
 //
-// Demonstrates bayes2's compile-time probabilistic programming:
+// Demonstrates symbolic4's compile-time probabilistic programming:
 // - Declarative model specification with beta(), bernoulli()
-// - samplePrior() for ancestral sampling
-// - jointLogProb() for symbolic log-probability expressions
+// - sample() for ancestral sampling
+// - logProb() for symbolic log-probability expressions
 
 #include <algorithm>
 #include <numeric>
@@ -12,12 +12,12 @@
 #include <random>
 #include <vector>
 
-#include "bayes/binomial.h"  // For posterior predictive (bayes2 lacks binomial)
-#include "bayes2/bayes2.h"
+#include "bayes/binomial.h"  // For posterior predictive (symbolic4 lacks binomial RV)
+#include "symbolic4/distributions/distributions.h"
 #include "plot.h"
 
 using namespace tempura;
-using namespace tempura::bayes2;
+using namespace tempura::symbolic4;
 
 auto main() -> int {
   std::mt19937_64 rng{42};
@@ -49,21 +49,21 @@ Model:
   constexpr int64_t n = 171;
   constexpr int64_t k = 111;
 
-  // Define posterior using bayes2 - conjugate Beta-Binomial update
+  // Define posterior using symbolic4 - conjugate Beta-Binomial update
   // Prior: Beta(1, 1) = Uniform
   // Posterior: Beta(1 + k, 1 + (n - k)) = Beta(112, 61)
-  auto p_posterior = beta(1.0 + k, 1.0 + (n - k));
+  auto p_posterior = beta(lit(1.0 + k), lit(1.0 + (n - k)));
 
   // Show the log-probability expression (compile-time symbolic)
-  auto lp = jointLogProb(p_posterior);
+  auto lp = logProb(p_posterior);
   std::println("Log-probability expression (compile-time): log Beta(p | 112, 61)");
-  std::println("  evaluated at p=0.65: {:.4f}\n", evaluate(lp, BinderPack{p_posterior = 0.65}));
+  std::println("  evaluated at p=0.65: {:.4f}\n", evaluate(lp, p_posterior = 0.65));
 
-  // Sample h = 2(1-p) using bayes2's samplePrior
+  // Sample h = 2(1-p) using symbolic4's sample
   std::vector<double> h_samples;
   h_samples.reserve(kSamples);
   for (int i = 0; i < kSamples; ++i) {
-    double p = samplePrior(p_posterior, rng);
+    double p = sample(p_posterior, rng);
     h_samples.push_back(2.0 * (1.0 - p));
   }
   std::ranges::sort(h_samples);
@@ -97,8 +97,8 @@ Method: Integrate over uncertainty in p:
   constexpr int64_t n_new = 10;
   std::vector<int64_t> pred_samples(kSamples);
   for (int i = 0; i < kSamples; ++i) {
-    double p = samplePrior(p_posterior, rng);
-    // Use bayes::Binomial for posterior predictive (bayes2 focuses on continuous)
+    double p = sample(p_posterior, rng);
+    // Use bayes::Binomial for posterior predictive
     pred_samples[i] = bayes::Binomial{n_new, p}.sample(rng);
   }
 
@@ -133,26 +133,26 @@ Method: Integrate over uncertainty in p:
   // ═══════════════════════════════════════════════════════════════════════════
   std::println(R"(
 
-=== PROBLEM 3: HIERARCHICAL MODEL (bayes2 showcase) ===
+=== PROBLEM 3: HIERARCHICAL MODEL (symbolic4 showcase) ===
 
-Demonstrating bayes2's compile-time DAG construction for a simple
+Demonstrating symbolic4's compile-time model construction for a simple
 hierarchical model: mu -> y
 
   mu ~ Normal(0, 10)    # prior on mean
   y  ~ Normal(mu, 1)    # observation with known variance
 )");
 
-  // Define hierarchical model - DAG is built at compile time
-  auto mu = normal(0.0, 10.0);
-  auto y = normal(mu, 1.0);
+  // Define hierarchical model - expression graph built at compile time
+  auto mu = normal(lit(0.0), lit(10.0));
+  auto y = normal(mu, lit(1.0));
 
   // Joint log-probability is a symbolic expression
-  auto joint_lp = jointLogProb(y);
+  auto joint_lp = logProb(mu, y);
   std::println("Joint log p(mu, y) evaluated at mu=2, y=2.5: {:.4f}",
-               evaluate(joint_lp, BinderPack{mu = 2.0, y = 2.5}));
+               evaluate(joint_lp, mu = 2.0, y = 2.5));
 
-  // Sample from prior - sampleTrace returns values for all nodes
-  auto trace = sampleTrace(y, rng);
+  // Sample from prior - sampleAll returns values for all nodes
+  auto trace = sampleAll(rng, mu, y);
   std::println("Prior sample: mu = {:.2f}, y = {:.2f}", trace[mu], trace[y]);
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -163,10 +163,10 @@ hierarchical model: mu -> y
 1. Generative reasoning: "If X% cheat, what would we see?" Math confirms intuition.
 2. Bayesian updating: More data -> narrower credible intervals.
 3. Posterior predictive: Integrate over parameter uncertainty, don't just plug in estimates.
-4. bayes2 features:
+4. symbolic4 features:
    - Declarative model specification: beta(), normal(), etc.
-   - Compile-time DAG: jointLogProb() builds symbolic expressions
-   - Hierarchical sampling: sampleTrace() samples entire model
+   - Compile-time expression graphs: logProb() builds symbolic expressions
+   - Hierarchical sampling: sampleAll() samples entire model
 )");
 
   return 0;

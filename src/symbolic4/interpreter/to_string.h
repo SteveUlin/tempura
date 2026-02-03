@@ -4,11 +4,10 @@
 #include <string>
 #include <tuple>
 
-#include "meta/function_objects.h"
 #include "symbolic4/core.h"
 #include "symbolic4/let.h"
 #include "symbolic4/operators.h"
-#include "symbolic4/scheme/fold.h"
+#include "symbolic4/scheme/cata.h"
 
 // ============================================================================
 // to_string.h - Pretty-printing symbolic expressions
@@ -224,6 +223,144 @@ struct DisplayTraits<EOp> {
   static constexpr int precedence = Precedence::kAtomic;
 };
 
+// Inverse trigonometric
+template <>
+struct DisplayTraits<AsinOp> {
+  static constexpr const char* symbol = "asin";
+  static constexpr DisplayMode mode = DisplayMode::kPrefix;
+  static constexpr int precedence = Precedence::kUnary;
+};
+
+template <>
+struct DisplayTraits<AcosOp> {
+  static constexpr const char* symbol = "acos";
+  static constexpr DisplayMode mode = DisplayMode::kPrefix;
+  static constexpr int precedence = Precedence::kUnary;
+};
+
+template <>
+struct DisplayTraits<AtanOp> {
+  static constexpr const char* symbol = "atan";
+  static constexpr DisplayMode mode = DisplayMode::kPrefix;
+  static constexpr int precedence = Precedence::kUnary;
+};
+
+// Special functions for probability distributions
+template <>
+struct DisplayTraits<LgammaOp> {
+  static constexpr const char* symbol = "lgamma";
+  static constexpr DisplayMode mode = DisplayMode::kPrefix;
+  static constexpr int precedence = Precedence::kUnary;
+};
+
+template <>
+struct DisplayTraits<DigammaOp> {
+  static constexpr const char* symbol = "digamma";
+  static constexpr DisplayMode mode = DisplayMode::kPrefix;
+  static constexpr int precedence = Precedence::kUnary;
+};
+
+template <>
+struct DisplayTraits<ErfOp> {
+  static constexpr const char* symbol = "erf";
+  static constexpr DisplayMode mode = DisplayMode::kPrefix;
+  static constexpr int precedence = Precedence::kUnary;
+};
+
+template <>
+struct DisplayTraits<ErfcOp> {
+  static constexpr const char* symbol = "erfc";
+  static constexpr DisplayMode mode = DisplayMode::kPrefix;
+  static constexpr int precedence = Precedence::kUnary;
+};
+
+// Numerical stability functions
+template <>
+struct DisplayTraits<Log1pOp> {
+  static constexpr const char* symbol = "log1p";
+  static constexpr DisplayMode mode = DisplayMode::kPrefix;
+  static constexpr int precedence = Precedence::kUnary;
+};
+
+template <>
+struct DisplayTraits<Expm1Op> {
+  static constexpr const char* symbol = "expm1";
+  static constexpr DisplayMode mode = DisplayMode::kPrefix;
+  static constexpr int precedence = Precedence::kUnary;
+};
+
+// Additional math functions
+template <>
+struct DisplayTraits<AbsOp> {
+  static constexpr const char* symbol = "abs";
+  static constexpr DisplayMode mode = DisplayMode::kPrefix;
+  static constexpr int precedence = Precedence::kUnary;
+};
+
+template <>
+struct DisplayTraits<FloorOp> {
+  static constexpr const char* symbol = "floor";
+  static constexpr DisplayMode mode = DisplayMode::kPrefix;
+  static constexpr int precedence = Precedence::kUnary;
+};
+
+template <>
+struct DisplayTraits<CeilOp> {
+  static constexpr const char* symbol = "ceil";
+  static constexpr DisplayMode mode = DisplayMode::kPrefix;
+  static constexpr int precedence = Precedence::kUnary;
+};
+
+template <>
+struct DisplayTraits<CbrtOp> {
+  static constexpr const char* symbol = "cbrt";
+  static constexpr DisplayMode mode = DisplayMode::kPrefix;
+  static constexpr int precedence = Precedence::kUnary;
+};
+
+template <>
+struct DisplayTraits<Log10Op> {
+  static constexpr const char* symbol = "log10";
+  static constexpr DisplayMode mode = DisplayMode::kPrefix;
+  static constexpr int precedence = Precedence::kUnary;
+};
+
+template <>
+struct DisplayTraits<Log2Op> {
+  static constexpr const char* symbol = "log2";
+  static constexpr DisplayMode mode = DisplayMode::kPrefix;
+  static constexpr int precedence = Precedence::kUnary;
+};
+
+template <>
+struct DisplayTraits<Exp2Op> {
+  static constexpr const char* symbol = "exp2";
+  static constexpr DisplayMode mode = DisplayMode::kPrefix;
+  static constexpr int precedence = Precedence::kUnary;
+};
+
+// Binary functions (prefix style with two args)
+template <>
+struct DisplayTraits<HypotOp> {
+  static constexpr const char* symbol = "hypot";
+  static constexpr DisplayMode mode = DisplayMode::kPrefix;
+  static constexpr int precedence = Precedence::kUnary;
+};
+
+template <>
+struct DisplayTraits<MaxOp> {
+  static constexpr const char* symbol = "max";
+  static constexpr DisplayMode mode = DisplayMode::kPrefix;
+  static constexpr int precedence = Precedence::kUnary;
+};
+
+template <>
+struct DisplayTraits<MinOp> {
+  static constexpr const char* symbol = "min";
+  static constexpr DisplayMode mode = DisplayMode::kPrefix;
+  static constexpr int precedence = Precedence::kUnary;
+};
+
 // ============================================================================
 // Type-based unique ID generation (works with incomplete types)
 // ============================================================================
@@ -294,12 +431,12 @@ struct StringBinding {
 
 // name() function creates StringBinding from symbol and string
 template <typename Id>
-auto name(Atom<Id, Lookup>, const char* str) -> StringBinding<Id> {
+auto name(Atom<Id, Free>, const char* str) -> StringBinding<Id> {
   return StringBinding<Id>{std::string(str)};
 }
 
 template <typename Id>
-auto name(Atom<Id, Lookup>, std::string str) -> StringBinding<Id> {
+auto name(Atom<Id, Free>, std::string str) -> StringBinding<Id> {
   return StringBinding<Id>{std::move(str)};
 }
 
@@ -340,12 +477,9 @@ struct StringBinderPack {
 
 template <typename Bindings>
 struct ToString {
-  using result_type = StringResult;
-  using context_type = Bindings;
-
   // Terminals
   template <typename T>
-  static auto terminal(T, context_type& ctx) -> StringResult {
+  static auto terminal(T, Bindings& ctx) -> StringResult {
     if constexpr (is_constant_v<T>) {
       if constexpr (std::is_integral_v<decltype(T::value)>) {
         return {std::format("{}", T::value), Precedence::kAtomic};
@@ -360,7 +494,7 @@ struct ToString {
                 Precedence::kMultiplication};
       }
     } else if constexpr (is_literal_v<T>) {
-      return {std::format("{}", T{}.strategy_.value), Precedence::kAtomic};
+      return {std::format("{}", T{}.effect_.value), Precedence::kAtomic};
     } else if constexpr (is_atom_v<T>) {
       // Symbol - lookup name from bindings
       return {ctx.template lookup<typename T::id_type>(), Precedence::kAtomic};
@@ -371,7 +505,7 @@ struct ToString {
 
   // Combine child results
   template <typename Op, typename... Rs>
-  static auto combine(context_type&, Op, Rs... children) -> StringResult {
+  static auto combine(Bindings&, Rs... children) -> StringResult {
     constexpr auto mode = DisplayTraits<Op>::mode;
     constexpr auto prec = DisplayTraits<Op>::precedence;
     const char* sym = DisplayTraits<Op>::symbol;
@@ -447,9 +581,8 @@ struct ToString {
 template <Symbolic E, typename... Bindings>
 auto toString(E expr, Bindings... bindings) -> std::string {
   using Pack = StringBinderPack<Bindings...>;
-  using ToStringType = ToString<Pack>;
   Pack ctx{std::tuple{bindings...}};
-  return fold<ToStringType>(expr, ctx).str;
+  return fold<ToString<Pack>>(expr, ctx).str;
 }
 
 // ============================================================================

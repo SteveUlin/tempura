@@ -1,15 +1,23 @@
 // BMJ Weekend Submissions Analysis
-// Statistical Rethinking 2025 - Hierarchical Models
+// Statistical Rethinking 2025 - Hierarchical Models (B01)
 // Data: BMJSubmissions.csv (doi:10.1136/bmj.l6460)
 //
-// Compares no-pooling vs partial-pooling estimates for weekend submission
-// probability across 38 countries. Demonstrates shrinkage toward the global mean.
+// Models the probability of weekend submission using a logit-linear model:
+//   W ~ Bernoulli(p)
+//   logit(p) = a + b[L]
+//
+// Compares:
+//   m1: No-pooling     - b[L] ~ Normal(0, 0.5) fixed
+//   m2: Partial-pooling - b[L] ~ Normal(0, sigma), sigma ~ Exponential(1)
+//
+// Demonstrates shrinkage toward the global mean for countries with small samples.
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <fstream>
-#include <functional>
 #include <numeric>
 #include <print>
 #include <random>
@@ -17,19 +25,10 @@
 #include <vector>
 
 #include "bayes/estimation/metropolis_hastings.h"
-#include "bayes2/bayes2.h"
 #include "csv.h"
 #include "plot.h"
-#include "prob/log_prob.h"
-#include "symbolic3/indexed_evaluate.h"
 
 using namespace tempura;
-using namespace tempura::bayes2;
-using namespace tempura::prob;
-using namespace tempura::symbolic3;
-
-// Dimension tag for plate notation - represents the set of countries
-struct Countries {};
 
 struct CountryData {
   std::string name;
@@ -38,56 +37,9 @@ struct CountryData {
   int64_t weekend;
 };
 
-// Beta PDF (unnormalized for plotting - we only care about shape)
-auto betaPdf(double alpha, double beta) {
-  return [alpha, beta](double x) -> double {
-    if (x <= 0.0 || x >= 1.0) return 0.0;
-    // Use log to avoid overflow, then exp
-    double log_pdf = (alpha - 1) * std::log(x) + (beta - 1) * std::log(1 - x);
-    return std::exp(log_pdf);
-  };
-}
+auto invLogit(double x) -> double { return 1.0 / (1.0 + std::exp(-x)); }
 
-// sparklineHistogram is now provided by plot.h
-
-// Beta distribution statistics
-struct BetaStats {
-  double alpha;
-  double beta;
-  double mean;
-  double std;
-  double ci_low;   // 2.5th percentile (approx)
-  double ci_high;  // 97.5th percentile (approx)
-};
-
-auto betaStats(double alpha, double beta) -> BetaStats {
-  double mean = alpha / (alpha + beta);
-  double var = alpha * beta / ((alpha + beta) * (alpha + beta) * (alpha + beta + 1));
-  double std = std::sqrt(var);
-  // Approximate 95% CI using normal approximation (good for large α, β)
-  return {alpha, beta, mean, std, mean - 1.96 * std, mean + 1.96 * std};
-}
-
-// Peak-normalized Beta PDF - scales so maximum value is 1.0
-// This makes narrow distributions visible alongside wide ones
-auto betaPdfNormalized(double alpha, double beta) {
-  // Mode of Beta distribution (where PDF is maximum)
-  double mode = (alpha - 1) / (alpha + beta - 2);
-  if (alpha <= 1) mode = 0.001;  // Handle edge cases
-  if (beta <= 1) mode = 0.999;
-
-  // Compute the peak value for normalization
-  auto raw_pdf = betaPdf(alpha, beta);
-  double peak = raw_pdf(mode);
-
-  return [alpha, beta, peak](double x) -> double {
-    if (x <= 0.0 || x >= 1.0) return 0.0;
-    double log_pdf = (alpha - 1) * std::log(x) + (beta - 1) * std::log(1 - x);
-    return std::exp(log_pdf) / peak;  // Normalize to [0, 1]
-  };
-}
-
-// Parse CSV and aggregate by country using CsvReader
+// Parse CSV and aggregate by country
 auto loadData(const std::string& path) -> std::vector<CountryData> {
   std::ifstream file{path};
   if (!file) {
@@ -96,12 +48,11 @@ auto loadData(const std::string& path) -> std::vector<CountryData> {
   }
 
   CsvReader reader{file};
-  reader.skipRows(1);  // Skip header
+  reader.skipRows(1);
 
   std::vector<CountryData> countries(39);  // IDs 1-38
 
   while (reader.nextRow()) {
-    // Columns: T, Y, country_name, L (country_id), W (weekend)
     std::string name = reader.get<std::string>(2);
     int64_t id = reader.get<int64_t>(3);
     int64_t weekend = reader.get<int64_t>(4);
@@ -118,20 +69,38 @@ auto loadData(const std::string& path) -> std::vector<CountryData> {
       result.push_back(c);
     }
   }
-  std::ranges::sort(result, [](const auto& a, const auto& b) {
-    return a.total > b.total;
-  });
 
   return result;
 }
 
+// Compute mean and percentile interval from samples
+struct Summary {
+  double mean;
+  double lo;  // 5.5th percentile (89% interval)
+  double hi;  // 94.5th percentile
+};
+
+auto summarize(std::vector<double> samples) -> Summary {
+  double sum = std::accumulate(samples.begin(), samples.end(), 0.0);
+  double mean = sum / static_cast<double>(samples.size());
+
+  std::ranges::sort(samples);
+  auto idx_lo = static_cast<std::size_t>(0.055 * static_cast<double>(samples.size() - 1));
+  auto idx_hi = static_cast<std::size_t>(0.945 * static_cast<double>(samples.size() - 1));
+
+  return {mean, samples[idx_lo], samples[idx_hi]};
+}
 
 auto main() -> int {
+  // Use black for inverted fg - works on dark terminals
+  // (Skip queryTerminalBackground() - OSC 11 interferes with terminal multiplexers like Zellij)
+  constexpr RGB terminal_bg{0, 0, 0};
+
   std::mt19937_64 rng{42};
-  constexpr int kSamples = 10'000;
 
   std::println(R"(
 === BMJ WEEKEND SUBMISSIONS ANALYSIS ===
+Statistical Rethinking 2025 - Homework B01
 
 Data: 49,464 article submissions to The BMJ (2012-2018)
 Question: What is the probability that authors from each country submit on weekends?
@@ -142,541 +111,443 @@ Question: What is the probability that authors from each country submit on weeke
 
   std::println("Loaded {} countries\n", countries.size());
 
-  int64_t total_n = 0;
-  int64_t total_k = 0;
-  for (const auto& c : countries) {
-    total_n += c.total;
-    total_k += c.weekend;
-  }
-  double global_rate = static_cast<double>(total_k) / total_n;
+  // Sort by country ID for consistent indexing
+  std::ranges::sort(countries, [](const auto& a, const auto& b) {
+    return a.country_id < b.country_id;
+  });
 
-  // Prior hyperparameters for Beta distribution on country-level rates.
-  // These reflect our PRIOR BELIEFS before seeing any data:
-  //   - If submissions were uniformly random across days: 2/7 ≈ 28.6%
-  //   - But research suggests people prefer weekdays, so center lower at ~15%
-  //   - Weak prior (low concentration) allows data to dominate
-  //
-  // Beta(3, 17) has mean = 3/20 = 15%, std ≈ 7.7%
-  // This says: "Rates probably around 15%, rarely above 30%"
-  //
-  // NOTE: In a full Bayesian treatment, we would put priors on α and β:
-  //   alpha ~ Gamma(2, 0.1)
-  //   beta ~ Gamma(2, 0.1)
-  // And use HMC to jointly sample (α, β, θ[1]...θ[38]) from the posterior.
-  // This example uses fixed hyperparameters for simplicity.
-  constexpr double alpha_prior = 3.0;
-  constexpr double beta_prior = 17.0;
+  const std::size_t kNumCountries = countries.size();
 
   // =========================================================================
-  // GENERATIVE MODEL VISUALIZATION
+  // PRIOR PREDICTIVE SIMULATION
   // =========================================================================
   std::println(R"(
-=== THE GENERATIVE MODEL ===
+=== PRIOR PREDICTIVE SIMULATION ===
 
-FULL BAYESIAN (hierarchical):             SIMPLIFIED (this example):
-  alpha ~ Gamma(2, 0.1)                     alpha = 3     (fixed)
-  beta  ~ Gamma(2, 0.1)                     beta  = 17    (fixed)
-  theta[i] ~ Beta(alpha, beta)              theta[i] ~ Beta(alpha, beta)
-  k ~ Binomial(n, theta[i])                 k ~ Binomial(n, theta[i])
+What do our priors imply about weekend submission probabilities?
 
-NO-POOLING (baseline):
-  theta[i] ~ Beta(1, 1) = Uniform
-  k ~ Binomial(n, theta[i])
+If submission timing were random, P(weekend) = 2/7 ≈ 0.14
+So we expect rates BELOW this (people prefer weekdays for work).
 
-The simplified model uses conjugate Beta-Binomial updating (analytical).
-Full Bayesian inference would use HMC to jointly sample (α, β, θ[1..38]).
+Model: logit(p) = a + b[L]
+  a ~ Normal(-2, 1)     # global intercept
+  b[L] ~ Normal(0, 0.5) # country offset
+
+inv_logit(-2) ≈ 0.12, so prior centers near the random baseline.
 )");
 
-  // Plot 1: Prior distributions (before any data)
-  std::println("=== PRIOR DISTRIBUTIONS (before seeing any data) ===\n");
+  std::normal_distribution<double> prior_a{-2.0, 1.0};
+  std::normal_distribution<double> prior_b{0.0, 0.5};
 
-  std::function<double(double)> flat_prior = betaPdf(1.0, 1.0);
-  std::function<double(double)> hierarchical_prior = betaPdf(alpha_prior, beta_prior);
+  // Generate 12 prior simulations - horizontal sparkline plot
+  constexpr int kNumSims = 12;
+  constexpr int kNumBins = 50;          // Probability bins (0-50% in 1% increments)
+  constexpr double kBinWidth = 0.01;    // 1% per bin
 
-  std::vector<Series> prior_series = {
-      {flat_prior, colors::kCyan, "No-pooling: Beta(1,1) = Uniform"},
-      {hierarchical_prior, colors::kYellow,
-       std::format("Partial-pooling: Beta({:.1f}, {:.1f})", alpha_prior, beta_prior)},
-  };
+  std::array<std::array<int, kNumBins>, kNumSims> histograms{};
 
-  std::print("{}", multiPlotBraille(prior_series, 0.0, 0.5, 70, 12,
-                                    true, false, "Prior Beliefs About Weekend Rate"));
-
-  double prior_mean = alpha_prior / (alpha_prior + beta_prior) * 100;
-  std::println(R"(
-The flat prior (cyan) says "any rate 0-100% is equally likely"
-The hierarchical prior (yellow) says "rates cluster around {:.0f}%, rarely exceed 30%"
-  This encodes prior belief that weekend rates are lower than random (2/7 ≈ 29%)
-)", prior_mean);
-
-  // =========================================================================
-  // POSTERIOR COMPARISON FOR SELECTED COUNTRIES
-  // =========================================================================
-  std::println("\n=== POSTERIOR DISTRIBUTIONS (after seeing data) ===\n");
-
-  // Find interesting countries: one large, one medium, one small sample
-  auto find_country = [&](const std::string& name) -> const CountryData* {
-    for (const auto& c : countries) {
-      if (c.name == name) return &c;
-    }
-    return nullptr;
-  };
-
-  // Large sample: UK (n~11k)
-  // Medium sample: Japan (n~1.5k)
-  // Small sample: Cameroon (n~100)
-  struct ExampleCountry {
-    std::string name;
-    int64_t n;
-    int64_t k;
-  };
-  std::vector<ExampleCountry> examples;
-
-  if (auto* uk = find_country("United Kingdom")) {
-    examples.push_back({"UK", uk->total, uk->weekend});
-  }
-  if (auto* japan = find_country("Japan")) {
-    examples.push_back({"Japan", japan->total, japan->weekend});
-  }
-  if (auto* cameroon = find_country("Cameroon")) {
-    examples.push_back({"Cameroon", cameroon->total, cameroon->weekend});
-  }
-
-  std::println("How CERTAIN are we about each country's weekend rate?\n");
-  std::println("{:12} {:>7} {:>9}  {:>20}  {:>8}",
-               "Country", "n", "Estimate", "95% Credible Interval", "Width");
-  std::println("{:-<65}", "");
-
-  for (const auto& ex : examples) {
-    // No-pooling posterior: Beta(1 + k, 1 + n - k)
-    auto no_pool = betaStats(1.0 + ex.k, 1.0 + ex.n - ex.k);
-
-    std::println("{:12} {:7}   {:6.2f}%    [{:5.2f}%, {:5.2f}%]    ±{:.2f}%",
-                 ex.name, ex.n,
-                 no_pool.mean * 100,
-                 no_pool.ci_low * 100, no_pool.ci_high * 100,
-                 (no_pool.ci_high - no_pool.ci_low) / 2 * 100);
-  }
-
-  std::println(R"(
-The KEY insight: Sample size determines CERTAINTY, not the estimate itself.
-
-- UK has 11k observations → we're very certain (±0.6% range)
-- Japan has 1.5k observations → moderately certain (±1.6% range)
-- Cameroon has 103 observations → quite uncertain (±7.5% range)
-
-When we're UNCERTAIN (small n), the prior has more influence → shrinkage!
-)");
-
-  // Show 95% credible intervals as horizontal bars - clearer than bell curves
-  // for comparing uncertainty across countries
-  std::println("=== CREDIBLE INTERVAL COMPARISON ===\n");
-  std::println("Each bar shows the 95%% credible interval for weekend submission rate.");
-  std::println("Wider bar = more uncertainty, narrower bar = more certainty.\n");
-
-  // Find overall range for consistent x-axis
-  constexpr double x_min_all = 0.05;
-  constexpr double x_max_all = 0.35;
-  constexpr int bar_width = 60;
-
-  // X-axis labels
-  std::println("         5%%       10%%       15%%       20%%       25%%       30%%       35%%");
-  std::println("         |         |         |         |         |         |         |");
-
-  for (const auto& ex : examples) {
-    auto no_pool = betaStats(1.0 + ex.k, 1.0 + ex.n - ex.k);
-    auto partial_pool = betaStats(alpha_prior + ex.k,
-                                  beta_prior + ex.n - ex.k);
-
-    double shrinkage = (no_pool.mean - partial_pool.mean) * 100;
-
-    std::println("\n{} (n={}):", ex.name, ex.n);
-
-    // No-pooling bar (cyan)
-    std::print("  No-pool:    {}  {:.1f}%% [{:.1f}%%, {:.1f}%%]\n",
-               credibleIntervalBar(no_pool.ci_low, no_pool.ci_high, no_pool.mean,
-                                   x_min_all, x_max_all, bar_width, colors::kCyan),
-               no_pool.mean * 100, no_pool.ci_low * 100, no_pool.ci_high * 100);
-
-    // Partial-pooling bar (yellow)
-    std::print("  Partial:    {}  {:.1f}%% [{:.1f}%%, {:.1f}%%]\n",
-               credibleIntervalBar(partial_pool.ci_low, partial_pool.ci_high, partial_pool.mean,
-                                   x_min_all, x_max_all, bar_width, colors::kYellow),
-               partial_pool.mean * 100, partial_pool.ci_low * 100, partial_pool.ci_high * 100);
-
-    std::println("  Shrinkage: {:+.2f}pp toward global mean ({:.1f}%%)", -shrinkage, global_rate * 100);
-  }
-
-  std::println(R"(
-Reading the bars:
-- UK: Bars are nearly invisible (very narrow) - extremely high certainty
-- Japan: Medium-width bars - moderate certainty
-- Cameroon: Wide bars - high uncertainty, partial-pooling pulls estimate left
-)");
-
-  // Show compact sparkline histograms for each country
-  std::println("=== POSTERIOR DISTRIBUTIONS (sparkline histograms) ===\n");
-  std::println("Each histogram shows the probability density. Taller = more likely.");
-  std::println("All plotted on same x-axis: 5%% to 35%%\n");
-
-  constexpr double hist_min = 0.05;
-  constexpr double hist_max = 0.35;
-  constexpr int hist_bins = 60;
-
-  // X-axis scale
-  std::println("              5%%        10%%        15%%        20%%        25%%        30%%        35%%");
-
-  for (const auto& ex : examples) {
-    auto no_pool = betaStats(1.0 + ex.k, 1.0 + ex.n - ex.k);
-    auto partial_pool = betaStats(alpha_prior + ex.k,
-                                  beta_prior + ex.n - ex.k);
-
-    std::function<double(double)> no_pool_pdf =
-        betaPdf(1.0 + ex.k, 1.0 + ex.n - ex.k);
-    std::function<double(double)> partial_pdf =
-        betaPdf(alpha_prior + ex.k, beta_prior + ex.n - ex.k);
-
-    auto [np_top, np_bot] = sparklineHistogram(no_pool_pdf, hist_min, hist_max, hist_bins);
-    auto [pp_top, pp_bot] = sparklineHistogram(partial_pdf, hist_min, hist_max, hist_bins);
-
-    double shrinkage = (no_pool.mean - partial_pool.mean) * 100;
-
-    std::println("\n{} (n={}):", ex.name, ex.n);
-
-    // For very narrow distributions, add a position marker
-    bool is_narrow = (no_pool.std < 0.005);
-
-    if (is_narrow) {
-      // Create a marker line showing where the spike is
-      std::string marker(hist_bins, ' ');
-      int pos = static_cast<int>((no_pool.mean - hist_min) / (hist_max - hist_min) * hist_bins);
-      pos = std::clamp(pos, 0, hist_bins - 1);
-      marker[pos] = '|';
-      std::println("  No-pool:  \033[38;2;100;255;255m{}█\033[0m  {:.1f}%% (spike too narrow to show)", marker, no_pool.mean * 100);
-      marker[pos] = '|';
-      int pos2 = static_cast<int>((partial_pool.mean - hist_min) / (hist_max - hist_min) * hist_bins);
-      pos2 = std::clamp(pos2, 0, hist_bins - 1);
-      marker = std::string(hist_bins, ' ');
-      marker[pos2] = '|';
-      std::println("  Partial:  \033[38;2;255;255;100m{}█\033[0m  {:.1f}%%", marker, partial_pool.mean * 100);
-    } else {
-      std::println("  No-pool:  \033[38;2;100;255;255m{}\033[0m  {:.1f}%%", np_top, no_pool.mean * 100);
-      std::println("            \033[38;2;100;255;255m{}\033[0m", np_bot);
-      std::println("  Partial:  \033[38;2;255;255;100m{}\033[0m  {:.1f}%%", pp_top, partial_pool.mean * 100);
-      std::println("            \033[38;2;255;255;100m{}\033[0m", pp_bot);
-    }
-    std::println("  Shrinkage: {:+.2f}pp", -shrinkage);
-  }
-
-  // =========================================================================
-  // HIERARCHICAL MODEL WITH INDEXED API
-  // =========================================================================
-  std::println("\n=== HIERARCHICAL MODEL USING INDEXED API ===\n");
-
-  // Define the FULL hierarchical model with Binomial likelihood:
-  //
-  //   alpha ~ Gamma(2, 0.1)          // hyperparameter prior
-  //   beta_hyper ~ Gamma(2, 0.1)     // hyperparameter prior
-  //   theta[i] ~ Beta(alpha, beta)   // per-country probability
-  //   k[i] ~ Binomial(n[i], theta[i]) // observed weekend counts
-  //
-  // In bayes2, this is expressed naturally with plate notation:
-
-  auto alpha_hyper = gamma(2.0, 0.1);
-  auto beta_hyper = gamma(2.0, 0.1);
-  auto theta = plate<Countries>(beta(alpha_hyper, beta_hyper));
-
-  // n[i] is observed data (trial counts), represented as an indexed symbol
-  auto n_obs = indexedSymbol<Countries>();
-
-  // k[i] ~ Binomial(n[i], theta[i]) - the observed data node
-  auto k_obs = plate<Countries>(binomial(n_obs, theta));
-
-  // Prepare observed data as indexed arrays
-  std::vector<double> n_values;  // total submissions per country
-  std::vector<double> k_values;  // weekend submissions per country
-  for (const auto& c : countries) {
-    n_values.push_back(static_cast<double>(c.total));
-    k_values.push_back(static_cast<double>(c.weekend));
-  }
-
-  // Compute posterior means for each country using conjugate update
-  std::vector<double> theta_posterior_means;
-  for (const auto& c : countries) {
-    double post_alpha = alpha_prior + c.weekend;
-    double post_beta = beta_prior + c.total - c.weekend;
-    theta_posterior_means.push_back(post_alpha / (post_alpha + post_beta));
-  }
-
-  // jointLogProb(k_obs) traverses the FULL DAG:
-  //   k_obs → binomial log-prob (summed over countries)
-  //   → theta → beta log-prob (summed over countries)
-  //   → alpha_hyper, beta_hyper → gamma log-probs
-  auto full_joint_lp = jointLogProb(k_obs);
-
-  double total_log_prob = evaluate(full_joint_lp,
-                                   BinderPack{alpha_hyper = alpha_prior,
-                                              beta_hyper = beta_prior,
-                                              theta = indexed(theta_posterior_means),
-                                              n_obs = indexed(n_values),
-                                              k_obs = indexed(k_values)});
-
-  std::println("Model: theta[i] ~ Beta(alpha, beta), k[i] ~ Binomial(n[i], theta[i])");
-  std::println("  alpha = {:.2f}, beta = {:.2f}", alpha_prior, beta_prior);
-  std::println("  {} countries with posterior means", countries.size());
-  std::println("  jointLogProb(k_obs) traverses full DAG automatically");
-  std::println("  Total joint log-prob = {:.2f}", total_log_prob);
-
-  // =========================================================================
-  // FULL BAYESIAN INFERENCE VIA METROPOLIS-HASTINGS
-  // =========================================================================
-  std::println("\n=== FULL BAYESIAN INFERENCE VIA MCMC ===\n");
-
-  // Joint posterior: p(α, β, θ[1..38] | data) ∝ p(α) p(β) Π p(θ[i]|α,β) Π p(k[i]|n[i],θ[i])
-  //
-  // State vector: [log(α), log(β), logit(θ[0]), ..., logit(θ[37])]
-  // We use transformed parameters to enable unconstrained sampling.
-
-  constexpr std::size_t kNumCountries = 38;
-  constexpr std::size_t kStateDim = 2 + kNumCountries;  // α, β, θ[0..37]
-
-  using State = std::array<double, kStateDim>;
-
-  // =========================================================================
-  // HYPERPRIORS: Gamma(shape, rate) on α and β
-  // =========================================================================
-  //
-  // We need priors on the Beta distribution's parameters α and β.
-  // Gamma is a natural choice: positive support, flexible shape.
-  //
-  // Gamma(shape=k, rate=λ) has:
-  //   Mean = k/λ          → 2/0.1 = 20
-  //   Mode = (k-1)/λ      → 1/0.1 = 10  (for k ≥ 1)
-  //   Std  = √(k/λ²)      → √200 ≈ 14
-  //   95% interval ≈ [1, 55]  (roughly)
-  //
-  // Why shape=2, rate=0.1?
-  //
-  //   1. WEAKLY INFORMATIVE: Mean 20 with std 14 covers a wide range.
-  //      This lets the data determine the true values.
-  //
-  //   2. CONCENTRATION PRIOR: E[α + β] ≈ 40 pseudo-observations.
-  //      Not too tight (would force countries to be identical) nor
-  //      too loose (would give no regularization).
-  //
-  //   3. MEAN PRIOR: E[α/(α+β)] ≈ 0.5, but with huge variance.
-  //      This is intentionally uninformative about the mean rate.
-  //      The data overwhelms this prior.
-  //
-  //   4. MODE AT 10: The prior gently favors moderate values of α, β
-  //      over very small values (which would make Beta nearly uniform)
-  //      or very large values (which would concentrate all rates tightly).
-  //
-  // Alternative: Gamma(1, 0.1) would be exponential (mode at 0).
-  //              Gamma(0.1, 0.1) would be nearly improper.
-  //              Gamma(10, 0.5) would be more informative (mean=20, std≈4.5).
-  //
-  // The priors are already encoded in the symbolic model (alpha_hyper, beta_hyper).
-  // We use them via full_joint_lp which computes the complete joint log-prob.
-
-  // Log-posterior function (manual computation)
-  // State: [log_alpha, log_beta, logit_theta[0], ..., logit_theta[37]]
-  //
-  // TODO: The symbolic full_joint_lp should work here, but there's a bug
-  // in the indexed evaluation. For now, compute manually.
-  auto log_posterior = [&](const State& state) -> double {
-    double log_alpha = state[0];
-    double log_beta = state[1];
-    double alpha_val = std::exp(log_alpha);
-    double beta_val = std::exp(log_beta);
-
-    // Reject invalid hyperparameters
-    if (alpha_val < 1e-6 || beta_val < 1e-6 || alpha_val > 1e6 || beta_val > 1e6) {
-      return -std::numeric_limits<double>::infinity();
-    }
-
-    // Prior on α, β (+ Jacobian for log transform)
-    double lp = prob::logGamma(alpha_val, 2.0, 0.1) + log_alpha;
-    lp += prob::logGamma(beta_val, 2.0, 0.1) + log_beta;
-
-    // For each country: p(θ[i] | α, β) and p(k[i] | n[i], θ[i])
-    for (std::size_t i = 0; i < kNumCountries; ++i) {
-      double logit_theta = state[2 + i];
-      double theta_i = 1.0 / (1.0 + std::exp(-logit_theta));  // sigmoid
-
-      // Reject invalid theta
-      if (theta_i < 1e-10 || theta_i > 1.0 - 1e-10) {
-        return -std::numeric_limits<double>::infinity();
+  for (int sim = 0; sim < kNumSims; ++sim) {
+    double a = prior_a(rng);
+    for (std::size_t j = 0; j < kNumCountries; ++j) {
+      double b = prior_b(rng);
+      double p = invLogit(a + b);
+      auto bin = static_cast<int>(p / kBinWidth);
+      if (bin >= 0 && bin < kNumBins) {
+        histograms[sim][bin]++;
       }
+    }
+  }
 
-      // Prior on θ[i] (+ Jacobian for logit transform)
-      // d(theta)/d(logit_theta) = theta * (1 - theta)
-      double jacobian = theta_i * (1.0 - theta_i);
-      lp += prob::logBeta(theta_i, alpha_val, beta_val) + std::log(jacobian);
+  // Find max count for scaling
+  int max_count = 1;
+  for (const auto& hist : histograms) {
+    for (int count : hist) {
+      max_count = std::max(max_count, count);
+    }
+  }
 
-      // Likelihood: k[i] ~ Binomial(n[i], θ[i])
-      lp += prob::logBinomial(k_values[i], n_values[i], theta_i);
+  // Symmetric violin: upper row grows DOWN, lower row grows UP
+  // Uses fg/bg color inversion for upper row to make blocks "fill from top"
+  // Eighth blocks ▁▂▃▄▅▆▇█ index 1-8 fill from bottom
+  constexpr const char* kEighths[] = {" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"};
+
+  // terminal_bg was queried at program start to avoid OSC interference
+
+  std::println("Prior predictive violin (12 simulations, 38 countries each):\n");
+  std::println("     │0%%       10%%       20%%       30%%       40%%       50%%");
+  std::println("     │|          |          |          |          |          |");
+
+  for (int sim = 0; sim < kNumSims; ++sim) {
+    std::string upper_row;
+    std::string lower_row;
+
+    for (int bin = 0; bin < kNumBins; ++bin) {
+      int count = histograms[sim][bin];
+
+      if (count == 0) {
+        upper_row += " ";
+        lower_row += " ";
+      } else {
+        // Scale to 1-8 levels per row
+        int h = 1 + (count - 1) * 7 / max_count;
+        h = std::clamp(h, 1, 8);
+
+        // Color intensity based on density
+        double t = static_cast<double>(count) / max_count;
+        RGB color{
+            static_cast<uint8_t>(100 + 155 * t),
+            static_cast<uint8_t>(200 + 55 * t),
+            static_cast<uint8_t>(255 * (1.0 - 0.6 * t))
+        };
+
+        // Upper row: normal - blocks fill UP from bottom (away from center)
+        upper_row += color.wrap(kEighths[h]);
+
+        // Lower row: INVERTED colors + complementary block
+        // Makes blocks appear to fill DOWN from top (away from center)
+        // height h → use block (8-h) with fg=terminal_bg, bg=color
+        // h=1 → ▇ inverted = 1/8 from top (small, close to center)
+        // h=7 → ▁ inverted = 7/8 from top (large, extends down away from center)
+        // h=8 → █ with normal colors (full block)
+        if (h == 8) {
+          lower_row += color.wrap(kEighths[8]);
+        } else {
+          lower_row += terminal_bg.wrapFgBg(kEighths[8 - h], color);
+        }
+      }
+    }
+
+    // Upper row (bars grow up), then lower row (bars grow down)
+    std::println("sim{:2}│{}\033[0m", sim + 1, upper_row);
+    std::println("     │{}\033[0m", lower_row);
+  }
+
+  std::println(R"(
+Symmetric violin: bars grow AWAY from center (outward bulge = higher density).
+Lower row uses inverted fg/bg colors to make blocks fill from top down.
+
+Most draws center around 10-20%%. Some (like sim 5) cluster tightly when
+the global intercept 'a' happens to be very negative.
+)");
+
+  // =========================================================================
+  // MODEL SETUP
+  // =========================================================================
+  // State layout: [a, b[0], b[1], ..., b[37]]
+  // For partial-pooling: [a, sigma, b[0], ..., b[37]]
+
+  constexpr std::size_t kNoPoolDim = 1 + 38;      // a + 38 country offsets
+  constexpr std::size_t kPartialPoolDim = 2 + 38; // a + sigma + 38 offsets
+
+  using NoPoolState = std::array<double, kNoPoolDim>;
+  using PartialPoolState = std::array<double, kPartialPoolDim>;
+
+  // Prepare observed data
+  std::vector<int64_t> n_obs(kNumCountries);
+  std::vector<int64_t> k_obs(kNumCountries);
+  for (std::size_t i = 0; i < kNumCountries; ++i) {
+    n_obs[i] = countries[i].total;
+    k_obs[i] = countries[i].weekend;
+  }
+
+  // =========================================================================
+  // MODEL 1: NO-POOLING
+  // =========================================================================
+  // W ~ Bernoulli(p)
+  // logit(p) = a + b[L]
+  // a ~ Normal(-2, 1)
+  // b[L] ~ Normal(0, 0.5)  <- FIXED sigma
+
+  auto log_posterior_no_pool = [&](const NoPoolState& state) {
+    double a = state[0];
+    double lp = 0.0;
+
+    // Prior on a: Normal(-2, 1)
+    lp += -0.5 * (a + 2.0) * (a + 2.0);
+
+    // Prior on b[L]: Normal(0, 0.5)
+    constexpr double sigma_fixed = 0.5;
+    for (std::size_t i = 0; i < kNumCountries; ++i) {
+      double b_i = state[1 + i];
+      lp += -0.5 * (b_i / sigma_fixed) * (b_i / sigma_fixed);
+    }
+
+    // Likelihood: Binomial(k | n, p) where logit(p) = a + b[i]
+    for (std::size_t i = 0; i < kNumCountries; ++i) {
+      double b_i = state[1 + i];
+      double logit_p = a + b_i;
+      double p = invLogit(logit_p);
+
+      // log Binomial(k | n, p) = k*log(p) + (n-k)*log(1-p) + const
+      double k = static_cast<double>(k_obs[i]);
+      double n = static_cast<double>(n_obs[i]);
+      lp += k * std::log(p + 1e-10) + (n - k) * std::log(1.0 - p + 1e-10);
     }
 
     return lp;
   };
 
-  // Initialize state at reasonable values
-  State initial_state{};
-  initial_state[0] = std::log(3.0);   // log(α) ≈ log(3)
-  initial_state[1] = std::log(17.0);  // log(β) ≈ log(17)
+  // =========================================================================
+  // MODEL 2: PARTIAL-POOLING
+  // =========================================================================
+  // W ~ Bernoulli(p)
+  // logit(p) = a + b[L]
+  // a ~ Normal(-2, 1)
+  // b[L] ~ Normal(0, sigma)
+  // sigma ~ Exponential(1)
+
+  auto log_posterior_partial_pool = [&](const PartialPoolState& state) {
+    double a = state[0];
+    double log_sigma = state[1];  // Sample in log space for positivity
+    double sigma = std::exp(log_sigma);
+    double lp = 0.0;
+
+    // Prior on a: Normal(-2, 1)
+    lp += -0.5 * (a + 2.0) * (a + 2.0);
+
+    // Prior on sigma: Exponential(1) with Jacobian for log transform
+    // log p(sigma) = -sigma, Jacobian = sigma
+    // log p(log_sigma) = -exp(log_sigma) + log_sigma
+    lp += -sigma + log_sigma;
+
+    // Prior on b[L]: Normal(0, sigma)
+    for (std::size_t i = 0; i < kNumCountries; ++i) {
+      double b_i = state[2 + i];
+      lp += -0.5 * (b_i / sigma) * (b_i / sigma) - std::log(sigma);
+    }
+
+    // Likelihood
+    for (std::size_t i = 0; i < kNumCountries; ++i) {
+      double b_i = state[2 + i];
+      double logit_p = a + b_i;
+      double p = invLogit(logit_p);
+
+      double k = static_cast<double>(k_obs[i]);
+      double n = static_cast<double>(n_obs[i]);
+      lp += k * std::log(p + 1e-10) + (n - k) * std::log(1.0 - p + 1e-10);
+    }
+
+    return lp;
+  };
+
+  // =========================================================================
+  // MCMC SAMPLING
+  // =========================================================================
+  std::println("=== FITTING MODELS VIA MCMC ===\n");
+
+  constexpr std::size_t kBurnIn = 5000;
+  constexpr std::size_t kSamples = 10000;
+  constexpr std::size_t kThin = 5;
+
+  // --- Model 1: No-pooling ---
+  std::println("Model 1 (no-pooling): a ~ Normal(-2,1), b[L] ~ Normal(0, 0.5)");
+
+  NoPoolState init_no_pool{};
+  init_no_pool[0] = -2.0;  // a
   for (std::size_t i = 0; i < kNumCountries; ++i) {
-    double raw_rate = k_values[i] / n_values[i];
-    raw_rate = std::clamp(raw_rate, 0.01, 0.99);
-    initial_state[2 + i] = std::log(raw_rate / (1.0 - raw_rate));  // logit
+    init_no_pool[1 + i] = 0.0;  // b[i]
   }
 
-  // Gaussian random walk proposal
-  bayes::GaussianWalkND<double, kStateDim> proposal{0.05};
+  bayes::GaussianWalkND<double, kNoPoolDim> proposal_no_pool{0.02};
+  auto mh_no_pool = bayes::makeMetropolisHastings<NoPoolState>(
+      log_posterior_no_pool, proposal_no_pool);
 
-  auto mh_kernel = bayes::makeMetropolisHastings<State>(log_posterior, proposal);
+  bayes::Chain chain_no_pool{mh_no_pool, rng, init_no_pool};
+  chain_no_pool.advance(kBurnIn);
+  auto [samples_no_pool, accept_no_pool] = chain_no_pool.takeWithStats(kSamples, kThin);
+  std::println("  Acceptance rate: {:.1f}%", accept_no_pool * 100);
 
-  std::println("Running Metropolis-Hastings MCMC...");
-  std::println("  Parameters: {} (α, β, θ[1..38])", kStateDim);
-  std::println("  Priors: α ~ Gamma(2, 0.1), β ~ Gamma(2, 0.1)");
+  // --- Model 2: Partial-pooling ---
+  std::println("Model 2 (partial-pooling): a ~ Normal(-2,1), b[L] ~ Normal(0,sigma), sigma ~ Exp(1)");
 
-  constexpr std::size_t kMcmcBurnIn = 5000;
-  constexpr std::size_t kMcmcSamples = 10000;
-  constexpr std::size_t kMcmcThin = 5;
+  PartialPoolState init_partial{};
+  init_partial[0] = -2.0;              // a
+  init_partial[1] = std::log(0.5);     // log(sigma)
+  for (std::size_t i = 0; i < kNumCountries; ++i) {
+    init_partial[2 + i] = 0.0;  // b[i]
+  }
 
-  std::println("  Burn-in: {}, Samples: {}, Thinning: {}", kMcmcBurnIn, kMcmcSamples, kMcmcThin);
+  bayes::GaussianWalkND<double, kPartialPoolDim> proposal_partial{0.02};
+  auto mh_partial = bayes::makeMetropolisHastings<PartialPoolState>(
+      log_posterior_partial_pool, proposal_partial);
 
-  bayes::Chain chain{mh_kernel, rng, initial_state};
-  chain.advance(kMcmcBurnIn);
-  auto [mcmc_samples, acceptance_rate] = chain.takeWithStats(kMcmcSamples, kMcmcThin);
+  bayes::Chain chain_partial{mh_partial, rng, init_partial};
+  chain_partial.advance(kBurnIn);
+  auto [samples_partial, accept_partial] = chain_partial.takeWithStats(kSamples, kThin);
+  std::println("  Acceptance rate: {:.1f}%\n", accept_partial * 100);
 
-  std::println("  Acceptance rate: {:.1f}%\n", acceptance_rate * 100);
+  // =========================================================================
+  // EXTRACT POSTERIOR PREDICTIONS
+  // =========================================================================
+  // For each country, compute p = inv_logit(a + b[i]) for each MCMC sample
 
-  // Extract posterior summaries
-  std::vector<double> alpha_samples;
-  std::vector<double> beta_samples;
-  std::vector<std::vector<double>> theta_samples(kNumCountries);
+  std::vector<std::vector<double>> p_samples_no_pool(kNumCountries);
+  std::vector<std::vector<double>> p_samples_partial(kNumCountries);
 
-  for (const auto& s : mcmc_samples) {
-    alpha_samples.push_back(std::exp(s[0]));
-    beta_samples.push_back(std::exp(s[1]));
+  for (const auto& s : samples_no_pool) {
+    double a = s[0];
     for (std::size_t i = 0; i < kNumCountries; ++i) {
-      double logit_theta = s[2 + i];
-      double theta_i = 1.0 / (1.0 + std::exp(-logit_theta));
-      theta_samples[i].push_back(theta_i);
+      double p = invLogit(a + s[1 + i]);
+      p_samples_no_pool[i].push_back(p);
     }
   }
 
-  // Compute posterior means
-  auto mean = [](const std::vector<double>& v) {
-    return std::accumulate(v.begin(), v.end(), 0.0) / static_cast<double>(v.size());
-  };
-  auto quantile = [](std::vector<double> v, double q) {
-    std::ranges::sort(v);
-    auto idx = static_cast<std::size_t>(q * static_cast<double>(v.size() - 1));
-    return v[idx];
-  };
-
-  double alpha_mean = mean(alpha_samples);
-  double beta_mean = mean(beta_samples);
-  double alpha_lo = quantile(alpha_samples, 0.025);
-  double alpha_hi = quantile(alpha_samples, 0.975);
-  double beta_lo = quantile(beta_samples, 0.025);
-  double beta_hi = quantile(beta_samples, 0.975);
-
-  std::println("=== INFERRED HYPERPARAMETERS ===\n");
-  std::println("  α (concentration on success):");
-  std::println("    Posterior mean: {:.2f}", alpha_mean);
-  std::println("    95%% CI: [{:.2f}, {:.2f}]", alpha_lo, alpha_hi);
-  std::println("  β (concentration on failure):");
-  std::println("    Posterior mean: {:.2f}", beta_mean);
-  std::println("    95%% CI: [{:.2f}, {:.2f}]", beta_lo, beta_hi);
-
-  double implied_mean = alpha_mean / (alpha_mean + beta_mean);
-  double implied_conc = alpha_mean + beta_mean;
-  std::println("\n  Implied population distribution: Beta({:.1f}, {:.1f})", alpha_mean, beta_mean);
-  std::println("    Mean weekend rate: {:.1f}%%", implied_mean * 100);
-  std::println("    Concentration: {:.0f} (higher = less between-country variation)", implied_conc);
-
-  // Update theta_posterior_means with MCMC results
-  std::println("\n=== MCMC vs CONJUGATE POSTERIOR MEANS ===\n");
-  std::println("{:18} {:>10} {:>10} {:>10}", "Country", "Raw %", "Conjugate", "MCMC");
-  std::println("{:-<55}", "");
-
-  std::vector<double> mcmc_theta_means(kNumCountries);
-  for (std::size_t i = 0; i < kNumCountries && i < 10; ++i) {
-    mcmc_theta_means[i] = mean(theta_samples[i]);
-    double raw = k_values[i] / n_values[i];
-    std::println("{:18} {:9.1f}% {:9.1f}% {:9.1f}%",
-                 countries[i].name.substr(0, 18),
-                 raw * 100,
-                 theta_posterior_means[i] * 100,
-                 mcmc_theta_means[i] * 100);
+  for (const auto& s : samples_partial) {
+    double a = s[0];
+    for (std::size_t i = 0; i < kNumCountries; ++i) {
+      double p = invLogit(a + s[2 + i]);
+      p_samples_partial[i].push_back(p);
+    }
   }
-  std::println("  ... ({} more countries)", kNumCountries - 10);
+
+  // Compute summaries
+  std::vector<Summary> summary_no_pool(kNumCountries);
+  std::vector<Summary> summary_partial(kNumCountries);
+
+  for (std::size_t i = 0; i < kNumCountries; ++i) {
+    summary_no_pool[i] = summarize(p_samples_no_pool[i]);
+    summary_partial[i] = summarize(p_samples_partial[i]);
+  }
+
+  // Global mean from partial-pooling model
+  std::vector<double> global_mean_samples;
+  for (const auto& s : samples_partial) {
+    global_mean_samples.push_back(invLogit(s[0]));
+  }
+  auto global_summary = summarize(global_mean_samples);
+
+  // Sigma posterior
+  std::vector<double> sigma_samples;
+  for (const auto& s : samples_partial) {
+    sigma_samples.push_back(std::exp(s[1]));
+  }
+  auto sigma_summary = summarize(sigma_samples);
+
+  std::println("=== INFERRED PARAMETERS ===\n");
+  std::println("Global intercept (partial-pooling):");
+  std::println("  a: mean inv_logit(a) = {:.1f}% [{:.1f}%, {:.1f}%]",
+               global_summary.mean * 100, global_summary.lo * 100, global_summary.hi * 100);
+  std::println("\nBetween-country variation:");
+  std::println("  sigma: {:.3f} [{:.3f}, {:.3f}]",
+               sigma_summary.mean, sigma_summary.lo, sigma_summary.hi);
+
+  // =========================================================================
+  // COUNTRY RANKINGS
+  // =========================================================================
+  std::println("\n=== COUNTRY RANKINGS (sorted by partial-pooling estimate) ===\n");
+
+  struct CountryResult {
+    std::string name;
+    int64_t n;
+    double raw_rate;
+    Summary no_pool;
+    Summary partial;
+  };
+
+  std::vector<CountryResult> results;
+  for (std::size_t i = 0; i < kNumCountries; ++i) {
+    double raw = static_cast<double>(k_obs[i]) / static_cast<double>(n_obs[i]);
+    results.push_back({
+        countries[i].name,
+        n_obs[i],
+        raw,
+        summary_no_pool[i],
+        summary_partial[i]
+    });
+  }
+
+  // Sort by partial-pooling mean (descending)
+  std::ranges::sort(results, [](const auto& a, const auto& b) {
+    return a.partial.mean > b.partial.mean;
+  });
+
+  std::println("{:18} {:>6}  {:>22}  {:>22}",
+               "Country", "n", "No-pooling (89% CI)", "Partial-pooling (89% CI)");
+  std::println("{:-<75}", "");
+
+  for (const auto& r : results) {
+    std::println("{:18} {:6}  {:5.1f}% [{:4.1f}%, {:4.1f}%]  {:5.1f}% [{:4.1f}%, {:4.1f}%]",
+                 r.name.substr(0, 18), r.n,
+                 r.no_pool.mean * 100, r.no_pool.lo * 100, r.no_pool.hi * 100,
+                 r.partial.mean * 100, r.partial.lo * 100, r.partial.hi * 100);
+  }
 
   // =========================================================================
   // SHRINKAGE VISUALIZATION
   // =========================================================================
-  std::println("\n=== SHRINKAGE: RAW RATE vs PARTIAL-POOLING ESTIMATE ===\n");
+  std::println("\n=== SHRINKAGE: HOW PARTIAL-POOLING SHIFTS ESTIMATES ===\n");
+  std::println("Countries with smaller samples get pulled more toward the global mean.\n");
 
-  struct Estimate {
-    std::string name;
-    int64_t n;
-    double raw_rate;
-    double partial_pool_mean;
-  };
-  std::vector<Estimate> estimates;
+  std::println("{:18} {:>10} {:>12} {:>12}",
+               "Country", "log(n)", "Shift (pp)", "Direction");
+  std::println("{:-<55}", "");
 
-  for (std::size_t i = 0; i < countries.size(); ++i) {
-    const auto& c = countries[i];
-    double raw = static_cast<double>(c.weekend) / c.total;
-    estimates.push_back({c.name, c.total, raw, theta_posterior_means[i]});
-  }
-
-  // Create scatter plot of raw vs pooled estimates
-  std::vector<Point> shrinkage_points;
-  for (const auto& e : estimates) {
-    shrinkage_points.push_back({e.raw_rate, e.partial_pool_mean});
-  }
-
-  DensityPlotOptions scatter_opts;
-  scatter_opts.width = 50;
-  scatter_opts.height = 20;
-  scatter_opts.min_x = 0.05;
-  scatter_opts.max_x = 0.35;
-  scatter_opts.min_y = 0.05;
-  scatter_opts.max_y = 0.35;
-  scatter_opts.title = "Raw Rate (x) vs Pooled Estimate (y)";
-  scatter_opts.low_color = colors::kBlue;
-  scatter_opts.high_color = colors::kYellow;
-
-  std::print("{}", scatterPlot(shrinkage_points, 50, 20, colors::kCyan));
-
-  std::println(R"(
-If there were no shrinkage, all points would lie on the diagonal (x=y).
-Points BELOW the diagonal: rate shrunk DOWN toward global mean ({:.1f}%)
-Points ABOVE the diagonal: rate shrunk UP toward global mean
-)", global_rate * 100);
-
-  // =========================================================================
-  // TABLE OF RESULTS
-  // =========================================================================
-  std::println("\n=== WEEKEND SUBMISSION PROBABILITIES ===\n");
-  std::println("{:18} {:>6} {:>6}  {:>8}  {:>12}  {:>10}",
-               "Country", "n", "k", "Raw %", "Pooled %", "Shrinkage");
-  std::println("{:-<70}", "");
-
-  std::ranges::sort(estimates, [](const auto& a, const auto& b) {
-    return a.partial_pool_mean > b.partial_pool_mean;
+  // Sort by sample size for this view
+  std::vector<CountryResult> by_size = results;
+  std::ranges::sort(by_size, [](const auto& a, const auto& b) {
+    return a.n < b.n;
   });
 
-  for (const auto& e : estimates) {
-    double shrinkage = (e.raw_rate - e.partial_pool_mean) * 100;
-    std::println("{:18} {:6} {:6}  {:7.1f}%  {:11.1f}%  {:+9.2f}pp",
-                 e.name.substr(0, 18), e.n,
-                 static_cast<int64_t>(e.raw_rate * e.n),
-                 e.raw_rate * 100, e.partial_pool_mean * 100, shrinkage);
+  for (const auto& r : by_size) {
+    double shift = (r.partial.mean - r.no_pool.mean) * 100;
+    std::string direction = "~";
+    if (shift < -0.1) {
+      direction = "<- shrunk";
+    } else if (shift > 0.1) {
+      direction = "-> expanded";
+    }
+    std::println("{:18} {:10.2f} {:+11.2f} {}",
+                 r.name.substr(0, 18), std::log(static_cast<double>(r.n)), shift, direction);
+  }
+
+  std::println(R"(
+Key observations:
+- Countries with small n (left side of log scale) show larger shifts
+- Most shifts are NEGATIVE (toward the mean) for countries above average
+- Countries with large n (UK, China, India) barely shift - data dominates
+)");
+
+  // =========================================================================
+  // VISUAL: CREDIBLE INTERVALS
+  // =========================================================================
+  std::println("\n=== CREDIBLE INTERVAL COMPARISON (Top 10 and Bottom 5) ===\n");
+  std::println("Bars show 89%% credible intervals. Wider = more uncertainty.\n");
+
+  std::println("         5%%       10%%       15%%       20%%       25%%       30%%       35%%");
+  std::println("         |         |         |         |         |         |         |");
+
+  constexpr double x_min = 0.05;
+  constexpr double x_max = 0.35;
+  constexpr int bar_width = 60;
+
+  // Top 10
+  for (std::size_t i = 0; i < 10 && i < results.size(); ++i) {
+    const auto& r = results[i];
+    std::println("\n{} (n={}):", r.name, r.n);
+    std::print("  No-pool:  {}  {:.1f}%%\n",
+               credibleIntervalBar(r.no_pool.lo, r.no_pool.hi, r.no_pool.mean,
+                                   x_min, x_max, bar_width, colors::kCyan),
+               r.no_pool.mean * 100);
+    std::print("  Partial:  {}  {:.1f}%%\n",
+               credibleIntervalBar(r.partial.lo, r.partial.hi, r.partial.mean,
+                                   x_min, x_max, bar_width, colors::kYellow),
+               r.partial.mean * 100);
+  }
+
+  std::println("\n  ... (middle countries omitted) ...");
+
+  // Bottom 5
+  for (std::size_t i = results.size() - 5; i < results.size(); ++i) {
+    const auto& r = results[i];
+    std::println("\n{} (n={}):", r.name, r.n);
+    std::print("  No-pool:  {}  {:.1f}%%\n",
+               credibleIntervalBar(r.no_pool.lo, r.no_pool.hi, r.no_pool.mean,
+                                   x_min, x_max, bar_width, colors::kCyan),
+               r.no_pool.mean * 100);
+    std::print("  Partial:  {}  {:.1f}%%\n",
+               credibleIntervalBar(r.partial.lo, r.partial.hi, r.partial.mean,
+                                   x_min, x_max, bar_width, colors::kYellow),
+               r.partial.mean * 100);
   }
 
   // =========================================================================
@@ -686,29 +557,31 @@ Points ABOVE the diagonal: rate shrunk UP toward global mean
 
 === KEY INSIGHTS ===
 
-1. HIERARCHICAL PRIOR: Beta({:.1f}, {:.1f})
-   - Encodes our PRIOR BELIEFS about weekend submission rates
-   - Mean: {:.1f}% (lower than random 2/7 ≈ 29% because weekdays are preferred)
-   - Concentration: {:.0f} (weak prior - about {:.0f} "pseudo-observations")
-   - NOTE: Full Bayesian inference would put priors on α, β and sample jointly
+1. PRIOR CHOICE MATTERS
+   - Random submission: P(weekend) = 2/7 ≈ 14%%
+   - Prior a ~ Normal(-2, 1) centers at inv_logit(-2) ≈ 12%%
+   - This encodes belief that weekend submission is uncommon
 
-2. SHRINKAGE MAGNITUDE depends on sample size:
-   - Large n (UK, China): < 1pp shrinkage - data dominates prior
-   - Medium n (Japan, Taiwan): 1-3pp shrinkage - balance of prior and data
-   - Small n (Cameroon, Bangladesh): larger shrinkage - prior dominates
+2. NO-POOLING vs PARTIAL-POOLING
+   - No-pooling: Each country estimated independently
+   - Partial-pooling: Countries share information via learned sigma
+   - Sigma ≈ {:.2f} tells us how much countries truly vary
 
-3. WHY PARTIAL-POOLING IS BETTER:
+3. SHRINKAGE PATTERN
+   - Small samples (Cameroon, Bangladesh): Large shrinkage toward mean
+   - Large samples (UK, India, China): Almost no shrinkage
+   - This is ADAPTIVE regularization - the model learns how much to trust each estimate
+
+4. INTERPRETATION
+   - Top: Cameroon, Bangladesh, Turkey (but wide intervals!)
+   - Bottom: India, Norway, Denmark (narrow intervals, confident)
+   - China is precisely estimated AND high - genuine cultural difference?
+
+5. WHY PARTIAL-POOLING IS BETTER
    - Extreme estimates from small samples are likely noise
-   - Borrowing strength from other countries regularizes estimates
-   - Predictions for new countries start at the prior mean, not 50%%
-
-4. BAYESIAN VS FREQUENTIST:
-   - This example uses conjugate Beta-Binomial updating (analytical)
-   - Full treatment: put Gamma priors on α, β and use HMC
-   - The bayes::sym::Joint DSL can compute gradients for HMC automatically
-)", alpha_prior, beta_prior,
-     alpha_prior / (alpha_prior + beta_prior) * 100,
-     alpha_prior + beta_prior, alpha_prior + beta_prior);
+   - Borrowing strength across countries improves predictions
+   - Predictions for NEW countries start at learned mean, not 50%%
+)", sigma_summary.mean);
 
   return 0;
 }

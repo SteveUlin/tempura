@@ -1,16 +1,17 @@
 // Tests for core.h - fundamental symbolic types
 #include "symbolic4/core.h"
-#include "symbolic4/operators.h"  // For AddOp, MulOp, convenience constants
+#include "symbolic4/constants.h"  // For zero, one, two, etc.
+#include "symbolic4/operators.h"  // For AddOp, MulOp
 #include "unit.h"
 
 using namespace tempura;
 using namespace tempura::symbolic4;
 
 auto main() -> int {
-  "Symbol is an Atom with Lookup strategy"_test = [] {
+  "Symbol is an Atom with Free effect"_test = [] {
     Symbol<struct X> x;
     static_assert(is_atom_v<decltype(x)>);
-    static_assert(std::is_same_v<get_strategy_t<decltype(x)>, Lookup>);
+    static_assert(std::is_same_v<get_effect_t<decltype(x)>, Free>);
     static_assert(has_identity_v<decltype(x)>);
   };
 
@@ -21,7 +22,7 @@ auto main() -> int {
   };
 
   "Literal has void identity"_test = [] {
-    auto l = Literal<double>{Intrinsic<double>{3.14}};
+    auto l = Literal<double>{Embedded<double>{3.14}};
     static_assert(is_atom_v<decltype(l)>);
     static_assert(is_literal_v<decltype(l)>);
     static_assert(!has_identity_v<decltype(l)>);
@@ -55,10 +56,11 @@ auto main() -> int {
   };
 
   "convenience constants"_test = [] {
-    static_assert(zero.value == 0);
-    static_assert(one.value == 1);
-    static_assert(two.value == 2);
-    static_assert(neg_one.value == -1);
+    // c<V> creates compile-time constants via template variable
+    static_assert(c<0>.value == 0);
+    static_assert(c<1>.value == 1);
+    static_assert(c<2>.value == 2);
+    static_assert(c<-1>.value == -1);
     static_assert(c<42>.value == 42);
     static_assert(c<-100>.value == -100);
   };
@@ -66,7 +68,7 @@ auto main() -> int {
   "lit helper creates Literal"_test = [] {
     auto l = lit(3.14);
     static_assert(is_literal_v<decltype(l)>);
-    expectNear(l.strategy_.value, 3.14);
+    expectNear(l.effect_.value, 3.14);
   };
 
   "Expression stores operator and args"_test = [] {
@@ -94,7 +96,7 @@ auto main() -> int {
     Symbol<struct X> x;
     Constant<1> c;
     Fraction<1, 2> f;
-    auto l = Literal<int>{Intrinsic<int>{42}};
+    auto l = Literal<int>{Embedded<int>{42}};
 
     static_assert(is_terminal_v<decltype(x)>);
     static_assert(is_terminal_v<decltype(c)>);
@@ -111,17 +113,71 @@ auto main() -> int {
     expectNear(bindings[y], 5.0);
   };
 
-  "RandomVar and DeterministicVar aliases"_test = [] {
+  "Atom effects and DeterministicVar aliases"_test = [] {
+    // Sample effect for random variables
     struct DummyDist {};
-    using RV = RandomVar<struct Id1, DummyDist>;
-    static_assert(is_atom_v<RV>);
-    static_assert(has_identity_v<RV>);
+    using SampleAtom = Atom<struct Id1, Sample<DummyDist>>;
+    static_assert(is_atom_v<SampleAtom>);
+    static_assert(has_identity_v<SampleAtom>);
 
+    // DeterministicVar for computed values
     Symbol<struct X> x;
     auto sum = x + x;
     using DV = DeterministicVar<struct Id2, decltype(sum)>;
     static_assert(is_atom_v<DV>);
     static_assert(has_identity_v<DV>);
+  };
+
+  // ===========================================================================
+  // Sample effect and random variable traits
+  // ===========================================================================
+
+  "is_sample_effect_v recognizes Sample effect"_test = [] {
+    struct DummyDist {};
+    static_assert(is_sample_effect_v<Sample<DummyDist>>);
+    static_assert(!is_sample_effect_v<Free>);
+    static_assert(!is_sample_effect_v<Embedded<double>>);
+    static_assert(!is_sample_effect_v<Compute<int>>);
+  };
+
+  "is_random_var_atom_v recognizes atoms with Sample effect"_test = [] {
+    struct DummyDist {};
+    using RVAtom = Atom<struct Id1, Sample<DummyDist>>;
+    using FreeAtom = Atom<struct Id1, Free>;
+    using LitAtom = Atom<void, Embedded<double>>;
+
+    static_assert(is_random_var_atom_v<RVAtom>);
+    static_assert(!is_random_var_atom_v<FreeAtom>);
+    static_assert(!is_random_var_atom_v<LitAtom>);
+  };
+
+  "get_distribution_t extracts distribution from Sample effect"_test = [] {
+    struct MyDist {
+      int param;
+    };
+    using EffectType = Sample<MyDist>;
+    static_assert(std::is_same_v<get_distribution_t<EffectType>, MyDist>);
+  };
+
+  "get_atom_distribution_t extracts distribution from atom"_test = [] {
+    struct MyDist {
+      double x;
+    };
+    using RVAtom = Atom<struct MyId, Sample<MyDist>>;
+    static_assert(std::is_same_v<get_atom_distribution_t<RVAtom>, MyDist>);
+  };
+
+  "Sample effect carries distribution instance"_test = [] {
+    struct MyDist {
+      int value;
+      constexpr MyDist(int v) : value{v} {}
+    };
+    constexpr Sample<MyDist> eff{MyDist{42}};
+    static_assert(eff.dist_.value == 42);
+
+    // Atom with Sample effect stores the distribution
+    constexpr Atom<struct Id, Sample<MyDist>> atom{Sample<MyDist>{MyDist{99}}};
+    static_assert(atom.effect_.dist_.value == 99);
   };
 
   return TestRegistry::result();

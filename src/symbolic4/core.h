@@ -25,20 +25,20 @@
 //
 // Core Abstraction:
 //   Everything in an expression tree is either:
-//     - Atom<Id, Strategy>: A leaf node (symbol, constant, literal)
+//     - Atom<Id, Effect>: A leaf node (symbol, constant, literal)
 //     - Expression<Op, Args...>: An internal node (addition, multiplication, etc.)
 //
-//   The "Strategy" determines how an Atom behaves during evaluation:
-//     - Lookup: Variable - look up value in bindings (Symbol<X>)
-//     - Intrinsic<T>: Embedded value - the atom carries its value (Literal<double>)
+//   The "Effect" determines how an Atom behaves during evaluation:
+//     - Free: Variable - look up value in bindings (Symbol<X>)
+//     - Embedded<T>: Embedded value - the atom carries its value (Literal<double>)
 //     - Sample<D>: Random variable - sample from distribution D
 //     - Compute<E>: Deterministic function - compute from expression E
 //
 // Example:
-//   Symbol<struct X> x;           // x is a lookup variable
+//   Symbol<struct X> x;           // x is a free variable
 //   auto expr = x * x + one;      // expr's type encodes the entire tree:
 //                                 // Expression<AddOp,
-//                                 //   Expression<MulOp, Atom<X,Lookup>, Atom<X,Lookup>>,
+//                                 //   Expression<MulOp, Atom<X,Free>, Atom<X,Free>>,
 //                                 //   Constant<1>>
 //
 // ============================================================================
@@ -53,41 +53,41 @@ template <typename SymbolType, typename ValueType>
 class TypeValueBinder;
 
 // ============================================================================
-// Binding Strategies — the "effects" that atoms can have
+// Binding Effects — how atoms produce values during evaluation
 // ============================================================================
 //
-// A "Strategy" determines how an Atom gets its value during evaluation.
+// An "Effect" determines how an Atom gets its value during evaluation.
 // Think of it as the "behavior" of a leaf node. This is the key to unifying
 // symbols, literals, random variables, and computed values under one type.
 //
-// Why strategies instead of separate types?
+// Why effects instead of separate types?
 //   - Uniform handling in generic code (traversals, interpreters)
 //   - Extensible: add new behaviors without changing the core Atom type
-//   - Strategy can carry data (distributions, expressions) without overhead
+//   - Effect can carry data (distributions, expressions) without overhead
 //
-// The four built-in strategies:
+// The four built-in effects:
 //
-//   Lookup     - A free variable. Value must be provided at evaluation time.
+//   Free       - A free variable. Value must be provided at evaluation time.
 //                Example: Symbol<struct X> x; evaluate(x + 1, x = 5.0);
 //
-//   Intrinsic  - Value is baked into the atom. No lookup needed.
+//   Embedded   - Value is baked into the atom. No lookup needed.
 //                Example: Literal<double> lit{3.14}; // carries 3.14
 //
 //   Sample     - Random variable. Draws from a probability distribution.
-//                Example: RandomVar<struct W, Normal> w; // w ~ Normal()
+//                Example: Atom<W, Sample<Normal>> w; // w ~ Normal()
 //
 //   Compute    - Deterministic function of other variables.
 //                Example: DeterministicVar<struct Y, E> y; // y = f(x)
 
-// Look up value in bindings at evaluation time
-struct Lookup {};
+// Free variable - look up value in bindings at evaluation time
+struct Free {};
 
 // Value embedded directly in the atom (no lookup needed)
 template <typename T>
-struct Intrinsic {
+struct Embedded {
   T value;
-  constexpr Intrinsic() = default;
-  constexpr Intrinsic(T v) : value{v} {}
+  constexpr Embedded() = default;
+  constexpr Embedded(T v) : value{v} {}
 };
 
 // Sample from distribution D (for Bayesian modeling)
@@ -110,51 +110,51 @@ struct Compute {
 // The Unified Atom Type
 // ============================================================================
 //
-// Atom<Id, Strategy> is the universal leaf node in the expression tree.
+// Atom<Id, Effect> is the universal leaf node in the expression tree.
 //
 // Type parameters:
-//   Id       - A unique type that identifies this atom. Used for:
-//              - Type-safe bindings (x = 5 only binds to x, not y)
-//              - DAG representation (detecting shared subexpressions)
-//              For anonymous atoms (like Literal), Id can be void.
+//   Id     - A unique type that identifies this atom. Used for:
+//            - Type-safe bindings (x = 5 only binds to x, not y)
+//            - DAG representation (detecting shared subexpressions)
+//            For anonymous atoms (like Literal), Id can be void.
 //
-//   Strategy - How this atom gets its value (Lookup, Intrinsic, Sample, Compute)
+//   Effect - How this atom gets its value (Free, Embedded, Sample, Compute)
 //
-// The combination of Id + Strategy gives us all leaf types:
-//   Symbol<X>        = Atom<X, Lookup>           - Variable, needs binding
-//   Literal<T>       = Atom<void, Intrinsic<T>>  - Embedded runtime value
-//   RandomVar<X, D>  = Atom<X, Sample<D>>        - Random variable ~ D
-//   DeterministicVar = Atom<X, Compute<E>>       - Computed from expression
+// The combination of Id + Effect gives us all leaf types:
+//   Symbol<X>        = Atom<X, Free>           - Variable, needs binding
+//   Literal<T>       = Atom<void, Embedded<T>> - Embedded runtime value
+//   Atom<X, Sample<D>>                         - Random variable ~ D
+//   DeterministicVar = Atom<X, Compute<E>>     - Computed from expression
 //
 // Memory layout:
-//   [[no_unique_address]] ensures empty strategies (like Lookup) take no space.
-//   Atom<X, Lookup> has sizeof == 1 (minimum for addressability).
+//   [[no_unique_address]] ensures empty effects (like Free) take no space.
+//   Atom<X, Free> has sizeof == 1 (minimum for addressability).
 
-template <typename Id, typename Strategy>
+template <typename Id, typename Effect>
 struct Atom : SymbolicTag {
   using id_type = Id;
-  using strategy_type = Strategy;
+  using effect_type = Effect;
 
-  [[no_unique_address]] Strategy strategy_;
+  [[no_unique_address]] Effect effect_;
 
   constexpr Atom() = default;
-  constexpr Atom(Strategy s) : strategy_{s} {}
+  constexpr Atom(Effect e) : effect_{e} {}
 
   // For atoms with identity, get a Symbol referencing this atom's Id.
   // This enables DAG patterns: let<X>(expr) creates an atom, x.sym() references it.
   static constexpr auto sym()
     requires(!std::is_void_v<Id>)
   {
-    return Atom<Id, Lookup>{};
+    return Atom<Id, Free>{};
   }
 
   // Enable binding syntax for evaluation: x = value
-  // This operator is only valid for Lookup strategy (symbols).
+  // This operator is only valid for Free effect (symbols).
   // Usage: evaluate(expr, x = 5.0, y = 3.0)
   constexpr auto operator=(auto value) const
-    requires std::is_same_v<Strategy, Lookup>
+    requires std::is_same_v<Effect, Free>
   {
-    return TypeValueBinder{Atom<Id, Lookup>{}, value};
+    return TypeValueBinder{Atom<Id, Free>{}, value};
   }
 };
 
@@ -163,7 +163,7 @@ struct Atom : SymbolicTag {
 // ============================================================================
 //
 // These type aliases provide the intuitive interface for building expressions.
-// Under the hood, they're all just Atom<Id, Strategy> with different configs.
+// Under the hood, they're all just Atom<Id, Effect> with different configs.
 
 // Symbol - A named variable that must be bound at evaluation time.
 //
@@ -178,18 +178,18 @@ struct Atom : SymbolicTag {
 //
 // The lambda trick (decltype([] {})) generates a unique type at each usage.
 template <typename Id = decltype([] {})>
-using Symbol = Atom<Id, Lookup>;
+using Symbol = Atom<Id, Free>;
 
 // Literal - A runtime value embedded directly in the expression.
 //
 // Unlike Constant, the value isn't known at compile time - it's stored in
-// the Intrinsic strategy. Has no Id (void) since it's anonymous.
+// the Embedded effect. Has no Id (void) since it's anonymous.
 //
 // Usage:
-//   Literal<double> lit{Intrinsic{3.14}};
+//   Literal<double> lit{Embedded{3.14}};
 //   auto expr = lit + x;
 template <typename T>
-using Literal = Atom<void, Intrinsic<T>>;
+using Literal = Atom<void, Embedded<T>>;
 
 // Constant - A compile-time constant value encoded in the type itself.
 //
@@ -233,16 +233,6 @@ struct Fraction : SymbolicTag {
   static constexpr double value =
       static_cast<double>(numerator) / static_cast<double>(denominator);
 };
-
-// RandomVar - A random variable that samples from distribution D.
-//
-// For Bayesian modeling: represents a quantity with uncertainty.
-// The Id identifies which random variable this is (for tracking in inference).
-//
-// Usage:
-//   RandomVar<struct Weight, Normal> w;  // w ~ Normal()
-template <typename Id, typename DistT>
-using RandomVar = Atom<Id, Sample<DistT>>;
 
 // DeterministicVar - A computed value (deterministic function of other vars).
 //
@@ -325,7 +315,7 @@ struct Expression : SymbolicTag {
 //
 // Accessor traits:
 //   get_id_t<T>        - Extract the Id type from an Atom
-//   get_strategy_t<T>  - Extract the Strategy type from an Atom
+//   get_effect_t<T>    - Extract the Effect type from an Atom
 //   get_op_t<T>        - Extract the Op type from an Expression
 //   get_args_t<T>      - Extract child types as TypeList from an Expression
 
@@ -377,14 +367,14 @@ template <long long N, long long D>
 struct IsFraction<Fraction<N, D>> : std::true_type {};
 
 template <typename T>
-constexpr bool is_fraction_v = IsFraction<T>::value;
+constexpr bool is_fraction_v = IsFraction<std::remove_cv_t<T>>::value;
 
 // Is this type a Literal?
 template <typename T>
 struct IsLiteral : std::false_type {};
 
 template <typename U>
-struct IsLiteral<Atom<void, Intrinsic<U>>> : std::true_type {};
+struct IsLiteral<Atom<void, Embedded<U>>> : std::true_type {};
 
 template <typename T>
 constexpr bool is_literal_v = IsLiteral<T>::value;
@@ -416,17 +406,68 @@ struct GetId<Atom<Id, S>> {
 template <typename T>
 using get_id_t = typename GetId<T>::type;
 
-// Get the Strategy type from an Atom
+// Get the Effect type from an Atom
 template <typename T>
-struct GetStrategy;
+struct GetEffect;
 
-template <typename Id, typename S>
-struct GetStrategy<Atom<Id, S>> {
-  using type = S;
+template <typename Id, typename E>
+struct GetEffect<Atom<Id, E>> {
+  using type = E;
 };
 
 template <typename T>
-using get_strategy_t = typename GetStrategy<T>::type;
+using get_effect_t = typename GetEffect<T>::type;
+
+// ============================================================================
+// Effect Classification Traits
+// ============================================================================
+//
+// These traits allow code to classify atoms by their effect type without
+// needing to know the specific effect parameters.
+
+// Is this effect a Sample?
+template <typename E>
+struct IsSampleEffect : std::false_type {};
+
+template <typename D>
+struct IsSampleEffect<Sample<D>> : std::true_type {};
+
+template <typename E>
+constexpr bool is_sample_effect_v = IsSampleEffect<E>::value;
+
+// Is this atom a random variable (has Sample effect)?
+template <typename T>
+struct IsRandomVarAtom : std::false_type {};
+
+template <typename Id, typename D>
+struct IsRandomVarAtom<Atom<Id, Sample<D>>> : std::true_type {};
+
+template <typename T>
+constexpr bool is_random_var_atom_v = IsRandomVarAtom<T>::value;
+
+// Get the Distribution type from a Sample effect
+template <typename E>
+struct GetDistribution;
+
+template <typename D>
+struct GetDistribution<Sample<D>> {
+  using type = D;
+};
+
+template <typename E>
+using get_distribution_t = typename GetDistribution<E>::type;
+
+// Get the Distribution type from an Atom (convenience wrapper)
+template <typename T>
+struct GetDistributionFromAtom;
+
+template <typename Id, typename D>
+struct GetDistributionFromAtom<Atom<Id, Sample<D>>> {
+  using type = D;
+};
+
+template <typename T>
+using get_atom_distribution_t = typename GetDistributionFromAtom<T>::type;
 
 // Get the Op type from an Expression
 template <typename T>
@@ -483,6 +524,9 @@ using get_args_t = typename GetArgs<T>::type;
 template <typename SymbolType, typename ValueType>
 class TypeValueBinder {
  public:
+  using symbol_type = SymbolType;
+  using value_type = ValueType;
+
   constexpr TypeValueBinder(SymbolType, ValueType value) : value_{value} {}
 
   // Lookup: only matches the exact symbol type

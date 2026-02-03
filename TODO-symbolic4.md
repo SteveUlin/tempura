@@ -1,106 +1,61 @@
 # symbolic4 Implementation TODO
 
-## Phase 1: Core Infrastructure
+## Milestone 1: The Unified Core (Refactoring)
 
-- [ ] Create `src/symbolic4/` directory structure
-- [ ] Implement `Atom<Id, Strategy>` base template
-- [ ] Implement binding strategies:
-  - [ ] `Lookup` (for Symbol)
-  - [ ] `Intrinsic<T>` (for Literal/Constant)
-  - [ ] `Sample<D>` (for RandomVar)
-  - [ ] `Compute<E>` (for DeterministicVar)
-- [ ] Implement `Pair` with `[[no_unique_address]]` (can't reuse meta/tuple.h - lacks compression)
-- [ ] Implement `CompressedTuple` with `[[no_unique_address]]`
-- [ ] `IdSet` - use `TypeList` from `meta/type_list.h` with ops from `meta/type_list_ops.h`
-  - Reuse: `Contains_v`, `Concat_t`, `Unique_t`
-- [ ] `ExtractIds<E>` - use `Filter_t`, `FlatMap_t` from `meta/type_list_ops.h`
+**Goal**: Establish `Atom` and `Strategy` as the core primitives, replacing ad-hoc Interpreters.
 
-## Phase 2: Recursion Schemes
+- [x] **Core Data Structures**
+  - [x] Ensure `Atom<Id, Effect>` is the universal leaf node in `src/symbolic4/core.h`
+  - [x] Implement `CompressedTuple` and `Pair` with `[[no_unique_address]]` (in `src/symbolic4/compressed.h`)
+  - [x] Verify `Expression<Op, Args...>` structure
 
-- [ ] Implement `fold<Interpreter>(expr, ctx)` — catamorphism
-- [ ] Implement `para<Interpreter>(expr, ctx)` — paramorphism
-- [ ] Implement `foldUnique<Interpreter>(expr, visited, ctx)` — deduplicating fold
-- [ ] Define `Interpreter` concept
+- [x] **Strategy Engine Port** (from `symbolic3`)
+  - [x] Port `PatternVar`, `BindingContext` to `src/symbolic4/strategy/pattern.h`
+  - [x] Port `Rule`, `RuleSet` to `src/symbolic4/strategy/rule.h`
+  - [x] Port Combinators (`Seq`, `Choice`, `Try`) to `src/symbolic4/strategy/combinator.h`
+  - [x] Port Traversals (`BottomUp`, `TopDown`, `Innermost`) to `src/symbolic4/strategy/combinator.h`
 
-## Phase 3: Core Interpreters
+- [ ] **Legacy Compatibility Adapter** (optional - may not need)
+  - [ ] Implement `InterpreterAdapter<I>` to wrap legacy `terminal`/`combine` classes into a `BottomUp` strategy
 
-- [ ] `Eval` interpreter (fold) — evaluate expression with bindings
-- [ ] `Diff<Var>` interpreter (para) — symbolic differentiation
-- [ ] `ToString` interpreter (fold) — pretty printing
-- [ ] `ExtractSymbols` interpreter (fold) — collect all Symbol ids
+## Milestone 2: Declarative Simplification
 
-## Phase 4: Probabilistic Atoms
+**Goal**: Replace monolithic simplification with declarative rules.
 
-- [ ] Implement `let(expr)` function to give identity to expressions
-- [ ] Adapt `RandomVar` as `Atom<Id, Sample<Dist>>`
-- [ ] Adapt `DeterministicVar` as `Atom<Id, Compute<Expr>>`
-- [ ] Remove explicit `Parents...` from RandomVar/DeterministicVar
-- [ ] Implement `Sampler` interpreter
-- [ ] Implement `LogProbAccumulator` interpreter
+- [x] **Algebraic Rules** (in `interpreter/simplify.h` using fold scheme)
+  - [x] Constant folding: `2+3` -> `5`
+  - [x] Identity elimination: `x+0`->`x`, `x*1`->`x`, `x*0`->`0`
+  - [x] Self operations: `x-x`->`0`, `x/x`->`1`
+  - [x] Inverse cancellation: `exp(log(x))`->`x`
+  - [x] Canonical ordering: `y+x` -> `x+y` (in `simplify/canonicalize.h`)
 
-## Phase 5: bayes3 Migration
+## Milestone 3: Bayesian Improvements
 
-- [ ] Refactor `bayes3/core.h` to use symbolic4 atoms
-- [ ] Replace hand-written DAG traversals with `foldUnique`
-- [ ] Update `sampleTrace` to use `Sampler` interpreter
-- [ ] Update `jointUnnormalizedLogProb` to use `LogProbAccumulator`
-- [ ] Ensure all bayes3 tests pass
+**Goal**: Switch Bayesian inference components to the Strategy system.
 
-## Phase 6: Future Atom Types (Priority Order)
+- [ ] **LogProb Strategy**
+  - [ ] Re-implement `jointLogProb` as a strategy (currently uses `foldUnique`)
+  - [ ] Handle DAG traversal (visit each node once)
 
-- [ ] `Observed<Id, D>` — conditioned on data
-- [ ] `Indexed<Id, I, E>` — plate notation
-- [ ] `Transformed<Id, E, J>` — reparameterization with Jacobian
-- [ ] `Param<Id>` — optimizable parameters
+- [x] **Differentiation Strategy** (in `strategy/diff.h`)
+  - [x] Define `DiffRules` as declarative `Rewrite` rules
+  - [x] Terminal rules via pattern matching (`AnySymbol`, `AnyConstant`, `AnyLiteral`)
+  - [x] `FailUnhandledDiff` for compile-time errors on missing rules
+  - [x] Uses `innermost` traversal with `simplify`
 
-## Phase 7: Interpreter Composition
+- [x] **Plate Notation** (in `indexed/`)
+  - [x] Implement `Indexed<Id>` atom
+  - [x] Implement plate transforms
 
-- [ ] `Compose<I1, I2>` — sequential composition
-- [ ] `Parallel<I1, I2>` — run both, return pair (zygomorphism)
-- [ ] `ForwardAD<Var, Binders>` — eval + diff in single pass
+## Milestone 4: Advanced Features (Future)
 
-## Phase 8: Grammars (Optional)
-
-- [ ] Define concept-based grammars for DSL validation
-- [ ] `CalcExpr` — simple arithmetic grammar
-- [ ] `BayesExpr` — probabilistic model grammar
+- [ ] **Code Generation**: Strategy to emit C++ source code
+- [ ] **GPU Placement**: Strategy to tag nodes for GPU execution
+- [ ] **Parallel Composition**: `Zygomorphism` (run two strategies in parallel)
 
 ## Testing Milestones
 
-- [ ] `fold<Eval>` matches current `evaluate()` behavior
-- [ ] `para<Diff>` matches current `diff()` behavior
-- [ ] `foldUnique<LogProbAccumulator>` matches current `jointUnnormalizedLogProb()`
-- [ ] No performance regression in HMC benchmarks
-- [ ] All existing symbolic3 tests pass with symbolic4
-
-## Documentation
-
-- [ ] Update DESIGN-symbolic4.md as implementation progresses
-- [ ] Add inline documentation for core concepts
-- [ ] Create examples showing atom extensibility
-
----
-
-## Speculative: Other Domains (from Brainstorming)
-
-These are future possibilities if the core abstraction proves useful:
-
-### Heterogeneous Compute
-- [ ] `HostVar<Id, T>` / `DeviceVar<Id, T>` — CPU/GPU placement
-- [ ] `PlacementInterpreter` — automatic device placement
-- [ ] `TransferInterpreter` — insert memory copies
-
-### Task Graphs
-- [ ] `Task<Id, F>` / `Future<Id, T>` — async computation
-- [ ] `ScheduleInterpreter` — find parallelism, topological sort
-- [ ] `ExecuteInterpreter` — thread pool execution
-
-### Dataflow / Streaming
-- [ ] `Source<Id, T>` / `Sink<Id, T>` — stream endpoints
-- [ ] `Window<Id, W>` — batching/windowing
-- [ ] Stream fusion interpreter
-
-### Query Plans
-- [ ] `Table<Id, Schema>` / `Filter<Id, P>` / `Join<Id, L, R, K>`
-- [ ] `CostEstimator` interpreter
-- [ ] `Optimizer` interpreter — join reordering, predicate pushdown
+- [ ] `EvalStrategy` produces same results as legacy `evaluate()`
+- [ ] `SimplifyStrategy` correctly simplifies `x + 0` and `x * 0`
+- [ ] `DiffStrategy` produces correct gradients for HMC
+- [ ] HMC sampler compiles and runs with new engine
