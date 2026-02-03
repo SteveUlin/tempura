@@ -153,7 +153,6 @@ constexpr auto asSymbolic(const T& x) {
 //   a + b + c parses as (a + b) + c → Expression<AddOp, Expression<AddOp, a, b>, c>
 
 template <SymbolicLike L, SymbolicLike R>
-  requires(Symbolic<L> || Symbolic<R>)  // At least one must be Symbolic to avoid ambiguity
 constexpr auto operator+(L lhs, R rhs) {
   auto l = asSymbolic(lhs);
   auto r = asSymbolic(rhs);
@@ -161,7 +160,6 @@ constexpr auto operator+(L lhs, R rhs) {
 }
 
 template <SymbolicLike L, SymbolicLike R>
-  requires(Symbolic<L> || Symbolic<R>)
 constexpr auto operator-(L lhs, R rhs) {
   auto l = asSymbolic(lhs);
   auto r = asSymbolic(rhs);
@@ -169,7 +167,6 @@ constexpr auto operator-(L lhs, R rhs) {
 }
 
 template <SymbolicLike L, SymbolicLike R>
-  requires(Symbolic<L> || Symbolic<R>)
 constexpr auto operator*(L lhs, R rhs) {
   auto l = asSymbolic(lhs);
   auto r = asSymbolic(rhs);
@@ -177,7 +174,6 @@ constexpr auto operator*(L lhs, R rhs) {
 }
 
 template <SymbolicLike L, SymbolicLike R>
-  requires(Symbolic<L> || Symbolic<R>)
 constexpr auto operator/(L lhs, R rhs) {
   auto l = asSymbolic(lhs);
   auto r = asSymbolic(rhs);
