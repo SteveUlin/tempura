@@ -1,5 +1,6 @@
 #include "symbolic4/simplify/canonicalize.h"
 
+#include "symbolic4/constants.h"
 #include "symbolic4/interpreter/eval.h"
 #include "unit.h"
 
@@ -43,17 +44,17 @@ auto main() -> int {
 
   "canonicalize with constants"_test = [] {
     // Symbol < Constant by our ordering
-    static_assert(compare(x, one) == Ordering::Less);
+    static_assert(compare(x, 1_c) == Ordering::Less);
 
-    auto c1 = canonicalize(x + one);
-    auto c2 = canonicalize(one + x);
+    auto c1 = canonicalize(x + 1_c);
+    auto c2 = canonicalize(1_c + x);
     static_assert(std::is_same_v<decltype(c1), decltype(c2)>);
 
     // Canonical form should have x first (smaller)
     // Use std::remove_cvref to handle constexpr const qualification
     static_assert(std::is_same_v<decltype(c1),
                                  Expression<AddOp, std::remove_cvref_t<decltype(x)>,
-                                            Constant<1>>>);
+                                            Constant<1.0>>>);
   };
 
   "canonicalize idempotent"_test = [] {

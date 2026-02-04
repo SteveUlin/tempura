@@ -65,7 +65,7 @@ class TypeValueBinder;
 //   - Extensible: add new behaviors without changing the core Atom type
 //   - Effect can carry data (distributions, expressions) without overhead
 //
-// The four built-in effects:
+// The core effects (domain-independent):
 //
 //   Free       - A free variable. Value must be provided at evaluation time.
 //                Example: Symbol<struct X> x; evaluate(x + 1, x = 5.0);
@@ -73,11 +73,11 @@ class TypeValueBinder;
 //   Embedded   - Value is baked into the atom. No lookup needed.
 //                Example: Literal<double> lit{3.14}; // carries 3.14
 //
-//   Sample     - Random variable. Draws from a probability distribution.
-//                Example: Atom<W, Sample<Normal>> w; // w ~ Normal()
-//
 //   Compute    - Deterministic function of other variables.
 //                Example: DeterministicVar<struct Y, E> y; // y = f(x)
+//
+// Domain-specific effects (e.g., Sample<D>, IndexedSample<D, Dims>) are defined
+// in their respective domain headers (see distributions/effects.h).
 
 // Free variable - look up value in bindings at evaluation time
 struct Free {};
@@ -88,14 +88,6 @@ struct Embedded {
   T value;
   constexpr Embedded() = default;
   constexpr Embedded(T v) : value{v} {}
-};
-
-// Sample from distribution D (for Bayesian modeling)
-template <typename D>
-struct Sample {
-  [[no_unique_address]] D dist_;
-  constexpr Sample() = default;
-  constexpr Sample(D d) : dist_{d} {}
 };
 
 // Compute from expression E (deterministic transformation)
@@ -118,13 +110,13 @@ struct Compute {
 //            - DAG representation (detecting shared subexpressions)
 //            For anonymous atoms (like Literal), Id can be void.
 //
-//   Effect - How this atom gets its value (Free, Embedded, Sample, Compute)
+//   Effect - How this atom gets its value (Free, Embedded, Compute, or domain-specific)
 //
 // The combination of Id + Effect gives us all leaf types:
 //   Symbol<X>        = Atom<X, Free>           - Variable, needs binding
 //   Literal<T>       = Atom<void, Embedded<T>> - Embedded runtime value
-//   Atom<X, Sample<D>>                         - Random variable ~ D
 //   DeterministicVar = Atom<X, Compute<E>>     - Computed from expression
+//   Atom<X, Sample<D>>                         - Random variable ~ D (domain effect)
 //
 // Memory layout:
 //   [[no_unique_address]] ensures empty effects (like Free) take no space.
@@ -244,18 +236,6 @@ struct Fraction : SymbolicTag {
 //   DeterministicVar<struct Y, decltype(x * x)> y_squared;
 template <typename Id, typename ExprT>
 using DeterministicVar = Atom<Id, Compute<ExprT>>;
-
-// Indexed sample from distribution D over dimensions DimsList (for plate notation).
-// Mirrors Sample<D> but carries dimension info, enabling auto-discovery of
-// indexed latent parameters in expression trees.
-template <typename D, typename DimsList>
-struct IndexedSample {
-  [[no_unique_address]] D dist_;
-  using dist_type = D;
-  using dims_list = DimsList;
-  constexpr IndexedSample() = default;
-  constexpr IndexedSample(D d) : dist_{d} {}
-};
 
 // ============================================================================
 // Compound Expressions (internal nodes)
@@ -430,33 +410,6 @@ struct GetEffect<Atom<Id, E>> {
 template <typename T>
 using get_effect_t = typename GetEffect<T>::type;
 
-// ============================================================================
-// Effect Classification Traits
-// ============================================================================
-//
-// These traits allow code to classify atoms by their effect type without
-// needing to know the specific effect parameters.
-
-// Is this effect a Sample?
-template <typename E>
-struct IsSampleEffect : std::false_type {};
-
-template <typename D>
-struct IsSampleEffect<Sample<D>> : std::true_type {};
-
-template <typename E>
-constexpr bool is_sample_effect_v = IsSampleEffect<E>::value;
-
-// Is this atom a random variable (has Sample effect)?
-template <typename T>
-struct IsRandomVarAtom : std::false_type {};
-
-template <typename Id, typename D>
-struct IsRandomVarAtom<Atom<Id, Sample<D>>> : std::true_type {};
-
-template <typename T>
-constexpr bool is_random_var_atom_v = IsRandomVarAtom<T>::value;
-
 // Do two atoms share the same Id (regardless of effect)?
 // Useful when bindings use Atom<Id, Free> but expressions contain Atom<Id, Sample<D>>.
 template <typename A, typename B>
@@ -464,46 +417,6 @@ constexpr bool same_atom_id_v = false;
 
 template <typename Id, typename E1, typename E2>
 constexpr bool same_atom_id_v<Atom<Id, E1>, Atom<Id, E2>> = true;
-
-// Is this effect an IndexedSample?
-template <typename E>
-struct IsIndexedSampleEffect : std::false_type {};
-template <typename D, typename DimsList>
-struct IsIndexedSampleEffect<IndexedSample<D, DimsList>> : std::true_type {};
-template <typename E>
-constexpr bool is_indexed_sample_effect_v = IsIndexedSampleEffect<E>::value;
-
-// Is this atom an indexed random variable? (Atom<Id, IndexedSample<D, DimsList>>)
-template <typename T>
-struct IsIndexedRandomVarAtom : std::false_type {};
-template <typename Id, typename D, typename DimsList>
-struct IsIndexedRandomVarAtom<Atom<Id, IndexedSample<D, DimsList>>> : std::true_type {};
-template <typename T>
-constexpr bool is_indexed_random_var_atom_v = IsIndexedRandomVarAtom<T>::value;
-
-// Get the Distribution type from a Sample effect
-template <typename E>
-struct GetDistribution;
-
-template <typename D>
-struct GetDistribution<Sample<D>> {
-  using type = D;
-};
-
-template <typename E>
-using get_distribution_t = typename GetDistribution<E>::type;
-
-// Get the Distribution type from an Atom (convenience wrapper)
-template <typename T>
-struct GetDistributionFromAtom;
-
-template <typename Id, typename D>
-struct GetDistributionFromAtom<Atom<Id, Sample<D>>> {
-  using type = D;
-};
-
-template <typename T>
-using get_atom_distribution_t = typename GetDistributionFromAtom<T>::type;
 
 // Get the Op type from an Expression
 template <typename T>
@@ -585,3 +498,8 @@ BinderPack(TypeValueBinder<Symbols, Values>...)
     -> BinderPack<TypeValueBinder<Symbols, Values>...>;
 
 }  // namespace tempura::symbolic4
+
+// Transitional: include probabilistic effects so existing code that includes
+// core.h still finds Sample, IndexedSample, and their traits.
+// This will be removed once all consumers include effects.h directly.
+#include "symbolic4/distributions/effects.h"

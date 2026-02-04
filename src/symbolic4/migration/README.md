@@ -46,18 +46,18 @@ Phase 4: New Capabilities            ← Grad<E>, new reductions, new combinator
 Phase 5: Cleanup                     ← deduplicate, remove RTTI, extract shared code
 
 
-Phase 6: Symbol-Forward MCMC         ← INDEPENDENT of phases 1-5
+✓ Phase 6: Symbol-Forward MCMC      ← ✓ DONE
                                         samples[expr], grad spans, constrained init
 
 Phase 7: Decouple Infrastructure     ← INDEPENDENT of phase 6, parallel ok
     │                                   open effects, extensible eval, symbolic state
-    ├── 7.0 SymbolicSlot/State       ← new file, no dependencies
-    ├── 7.1 Open effect system       ← refactor core.h, no dependencies
-    ├── 7.3 TransformPack            ← new file, no dependencies
-    ├── 7.2 Extensible eval          ← depends on 7.1
-    ├── 7.4 Unify posteriors         ← depends on 7.0, 7.2, 7.3
-    ├── 7.5 Remove lookupByAtomId    ← depends on 7.2, 7.3
-    └── 7.6 Diff cleanup            ← depends on 7.3
+    ├── ✓ 7.0 SymbolicSlot/State    ← ✓ DONE (symbolic_state.h)
+    ├── ✓ 7.1 Open effect system    ← ✓ DONE (distributions/effects.h)
+    ├── ✓ 7.3 TransformPack         ← ✓ DONE (mcmc/transform_pack.h)
+    ├── ✓ 7.2 Extensible eval       ← ✓ DONE (terminals.h, prob_terminals.h, indexed_eval.h)
+    ├── 7.4 Unify posteriors         ← NEXT: all prerequisites done (7.0, 7.2, 7.3)
+    ├── 7.5 Remove lookupByAtomId    ← depends on 7.4 (expressions must use Free atoms)
+    └── 7.6 Diff cleanup            ← depends on 7.4 (diff must not see Sample atoms)
 ```
 
 **Standalone fix (any time, no dependencies):** Relax operator `requires` clause

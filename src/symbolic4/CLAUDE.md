@@ -106,9 +106,16 @@ composed via `recursive()`, `innermost()`, etc.
 | 3 | Kill cata — direct recursion for eval/toString | ✓ Done |
 | 4 | Grad<Expr>, new reductions, new combinators | ✓ Done |
 | 5 | Deduplicate constraints, cleanup | ✓ Done |
-| 6 | Symbol-forward MCMC: `samples[expr]`, init API, grad spans | Pending (independent) |
+| 6 | Symbol-forward MCMC: `samples[expr]`, init API, grad spans | ✓ Done |
+| 7.0 | SymbolicSlot / SymbolicState | ✓ Done |
+| 7.1 | Open effect system (Sample/IndexedSample → effects.h) | ✓ Done |
+| 7.2 | Extensible evaluator terminal dispatch | ✓ Done |
+| 7.3 | TransformPack | ✓ Done |
+| 7.4 | Unify posteriors | Pending |
+| 7.5 | Remove lookupByAtomId | Pending (blocked by 7.4) |
+| 7.6 | Diff cleanup (remove Sample interception) | Pending (blocked by 7.4) |
 
-**Standalone fix (no phase dependency):** Relax `operators.h` `requires` clause so
+**Standalone fix (no phase dependency):** ✓ Done. Relax `operators.h` `requires` clause so
 RandomVar/IndexedRandomVar work directly in expressions without `.constrainedExpr()`/`.sym()`.
 
 ## Expression Algebra
@@ -127,8 +134,9 @@ RandomVar/IndexedRandomVar work directly in expressions without `.constrainedExp
 - `Sample<D>` — Random variable from distribution D
 - `IndexedSample<D, DimsList>` — Indexed random variable
 
-Currently `Sample` and `IndexedSample` are defined in `core.h` — this is a known
-coupling that should be resolved (see `migration/phase7.md`).
+`Sample` and `IndexedSample` are now also re-exported from `distributions/effects.h`
+(Phase 7.1 done). They remain in `core.h` for backward compat until Phase 7.4
+completes the posterior unification.
 
 ### Expressions (internal nodes)
 
@@ -345,6 +353,26 @@ problems from Richard McElreath's Statistical Rethinking 2025 course.
 | `bangladesh_contraception.cpp` | Manual everything | Hierarchical model, varying effects, Dirichlet simplex, ordered monotonic |
 | `bmj_weekend_submissions.cpp` | Manual | Poisson regression |
 | `bmj_symbolic.cpp` | Symbolic | Simpler model using symbolic4 API |
+
+### Verification
+
+Changes should be verified against the symbolic4 tests AND the examples, since the
+examples exercise deeper template instantiation paths (full model → posterior →
+gradient → HMC chains) that unit tests may not cover.
+
+```bash
+# Fast: unit tests only (~seconds)
+ctest --test-dir build -R symbolic4
+
+# Thorough: also build examples (~minutes, heavy template instantiation)
+cmake --build build --target bmj_symbolic
+cmake --build build --target linear_regression
+```
+
+⚠️ **The stat_rethinking examples are slow to compile** — deep expression trees with
+full MCMC pipelines produce large template instantiations. Don't build all examples
+on every change. Use the unit tests for iteration, build examples for validation
+before committing.
 
 ### What "Complete" Looks Like
 
@@ -565,9 +593,9 @@ at compile time, this framework isn't the right tool.
 | Priority | Feature | See |
 |----------|---------|-----|
 | ~~Done~~ | ~~Strategy migration (phases 1–5)~~ | `migration/README.md` |
-| **Now** | Relax operator `requires` clause | `operators.h:156` |
-| **Next** | Decouple infrastructure from domain (phase 7) | `migration/phase7.md` |
-| **Next** | Symbol-forward MCMC (phase 6) | `migration/phase6.md` |
+| ~~Done~~ | ~~Relax operator `requires` clause~~ | ~~`operators.h:156`~~ |
+| ~~Done~~ | ~~Symbol-forward MCMC (phase 6)~~ | ~~`migration/phase6.md`~~ |
+| **In Progress** | Decouple infrastructure from domain (phase 7: 7.0-7.3 done, 7.4 next) | `migration/phase7.md` |
 | **Next** | Matrix algebra: Track A (Cholesky, inverse in matrix3) | `matrix_algebra/track_a_numeric.md` |
 | **Later** | Matrix algebra: Track B (symbolic matrix types + ops) | `matrix_algebra/track_b_symbolic.md` |
 | **Later** | `Grad<Expr>` with typed rank via nesting | `migration/phase4.md` |

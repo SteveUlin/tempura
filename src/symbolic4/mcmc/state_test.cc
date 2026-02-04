@@ -143,10 +143,11 @@ auto main() -> int {
 
     std::mt19937_64 rng{42};
 
-    // Run sampling
+    // Run sampling — init values are in constrained space
+    // alpha = 5.0 (close to data mean), sigma = 1.0 (HalfNormal/Positive: z=log(1)=0)
     auto samples = posterior.sample(
-        HmcConfig{.epsilon = 0.05, .steps = 10, .warmup = 100, .draws = 200},
-        BinderPack{alpha = 0.0, sigma = 0.0},  // init in unconstrained space
+        HmcConfig{.epsilon = 0.05, .steps = 10, .warmup = 200, .draws = 200},
+        BinderPack{alpha = 5.0, sigma = 1.0},
         rng);
 
     expectEq(200u, samples.size());
@@ -175,10 +176,12 @@ auto main() -> int {
     auto posterior = infer(alpha, sigma, y)
         .bind(y = indexed(y_data));
 
-    // Evaluate log-prob using binding syntax
-    double lp1 = posterior.logProbAt(BinderPack{alpha = 5.0, sigma = 0.0});
+    // Evaluate log-prob using binding syntax (constrained space)
+    // sigma = 1.0 → z = log(1.0) = 0.0 via inverse transform
+    double lp1 = posterior.logProbAt(BinderPack{alpha = 5.0, sigma = 1.0});
 
-    // Compare with array-based evaluation
+    // Compare with array-based evaluation (unconstrained space)
+    // z = {5.0, 0.0} matches alpha=5.0, sigma=exp(0)=1.0
     std::array<double, 2> z{5.0, 0.0};
     double lp2 = posterior.logProb(z);
 
@@ -197,16 +200,15 @@ auto main() -> int {
     auto posterior = infer(alpha, sigma, y)
         .bind(y = indexed(y_data));
 
-    // Evaluate gradient using binding syntax
-    auto grad = posterior.gradientAt(BinderPack{alpha = 5.0, sigma = 0.0});
+    // Evaluate gradient using both APIs and compare
+    // Constrained values: alpha=5.0, sigma=1.0
+    // Unconstrained values: z = {5.0, log(1.0)} = {5.0, 0.0}
+    std::vector<double> z{5.0, 0.0};
+    auto grad_arr = posterior.gradient(z);
 
-    // Query by symbol
+    auto grad = posterior.gradientAt(BinderPack{alpha = 5.0, sigma = 1.0});
     double d_alpha = grad[alpha];
     double d_sigma = grad[sigma];
-
-    // Compare with array-based evaluation
-    std::array<double, 2> z{5.0, 0.0};
-    auto grad_arr = posterior.gradient(z);
 
     expectNear(d_alpha, grad_arr[0], 1e-10);
     expectNear(d_sigma, grad_arr[1], 1e-10);

@@ -132,9 +132,9 @@ constexpr auto collectFromExprImpl(Visited visited, E expr) {
 // collectLogProbsFromExpr - Collect log-probs from an expression
 // ============================================================================
 
-template <Symbolic E>
+template <typename InitVisited = IdSet<>, Symbolic E>
 constexpr auto collectLogProbsFromExpr(E expr) {
-  auto [result, visited] = collect_detail::collectFromExprImpl(IdSet<>{}, expr);
+  auto [result, visited] = collect_detail::collectFromExprImpl(InitVisited{}, expr);
   return result;
 }
 
@@ -146,7 +146,10 @@ template <typename RV>
   requires IsRandomVar<RV> && (!IsIndexedRandomVar<RV>)
 constexpr auto collectLogProbs(const RV& rv) {
   auto rv_logprob = rv.logProb();
-  auto parent_logprobs = collectLogProbsFromExpr(rv_logprob);
+  // Pre-visit rv's own Id: logProb() now uses sym() (a Sample atom), so
+  // the traversal would re-discover it and double-count without this.
+  using OwnVisited = id_set_insert_t<typename RV::id_type, IdSet<>>;
+  auto parent_logprobs = collectLogProbsFromExpr<OwnVisited>(rv_logprob);
   return collect_detail::addNonZero(rv_logprob, parent_logprobs);
 }
 
@@ -207,7 +210,8 @@ constexpr auto collectLogProbsMulti(Visited visited, Accum accum, const RV& rv,
 template <IsIndexedRandomVar RV>
 constexpr auto collectLogProbs(const RV& rv) {
   auto rv_logprob = rv.logProb();
-  auto parent_logprobs = collectLogProbsFromExpr(rv_logprob);
+  using OwnVisited = id_set_insert_t<typename RV::id_type, IdSet<>>;
+  auto parent_logprobs = collectLogProbsFromExpr<OwnVisited>(rv_logprob);
   return collect_detail::addNonZero(rv_logprob, parent_logprobs);
 }
 

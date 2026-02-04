@@ -35,14 +35,16 @@ auto main() -> int {
   // IndexedStochasticNode::sym()
   // ===========================================================================
 
-  "IndexedStochasticNode::sym returns IndexedSymbol"_test = [] {
+  "IndexedStochasticNode::sym returns discoverable atom"_test = [] {
     struct Obs {};
     auto theta = plate<Obs>(beta(lit(2.0), lit(3.0)));
     auto sym = theta.sym();
 
-    static_assert(is_indexed_symbol_v<decltype(sym)>);
-    static_assert(decltype(sym)::ndims == 1);
-    static_assert(decltype(sym)::has_dim<Obs>);
+    // sym() returns Atom<Id, IndexedSample<Dist, DimsList>> for auto-discovery
+    static_assert(is_indexed_random_var_atom_v<decltype(sym)>);
+    using Effect = typename decltype(sym)::effect_type;
+    static_assert(Size_v<typename Effect::dims_list> == 1);
+    static_assert(Contains_v<Obs, typename Effect::dims_list>);
   };
 
   // ===========================================================================
@@ -65,9 +67,10 @@ auto main() -> int {
     std::vector<double> theta_vals = {0.3, 0.5, 0.7};
     double result = evaluateIndexed(lp, theta = indexed(theta_vals));
 
-    // Unnormalized log Beta: (alpha-1)*log(x) + (beta-1)*log(1-x) = log(x) + 2*log(1-x)
-    auto expected_at = [](double x) {
-      return std::log(x) + 2.0 * std::log(1.0 - x);
+    // Full log Beta(2,3): (α-1)log(x) + (β-1)log(1-x) - logB(α,β)
+    double log_normalizer = std::lgamma(2.0) + std::lgamma(3.0) - std::lgamma(5.0);
+    auto expected_at = [log_normalizer](double x) {
+      return std::log(x) + 2.0 * std::log(1.0 - x) - log_normalizer;
     };
     double expected = expected_at(0.3) + expected_at(0.5) + expected_at(0.7);
     expectNear(expected, result, 1e-10);
@@ -89,9 +92,10 @@ auto main() -> int {
     std::vector<double> theta_vals = {0.3, 0.5, 0.7};
     double result = evaluateIndexed(lp, alpha = 2.0, theta = indexed(theta_vals));
 
-    // alpha=2, beta=3: log(x) + 2*log(1-x)
-    auto expected_at = [](double x) {
-      return std::log(x) + 2.0 * std::log(1.0 - x);
+    // alpha=2, beta=3: full log Beta including normalizer
+    double log_normalizer = std::lgamma(2.0) + std::lgamma(3.0) - std::lgamma(5.0);
+    auto expected_at = [log_normalizer](double x) {
+      return std::log(x) + 2.0 * std::log(1.0 - x) - log_normalizer;
     };
     double expected = expected_at(0.3) + expected_at(0.5) + expected_at(0.7);
     expectNear(expected, result, 1e-10);
@@ -114,9 +118,11 @@ auto main() -> int {
     static_assert(std::is_same_v<DimsType, TypeList<Countries, Years>>);
 
     auto sym = theta.sym();
-    static_assert(sym.ndims == 2);
-    static_assert(sym.has_dim<Countries>);
-    static_assert(sym.has_dim<Years>);
+    // sym() returns Atom<Id, IndexedSample<Dist, TypeList<Countries, Years>>>
+    using Effect = typename decltype(sym)::effect_type;
+    static_assert(Size_v<typename Effect::dims_list> == 2);
+    static_assert(Contains_v<Countries, typename Effect::dims_list>);
+    static_assert(Contains_v<Years, typename Effect::dims_list>);
   };
 
   "nested plate logProb returns nested SumOver"_test = [] {
@@ -149,12 +155,13 @@ auto main() -> int {
   // toSymbolic and argToSymbolic
   // ===========================================================================
 
-  "toSymbolic returns IndexedSymbol"_test = [] {
+  "toSymbolic returns discoverable atom"_test = [] {
     struct Obs {};
     auto theta = plate<Obs>(normal(lit(0.0), lit(1.0)));
     auto sym = toSymbolic(theta);
 
-    static_assert(is_indexed_symbol_v<decltype(sym)>);
+    // toSymbolic() delegates to sym(), returning Atom<Id, IndexedSample<...>>
+    static_assert(is_indexed_random_var_atom_v<decltype(sym)>);
   };
 
   "toSymbolic works for IndexedRandomVar"_test = [] {
@@ -162,7 +169,7 @@ auto main() -> int {
     auto theta = plate<Obs>(normal(lit(0.0), lit(1.0)));
     auto sym = toSymbolic(theta);
 
-    static_assert(is_indexed_symbol_v<decltype(sym)>);
+    static_assert(is_indexed_random_var_atom_v<decltype(sym)>);
   };
 
   // ===========================================================================

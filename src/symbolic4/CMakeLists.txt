@@ -304,6 +304,18 @@ target_link_libraries(symbolic4_state_test PRIVATE symbolic4 tempura::bayes temp
 add_test(NAME symbolic4_state_test COMMAND symbolic4_state_test)
 set_tests_properties(symbolic4_state_test PROPERTIES LABELS "symbolic4;mcmc;state;samples")
 
+# mcmc/transform_pack.h tests
+add_executable(symbolic4_transform_pack_test mcmc/transform_pack_test.cc)
+target_link_libraries(symbolic4_transform_pack_test PRIVATE symbolic4 unit)
+add_test(NAME symbolic4_transform_pack_test COMMAND symbolic4_transform_pack_test)
+set_tests_properties(symbolic4_transform_pack_test PROPERTIES LABELS "symbolic4;mcmc;transform_pack")
+
+# symbolic_state.h tests
+add_executable(symbolic4_symbolic_state_test symbolic_state_test.cc)
+target_link_libraries(symbolic4_symbolic_state_test PRIVATE symbolic4 unit)
+add_test(NAME symbolic4_symbolic_state_test COMMAND symbolic4_symbolic_state_test)
+set_tests_properties(symbolic4_symbolic_state_test PROPERTIES LABELS "symbolic4;symbolic_state")
+
 # plate_infer_test.cc - plate inference API tests
 add_executable(plate_infer_test plate_infer_test.cc)
 target_link_libraries(plate_infer_test PRIVATE symbolic4 tempura::prob unit)

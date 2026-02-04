@@ -199,7 +199,9 @@ class RawPosterior {
 template <IsRandomVar... RVs>
 constexpr auto inferRaw(const RVs&... rvs) {
   auto joint_lp = collectLogProbs(rvs...);
-  auto params = std::make_tuple(rvs.freeSym()...);
+  // Use RandomVars for params: their operator= applies inverse transform,
+  // ensuring constrained-space values round-trip correctly through eval.
+  auto params = std::make_tuple(rvs...);
   auto grads = std::make_tuple(simplify(diff(joint_lp, rvs.freeSym()))...);
   return RawPosterior{joint_lp, params, grads};
 }

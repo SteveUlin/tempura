@@ -3,9 +3,8 @@
 #include <unordered_map>
 #include <typeindex>
 
-#include "symbolic4/constraints.h"
 #include "symbolic4/core.h"
-#include "symbolic4/distributions/indexed_node.h"  // For make_indexed_symbol_t, IndexedRandomVar
+#include "symbolic4/distributions/prob_terminals.h"  // ProbTerminals (default handler)
 #include "symbolic4/indexed/data.h"
 #include "symbolic4/indexed/dim.h"
 #include "symbolic4/indexed/sum_over.h"
@@ -17,12 +16,13 @@
 //
 // Extends evaluate() to handle:
 //   - IndexedSymbol with multiple dimensions
-//   - Nested SumOver expressions
+//   - Nested SumOver / ReduceOver expressions
 //   - Broadcasting (1D symbol used in 2D context)
 //
-// Key design: Context tracks current index for each dimension tag using
-// type-erased storage. When evaluating IndexedSymbol<Id, D1, D2>, we look up
-// the current index for D1 and D2 from the context.
+// Key design: Terminal dispatch is delegated to a Terminals policy type.
+// BaseTerminals handles domain-independent atoms (constants, free symbols,
+// indexed symbols). ProbTerminals extends it with probabilistic atoms
+// (Sample, IndexedSample). Custom domains can define their own terminals.
 //
 // ============================================================================
 
@@ -112,8 +112,19 @@ class DimIndexMap {
 // ============================================================================
 // IndexedEval - Interpreter for expressions with indexed bindings
 // ============================================================================
+//
+// Template parameters:
+//   ScalarBindings  - BinderPack of scalar bindings
+//   IndexedBindings - BinderPack of indexed bindings
+//   Terminals       - Terminal dispatch policy (default: ProbTerminals)
+//
+// The Terminals policy decouples terminal handling from the fold machinery.
+// BaseTerminals handles domain-independent atoms. ProbTerminals extends it
+// with probabilistic atoms (Sample, IndexedSample). Custom domains can
+// define their own terminal handler.
 
-template <typename ScalarBindings, typename IndexedBindings>
+template <typename ScalarBindings, typename IndexedBindings,
+          typename Terminals = ProbTerminals>
 struct IndexedEval {
   using result_type = double;
 
@@ -123,44 +134,10 @@ struct IndexedEval {
     DimIndexMap dim_indices;
   };
 
-  // Terminal handling - dispatch based on terminal type
+  // Terminal handling — delegates to Terminals policy
   template <typename T>
   static auto terminal(T term, context_type& ctx) -> double {
-    if constexpr (is_constant_v<T>) {
-      return static_cast<double>(T::value);
-    } else if constexpr (is_fraction_v<T>) {
-      return T::value;
-    } else if constexpr (is_literal_v<T>) {
-      return static_cast<double>(term.effect_.value);
-    } else if constexpr (is_indexed_symbol_v<T>) {
-      // Look up indexed binding and extract value at current indices
-      return lookupIndexedSymbol<T>(term, ctx);
-    } else if constexpr (is_indexed_data_v<T>) {
-      // IndexedData - convert to its symbol and look up in indexed bindings
-      using SymType = typename T::symbol_type;
-      return lookupIndexedSymbol<SymType>(SymType{}, ctx);
-    } else if constexpr (is_indexed_random_var_atom_v<T>) {
-      // Atom<Id, IndexedSample<Dist, DimsList>> - look up via IndexedSymbol
-      using DimsList = typename T::effect_type::dims_list;
-      using IdType = typename T::id_type;
-      using LookupSym = detail::make_indexed_symbol_t<IdType, DimsList>;
-      return lookupIndexedSymbol<LookupSym>(LookupSym{}, ctx);
-    } else if constexpr (is_random_var_atom_v<T>) {
-      // Sample atom: Atom<Id, Sample<Dist>>
-      // Look up by Free symbol (Atom<Id, Free>) and apply constraint transform
-      double z = indexed_eval_detail::lookupByAtomId(term, ctx.scalars);
-
-      // Apply constraint transform based on distribution support
-      using Dist = get_distribution_t<typename T::effect_type>;
-      using Support = typename Dist::support_type;
-      return constraints::applyNumeric<Support>(z);
-    } else if constexpr (is_atom_v<T>) {
-      // Regular Free symbol - look up in scalar bindings (no transform)
-      return indexed_eval_detail::lookupByAtomId(term, ctx.scalars);
-    } else {
-      static_assert(is_atom_v<T>, "Unknown terminal type");
-      return 0.0;
-    }
+    return Terminals::template eval<IndexedEval>(term, ctx);
   }
 
   // Combine child results using the operator functor
@@ -169,9 +146,8 @@ struct IndexedEval {
     return op(children...);
   }
 
- private:
-  // Look up an IndexedSymbol value using current dimension indices.
-  // Pack-expansion calls binding.at(idx0, idx1, ...) for any ndims.
+  // Public: Look up an IndexedSymbol value using current dimension indices.
+  // Terminal handlers call this via Interp::lookupIndexedSymbol<Sym>(sym, ctx).
   template <typename Sym>
   static auto lookupIndexedSymbol([[maybe_unused]] Sym sym, context_type& ctx) -> double {
     const auto& binding = ctx.indexed[sym];
@@ -179,6 +155,7 @@ struct IndexedEval {
                                 std::make_index_sequence<Sym::ndims>{});
   }
 
+ private:
   template <typename Sym, typename Binding, SizeT... Is>
   static auto lookupAtIndices(const Binding& binding, const DimIndexMap& dim_indices,
                               std::index_sequence<Is...>) -> double {
@@ -349,8 +326,12 @@ inline auto tupleToBinderPack(std::tuple<>) { return BinderPack<>{}; }
 // ============================================================================
 // evaluateIndexed - Main entry point
 // ============================================================================
+//
+// The Terminals parameter selects the terminal dispatch policy.
+// Default is ProbTerminals which handles Sample/IndexedSample atoms.
+// Use BaseTerminals for domain-independent evaluation (no probabilistic effects).
 
-template <Symbolic E, typename... Binders>
+template <typename Terminals = ProbTerminals, Symbolic E, typename... Binders>
 auto evaluateIndexed(E expr, BinderPack<Binders...> bindings) -> double {
   auto [scalar_tuple, indexed_tuple] = detail::SeparateBinders<Binders...>::separate(bindings);
   auto scalars = detail::tupleToBinderPack(scalar_tuple);
@@ -358,15 +339,15 @@ auto evaluateIndexed(E expr, BinderPack<Binders...> bindings) -> double {
 
   using ScalarBindings = decltype(scalars);
   using IndexedBindings = decltype(indexed);
-  using Interp = IndexedEval<ScalarBindings, IndexedBindings>;
+  using Interp = IndexedEval<ScalarBindings, IndexedBindings, Terminals>;
 
   typename Interp::context_type ctx{scalars, indexed, {}};
   return indexedFold<Interp>(expr, ctx);
 }
 
-template <Symbolic E, typename... Args>
+template <typename Terminals = ProbTerminals, Symbolic E, typename... Args>
 auto evaluateIndexed(E expr, Args... binders) -> double {
-  return evaluateIndexed(expr, BinderPack{binders...});
+  return evaluateIndexed<Terminals>(expr, BinderPack{binders...});
 }
 
 // ============================================================================
@@ -380,7 +361,7 @@ auto evaluateIndexed(E expr, Args... binders) -> double {
 // Example: For grad_expr = SumOver<D, f> + SumOver<D, g> evaluated at index i:
 //   Returns f(i) + g(i), NOT Σⱼf(j) + Σⱼg(j)
 //
-template <Symbolic E, typename... Binders>
+template <typename Terminals = ProbTerminals, Symbolic E, typename... Binders>
 auto evaluateAtIndex(E expr, BinderPack<Binders...> bindings, SizeT idx) -> double {
   auto [scalar_tuple, indexed_tuple] = detail::SeparateBinders<Binders...>::separate(bindings);
   auto scalars = detail::tupleToBinderPack(scalar_tuple);
@@ -388,7 +369,7 @@ auto evaluateAtIndex(E expr, BinderPack<Binders...> bindings, SizeT idx) -> doub
 
   using ScalarBindings = decltype(scalars);
   using IndexedBindings = decltype(indexed);
-  using Interp = IndexedEval<ScalarBindings, IndexedBindings>;
+  using Interp = IndexedEval<ScalarBindings, IndexedBindings, Terminals>;
 
   typename Interp::context_type ctx{scalars, indexed, {}};
 

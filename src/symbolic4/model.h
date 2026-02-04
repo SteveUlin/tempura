@@ -107,9 +107,10 @@ class Model {
     return unnormalizedJointLogProbImpl(std::make_index_sequence<NumRVs>{});
   }
 
-  // Extract all parameter symbols as a tuple (free symbols for bindings)
+  // Extract all parameter symbols as a tuple (Sample atoms for expressions)
+  // These carry distribution info, so evaluate() applies constraint transforms.
   constexpr auto params() const {
-    return std::apply([](auto&... rv) { return std::make_tuple(rv.freeSym()...); }, rvs_);
+    return std::apply([](auto&... rv) { return std::make_tuple(rv.sym()...); }, rvs_);
   }
 
   // Create a posterior builder for inference
@@ -157,18 +158,18 @@ class PosteriorBuilderFromModel<ModelT, false> {
   // Build posterior without observations (for prior sampling)
   auto build() const {
     using TupleType = std::remove_cvref_t<decltype(model_.rvs())>;
-    return buildPosteriorImpl(model_.jointLogProb(), model_.params(),
+    return buildPosteriorImpl(model_.jointLogProb(),
                               std::make_index_sequence<std::tuple_size_v<TupleType>>{});
   }
 
  private:
   ModelT model_;
 
-  template <typename LogProb, typename ParamsTuple, std::size_t... Is>
-  auto buildPosteriorImpl(LogProb lp, ParamsTuple params,
-                          std::index_sequence<Is...>) const {
+  template <typename LogProb, std::size_t... Is>
+  auto buildPosteriorImpl(LogProb lp, std::index_sequence<Is...>) const {
     auto transforms = std::make_tuple(autoTransform(std::get<Is>(model_.rvs()))...);
-    auto symbols = std::make_tuple(std::get<Is>(params)...);
+    // Use freeSym() for differentiation and binding (Free atoms)
+    auto symbols = std::make_tuple(std::get<Is>(model_.rvs()).freeSym()...);
     auto grads = std::make_tuple(simplify(diff(lp, std::get<Is>(symbols)))...);
 
     return TransformedPosterior<LogProb, BinderPack<>, decltype(transforms),
@@ -411,8 +412,8 @@ constexpr auto model(RVs... rvs) {
 
 template <typename... RVs>
 constexpr auto params(const RVs&... rvs) {
-  // Use freeSym() for binding compatibility
-  return std::make_tuple(rvs.freeSym()...);
+  // Use sym() (Sample atoms) so evaluate() applies constraint transforms
+  return std::make_tuple(rvs.sym()...);
 }
 
 }  // namespace tempura::symbolic4
