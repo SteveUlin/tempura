@@ -386,10 +386,15 @@ struct MatrixPlateEval {
     return PlateVectorView{binding.row(plate_idx)};
   }
 
-  // Look up scalar using Id-based matching
+  // Look up scalar — Sample atoms resolve via corresponding Free symbol
   template <typename T>
-  static auto lookupScalar(T term, context_type& ctx) -> double {
-    return indexed_eval_detail::lookupByAtomId(term, ctx.scalars);
+  static auto lookupScalar([[maybe_unused]] T term, context_type& ctx) -> double {
+    if constexpr (is_random_var_atom_v<T>) {
+      using FreeSymbol = Atom<get_id_t<T>, Free>;
+      return ctx.scalars[FreeSymbol{}];
+    } else {
+      return ctx.scalars[term];
+    }
   }
 };
 

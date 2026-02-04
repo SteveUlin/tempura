@@ -2,6 +2,7 @@
 
 #include "meta/function_objects.h"
 #include "symbolic4/core.h"
+#include "symbolic4/indexed/dim.h"  // For is_indexed_symbol_v
 
 // ============================================================================
 // operators.h - Building symbolic expressions with natural syntax
@@ -86,50 +87,57 @@ using tempura::TanhOp;
 //
 // Conversion priorities:
 //   1. Already Symbolic → return as-is
-//   2. Has sym() method → call sym() (IndexedData, old-style types)
-//   3. Has constrainedExpr() static method → call it (RandomVar)
+//   2. Has toSymbolic() overload → use toSymbolic(x) for discoverable atoms
+//   3. Has sym() method → call sym() (fallback)
 //
 // This enables natural syntax:
 //   auto alpha = normal(0, 10);  // RandomVar
 //   auto x = data<Obs>();        // IndexedData
 //   auto mu = alpha + x;         // Works! Converts automatically
+//
+// IMPORTANT: We use toSymbolic() (not sym()) so that RandomVars in expressions
+// become Atom<Id, Sample<Dist>> which are discoverable by collectLogProbs()
+// and discoverParams(). This enables auto-discovery in infer(y).
 
-// Check if T has a sym() method returning Symbolic
+// Check if toSymbolic(x) is a valid expression returning Symbolic
+template <typename T>
+concept HasToSymbolic = requires(const T& t) {
+  { toSymbolic(t) } -> Symbolic;
+};
+
+// Check if T has a sym() method returning Symbolic (fallback)
 template <typename T>
 concept HasSymMethod = requires(const T& t) {
   { t.sym() } -> Symbolic;
 };
 
-// Check if T has a constrainedExpr() method (static or instance) returning Symbolic
-template <typename T>
-concept HasConstrainedExpr = requires(const T& t) {
-  { t.constrainedExpr() } -> Symbolic;
-};
-
 // Combined: types that can participate in symbolic expressions
 template <typename T>
-concept SymbolicLike = Symbolic<T> || HasSymMethod<T> || HasConstrainedExpr<T>;
+concept SymbolicLike = Symbolic<T> || HasToSymbolic<T> || HasSymMethod<T>;
 
 // Helper to get the symbolic form of a value
 // Priority:
-//   1. Already Symbolic → return as-is (preserves Sample atoms, Expressions, etc.)
-//   2. Has constrainedExpr() → call it (RandomVar types - returns Sample atom)
-//   3. Has sym() → call it (IndexedData)
+//   1. Has toSymbolic() AND is a "wrapper" type → call toSymbolic() to get canonical form
+//      (Handles RandomVar → Atom<Id, Sample<D>>, IndexedData → IndexedSymbol)
+//   2. Already Symbolic (Atom, Expression, etc.) → return as-is
+//   3. Has sym() → call sym() (fallback)
+//
+// Key insight: Types like RandomVar and IndexedData inherit from SymbolicTag (so they
+// satisfy Symbolic<T>), but their toSymbolic() returns a DIFFERENT canonical form that
+// works better in expression trees. We check for this case first.
 template <typename T>
 constexpr auto asSymbolic(const T& x) {
-  if constexpr (Symbolic<T>) {
-    // Already a valid symbolic expression (Atom, Expression, etc.)
-    // This preserves Sample atoms which are needed for auto-discovery
+  // For wrapper types that have toSymbolic() returning a canonical form, use it.
+  // Skip Expression and Atom (their toSymbolic is identity or they don't have it).
+  if constexpr (HasToSymbolic<T> && !is_expression_v<T> && !is_atom_v<T> &&
+                !is_indexed_symbol_v<T> && !is_constant_v<T>) {
+    return toSymbolic(x);
+  } else if constexpr (Symbolic<T>) {
     return x;
-  } else if constexpr (HasConstrainedExpr<T>) {
-    // RandomVar - returns Sample atom for auto-discovery
-    // Constraint transform is applied during evaluation
-    return x.constrainedExpr();
   } else if constexpr (HasSymMethod<T>) {
-    // IndexedData and similar - convert to their symbol type
     return x.sym();
   } else {
-    static_assert(Symbolic<T> || HasConstrainedExpr<T> || HasSymMethod<T>,
+    static_assert(Symbolic<T> || HasToSymbolic<T> || HasSymMethod<T>,
                   "Type cannot be converted to Symbolic");
   }
 }

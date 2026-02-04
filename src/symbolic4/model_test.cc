@@ -51,12 +51,12 @@ auto main() -> int {
 
     auto posterior = m.posterior().build();
 
-    // Posterior has automatic transforms: mu -> unconstrained, sigma -> positive
-    std::array<double, 2> z = {1.0, 0.5};
-    double lp = posterior.logProb(z);
+    // Symbolic lookup: pass constrained values, posterior handles transforms
+    double lp = posterior.logProbAt(BinderPack{mu = 1.0, sigma = 2.0});
     expectTrue(std::isfinite(lp));
 
-    // Gradient
+    // Gradient via flat state (HMC internal representation)
+    std::vector<double> z = {1.0, 0.5};
     auto grad = posterior.gradient(z);
     expectTrue(std::isfinite(grad[0]));
     expectTrue(std::isfinite(grad[1]));
@@ -70,9 +70,8 @@ auto main() -> int {
 
     auto posterior = m.posterior().observe(y = 3.5).build();
 
-    // After observing y=3.5, all three parameters still exist in state
-    std::array<double, 3> z = {1.0, 0.5, 0.0};
-    double lp = posterior.logProb(z);
+    // After observing y=3.5, only mu and sigma are sampled
+    double lp = posterior.logProbAt(BinderPack{mu = 1.0, sigma = 2.0});
     expectTrue(std::isfinite(lp));
   };
 

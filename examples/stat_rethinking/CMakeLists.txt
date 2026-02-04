@@ -25,6 +25,14 @@ target_link_libraries(bangladesh_contraception PRIVATE bayes plot)
 add_executable(bmj_symbolic bmj_symbolic.cpp)
 target_link_libraries(bmj_symbolic PRIVATE bayes symbolic4 plot)
 
+# Bangladesh Gather Test: Tests cross-plate indexing with gather()
+add_executable(bangladesh_gather_test bangladesh_gather_test.cpp)
+target_link_libraries(bangladesh_gather_test PRIVATE symbolic4)
+
+# Hierarchical Gather Example: Full model with gather() and sample()
+add_executable(hierarchical_gather_example hierarchical_gather_example.cpp)
+target_link_libraries(hierarchical_gather_example PRIVATE bayes symbolic4)
+
 # Week 2: Geocentric Models / Categories and Curves
 # Week 3: Elemental Confounds / Good and Bad Controls
 # Week 4: Overfitting / MCMC

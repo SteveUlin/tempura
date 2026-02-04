@@ -7,6 +7,7 @@
 #include "symbolic4/distributions/prob_terminals.h"  // ProbTerminals (default handler)
 #include "symbolic4/indexed/data.h"
 #include "symbolic4/indexed/dim.h"
+#include "symbolic4/indexed/gather.h"
 #include "symbolic4/indexed/sum_over.h"
 #include "symbolic4/operators.h"
 
@@ -27,54 +28,6 @@
 // ============================================================================
 
 namespace tempura::symbolic4 {
-
-// ============================================================================
-// Atom Id matching - allows Atom<Id, Free> to bind Atom<Id, Sample<D>>
-// ============================================================================
-// When evaluating expressions from distributions, we see Atom<Id, Sample<D>>
-// but bindings are made with Atom<Id, Free>. They share the same Id so should
-// match for evaluation purposes.
-
-namespace indexed_eval_detail {
-
-// Get the symbol type from a binder
-template <typename Binder>
-struct BinderSymbol;
-
-template <typename S, typename V>
-struct BinderSymbol<TypeValueBinder<S, V>> {
-  using type = S;
-};
-
-// Check if a binder's symbol matches the given atom by Id (uses same_atom_id_v from core.h)
-template <typename AtomT, typename Binder>
-struct BinderMatchesAtom : std::false_type {};
-
-template <typename Id, typename E1, typename E2, typename V>
-struct BinderMatchesAtom<Atom<Id, E1>, TypeValueBinder<Atom<Id, E2>, V>> : std::true_type {};
-
-// Look up value in BinderPack by matching atom Id (not exact type)
-template <typename T, typename... Binders>
-auto lookupByAtomId([[maybe_unused]] T term, const BinderPack<Binders...>& pack) -> double {
-  double result = 0.0;
-  bool found = false;
-
-  auto try_lookup = [&]<typename B>(const B& binder) {
-    if constexpr (BinderMatchesAtom<T, B>::value) {
-      if (!found) {
-        using BinderSym = typename BinderSymbol<B>::type;
-        result = binder[BinderSym{}];
-        found = true;
-      }
-    }
-  };
-
-  (try_lookup(static_cast<const Binders&>(pack)), ...);
-
-  return result;
-}
-
-}  // namespace indexed_eval_detail
 
 // ============================================================================
 // DimIndex - Type-erased dimension index storage
@@ -166,36 +119,32 @@ struct IndexedEval {
 // ============================================================================
 // Get dimension size from bindings
 // ============================================================================
+//
+// Searches through indexed bindings to find one that has DimTag and returns
+// its size. Uses fold expression to iterate through binders without casting.
 
-template <typename DimTag, typename Bindings>
-struct GetDimensionSizeImpl;
+namespace detail {
 
-template <typename DimTag>
-struct GetDimensionSizeImpl<DimTag, BinderPack<>> {
-  static auto get(const BinderPack<>&) -> SizeT { return 0; }
-};
-
-template <typename DimTag, typename First, typename... Rest>
-struct GetDimensionSizeImpl<DimTag, BinderPack<First, Rest...>> {
-  static auto get(const BinderPack<First, Rest...>& pack) -> SizeT {
-    if constexpr (is_indexed_binding_v<First>) {
-      using Sym = typename First::symbol_type;
-      if constexpr (Sym::template has_dim<DimTag>) {
-        return static_cast<const First&>(pack).template dimSize<DimTag>();
-      } else {
-        return GetDimensionSizeImpl<DimTag, BinderPack<Rest...>>::get(
-            static_cast<const BinderPack<Rest...>&>(pack));
-      }
-    } else {
-      return GetDimensionSizeImpl<DimTag, BinderPack<Rest...>>::get(
-          static_cast<const BinderPack<Rest...>&>(pack));
+// Check if a single binder has the dimension and return its size, or 0
+template <typename DimTag, typename Binder, typename Pack>
+auto getDimSizeFromBinder(const Pack& pack) -> SizeT {
+  if constexpr (is_indexed_binding_v<Binder>) {
+    using Sym = typename Binder::symbol_type;
+    if constexpr (Sym::template has_dim<DimTag>) {
+      return static_cast<const Binder&>(pack).template dimSize<DimTag>();
     }
   }
-};
+  return 0;
+}
 
-template <typename DimTag, typename Bindings>
-auto getDimensionSize(const Bindings& bindings) -> SizeT {
-  return GetDimensionSizeImpl<DimTag, Bindings>::get(bindings);
+}  // namespace detail
+
+template <typename DimTag, typename... Binders>
+auto getDimensionSize(const BinderPack<Binders...>& pack) -> SizeT {
+  SizeT result = 0;
+  // Fold expression: check each binder, keep first non-zero result
+  ((result == 0 ? result = detail::getDimSizeFromBinder<DimTag, Binders>(pack) : result), ...);
+  return result;
 }
 
 // ============================================================================
@@ -230,6 +179,36 @@ auto indexedFold(E expr, Ctx& ctx) -> double {
       accum = ROp::combine(accum, indexedFold<Interp>(expr.expr_, ctx));
     }
     return accum;
+  } else if constexpr (is_gather_v<E>) {
+    // Handle Gather - cross-plate indexing
+    // 1. Evaluate the index expression to get an integer
+    auto idx_val = static_cast<SizeT>(indexedFold<Interp>(expr.index, ctx));
+
+    // 2. Extract the param dimension from the param expression
+    //    Works for both IndexedSymbol and expressions containing IndexedSymbols
+    using ParamType = typename E::param_type;
+    if constexpr (has_indexed_dim_v<ParamType>) {
+      using ParamDim = find_indexed_dim_t<ParamType>;
+
+      // 3. Save old dimension state
+      auto old_idx = ctx.dim_indices.template get<ParamDim>();
+      auto old_size = ctx.dim_indices.template getSize<ParamDim>();
+
+      // 4. Set ParamDim to the gathered index value
+      auto param_size = getDimensionSize<ParamDim>(ctx.indexed);
+      ctx.dim_indices.template set<ParamDim>(idx_val, param_size);
+
+      // 5. Evaluate param with the modified dimension
+      auto result = indexedFold<Interp>(expr.param, ctx);
+
+      // 6. Restore old dimension index
+      ctx.dim_indices.template set<ParamDim>(old_idx, old_size);
+      return result;
+    } else {
+      // For expressions that don't contain any IndexedSymbol, just evaluate directly
+      // (e.g., pure scalar expressions)
+      return indexedFold<Interp>(expr.param, ctx);
+    }
   } else if constexpr (is_expression_v<E>) {
     return detail::indexedFoldExpression<Interp>(expr, ctx, MakeIndexSequence<E::arity>{});
   } else {
@@ -270,6 +249,26 @@ auto indexedFoldSingleIndex(E expr, Ctx& ctx) -> double {
     // For single-index mode: evaluate inner expression at current index (no reduction)
     // The dimension index should already be set in ctx.dim_indices
     return indexedFoldSingleIndex<Interp>(expr.expr_, ctx);
+  } else if constexpr (is_gather_v<E>) {
+    // Handle Gather in single-index mode - same logic as indexedFold
+    auto idx_val = static_cast<SizeT>(indexedFoldSingleIndex<Interp>(expr.index, ctx));
+
+    using ParamType = typename E::param_type;
+    if constexpr (has_indexed_dim_v<ParamType>) {
+      using ParamDim = find_indexed_dim_t<ParamType>;
+
+      auto old_idx = ctx.dim_indices.template get<ParamDim>();
+      auto old_size = ctx.dim_indices.template getSize<ParamDim>();
+      auto param_size = getDimensionSize<ParamDim>(ctx.indexed);
+      ctx.dim_indices.template set<ParamDim>(idx_val, param_size);
+
+      auto result = indexedFoldSingleIndex<Interp>(expr.param, ctx);
+
+      ctx.dim_indices.template set<ParamDim>(old_idx, old_size);
+      return result;
+    } else {
+      return indexedFoldSingleIndex<Interp>(expr.param, ctx);
+    }
   } else if constexpr (is_expression_v<E>) {
     return detail::indexedFoldSingleIndexExpr<Interp>(expr, ctx, MakeIndexSequence<E::arity>{});
   } else {

@@ -55,9 +55,9 @@ Phase 7: Decouple Infrastructure     ← INDEPENDENT of phase 6, parallel ok
     ├── ✓ 7.1 Open effect system    ← ✓ DONE (distributions/effects.h)
     ├── ✓ 7.3 TransformPack         ← ✓ DONE (mcmc/transform_pack.h)
     ├── ✓ 7.2 Extensible eval       ← ✓ DONE (terminals.h, prob_terminals.h, indexed_eval.h)
-    ├── 7.4 Unify posteriors         ← NEXT: all prerequisites done (7.0, 7.2, 7.3)
-    ├── 7.5 Remove lookupByAtomId    ← depends on 7.4 (expressions must use Free atoms)
-    └── 7.6 Diff cleanup            ← depends on 7.4 (diff must not see Sample atoms)
+    ├── ✓ 7.4 Unify posteriors      ← ✓ DONE (Free symbols, no eval-time transforms)
+    ├── ✓ 7.5 Remove lookupByAtomId ← ✓ DONE (direct Free symbol lookup, BinderMatchesAtom deleted)
+    └── ✓ 7.6 Diff cleanup          ← ✓ DONE (simplified Sample interception, removed SampleDerivative/wrappers.h)
 ```
 
 **Standalone fix (any time, no dependencies):** Relax operator `requires` clause

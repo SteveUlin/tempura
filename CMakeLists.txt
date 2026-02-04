@@ -7,6 +7,8 @@ project(tempura LANGUAGES CXX VERSION 0.1.0)
 
 option(TEMPURA_BUILD_TESTS "Build tests" ON)
 option(TEMPURA_BUILD_EXAMPLES "Build examples" ON)
+set(TEMPURA_COMPILE_TIMEOUT "0" CACHE STRING "Per-file compilation timeout in seconds (0=off)")
+option(TEMPURA_PROFILE_COMPILE "Add -ftime-report (GCC) or -ftime-trace (Clang)" OFF)
 
 # ============================================================================
 # External Dependencies
@@ -94,6 +96,35 @@ target_link_libraries(tempura_flags INTERFACE
   tempura_compiler_flags
   tempura_release_flags
 )
+
+# ============================================================================
+# Compile Timeout (per-file)
+# ============================================================================
+# Wraps the compiler with tools/timeout_compile.sh via CMAKE_CXX_COMPILER_LAUNCHER.
+# Files exceeding the timeout are killed with a clear diagnostic.
+
+if(NOT TEMPURA_COMPILE_TIMEOUT STREQUAL "0" AND TEMPURA_COMPILE_TIMEOUT)
+  set(CMAKE_CXX_COMPILER_LAUNCHER
+    "${CMAKE_SOURCE_DIR}/tools/timeout_compile.sh" "${TEMPURA_COMPILE_TIMEOUT}")
+  message(STATUS "Compile timeout: ${TEMPURA_COMPILE_TIMEOUT}s per file")
+endif()
+
+# ============================================================================
+# Compile Profiling
+# ============================================================================
+# Adds -ftime-report (GCC) or -ftime-trace (Clang) to see phase timing.
+
+if(TEMPURA_PROFILE_COMPILE)
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    add_compile_options(-ftime-report)
+    message(STATUS "Compile profiling: -ftime-report (GCC)")
+  elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    add_compile_options(-ftime-trace)
+    message(STATUS "Compile profiling: -ftime-trace (Clang)")
+  else()
+    message(WARNING "Compile profiling not supported for ${CMAKE_CXX_COMPILER_ID}")
+  endif()
+endif()
 
 # ============================================================================
 # Testing

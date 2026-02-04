@@ -316,7 +316,7 @@ inline auto choleskyLogJacobian(const std::vector<double>& params, std::size_t k
 // CholeskyTransform - Transform compatible with existing transform system
 // ============================================================================
 //
-// Wraps Cholesky parameterization for use with makeTransformedPosterior.
+// Wraps Cholesky parameterization for use with PlateTransformedPosterior.
 // Unlike scalar transforms, this handles vector parameters representing
 // the flattened Cholesky factor.
 //

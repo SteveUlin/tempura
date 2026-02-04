@@ -111,9 +111,9 @@ composed via `recursive()`, `innermost()`, etc.
 | 7.1 | Open effect system (Sample/IndexedSample → effects.h) | ✓ Done |
 | 7.2 | Extensible evaluator terminal dispatch | ✓ Done |
 | 7.3 | TransformPack | ✓ Done |
-| 7.4 | Unify posteriors | Pending |
-| 7.5 | Remove lookupByAtomId | Pending (blocked by 7.4) |
-| 7.6 | Diff cleanup (remove Sample interception) | Pending (blocked by 7.4) |
+| 7.4 | Unify posteriors | ✓ Done (RandomVar uses Free symbols, eval no longer applies transforms, ConstrainedParamSymbol deleted) |
+| 7.5 | Remove lookupByAtomId | ✓ Done (ProbTerminals/BaseTerminals use direct Free symbol lookup, lookupByAtomId deleted) |
+| 7.6 | Diff cleanup | ✓ Done (removed SampleDerivative/same_symbolic_id_v, simplified to same_atom_id_v; wrappers.h include removed) |
 
 **Standalone fix (no phase dependency):** ✓ Done. Relax `operators.h` `requires` clause so
 RandomVar/IndexedRandomVar work directly in expressions without `.constrainedExpr()`/`.sym()`.
@@ -506,17 +506,16 @@ posterior.sample(config, {sigma = 0.5, a = -2.0, z_b = zeros}, rng);
 `indexed_eval.h` uses `std::unordered_map<std::type_index, SizeT>` — the only
 RTTI in the codebase. Low priority — works correctly, just aesthetically unclean.
 
-### Constraint transform asymmetry (scalar vs indexed)
-Scalar params: expression contains `Sample<D>` atom, evaluator applies `exp(z)` at
-eval time. Indexed params: posterior pre-transforms `z → x` before binding, expression
-uses raw `IndexedSymbol` with no transform. This forces two separate posteriors, two
-gradient paths, and the `lookupByAtomId` hack. Fix: make transforms a binding concern
-(phase 7), not an evaluation concern.
+### ✓ Fixed: Constraint transform asymmetry (scalar vs indexed)
+Phase 7.4 unified both paths: RandomVar uses `Symbol<Id>` (Free atom) for bindings,
+the posterior's TransformPack pre-transforms z→x for ALL params (scalar and indexed),
+and the evaluator no longer applies constraint transforms. `ConstrainedParamSymbol` deleted.
 
-### Evaluator coupled to distributions
-`indexed_eval.h` imports `distributions/indexed_node.h` and `constraints.h` to handle
-`Sample`/`IndexedSample` atoms. Should be extensible via terminal handler policy. Fix
-planned in phase 7.
+### ✓ Fixed: Evaluator coupled to distributions
+Phase 7.5 removed `lookupByAtomId` (runtime ID-scanning fallback). ProbTerminals now
+constructs `Atom<get_id_t<T>, Free>` directly for compile-time lookup. BaseTerminals
+uses `ctx.scalars[term]` for Free atoms. `constraints.h` no longer imported by any
+evaluator path.
 
 ### MCMC containers bypass BinderPack
 ParameterState, GradientResult, Samples each roll their own type-to-index + flat array
@@ -595,7 +594,7 @@ at compile time, this framework isn't the right tool.
 | ~~Done~~ | ~~Strategy migration (phases 1–5)~~ | `migration/README.md` |
 | ~~Done~~ | ~~Relax operator `requires` clause~~ | ~~`operators.h:156`~~ |
 | ~~Done~~ | ~~Symbol-forward MCMC (phase 6)~~ | ~~`migration/phase6.md`~~ |
-| **In Progress** | Decouple infrastructure from domain (phase 7: 7.0-7.3 done, 7.4 next) | `migration/phase7.md` |
+| ~~Done~~ | ~~Decouple infrastructure from domain (phase 7)~~ | `migration/phase7.md` |
 | **Next** | Matrix algebra: Track A (Cholesky, inverse in matrix3) | `matrix_algebra/track_a_numeric.md` |
 | **Later** | Matrix algebra: Track B (symbolic matrix types + ops) | `matrix_algebra/track_b_symbolic.md` |
 | **Later** | `Grad<Expr>` with typed rank via nesting | `migration/phase4.md` |

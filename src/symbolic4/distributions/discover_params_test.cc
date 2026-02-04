@@ -49,7 +49,7 @@ auto main() -> int {
 
     // Its symbol should match alpha's symbol type
     using FirstSymbol = typename std::decay_t<decltype(first)>::symbol_type;
-    using AlphaSymbol = typename decltype(alpha)::unconstrained_symbol_type;
+    using AlphaSymbol = typename decltype(alpha)::symbol_type;
 
     // They should be the same type
     static_assert(std::is_same_v<FirstSymbol, AlphaSymbol> ||

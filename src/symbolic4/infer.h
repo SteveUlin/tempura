@@ -3,9 +3,8 @@
 #include <array>
 #include <cstddef>
 #include <span>
-#include <tuple>
-#include <utility>
 
+#include "meta/tuple.h"
 #include "symbolic4/distributions/collect_log_prob.h"
 #include "symbolic4/distributions/discover_params.h"
 #include "symbolic4/distributions/indexed_node.h"
@@ -13,7 +12,6 @@
 #include "symbolic4/interpreter/eval.h"
 #include "symbolic4/strategy/diff.h"
 #include "symbolic4/mcmc/plate_transforms.h"
-#include "symbolic4/mcmc/support.h"
 
 // ============================================================================
 // infer.h - Simplified inference API with automatic parameter discovery
@@ -53,7 +51,7 @@ auto buildPosteriorFromDiscovered(LogProbExpr joint_lp,
                                    DiscoveredTuple discovered,
                                    const ObservedRVs&... observed) {
   // Expand discovered tuple and combine with observed RVs
-  return std::apply(
+  return apply(
       [&joint_lp, &observed...](const auto&... disc_rvs) {
         // Pass discovered RVs first, then observed RVs
         // The observed RVs must be included so bind() can mark them as observed
@@ -87,7 +85,7 @@ auto infer(const ObservedRVs&... observed) {
   auto joint_lp = collectLogProbs(observed...);
 
   // Check if we have any discovered params
-  if constexpr (std::tuple_size_v<decltype(discovered)> == 0) {
+  if constexpr (tupleSize<decltype(discovered)> == 0) {
     // No latent params discovered - just use the observed RVs
     return makePlateTransformedPosterior(joint_lp, observed...);
   } else {
@@ -98,24 +96,17 @@ auto infer(const ObservedRVs&... observed) {
 }
 
 // ============================================================================
-// inferExplicit(rv1, rv2, ...) - Legacy API with explicit parameter listing
+// inferExplicit(rv1, rv2, ...) - Explicit parameter listing
 // ============================================================================
 //
 // For cases where you want to explicitly list all parameters.
 // All RVs are treated as parameters (no distinction between observed/latent).
+// Uses the unified PlateTransformedPosterior for both scalar and indexed params.
 
-template <typename... RVs>
-  requires(infer_detail::any_indexed_v<RVs...>)
+template <HasLogProb... RVs>
 auto inferExplicit(const RVs&... rvs) {
   auto joint_lp = collectLogProbs(rvs...);
   return makePlateTransformedPosterior(joint_lp, rvs...);
-}
-
-template <typename... RVs>
-  requires(IsRandomVar<RVs> && ...) && (!infer_detail::any_indexed_v<RVs...>)
-constexpr auto inferExplicit(const RVs&... rvs) {
-  auto joint_lp = collectLogProbs(rvs...);
-  return makeAutoTransformedPosterior(joint_lp, rvs...);
 }
 
 // ============================================================================
@@ -128,7 +119,7 @@ constexpr auto inferExplicit(const RVs&... rvs) {
 template <typename LogProbExpr, typename ParamsTuple, typename GradsTuple>
 class RawPosterior {
  public:
-  static constexpr std::size_t NumParams = std::tuple_size_v<ParamsTuple>;
+  static constexpr std::size_t NumParams = tupleSize<ParamsTuple>;
 
   constexpr RawPosterior(LogProbExpr lp, ParamsTuple params, GradsTuple grads)
       : lp_{lp}, params_{params}, grads_{grads} {}
@@ -136,11 +127,11 @@ class RawPosterior {
   template <typename... Values>
     requires(sizeof...(Values) == NumParams)
   double logProb(Values... values) const {
-    return logProbImpl(std::make_index_sequence<NumParams>{}, values...);
+    return logProbImpl(MakeIndexSequence<NumParams>{}, values...);
   }
 
   double logProb(std::span<const double> values) const {
-    return logProbFromSpanImpl(values, std::make_index_sequence<NumParams>{});
+    return logProbFromSpanImpl(values, MakeIndexSequence<NumParams>{});
   }
 
   template <std::size_t N>
@@ -152,11 +143,11 @@ class RawPosterior {
   template <typename... Values>
     requires(sizeof...(Values) == NumParams)
   std::array<double, NumParams> gradient(Values... values) const {
-    return gradientImpl(std::make_index_sequence<NumParams>{}, values...);
+    return gradientImpl(MakeIndexSequence<NumParams>{}, values...);
   }
 
   std::array<double, NumParams> gradient(std::span<const double> values) const {
-    return gradientFromSpanImpl(values, std::make_index_sequence<NumParams>{});
+    return gradientFromSpanImpl(values, MakeIndexSequence<NumParams>{});
   }
 
   template <std::size_t N>
@@ -173,26 +164,26 @@ class RawPosterior {
   GradsTuple grads_;
 
   template <std::size_t... Is, typename... Values>
-  double logProbImpl(std::index_sequence<Is...>, Values... values) const {
-    return evaluate(lp_, (std::get<Is>(params_) = values)...);
+  double logProbImpl(IndexSequence<Is...>, Values... values) const {
+    return evaluate(lp_, (get<Is>(params_) = values)...);
   }
 
   template <std::size_t... Is>
   double logProbFromSpanImpl(std::span<const double> values,
-                             std::index_sequence<Is...>) const {
-    return evaluate(lp_, (std::get<Is>(params_) = values[Is])...);
+                             IndexSequence<Is...>) const {
+    return evaluate(lp_, (get<Is>(params_) = values[Is])...);
   }
 
   template <std::size_t... Is, typename... Values>
-  std::array<double, NumParams> gradientImpl(std::index_sequence<Is...>,
+  std::array<double, NumParams> gradientImpl(IndexSequence<Is...>,
                                              Values... values) const {
-    return {evaluate(std::get<Is>(grads_), (std::get<Is>(params_) = values)...)...};
+    return {evaluate(get<Is>(grads_), (get<Is>(params_) = values)...)...};
   }
 
   template <std::size_t... Is>
   std::array<double, NumParams> gradientFromSpanImpl(
-      std::span<const double> values, std::index_sequence<Is...>) const {
-    return {evaluate(std::get<Is>(grads_), (std::get<Is>(params_) = values[Is])...)...};
+      std::span<const double> values, IndexSequence<Is...>) const {
+    return {evaluate(get<Is>(grads_), (get<Is>(params_) = values[Is])...)...};
   }
 };
 
@@ -201,8 +192,8 @@ constexpr auto inferRaw(const RVs&... rvs) {
   auto joint_lp = collectLogProbs(rvs...);
   // Use RandomVars for params: their operator= applies inverse transform,
   // ensuring constrained-space values round-trip correctly through eval.
-  auto params = std::make_tuple(rvs...);
-  auto grads = std::make_tuple(simplify(diff(joint_lp, rvs.freeSym()))...);
+  auto params = makeTuple(rvs...);
+  auto grads = makeTuple(simplify(diff(joint_lp, rvs.freeSym()))...);
   return RawPosterior{joint_lp, params, grads};
 }
 

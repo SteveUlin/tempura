@@ -1,6 +1,5 @@
 #pragma once
 
-#include <tuple>
 #include <vector>
 
 #include "prob/bernoulli.h"

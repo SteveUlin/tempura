@@ -1,17 +1,11 @@
 #pragma once
 
 #include <cstddef>
-#include <tuple>
-#include <type_traits>
-#include <utility>
 
+#include "meta/tuple.h"
 #include "symbolic4/core.h"
 #include "symbolic4/distributions/indexed_node.h"
-#include "symbolic4/distributions/random_var.h"
-#include "symbolic4/strategy/diff.h"
 #include "symbolic4/mcmc/plate_transforms.h"
-#include "symbolic4/mcmc/support.h"
-#include "symbolic4/mcmc/transforms.h"
 
 // ============================================================================
 // model.h - Unified model specification with automatic parameter handling
@@ -61,11 +55,12 @@ template <typename... RVs>
 struct HasIndexedRV;
 
 template <>
-struct HasIndexedRV<> : std::false_type {};
+struct HasIndexedRV<> : FalseType {};
 
 template <typename First, typename... Rest>
-struct HasIndexedRV<First, Rest...>
-    : std::bool_constant<is_indexed_random_var_v<First> || HasIndexedRV<Rest...>::value> {};
+struct HasIndexedRV<First, Rest...> {
+  static constexpr bool value = is_indexed_random_var_v<First> || HasIndexedRV<Rest...>::value;
+};
 
 template <typename... RVs>
 constexpr bool has_indexed_rv_v = HasIndexedRV<RVs...>::value;
@@ -94,23 +89,23 @@ class Model {
   // Access individual random variables by index
   template <std::size_t I>
   constexpr auto rv() const {
-    return std::get<I>(rvs_);
+    return get<I>(rvs_);
   }
 
   // Compute joint log-probability (sum of all RV log-probs)
   constexpr auto jointLogProb() const {
-    return jointLogProbImpl(std::make_index_sequence<NumRVs>{});
+    return jointLogProbImpl(MakeIndexSequence<NumRVs>{});
   }
 
   // Compute unnormalized joint log-probability
   constexpr auto unnormalizedJointLogProb() const {
-    return unnormalizedJointLogProbImpl(std::make_index_sequence<NumRVs>{});
+    return unnormalizedJointLogProbImpl(MakeIndexSequence<NumRVs>{});
   }
 
   // Extract all parameter symbols as a tuple (Sample atoms for expressions)
   // These carry distribution info, so evaluate() applies constraint transforms.
   constexpr auto params() const {
-    return std::apply([](auto&... rv) { return std::make_tuple(rv.sym()...); }, rvs_);
+    return apply([](auto&... rv) { return makeTuple(rv.sym()...); }, rvs_);
   }
 
   // Create a posterior builder for inference
@@ -120,16 +115,16 @@ class Model {
   constexpr const auto& rvs() const { return rvs_; }
 
  private:
-  std::tuple<RVs...> rvs_;
+  Tuple<RVs...> rvs_;
 
   template <std::size_t... Is>
-  constexpr auto jointLogProbImpl(std::index_sequence<Is...>) const {
-    return (std::get<Is>(rvs_).logProb() + ...);
+  constexpr auto jointLogProbImpl(IndexSequence<Is...>) const {
+    return (get<Is>(rvs_).logProb() + ...);
   }
 
   template <std::size_t... Is>
-  constexpr auto unnormalizedJointLogProbImpl(std::index_sequence<Is...>) const {
-    return (std::get<Is>(rvs_).unnormalizedLogProb() + ...);
+  constexpr auto unnormalizedJointLogProbImpl(IndexSequence<Is...>) const {
+    return (get<Is>(rvs_).unnormalizedLogProb() + ...);
   }
 };
 
@@ -157,24 +152,18 @@ class PosteriorBuilderFromModel<ModelT, false> {
 
   // Build posterior without observations (for prior sampling)
   auto build() const {
-    using TupleType = std::remove_cvref_t<decltype(model_.rvs())>;
+    using TupleType = RemoveCvRefT<decltype(model_.rvs())>;
     return buildPosteriorImpl(model_.jointLogProb(),
-                              std::make_index_sequence<std::tuple_size_v<TupleType>>{});
+                              MakeIndexSequence<tupleSize<TupleType>>{});
   }
 
  private:
   ModelT model_;
 
   template <typename LogProb, std::size_t... Is>
-  auto buildPosteriorImpl(LogProb lp, std::index_sequence<Is...>) const {
-    auto transforms = std::make_tuple(autoTransform(std::get<Is>(model_.rvs()))...);
-    // Use freeSym() for differentiation and binding (Free atoms)
-    auto symbols = std::make_tuple(std::get<Is>(model_.rvs()).freeSym()...);
-    auto grads = std::make_tuple(simplify(diff(lp, std::get<Is>(symbols)))...);
-
-    return TransformedPosterior<LogProb, BinderPack<>, decltype(transforms),
-                                decltype(symbols), decltype(grads)>{
-        lp, BinderPack<>{}, transforms, symbols, grads};
+  auto buildPosteriorImpl(LogProb lp, IndexSequence<Is...>) const {
+    // Unified path: PlateTransformedPosterior handles both scalar and indexed params
+    return makePlateTransformedPosterior(lp, get<Is>(model_.rvs())...).build();
   }
 };
 
@@ -204,16 +193,16 @@ class PosteriorBuilderFromModel<ModelT, true> {
 
   // Build without dimension - will fail at runtime if plates need sizes
   auto build() const {
-    return buildImpl(std::make_index_sequence<ModelT::NumRVs>{});
+    return buildImpl(MakeIndexSequence<ModelT::NumRVs>{});
   }
 
  private:
   ModelT model_;
 
   template <std::size_t... Is>
-  auto buildImpl(std::index_sequence<Is...>) const {
+  auto buildImpl(IndexSequence<Is...>) const {
     auto lp = model_.jointLogProb();
-    return makePlateTransformedPosterior(lp, std::get<Is>(model_.rvs())...).build();
+    return makePlateTransformedPosterior(lp, get<Is>(model_.rvs())...).build();
   }
 
   // Helper class for dimension chaining
@@ -245,7 +234,7 @@ class PosteriorBuilderFromModel<ModelT, true> {
     }
 
     auto build() const {
-      return buildImpl(std::make_index_sequence<ModelT::NumRVs>{});
+      return buildImpl(MakeIndexSequence<ModelT::NumRVs>{});
     }
 
    private:
@@ -254,9 +243,9 @@ class PosteriorBuilderFromModel<ModelT, true> {
     DataBindings data_bindings_;
 
     template <std::size_t... Is>
-    auto buildImpl(std::index_sequence<Is...>) const {
+    auto buildImpl(IndexSequence<Is...>) const {
       auto lp = model_.jointLogProb();
-      return makePlateTransformedPosterior(lp, std::get<Is>(model_.rvs())...)
+      return makePlateTransformedPosterior(lp, get<Is>(model_.rvs())...)
           .template withDimension<DimTag>(size_)
           .bindData(data_bindings_)
           .build();
@@ -280,7 +269,7 @@ class PosteriorBuilderFromModel<ModelT, true> {
     }
 
     auto build() const {
-      return buildImpl(std::make_index_sequence<ModelT::NumRVs>{});
+      return buildImpl(MakeIndexSequence<ModelT::NumRVs>{});
     }
 
    private:
@@ -290,12 +279,12 @@ class PosteriorBuilderFromModel<ModelT, true> {
     DataBindings data_bindings_;
 
     template <std::size_t... Is>
-    auto buildImpl(std::index_sequence<Is...>) const {
+    auto buildImpl(IndexSequence<Is...>) const {
       auto lp = model_.jointLogProb();
       // Use the version that filters out observed RVs from param specs
       // The jointLogProb still includes observed RVs' log-prob
       auto posterior = makePlateTransformedPosteriorWithObs(
-          lp, observations_, std::get<Is>(model_.rvs())...);
+          lp, observations_, get<Is>(model_.rvs())...);
       return posterior
           .template withDimension<DimTag>(size_)
           .withData(data_bindings_);
@@ -316,8 +305,8 @@ class ObservedPosteriorBuilder<ModelT, ObsBindings, false> {
       : model_{model}, observations_{obs} {}
 
   auto build() const {
-    using TupleType = std::remove_cvref_t<decltype(model_.rvs())>;
-    return buildImpl(std::make_index_sequence<std::tuple_size_v<TupleType>>{});
+    using TupleType = RemoveCvRefT<decltype(model_.rvs())>;
+    return buildImpl(MakeIndexSequence<tupleSize<TupleType>>{});
   }
 
  private:
@@ -325,17 +314,11 @@ class ObservedPosteriorBuilder<ModelT, ObsBindings, false> {
   ObsBindings observations_;
 
   template <std::size_t... Is>
-  auto buildImpl(std::index_sequence<Is...>) const {
+  auto buildImpl(IndexSequence<Is...>) const {
     auto lp = model_.jointLogProb();
-    auto transforms = std::make_tuple(autoTransform(std::get<Is>(model_.rvs()))...);
-    // Use freeSym() for binding compatibility
-    auto symbols = std::make_tuple(std::get<Is>(model_.rvs()).freeSym()...);
-    auto grads = std::make_tuple(simplify(diff(lp, std::get<Is>(symbols)))...);
-
-    return TransformedPosterior<decltype(lp), ObsBindings, decltype(transforms),
-                                decltype(symbols), decltype(grads)>{lp, observations_,
-                                                                     transforms, symbols,
-                                                                     grads};
+    // Unified path: PlateTransformedPosterior excludes observed params from state
+    return makePlateTransformedPosterior(lp, get<Is>(model_.rvs())...)
+        .observe(observations_);
   }
 };
 
@@ -358,7 +341,7 @@ class ObservedPosteriorBuilder<ModelT, ObsBindings, true> {
   }
 
   auto build() const {
-    return buildImpl(std::make_index_sequence<ModelT::NumRVs>{});
+    return buildImpl(MakeIndexSequence<ModelT::NumRVs>{});
   }
 
  private:
@@ -366,10 +349,10 @@ class ObservedPosteriorBuilder<ModelT, ObsBindings, true> {
   ObsBindings observations_;
 
   template <std::size_t... Is>
-  auto buildImpl(std::index_sequence<Is...>) const {
+  auto buildImpl(IndexSequence<Is...>) const {
     auto lp = model_.jointLogProb();
     // Note: observations need to be integrated with plate posterior
-    return makePlateTransformedPosterior(lp, std::get<Is>(model_.rvs())...).build();
+    return makePlateTransformedPosterior(lp, get<Is>(model_.rvs())...).build();
   }
 
   template <typename DimTag>
@@ -379,7 +362,7 @@ class ObservedPosteriorBuilder<ModelT, ObsBindings, true> {
         : model_{model}, observations_{obs}, size_{size} {}
 
     auto build() const {
-      return buildImpl(std::make_index_sequence<ModelT::NumRVs>{});
+      return buildImpl(MakeIndexSequence<ModelT::NumRVs>{});
     }
 
    private:
@@ -388,9 +371,9 @@ class ObservedPosteriorBuilder<ModelT, ObsBindings, true> {
     std::size_t size_;
 
     template <std::size_t... Is>
-    auto buildImpl(std::index_sequence<Is...>) const {
+    auto buildImpl(IndexSequence<Is...>) const {
       auto lp = model_.jointLogProb();
-      return makePlateTransformedPosterior(lp, std::get<Is>(model_.rvs())...)
+      return makePlateTransformedPosterior(lp, get<Is>(model_.rvs())...)
           .template withDimension<DimTag>(size_)
           .build();
     }
@@ -413,7 +396,7 @@ constexpr auto model(RVs... rvs) {
 template <typename... RVs>
 constexpr auto params(const RVs&... rvs) {
   // Use sym() (Sample atoms) so evaluate() applies constraint transforms
-  return std::make_tuple(rvs.sym()...);
+  return makeTuple(rvs.sym()...);
 }
 
 }  // namespace tempura::symbolic4

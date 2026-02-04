@@ -146,22 +146,11 @@ class TransformPack {
 
   // -------------------------------------------------------------------------
   // Symbol lookup: find index of a symbol type in the symbols tuple.
-  // Tries unconstrained_symbol_type first (for RandomVars), then symbol_type,
-  // then direct type match.
   // -------------------------------------------------------------------------
 
   template <typename P>
   static constexpr std::size_t findSymbolIndex() {
-    if constexpr (requires { typename P::unconstrained_symbol_type; }) {
-      constexpr auto idx = findByType<typename P::unconstrained_symbol_type>();
-      if constexpr (idx < NumParams) {
-        return idx;
-      } else if constexpr (requires { typename P::symbol_type; }) {
-        return findByType<typename P::symbol_type>();
-      } else {
-        return idx;
-      }
-    } else if constexpr (requires { typename P::symbol_type; }) {
+    if constexpr (requires { typename P::symbol_type; }) {
       return findByType<typename P::symbol_type>();
     } else {
       return findByType<P>();

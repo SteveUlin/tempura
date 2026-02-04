@@ -440,13 +440,15 @@ auto main() -> int {
     auto z = plate<Groups>(normal(lit(0.0), lit(1.0)));
 
     // Non-centered: theta = mu + sigma * z (used inline in likelihood)
-    auto theta_expr = mu.constrainedExpr() + sigma.constrainedExpr() * z.sym();
+    auto theta_expr = mu + sigma * z;
     auto y = plate<Groups>(normal(theta_expr, lit(1.0)));
 
     constexpr std::size_t kN = 5;
     std::vector<double> y_data = {1.2, 2.3, 0.8, 1.5, 2.0};
 
-    auto posterior = infer(y)
+    // Explicit param listing: operator expressions produce Free atoms (not
+    // discoverable), so non-centered models list params explicitly.
+    auto posterior = infer(mu, sigma, z, y)
         .bind(y = indexed(y_data));
 
     // State dim: mu (1 scalar) + sigma (1 scalar) + z (5 indexed) = 7
@@ -493,7 +495,7 @@ auto main() -> int {
     auto n = data<Countries>();
 
     // p = sigmoid(a + sigma * z_b)
-    auto p = 1_c / (1_c + exp(-(a.constrainedExpr() + sigma.constrainedExpr() * z_b.sym())));
+    auto p = 1_c / (1_c + exp(-(a + sigma * z_b)));
     auto k = plate<Countries>(binomial(n, p));
 
     // Small test data: 4 countries
@@ -501,7 +503,8 @@ auto main() -> int {
     std::vector<double> n_obs = {10.0, 20.0, 15.0, 8.0};
     std::vector<double> k_obs = {2.0, 3.0, 1.0, 2.0};
 
-    auto posterior = infer(k)
+    // Explicit param listing for non-centered model
+    auto posterior = infer(a, sigma, z_b, k)
         .bind(n = indexed(n_obs), k = indexed(k_obs));
 
     // State dim: a (1) + sigma (1) + z_b (4) = 6

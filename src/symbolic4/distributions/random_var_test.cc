@@ -185,60 +185,44 @@ auto main() -> int {
   // RandomVarSymbol type traits
   // ===========================================================================
 
-  "RandomVar::sym returns RandomVarSymbol with Sample effect"_test = [] {
+  "RandomVar::sym returns plain Free symbol"_test = [] {
     auto mu = normal(lit(0), lit(1));
     auto sym = mu.sym();
 
-    // The symbol should have Sample effect, not Free effect
-    static_assert(is_random_var_atom_v<decltype(sym)>);
-    static_assert(!std::is_same_v<get_effect_t<decltype(sym)>, Free>);
+    // sym() now returns Symbol<Id> (Atom<Id, Free>) — no Sample effect
+    static_assert(std::is_same_v<get_effect_t<decltype(sym)>, Free>);
+    static_assert(!is_random_var_atom_v<decltype(sym)>);
   };
 
-  "RandomVarSymbol carries distribution in type"_test = [] {
+  "freeSym and sym return the same type"_test = [] {
     auto mu = normal(lit(0), lit(1));
-    using SymType = decltype(mu.sym());
-
-    // Can extract distribution type from the symbol
-    using DistType = get_atom_distribution_t<SymType>;
-    static_assert(std::is_same_v<DistType, NormalDist<Literal<int>, Literal<int>>>);
+    static_assert(std::is_same_v<decltype(mu.sym()), decltype(mu.freeSym())>);
   };
 
-  "RandomVarSymbol carries distribution instance"_test = [] {
+  "RandomVar preserves distribution access via dist()"_test = [] {
     auto mu = normal(lit(5.0), lit(2.0));
-    auto sym = mu.sym();
 
-    // The distribution instance is stored in the symbol's effect
-    auto& dist = sym.effect_.dist_;
+    // Distribution is accessible via dist(), not via the symbol
+    auto& dist = mu.dist();
     expectNear(dist.mu_.effect_.value, 5.0);
     expectNear(dist.sigma_.effect_.value, 2.0);
   };
 
-  "freeSym returns plain Symbol for bindings"_test = [] {
+  "sym and freeSym are identical"_test = [] {
     auto mu = normal(lit(0), lit(1));
-    auto free_sym = mu.freeSym();
-
-    // freeSym should return Atom<Id, Free> for use with bindings
-    static_assert(std::is_same_v<get_effect_t<decltype(free_sym)>, Free>);
-    static_assert(!is_random_var_atom_v<decltype(free_sym)>);
+    // Both return the same Symbol<Id> type
+    static_assert(std::is_same_v<decltype(mu.sym()), decltype(mu.freeSym())>);
+    static_assert(std::is_same_v<get_id_t<decltype(mu.sym())>, get_id_t<decltype(mu.freeSym())>>);
   };
 
-  "RandomVarSymbol and freeSym have same Id"_test = [] {
-    auto mu = normal(lit(0), lit(1));
-    auto sym = mu.sym();
-    auto free_sym = mu.freeSym();
-
-    // Both should have the same identity type
-    static_assert(std::is_same_v<get_id_t<decltype(sym)>, get_id_t<decltype(free_sym)>>);
-  };
-
-  "Expression with RandomVarSymbol evaluates correctly"_test = [] {
+  "Expression with RandomVar symbols evaluates directly"_test = [] {
     auto mu = normal(lit(0), lit(1));
     auto sigma = halfNormal(lit(5));
 
-    // Build expression using RandomVarSymbols
+    // Build expression using Free symbols from RandomVars
     auto expr = mu.sym() + sigma.sym();
 
-    // Evaluate - bindings use freeSym types but evaluator maps RandomVarSymbol to it
+    // Bind constrained values directly — no inverse transform needed
     double val = evaluate(expr, mu = 3.0, sigma = 2.0);
     expectNear(val, 5.0, 1e-10);
   };

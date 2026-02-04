@@ -152,32 +152,20 @@ auto makeGradExprs(LogProbExpr lp, ParamsTuple params, std::index_sequence<Is...
 // Parameters can be RandomVars (their symbols are extracted) or raw Symbols
 template <Symbolic LogProbExpr, typename... Params>
 constexpr auto makePosterior(LogProbExpr lp, Params... params) {
-  // Extract constrained param symbols from params for bindings.
-  // RandomVar: use ConstrainedParamSymbol (applies inverse on bind)
-  // Symbol: use as-is (already Atom<Id, Free>)
-  auto extractBindSym = [](auto p) {
+  // Extract Free symbols from params for both bindings and differentiation.
+  // RandomVar: use sym() (returns Symbol<Id> = Atom<Id, Free>)
+  // Symbol: use as-is
+  auto extractSym = [](auto p) {
     if constexpr (IsRandomVar<decltype(p)>) {
-      using Id = typename decltype(p)::id_type;
-      using Support = typename decltype(p)::support_type;
-      return ConstrainedParamSymbol<Id, Support>{};
+      return p.sym();
     } else {
       return p;
     }
   };
 
-  // For differentiation, we still need the raw Free symbols
-  auto extractDiffSym = [](auto p) {
-    if constexpr (IsRandomVar<decltype(p)>) {
-      return p.freeSym();
-    } else {
-      return p;
-    }
-  };
-
-  auto param_symbols = std::make_tuple(extractBindSym(params)...);
-  auto diff_symbols = std::make_tuple(extractDiffSym(params)...);
+  auto param_symbols = std::make_tuple(extractSym(params)...);
   auto grad_exprs = detail::makeGradExprs(
-      lp, diff_symbols, std::make_index_sequence<sizeof...(Params)>{});
+      lp, param_symbols, std::make_index_sequence<sizeof...(Params)>{});
 
   return PosteriorBuilder<LogProbExpr, decltype(param_symbols), decltype(grad_exprs)>{
       lp, param_symbols, grad_exprs};

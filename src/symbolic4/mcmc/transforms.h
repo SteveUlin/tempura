@@ -6,39 +6,29 @@
 #include <cmath>
 #include <cstddef>
 #include <span>
-#include <tuple>
 #include <utility>
 #include <vector>
 
 #include "symbolic4/core.h"
 #include "symbolic4/matrix/eval.h"
-#include "symbolic4/distributions/random_var.h"
-#include "symbolic4/strategy/diff.h"
-#include "symbolic4/interpreter/eval.h"
-#include "symbolic4/interpreter/simplify.h"
 
 // ============================================================================
-// transforms.h - Parameter transforms for MCMC with automatic Jacobian
+// transforms.h - Parameter transform types for MCMC
 // ============================================================================
 //
-// Provides automatic parameter transforms for constrained parameters:
-//   - Positive parameters (sigma, alpha) -> log transform
-//   - (0,1) bounded parameters (probabilities) -> logit transform
-//   - Lower-bounded -> shifted log transform
-//   - Upper-bounded -> reflected shifted log transform
-//   - Interval (a,b) -> scaled logit transform
+// Defines transform types for constrained parameters:
+//   - Unconstrained (identity)
+//   - Positive: exp/log
+//   - UnitInterval: sigmoid/logit
+//   - LowerBounded, UpperBounded, Interval
+//   - CholeskyTransform (K×K matrix → K(K+1)/2 unconstrained)
+//   - SimplexTransform<K> (K-simplex → K-1 unconstrained via stick-breaking)
 //
-// Usage:
-//   auto sigma = halfNormal(2.0);
-//   auto posterior = makeTransformedPosterior(
-//       logProb(mu, sigma),
-//       unconstrained(mu),           // No transform
-//       positive(sigma)              // Log transform: sigma = exp(z)
-//   );
+// Each transform provides: transform(), inverse(), logJacobian(),
+// and chainRuleGrad() for gradient computation.
 //
-//   // MCMC samples z (unconstrained), get sigma back:
-//   double z_sample = ...;
-//   double sigma_val = posterior.untransform<1>(z_sample);  // exp(z)
+// These types are used by PlateTransformedPosterior (plate_transforms.h)
+// via TransformPack to automatically handle constrained parameters in MCMC.
 //
 // ============================================================================
 
@@ -643,287 +633,5 @@ template <std::size_t K>
 struct IsSimplexTransform<SimplexTransform<K>> : std::true_type {};
 template <typename T>
 constexpr bool is_simplex_transform_v = IsSimplexTransform<T>::value;
-
-// ============================================================================
-// TransformedPosterior - Posterior with automatic parameter transforms
-// ============================================================================
-//
-// Operates in the unconstrained space but evaluates model in constrained space.
-// Automatically adds Jacobian correction to log-probability.
-
-template <Symbolic LogProbExpr, typename ObsBindings, typename TransformsTuple,
-          typename ParamSymbolsTuple, typename GradExprsTuple>
-class TransformedPosterior {
- public:
-  static constexpr std::size_t NumParams = std::tuple_size_v<ParamSymbolsTuple>;
-  using GradArray = std::array<double, NumParams>;
-  using StateArray = std::array<double, NumParams>;
-
-  constexpr TransformedPosterior(LogProbExpr lp, ObsBindings obs,
-                                  TransformsTuple transforms,
-                                  ParamSymbolsTuple params,
-                                  GradExprsTuple grads)
-      : log_prob_expr_{lp},
-        observations_{obs},
-        transforms_{transforms},
-        param_symbols_{params},
-        grad_exprs_{grads} {}
-
-  // Evaluate log-probability at unconstrained values (includes Jacobian)
-  auto logProb(const StateArray& z) const -> double {
-    return logProbImpl(z, std::make_index_sequence<NumParams>{});
-  }
-
-  // Evaluate gradient at unconstrained values
-  auto gradient(const StateArray& z) const -> GradArray {
-    return gradientImpl(z, std::make_index_sequence<NumParams>{});
-  }
-
-  // Transform from unconstrained z to constrained x
-  auto transform(const StateArray& z) const -> StateArray {
-    return transformImpl(z, std::make_index_sequence<NumParams>{});
-  }
-
-  // Transform single parameter by index
-  template <std::size_t I>
-  auto transformOne(double z) const -> double {
-    return std::get<I>(transforms_).transform(z);
-  }
-
-  // Inverse: constrained x to unconstrained z
-  auto inverse(const StateArray& x) const -> StateArray {
-    return inverseImpl(x, std::make_index_sequence<NumParams>{});
-  }
-
- private:
-  LogProbExpr log_prob_expr_;
-  ObsBindings observations_;
-  TransformsTuple transforms_;
-  ParamSymbolsTuple param_symbols_;
-  GradExprsTuple grad_exprs_;
-
-  template <std::size_t... Is>
-  auto logProbImpl(const StateArray& z, std::index_sequence<Is...>) const -> double {
-    // Transform z to x
-    StateArray x = transform(z);
-
-    // Evaluate model log-prob at x
-    auto bindings = mergeBindings(
-        BinderPack{(std::get<Is>(param_symbols_) = x[Is])...},
-        observations_);
-    double lp = evaluate(log_prob_expr_, bindings);
-
-    // Add Jacobian correction: log|dx/dz|
-    double log_jacobian = (std::get<Is>(transforms_).logJacobian(z[Is]) + ...);
-
-    return lp + log_jacobian;
-  }
-
-  template <std::size_t... Is>
-  auto gradientImpl(const StateArray& z, std::index_sequence<Is...>) const -> GradArray {
-    // Transform z to x
-    StateArray x = transform(z);
-
-    // Compute gradient of model log-prob w.r.t. x
-    auto bindings = mergeBindings(
-        BinderPack{(std::get<Is>(param_symbols_) = x[Is])...},
-        observations_);
-    GradArray grad_x{evaluate(std::get<Is>(grad_exprs_), bindings)...};
-
-    // Chain rule: d/dz = (d/dx) * (dx/dz)
-    // For log transform: dx/dz = exp(z) = x, so d/dz[f] = d/dx[f] * x
-    // Plus Jacobian gradient: d/dz[log|J|]
-    GradArray grad_z;
-    ((grad_z[Is] = chainRuleGrad<Is>(z[Is], x[Is], grad_x[Is])), ...);
-
-    return grad_z;
-  }
-
-  template <std::size_t I>
-  auto chainRuleGrad(double z, double x, double grad_x) const -> double {
-    using Transform = std::tuple_element_t<I, TransformsTuple>;
-
-    if constexpr (is_unconstrained_v<Transform>) {
-      // No transform: d/dz = d/dx, Jacobian grad = 0
-      return grad_x;
-    } else if constexpr (is_positive_v<Transform>) {
-      // x = exp(z): dx/dz = x, d/dz[log|J|] = d/dz[z] = 1
-      return grad_x * x + 1.0;
-    } else if constexpr (is_unit_interval_v<Transform>) {
-      // x = sigmoid(z): dx/dz = x(1-x)
-      // log|J| = log(x) + log(1-x)
-      // d/dz[log|J|] = (1/x)(dx/dz) - (1/(1-x))(dx/dz) = (1-x) - x = 1 - 2x
-      double dxdz = x * (1.0 - x);
-      double jacobian_grad = 1.0 - 2.0 * x;
-      return grad_x * dxdz + jacobian_grad;
-    } else if constexpr (is_lower_bounded_v<Transform>) {
-      // x = a + exp(z): dx/dz = exp(z) = x - a
-      // log|J| = z, d/dz[log|J|] = 1
-      const auto& t = std::get<I>(transforms_);
-      double dxdz = x - t.lower;
-      return grad_x * dxdz + 1.0;
-    } else if constexpr (is_upper_bounded_v<Transform>) {
-      // x = b - exp(z): dx/dz = -exp(z) = x - b
-      // log|J| = z, d/dz[log|J|] = 1
-      const auto& t = std::get<I>(transforms_);
-      double dxdz = x - t.upper;
-      return grad_x * dxdz + 1.0;
-    } else if constexpr (is_interval_v<Transform>) {
-      // x = a + (b-a)*sigmoid(z), let s = sigmoid(z)
-      // dx/dz = (b-a)*s*(1-s)
-      // log|J| = log(b-a) + log(s) + log(1-s)
-      // d/dz[log|J|] = 1 - 2s
-      const auto& t = std::get<I>(transforms_);
-      double s = (x - t.lower) / (t.upper - t.lower);
-      double dxdz = (t.upper - t.lower) * s * (1.0 - s);
-      double jacobian_grad = 1.0 - 2.0 * s;
-      return grad_x * dxdz + jacobian_grad;
-    } else {
-      // Fallback for unknown transforms: use finite differences
-      const auto& t = std::get<I>(transforms_);
-      constexpr double eps = 1e-8;
-      double dxdz = (t.transform(z + eps) - t.transform(z - eps)) / (2.0 * eps);
-      double jac_grad = (t.logJacobian(z + eps) - t.logJacobian(z - eps)) / (2.0 * eps);
-      return grad_x * dxdz + jac_grad;
-    }
-  }
-
-  template <std::size_t... Is>
-  auto transformImpl(const StateArray& z, std::index_sequence<Is...>) const -> StateArray {
-    return StateArray{std::get<Is>(transforms_).transform(z[Is])...};
-  }
-
-  template <std::size_t... Is>
-  auto inverseImpl(const StateArray& x, std::index_sequence<Is...>) const -> StateArray {
-    return StateArray{std::get<Is>(transforms_).inverse(x[Is])...};
-  }
-
-  // MergedBinderPack: observations override params when symbol exists in both
-  template <typename ParamPack, typename ObsPack>
-  struct MergedBinderPack {
-    ParamPack params;
-    ObsPack obs;
-
-    constexpr MergedBinderPack(ParamPack p, ObsPack o) : params{p}, obs{o} {}
-
-    // Lookup: try observations first, fall back to params
-    template <typename Sym>
-    constexpr auto operator[](Sym s) const {
-      if constexpr (requires { obs[s]; }) {
-        return obs[s];
-      } else {
-        return params[s];
-      }
-    }
-  };
-
-  template <typename... PB, typename... Obs>
-  static auto mergeBindings(BinderPack<PB...> pb, BinderPack<Obs...> obs) {
-    return MergedBinderPack<BinderPack<PB...>, BinderPack<Obs...>>{pb, obs};
-  }
-};
-
-// ============================================================================
-// TransformedPosteriorBuilder
-// ============================================================================
-
-template <Symbolic LogProbExpr, typename TransformsTuple, typename ParamSymbolsTuple,
-          typename GradExprsTuple>
-class TransformedPosteriorBuilder {
- public:
-  static constexpr std::size_t NumParams = std::tuple_size_v<ParamSymbolsTuple>;
-
-  constexpr TransformedPosteriorBuilder(LogProbExpr lp, TransformsTuple transforms,
-                                         ParamSymbolsTuple params, GradExprsTuple grads)
-      : log_prob_expr_{lp}, transforms_{transforms},
-        param_symbols_{params}, grad_exprs_{grads} {}
-
-  template <typename... Binders>
-  auto observe(Binders... binders) const {
-    auto obs = BinderPack{binders...};
-    return TransformedPosterior<LogProbExpr, BinderPack<Binders...>, TransformsTuple,
-                                 ParamSymbolsTuple, GradExprsTuple>{
-        log_prob_expr_, obs, transforms_, param_symbols_, grad_exprs_};
-  }
-
-  auto build() const {
-    return TransformedPosterior<LogProbExpr, BinderPack<>, TransformsTuple,
-                                 ParamSymbolsTuple, GradExprsTuple>{
-        log_prob_expr_, BinderPack<>{}, transforms_, param_symbols_, grad_exprs_};
-  }
-
- private:
-  LogProbExpr log_prob_expr_;
-  TransformsTuple transforms_;
-  ParamSymbolsTuple param_symbols_;
-  GradExprsTuple grad_exprs_;
-};
-
-// ============================================================================
-// Factory function
-// ============================================================================
-
-namespace detail {
-
-template <typename T>
-constexpr auto extractParam(T t) {
-  if constexpr (is_transform_v<T>) {
-    return t.param;
-  } else {
-    return t;
-  }
-}
-
-// Extract Free symbol for differentiation
-template <typename T>
-constexpr auto extractDiffSym(T t) {
-  auto param = extractParam(t);
-  if constexpr (IsRandomVar<decltype(param)>) {
-    return param.freeSym();
-  } else {
-    return param;
-  }
-}
-
-// Extract binding symbol: ConstrainedParamSymbol for RandomVars (applies inverse on bind)
-template <typename T>
-constexpr auto extractBindSym(T t) {
-  auto param = extractParam(t);
-  if constexpr (IsRandomVar<decltype(param)>) {
-    using Id = typename decltype(param)::id_type;
-    using Support = typename decltype(param)::support_type;
-    return ConstrainedParamSymbol<Id, Support>{};
-  } else {
-    return param;
-  }
-}
-
-template <typename T>
-constexpr auto wrapTransform(T t) {
-  if constexpr (is_transform_v<T>) {
-    return t;
-  } else {
-    // Default: unconstrained
-    return unconstrained(t);
-  }
-}
-
-}  // namespace detail
-
-// Create transformed posterior from log-prob and transformed parameters
-template <Symbolic LogProbExpr, typename... TransformedParams>
-constexpr auto makeTransformedPosterior(LogProbExpr lp, TransformedParams... params) {
-  auto transforms = std::make_tuple(detail::wrapTransform(params)...);
-  auto bind_symbols = std::make_tuple(detail::extractBindSym(params)...);
-  auto diff_symbols = std::make_tuple(detail::extractDiffSym(params)...);
-
-  auto grad_exprs = [&]<std::size_t... Is>(std::index_sequence<Is...>) {
-    return std::make_tuple(simplify(diff(lp, std::get<Is>(diff_symbols)))...);
-  }(std::make_index_sequence<sizeof...(TransformedParams)>{});
-
-  return TransformedPosteriorBuilder<LogProbExpr, decltype(transforms),
-                                      decltype(bind_symbols), decltype(grad_exprs)>{
-      lp, transforms, bind_symbols, grad_exprs};
-}
 
 }  // namespace tempura::symbolic4

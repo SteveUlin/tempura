@@ -39,7 +39,7 @@ namespace tempura::symbolic4 {
 
 namespace state_detail {
 
-// Find index of Target in a parameter pack by matching unconstrained_symbol_type
+// Find index of Target in a parameter pack by matching symbol_type
 template <typename Target, typename... Ts>
 struct IndexOf;
 
@@ -63,11 +63,11 @@ struct BinderSymbol {
   using type = typename Binder::symbol_type;
 };
 
-// Check if binder's symbol matches param's unconstrained symbol
+// Check if binder's symbol matches param's symbol
 template <typename Param, typename Binder>
 struct BinderMatchesParam {
   static constexpr bool value =
-      std::is_same_v<typename Param::unconstrained_symbol_type,
+      std::is_same_v<typename Param::symbol_type,
                      typename std::decay_t<Binder>::symbol_type>;
 };
 
@@ -127,9 +127,9 @@ class ParameterState {
   // Find index of a parameter type (public for Samples to use)
   template <typename P>
   static constexpr auto indexOfParam() -> std::size_t {
-    using TargetSym = typename P::unconstrained_symbol_type;
+    using TargetSym = typename P::symbol_type;
     return state_detail::index_of_v<TargetSym,
-                                    typename Params::unconstrained_symbol_type...>;
+                                    typename Params::symbol_type...>;
   }
 
  private:
@@ -147,7 +147,7 @@ class ParameterState {
   template <std::size_t I, typename... Binders>
   constexpr auto extractBindingForParam(BinderPack<Binders...> bindings) -> double {
     using ParamType = std::tuple_element_t<I, std::tuple<Params...>>;
-    using SymType = typename ParamType::unconstrained_symbol_type;
+    using SymType = typename ParamType::symbol_type;
     // bindings[sym] uses the inherited operator[] from the matching TypeValueBinder
     return static_cast<double>(bindings[SymType{}]);
   }

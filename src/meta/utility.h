@@ -117,6 +117,9 @@ template <typename T>
 inline constexpr bool isReference = false;
 
 template <typename T>
+inline constexpr bool isReference<T&> = true;
+
+template <typename T>
 inline constexpr bool isReference<T&&> = true;
 
 template <typename T>
@@ -139,6 +142,74 @@ inline constexpr bool isTriviallyMoveConstructible =
 
 template <typename T>
 inline constexpr bool isTriviallyDestructible = __has_trivial_destructor(T);
+
+// --- RemoveConst ---
+
+template <typename T>
+struct RemoveConst {
+  using Type = T;
+};
+
+template <typename T>
+struct RemoveConst<const T> {
+  using Type = T;
+};
+
+template <typename T>
+using RemoveConstT = typename RemoveConst<T>::Type;
+
+// --- RemoveVolatile ---
+
+template <typename T>
+struct RemoveVolatile {
+  using Type = T;
+};
+
+template <typename T>
+struct RemoveVolatile<volatile T> {
+  using Type = T;
+};
+
+template <typename T>
+using RemoveVolatileT = typename RemoveVolatile<T>::Type;
+
+// --- RemoveCV ---
+
+template <typename T>
+using RemoveCvT = RemoveConstT<RemoveVolatileT<T>>;
+
+// --- RemoveReference ---
+
+template <typename T>
+struct RemoveReference {
+  using Type = T;
+};
+
+template <typename T>
+struct RemoveReference<T&> {
+  using Type = T;
+};
+
+template <typename T>
+struct RemoveReference<T&&> {
+  using Type = T;
+};
+
+template <typename T>
+using RemoveReferenceT = typename RemoveReference<T>::Type;
+
+// --- RemoveCvRef ---
+
+template <typename T>
+using RemoveCvRefT = RemoveCvT<RemoveReferenceT<T>>;
+
+// --- Decay ---
+// Simplified decay: removes const, volatile, and references.
+// Does NOT handle array-to-pointer or function-to-pointer decay.
+// For full std::decay behavior, use <type_traits>.
+
+template <typename T>
+using DecayT = RemoveCvRefT<T>;
 
 // --- Type Concepts ---
 

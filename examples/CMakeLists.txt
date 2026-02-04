@@ -1,3 +1,4 @@
+add_subdirectory(build_tooling)
 add_subdirectory(idioms)
 add_subdirectory(stat_rethinking)
 

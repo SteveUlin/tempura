@@ -1,15 +1,26 @@
-#include "symbolic4/mcmc/hmc_adapter.h"
-
 #include <cmath>
 #include <random>
+#include <span>
+#include <vector>
 
+#include "bayes/estimation/hmc.h"
+#include "symbolic4/distributions/distributions.h"
 #include "symbolic4/distributions/joint.h"
 #include "symbolic4/distributions/random_var.h"
-#include "symbolic4/mcmc/transforms.h"
+#include "symbolic4/indexed/indexed.h"
+#include "symbolic4/infer.h"
+#include "symbolic4/mcmc/plate_transforms.h"
+#include "symbolic4/mcmc/samples.h"
+#include "symbolic4/mcmc/sampler.h"
 #include "unit.h"
 
 using namespace tempura;
 using namespace tempura::symbolic4;
+
+// Dimension tag at namespace scope
+namespace {
+struct HmcTestCountries {};
+}  // namespace
 
 auto main() -> int {
   "HMC adapter basic functionality"_test = [] {
@@ -19,28 +30,31 @@ auto main() -> int {
     auto sigma = halfNormal(lit(2.0));
     auto y = normal(mu.sym(), sigma.sym());
 
-    // Create transformed posterior: mu unconstrained, sigma positive
-    auto posterior = makeTransformedPosterior(
-        logProb(mu, sigma, y),
-        unconstrained(mu),
-        positive(sigma)
+    // makePlateTransformedPosterior auto-infers transforms from support
+    auto posterior = makePlateTransformedPosterior(
+        logProb(mu, sigma, y), mu, sigma
     ).observe(y = 3.5);
 
-    // Create HMC adapter
-    auto adapter = makeHMCFromPosterior<double>(posterior, 0.1, 10);
+    std::size_t dim = posterior.stateDim();
+
+    // Create dynamic HMC kernel wrapping the posterior
+    auto hmc = bayes::makeHMCDynamic(
+        [&](std::span<const double> s) { return posterior.logProb(s); },
+        [&](std::span<const double> s) { return posterior.gradient(s); },
+        0.1, 10, dim);
 
     // Test log-prob evaluation
-    std::array<double, 2> z{0.0, 0.0};  // mu=0, sigma=exp(0)=1
-    double lp = adapter.logProb(z);
+    std::vector<double> z(dim, 0.0);  // mu=0, sigma=exp(0)=1
+    double lp = hmc.logProb(z);
     expectTrue(std::isfinite(lp));
 
     // Test gradient evaluation
-    auto grad = adapter.gradient(z);
+    auto grad = posterior.gradient(std::span<const double>(z));
     expectTrue(std::isfinite(grad[0]));
     expectTrue(std::isfinite(grad[1]));
 
     // Test transform
-    auto x = adapter.transform(z);
+    auto x = posterior.transform(std::span<const double>(z));
     expectNear(x[0], 0.0, 1e-10);  // mu unchanged
     expectNear(x[1], 1.0, 1e-10);  // sigma = exp(0) = 1
   };
@@ -49,22 +63,26 @@ auto main() -> int {
     // Simple model: x ~ Normal(2, 0.5)
     // Should recover mean near 2
     auto x = normal(lit(2.0), lit(0.5));
-    auto posterior = makeTransformedPosterior(
-        logProb(x),
-        unconstrained(x)
+    auto posterior = makePlateTransformedPosterior(
+        logProb(x), x
     ).build();
 
-    auto adapter = makeHMCFromPosterior<double>(posterior, 0.05, 20);
+    std::size_t dim = posterior.stateDim();
+
+    auto hmc = bayes::makeHMCDynamic(
+        [&](std::span<const double> s) { return posterior.logProb(s); },
+        [&](std::span<const double> s) { return posterior.gradient(s); },
+        0.05, 20, dim);
 
     std::mt19937_64 rng{42};
-    std::array<double, 1> z{0.0};
-    double lp = adapter.logProb(z);
+    std::vector<double> z(dim, 0.0);
+    double lp = hmc.logProb(z);
 
     // Run some steps
     int accepted = 0;
     double sum = 0.0;
     for (int i = 0; i < 500; ++i) {
-      auto [next_z, next_lp, was_accepted] = adapter.step(z, lp, rng);
+      auto [next_z, next_lp, was_accepted] = hmc.step(z, lp, rng);
       z = next_z;
       lp = next_lp;
       if (was_accepted) accepted++;
@@ -86,24 +104,28 @@ auto main() -> int {
     // Model: sigma ~ HalfNormal(2)
     // Should recover positive samples
     auto sigma = halfNormal(lit(2.0));
-    auto posterior = makeTransformedPosterior(
-        logProb(sigma),
-        positive(sigma)
+    auto posterior = makePlateTransformedPosterior(
+        logProb(sigma), sigma
     ).build();
 
-    auto adapter = makeHMCFromPosterior<double>(posterior, 0.1, 10);
+    std::size_t dim = posterior.stateDim();
+
+    auto hmc = bayes::makeHMCDynamic(
+        [&](std::span<const double> s) { return posterior.logProb(s); },
+        [&](std::span<const double> s) { return posterior.gradient(s); },
+        0.1, 10, dim);
 
     std::mt19937_64 rng{123};
-    std::array<double, 1> z{0.0};  // z=0 -> sigma=1
-    double lp = adapter.logProb(z);
+    std::vector<double> z(dim, 0.0);  // z=0 -> sigma=1
+    double lp = hmc.logProb(z);
 
     // Run some steps and verify all transformed values are positive
     for (int i = 0; i < 100; ++i) {
-      auto [next_z, next_lp, accepted] = adapter.step(z, lp, rng);
+      auto [next_z, next_lp, was_accepted] = hmc.step(z, lp, rng);
       z = next_z;
       lp = next_lp;
 
-      auto x = adapter.transform(z);
+      auto x = posterior.transform(std::span<const double>(z));
       expectTrue(x[0] > 0.0);  // sigma always positive
     }
   };
@@ -112,18 +134,14 @@ auto main() -> int {
     auto mu = normal(lit(0.0), lit(1.0));
     auto sigma = halfNormal(lit(1.0));
 
-    auto posterior = makeTransformedPosterior(
-        logProb(mu, sigma),
-        unconstrained(mu),
-        positive(sigma)
+    auto posterior = makePlateTransformedPosterior(
+        logProb(mu, sigma), mu, sigma
     ).build();
 
-    auto adapter = makeHMCFromPosterior<double>(posterior, 0.1, 10);
-
     // Test round-trip: constrained -> unconstrained -> constrained
-    std::array<double, 2> x_original{2.5, 1.5};
-    auto z = adapter.inverse(x_original);
-    auto x_recovered = adapter.transform(z);
+    std::vector<double> x_original{2.5, 1.5};
+    auto z = posterior.inverse(std::span<const double>(x_original));
+    auto x_recovered = posterior.transform(std::span<const double>(z));
 
     expectNear(x_recovered[0], x_original[0], 1e-10);
     expectNear(x_recovered[1], x_original[1], 1e-10);
@@ -131,6 +149,59 @@ auto main() -> int {
     // Verify unconstrained values
     expectNear(z[0], 2.5, 1e-10);             // mu unchanged
     expectNear(z[1], std::log(1.5), 1e-10);   // log(sigma)
+  };
+
+  // =========================================================================
+  // Mixed scalar + indexed params: samples[param] access
+  // =========================================================================
+  //
+  // This is the key test case for the DynamicSamples symbol lookup bug:
+  // When a model has both scalar params (a, sigma) and indexed params (z_b),
+  // samples[a] should correctly find the scalar param in DynamicSamples.
+
+  "sample() with mixed scalar+indexed params and symbol access"_test = [] {
+    // Model similar to bmj_symbolic:
+    // a ~ Normal(-2, 1)        (scalar)
+    // sigma ~ Exponential(1)   (scalar)
+    // z_b[i] ~ Normal(0, 1)    (indexed)
+    auto a = normal(-2.0, 1.0);
+    auto sigma = exponential(1.0);
+    auto z_b = plate<HmcTestCountries>(normal(lit(0.0), lit(1.0)));
+
+    // Joint log-prob (simplified - no likelihood for this test)
+    auto joint_lp = collectLogProbs(a, sigma, z_b);
+
+    auto posterior = makePlateTransformedPosterior(joint_lp, a, sigma, z_b)
+                         .withDimension<HmcTestCountries>(3)
+                         .build();
+
+    // State dim: a (1) + sigma (1) + z_b (3) = 5
+    expectEq(posterior.stateDim(), 5UL);
+
+    // Run a few HMC steps to get samples
+    std::mt19937_64 rng{42};
+    auto samples = posterior.sample(
+        HmcConfig{.epsilon = 0.1, .steps = 10, .warmup = 10, .draws = 20},
+        BinderPack{a = -2.0, sigma = 1.0, z_b = std::vector<double>{0.0, 0.0, 0.0}},
+        rng);
+
+    expectEq(samples.size(), 20UL);
+
+    // KEY TEST: samples[a] should work for scalar params in mixed model
+    auto a_draws = samples[a];
+    expectEq(a_draws.size(), 20UL);
+    expectTrue(std::isfinite(a_draws[0]));
+
+    // samples[sigma] should also work
+    auto sigma_draws = samples[sigma];
+    expectEq(sigma_draws.size(), 20UL);
+    expectTrue(sigma_draws[0] > 0.0);  // Positive constraint
+
+    // samples[z_b] should return matrix (draws × groups)
+    auto z_b_draws = samples[z_b];
+    expectEq(z_b_draws.rows(), 20UL);
+    expectEq(z_b_draws.cols(), 3UL);
+    expectTrue(std::isfinite(z_b_draws[0, 0]));
   };
 
   return TestRegistry::result();

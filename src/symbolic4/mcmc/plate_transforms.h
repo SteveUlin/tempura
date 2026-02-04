@@ -19,6 +19,7 @@
 #include "symbolic4/mcmc/sampler.h"
 #include "symbolic4/mcmc/state.h"
 #include "symbolic4/mcmc/support.h"
+#include "symbolic4/mcmc/transform_pack.h"
 #include "symbolic4/mcmc/transforms.h"
 
 // ============================================================================
@@ -159,21 +160,9 @@ class GradientResult {
   std::array<std::size_t, std::tuple_size_v<SymbolsTuple>> offsets_;
 
   // Find the index of RV's symbol in our symbols tuple
-  // Tries unconstrained_symbol_type first (scalar params use Symbol<Id>),
-  // then falls back to symbol_type (indexed params where both are IndexedSymbol)
   template <typename RV>
   static constexpr std::size_t findSymbolIndex() {
-    if constexpr (requires { typename RV::unconstrained_symbol_type; }) {
-      constexpr auto idx = plate_detail::SymbolIndexIn<
-          typename RV::unconstrained_symbol_type, SymbolsTuple>::value;
-      if constexpr (idx < std::tuple_size_v<SymbolsTuple>) {
-        return idx;
-      } else {
-        return plate_detail::SymbolIndexIn<typename RV::symbol_type, SymbolsTuple>::value;
-      }
-    } else {
-      return plate_detail::SymbolIndexIn<typename RV::symbol_type, SymbolsTuple>::value;
-    }
+    return plate_detail::SymbolIndexIn<typename RV::symbol_type, SymbolsTuple>::value;
   }
 
   void computeOffsets() {
@@ -230,6 +219,12 @@ struct ScalarParamSpec {
   auto transformValue(double z) const -> double { return transform.transform(z); }
 
   auto logJacobian(double z) const -> double { return transform.logJacobian(z); }
+
+  // Chain rule for gradient: convert d(logp)/dx to d(logp)/dz
+  // Returns grad_z = grad_x * dx/dz + d(logJacobian)/dz
+  auto chainRuleGrad(double grad_x, double z) const -> double {
+    return transform.chainRuleGrad(grad_x, z);
+  }
 };
 
 // Indexed parameter (from a plate)
@@ -365,11 +360,13 @@ class PlateTransformedPosterior {
         data_bindings_{data},
         specs_{specs},
         symbols_{symbols},
-        grad_exprs_{grads} {}
+        grad_exprs_{grads},
+        transform_pack_{buildNonObservedSymbols(std::make_index_sequence<NumParamSlots>{}),
+                         buildNonObservedSpecs(std::make_index_sequence<NumParamSlots>{})} {}
 
   // Total state dimension (sum of all param sizes)
   auto stateDim() const -> std::size_t {
-    return stateDimImpl(std::make_index_sequence<NumParamSlots>{});
+    return transform_pack_.stateDim();
   }
 
   // Debug: evaluate log_prob_expr_ with externally provided bindings
@@ -450,15 +447,12 @@ class PlateTransformedPosterior {
 
   // Transform from unconstrained to constrained space
   auto transform(std::span<const double> z) const -> std::vector<double> {
-    return transformImpl(z, std::make_index_sequence<NumParamSlots>{});
+    return transform_pack_.transform(z);
   }
 
   // Inverse: constrained to unconstrained
   auto inverse(std::span<const double> x) const -> std::vector<double> {
-    std::vector<double> z(x.size());
-    std::size_t offset = 0;
-    inverseImpl(x, z, offset, std::make_index_sequence<NumParamSlots>{});
-    return z;
+    return transform_pack_.inverse(x);
   }
 
   // Set dimension size for a plate
@@ -549,6 +543,9 @@ class PlateTransformedPosterior {
 
   using NonObservedSymbolsTuple =
       typename ConcatNonObservedSymbols<std::make_index_sequence<NumParamSlots>>::type;
+
+  // TransformPack for non-observed params — delegates transform/inverse/logJacobian
+  using TransformPackType = TransformPack<NonObservedSymbolsTuple, NonObservedSpecsTuple>;
 
   // Check if all non-observed specs are scalar (for compile-time validation)
   static constexpr auto allParamsAreScalar() -> bool {
@@ -782,13 +779,13 @@ class PlateTransformedPosterior {
                            std::size_t& offset) const {
     using SymType = std::decay_t<std::tuple_element_t<I, ParamSymbolsTuple>>;
     if constexpr (isSymbolObserved<SymType>()) {
-      // Skip observed params
       return;
     } else {
-      // For scalar params, size == 1
-      // Bind using the unconstrained symbol
-      double value = static_cast<double>(bindings[SymType{}]);
-      z[offset] = value;
+      // User binds constrained value (sigma = 2.0 → Symbol<Id> = 2.0).
+      // Convert to unconstrained z via inverse transform.
+      double constrained = static_cast<double>(bindings[SymType{}]);
+      const auto& spec = std::get<I>(specs_);
+      z[offset] = spec.transform.inverse(constrained);
       offset += 1;  // Scalar params only for now
     }
   }
@@ -800,6 +797,7 @@ class PlateTransformedPosterior {
   ParamSpecsTuple specs_;
   ParamSymbolsTuple symbols_;
   GradExprsTuple grad_exprs_;
+  TransformPackType transform_pack_;
 
   // -------------------------------------------------------------------------
   // Implementation helpers
@@ -817,49 +815,21 @@ class PlateTransformedPosterior {
   }
 
   template <std::size_t... Is>
-  auto stateDimImpl(std::index_sequence<Is...>) const -> std::size_t {
-    // Only count non-observed parameters
-    return (paramSizeIfNotObserved<Is>() + ...);
-  }
-
-  template <std::size_t... Is>
   auto logProbImpl(std::span<const double> z, std::index_sequence<Is...>) const -> double {
-    // Build bindings using UNCONSTRAINED values (z, not x)
-    // The expression uses constrainedExpr() which applies the transform
-    // Note: Jacobian is already included in RandomVar::logProb() via jacobian()
+    // Evaluate model log-probability: log p(x) where x = transform(z)
+    // All params: pre-transform z → x, bind constrained x to Free symbols
     auto bindings = buildBindingsUnconstrained(z, std::make_index_sequence<NumParamSlots>{});
     auto merged = mergeAllBindings(bindings, observations_, data_bindings_);
-    return evaluateIndexed(log_prob_expr_, merged);
-  }
+    double lp = evaluateIndexed(log_prob_expr_, merged);
 
-  template <std::size_t I>
-  void maybeAccumulateJacobian(std::span<const double> z, double& log_jacobian,
-                                std::size_t& offset) const {
-    using SymType = std::decay_t<std::tuple_element_t<I, ParamSymbolsTuple>>;
-    if constexpr (!isSymbolObserved<SymType>()) {
-      const auto& spec = std::get<I>(specs_);
-      std::size_t n = spec.size();
-      for (std::size_t i = 0; i < n; ++i) {
-        log_jacobian += spec.logJacobian(z[offset + i]);
-      }
-      offset += n;
-    }
-  }
+    // Jacobian correction: log p(z) = log p(x) + log |dx/dz|
+    // Required for correct density in unconstrained space (HMC target)
+    // Use subspan matching non-observed param count (z may be oversized if caller
+    // includes slots for observed params that buildBindingsUnconstrained skips)
+    auto state_dim = transform_pack_.stateDim();
+    double log_jacobian = transform_pack_.logJacobian(z.subspan(0, state_dim));
 
-  template <std::size_t I>
-  void maybeTransformParam(std::span<const double> z, std::vector<double>& x,
-                           double& log_jacobian, std::size_t& offset) const {
-    using SymType = std::decay_t<std::tuple_element_t<I, ParamSymbolsTuple>>;
-    if constexpr (!isSymbolObserved<SymType>()) {
-      const auto& spec = std::get<I>(specs_);
-      std::size_t n = spec.size();
-
-      for (std::size_t i = 0; i < n; ++i) {
-        x[offset + i] = spec.transformValue(z[offset + i]);
-        log_jacobian += spec.logJacobian(z[offset + i]);
-      }
-      offset += n;
-    }
+    return lp + log_jacobian;
   }
 
   // Check if a symbol type is in ObsBindings (to avoid duplicate bindings)
@@ -933,9 +903,9 @@ class PlateTransformedPosterior {
     return offsets;
   }
 
-  // Bind value at a specific offset (doesn't modify offset)
-  // For scalar params: bind unconstrained value (expression contains transform like exp(z))
-  // For indexed params: bind CONSTRAINED value (expression uses IndexedSymbol directly)
+  // Bind constrained value at a specific offset.
+  // Both scalar and indexed params: pre-transform z → x, bind x to the Free symbol.
+  // Expression trees use plain Free atoms — no eval-time constraint transforms.
   template <std::size_t I>
   auto maybeBindParamUnconstrainedAtOffset(std::span<const double> z, std::size_t offset) const {
     using SymType = std::decay_t<decltype(std::get<I>(symbols_))>;
@@ -947,12 +917,11 @@ class PlateTransformedPosterior {
       const auto& sym = std::get<I>(symbols_);
 
       if constexpr (is_scalar_param_spec_v<std::decay_t<decltype(spec)>>) {
-        // Scalar: bind unconstrained value (expression applies transform via Sample atom)
-        double val = z[offset];
-        return std::make_tuple(sym = val);
+        // Scalar: pre-transform z → x, bind constrained value
+        double x = spec.transformValue(z[offset]);
+        return std::make_tuple(sym = x);
       } else {
-        // Indexed: bind CONSTRAINED values (IndexedSymbol doesn't apply transforms)
-        // Transform each value from unconstrained to constrained space
+        // Indexed: pre-transform z → x, bind constrained values
         std::size_t n = spec.size();
         constrained_values_[I].resize(n);
         for (std::size_t i = 0; i < n; ++i) {
@@ -974,8 +943,7 @@ class PlateTransformedPosterior {
   template <std::size_t... Is>
   auto gradientImpl(std::span<const double> z, std::index_sequence<Is...>) const
       -> std::vector<double> {
-    // Build bindings using UNCONSTRAINED values (z)
-    // Since expressions already contain transforms like exp(z), we bind z directly
+    // Build bindings: pre-transform z → x, bind constrained x to Free symbols
     auto bindings = buildBindingsUnconstrained(z, std::make_index_sequence<NumParamSlots>{});
     auto merged = mergeAllBindings(bindings, observations_, data_bindings_);
 
@@ -995,16 +963,15 @@ class PlateTransformedPosterior {
     return grad;
   }
 
-  // Analytic gradient for a single parameter slot (skipping observed)
-  // Since expressions already contain transforms (exp(z), sigmoid(z), etc.)
-  // AND the Jacobian term (from RandomVar::logProb()), the symbolic
-  // differentiation gives us the complete d(log p + log|J|)/dz directly.
+  // Analytic gradient for a single parameter slot (skipping observed).
+  // All params bind constrained values x = transform(z), so grad_expr
+  // evaluates to d(logp)/dx. Chain rule converts to unconstrained space:
+  //   grad_z = grad_x * dx/dz + d(logJacobian)/dz
   template <std::size_t I, typename Bindings>
   void maybeComputeAnalyticGrad(std::span<const double> z, const Bindings& bindings,
                                 std::vector<double>& grad, std::size_t& offset) const {
     using SymType = std::decay_t<std::tuple_element_t<I, ParamSymbolsTuple>>;
     if constexpr (isSymbolObserved<SymType>()) {
-      // Skip observed parameters
       return;
     } else {
       const auto& spec = std::get<I>(specs_);
@@ -1012,27 +979,16 @@ class PlateTransformedPosterior {
       const auto& grad_expr = std::get<I>(grad_exprs_);
 
       if constexpr (is_scalar_param_spec_v<std::decay_t<decltype(spec)>>) {
-        // Scalar parameter: single gradient value
-        // grad_z is d(log p + log|J|)/dz from symbolic diff - includes everything
-        double grad_z = evaluateIndexed(grad_expr, bindings);
+        // Scalar: grad_expr gives d(logp)/dx, apply chain rule for z → x
+        double grad_x = evaluateIndexed(grad_expr, bindings);
+        double grad_z = spec.chainRuleGrad(grad_x, z[offset]);
         grad[offset] = grad_z;
         offset += 1;
       } else {
-        // Indexed parameter: gradient for each element
-        // Since we bind CONSTRAINED values (x) but HMC samples UNCONSTRAINED (z),
-        // we need: d(logp)/dz = d(logp)/dx * dx/dz + d(logJacobian)/dz
-        //
-        // For SumOver expressions, diff distributes into the sum.
-        // grad_expr is d(logp)/d(IndexedSymbol) = d(logp)/dx (since we bind x values)
+        // Indexed: same logic per-element, diff distributes through SumOver
         for (std::size_t i = 0; i < n; ++i) {
           double z_i = z[offset + i];
-
-          // d(logp)/dx - gradient w.r.t. constrained value
           double grad_x = evaluateGradAtIndex<I>(grad_expr, bindings, i);
-
-          // Apply chain rule: multiply by dx/dz and add Jacobian gradient
-          // For positive: dx/dz = exp(z), d(logJ)/dz = 1
-          // For unit: dx/dz = sigmoid(z)*(1-sigmoid(z)), d(logJ)/dz = 1 - 2*sigmoid(z)
           double grad_z = spec.chainRuleGrad(grad_x, z_i);
           grad[offset + i] = grad_z;
         }
@@ -1068,49 +1024,6 @@ class PlateTransformedPosterior {
 
       z_plus[i] = z[i];
       z_minus[i] = z[i];
-    }
-  }
-
-  template <std::size_t... Is>
-  auto transformImpl(std::span<const double> z, std::index_sequence<Is...>) const
-      -> std::vector<double> {
-    std::vector<double> x(z.size());
-    std::size_t offset = 0;
-    (maybeTransformParamOnly<Is>(z, x, offset), ...);
-    return x;
-  }
-
-  template <std::size_t I>
-  void maybeTransformParamOnly(std::span<const double> z, std::vector<double>& x,
-                               std::size_t& offset) const {
-    using SymType = std::decay_t<std::tuple_element_t<I, ParamSymbolsTuple>>;
-    if constexpr (!isSymbolObserved<SymType>()) {
-      const auto& spec = std::get<I>(specs_);
-      std::size_t n = spec.size();
-      for (std::size_t i = 0; i < n; ++i) {
-        x[offset + i] = spec.transformValue(z[offset + i]);
-      }
-      offset += n;
-    }
-  }
-
-  template <std::size_t... Is>
-  void inverseImpl(std::span<const double> x, std::vector<double>& z,
-                   std::size_t& offset, std::index_sequence<Is...>) const {
-    (maybeInverseParam<Is>(x, z, offset), ...);
-  }
-
-  template <std::size_t I>
-  void maybeInverseParam(std::span<const double> x, std::vector<double>& z,
-                         std::size_t& offset) const {
-    using SymType = std::decay_t<std::tuple_element_t<I, ParamSymbolsTuple>>;
-    if constexpr (!isSymbolObserved<SymType>()) {
-      const auto& spec = std::get<I>(specs_);
-      std::size_t n = spec.size();
-      for (std::size_t i = 0; i < n; ++i) {
-        z[offset + i] = spec.transform.inverse(x[offset + i]);
-      }
-      offset += n;
     }
   }
 

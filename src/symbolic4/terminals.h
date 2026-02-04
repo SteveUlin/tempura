@@ -19,14 +19,6 @@
 
 namespace tempura::symbolic4 {
 
-// Forward declarations for helpers defined in indexed_eval.h
-namespace indexed_eval_detail {
-
-template <typename T, typename... Binders>
-auto lookupByAtomId(T term, const BinderPack<Binders...>& pack) -> double;
-
-}  // namespace indexed_eval_detail
-
 // ============================================================================
 // BaseTerminals - Domain-independent terminal handler
 // ============================================================================
@@ -57,8 +49,8 @@ struct BaseTerminals {
       using SymType = typename T::symbol_type;
       return Interp::template lookupIndexedSymbol<SymType>(SymType{}, ctx);
     } else if constexpr (is_atom_v<T>) {
-      // Free atom or any other atom - look up by Id in scalar bindings
-      return indexed_eval_detail::lookupByAtomId(term, ctx.scalars);
+      // Free atom — direct lookup in scalar bindings
+      return ctx.scalars[term];
     } else {
       static_assert(is_atom_v<T>, "Unknown terminal type");
       return 0.0;

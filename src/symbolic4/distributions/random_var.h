@@ -1,6 +1,5 @@
 #pragma once
 
-#include "symbolic4/constraints.h"
 #include "symbolic4/core.h"
 #include "symbolic4/distributions/wrappers.h"
 
@@ -38,78 +37,39 @@ namespace tempura::symbolic4 {
 // RandomVar - A random variable in a probabilistic model
 // ============================================================================
 //
-// For distributions with constrained support (Positive, Unit), RandomVar
-// separates user-facing and MCMC-internal concerns:
-//   - sym() returns the Sample atom (constrained at eval time via eval.h)
-//   - logProb() works in constrained space (no Jacobian)
-//   - operator= applies inverse transform (sigma=2.0 → z=log(2))
-//   - unconstrainedExpr() / jacobian() are available for MCMC internals
+// RandomVar uses plain Free symbols (Atom<Id, Free>) in expression trees.
+// Constraint transforms (exp for positive, sigmoid for unit) are handled
+// externally by the posterior's TransformPack — NOT embedded in the expression.
+//
+// Key invariant: operator= binds CONSTRAINED values directly.
+//   sigma = 2.0  →  bind Symbol<Id> = 2.0
+//   The posterior handles z↔x conversion internally.
 //
 // ============================================================================
-
-// ============================================================================
-// RandomVarSymbol - The symbol type for random variables
-// ============================================================================
-//
-// Unlike plain Symbol<Id> (which is Atom<Id, Free>), RandomVarSymbol carries
-// its distribution in the type system via Sample<Dist> effect. This enables:
-//   - Auto-discovery of random variables during expression traversal
-//   - Extraction of distribution for log-probability computation
-//   - Type-safe differentiation between free variables and random variables
-//
-// RandomVarSymbol<Id, Dist> is an alias for Atom<Id, Sample<Dist>>.
-
-template <typename Id, typename Dist>
-using RandomVarSymbol = Atom<Id, Sample<Dist>>;
 
 template <typename Dist, typename Id>
 struct RandomVar {
   using id_type = Id;
   using dist_type = Dist;
   using support_type = typename Dist::support_type;
-  using symbol_type = RandomVarSymbol<Id, Dist>;
-
-  // The unconstrained symbol (what HMC samples / what we differentiate w.r.t.)
-  using unconstrained_symbol_type = Symbol<Id>;
+  using symbol_type = Symbol<Id>;
 
   [[no_unique_address]] Dist dist_;
 
   constexpr explicit RandomVar(Dist dist) : dist_{dist} {}
 
-  // Get the unconstrained symbol (for HMC sampling and differentiation)
-  static constexpr auto unconstrainedSym() { return unconstrained_symbol_type{}; }
+  // The symbol for this random variable — a plain Free atom.
+  // Expression trees use this directly; no constraint transform embedded.
+  static constexpr auto sym() { return symbol_type{}; }
 
-  // Get the constrained expression - just returns the Sample atom
-  // The constraint transform is applied during evaluation (see eval.h)
-  // This enables auto-discovery of parent RVs in expression trees
-  constexpr auto constrainedExpr() const {
-    return symbol_type{Sample<Dist>{dist_}};
-  }
+  // Alias: freeSym() == sym() (both return Symbol<Id>)
+  static constexpr auto freeSym() { return symbol_type{}; }
 
-  // Static version for use when instance isn't available (e.g., in transforms)
-  // Returns the unconstrained symbol (constraint applied at eval time)
-  static constexpr auto unconstrainedExpr() {
-    return constraints::expr<support_type>(unconstrainedSym());
-  }
-
-  // Get the Jacobian expression: log |dx/dz|
-  static constexpr auto jacobian() {
-    return constraints::logJacobian<support_type>(unconstrainedSym());
-  }
-
-  // Get the symbol representing this random variable (with distribution info)
-  // Note: For constrained distributions, this carries the transform info
-  constexpr auto sym() const { return symbol_type{Sample<Dist>{dist_}}; }
-
-  // For backward compatibility: freeSym() returns the unconstrained symbol
-  static constexpr auto freeSym() { return unconstrainedSym(); }
-
-  // Implicit conversion to constrained expression (for use in other distributions)
-  constexpr auto operator*() const { return constrainedExpr(); }
+  // Implicit conversion to symbol (for use in other distributions' parameter expressions)
+  constexpr auto operator*() const { return sym(); }
 
   // Get log-probability in constrained space: log p(x | params)
-  // No Jacobian — this is the user-facing API working in constrained space.
-  // MCMC adds Jacobian corrections separately via its transform system.
+  // No Jacobian — MCMC adds Jacobian corrections separately via TransformPack.
   constexpr auto logProb() const {
     return dist_.logProbFor(sym());
   }
@@ -122,13 +82,11 @@ struct RandomVar {
   // Access the distribution
   constexpr const auto& dist() const { return dist_; }
 
-  // Enable binding syntax: rv = value (value is in constrained space)
-  // Applies inverse transform so eval.h's forward transform round-trips correctly:
-  //   sigma = 2.0  →  bind z = log(2.0)  →  eval exp(log(2.0)) = 2.0
+  // Bind constrained value directly: sigma = 2.0 → Symbol<Id> = 2.0
   template <typename T>
     requires std::is_arithmetic_v<T>
   constexpr auto operator=(T value) const {
-    return unconstrainedSym() = constraints::inverseNumeric<support_type>(static_cast<double>(value));
+    return sym() = static_cast<double>(value);
   }
 };
 
@@ -221,22 +179,20 @@ constexpr auto poisson(Lambda lambda) {
 // toSymbolic overload for RandomVar
 // ============================================================================
 //
-// This enables RandomVar to be used directly in expressions:
+// Enables RandomVar to be used directly in expressions:
 //   auto alpha = normal(0, 10);
 //   auto beta = normal(0, 5);
 //   auto mu = alpha + beta * x;  // Works! No need for *alpha, *beta
 //
-// Returns the random variable symbol (Atom<Id, Sample<Dist>>), which carries
-// distribution info needed for:
-//   - Auto-discovery of parent RVs (collectLogProbs, discoverParams)
-//   - Correct evaluation with automatic constraint transforms
-//
-// Evaluation of Sample atoms applies the appropriate transform based on
-// the distribution's support type (see eval.h).
+// Returns Atom<Id, Sample<Dist>> — a discoverable atom that carries distribution
+// info. This enables collectLogProbs() to auto-discover parent distributions by
+// traversing expression trees. The evaluator resolves these atoms by ID lookup
+// against Free symbol bindings (no constraint transform at eval time — the
+// posterior's TransformPack handles that externally).
 
 template <typename Dist, typename Id>
 constexpr auto toSymbolic(const RandomVar<Dist, Id>& rv) {
-  return rv.sym();
+  return Atom<Id, Sample<Dist>>{Sample<Dist>{rv.dist()}};
 }
 
 }  // namespace tempura::symbolic4

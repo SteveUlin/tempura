@@ -3,6 +3,7 @@
 #include "meta/type_list_ops.h"
 #include "symbolic4/distributions/random_var.h"
 #include "symbolic4/indexed/dim.h"
+#include "symbolic4/indexed/gather.h"
 #include "symbolic4/indexed/sum_over.h"
 
 // ============================================================================
@@ -79,9 +80,6 @@ struct IndexedRandomVar {
   using symbol_type = detail::make_indexed_symbol_t<Id, DimsList>;
   using discoverable_type = Atom<Id, IndexedSample<Dist, DimsList>>;
 
-  // Unconstrained symbol type (for HMC / gradient differentiation)
-  using unconstrained_symbol_type = symbol_type;
-
   // For backward compatibility: single-dim case exposes dim_tag
   using dim_tag = Head_t<DimsList>;
 
@@ -126,6 +124,13 @@ struct IndexedRandomVar {
   template <typename... ShapeDims>
   auto operator=(IndexedValuesND<ShapeDims...> iv) const {
     return IndexedBinding<symbol_type, sizeof...(ShapeDims)>{iv.data, iv.shape.sizes};
+  }
+
+  // Cross-plate indexing: z[idx] returns gather(z, idx)
+  // Enables natural syntax like: a_bar + sigma * z[district_idx]
+  template <SymbolicLike Index>
+  constexpr auto operator[](Index idx) const {
+    return gather(sym(), idx);
   }
 };
 

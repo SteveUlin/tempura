@@ -2,7 +2,7 @@
 
 #include "symbolic4/constants.h"
 #include "symbolic4/core.h"
-#include "symbolic4/distributions/wrappers.h"
+#include "symbolic4/indexed/gather.h"
 #include "symbolic4/indexed/reduce_over.h"
 #include "symbolic4/interpreter/simplify.h"
 #include "symbolic4/operators.h"
@@ -29,53 +29,19 @@
 namespace tempura::symbolic4 {
 
 // ============================================================================
-// Sample atom handling for differentiation
+// DiffRecursive - Recursive with ReduceOver and Sample atom awareness
 // ============================================================================
 //
-// Expressions built from RandomVars contain Atom<Id, Sample<Dist>> nodes.
-// In the constrained-space API, Sample atoms act as identity w.r.t. their
-// corresponding Free variable. When Var is Atom<Id, Free>:
-//   - Same Id: d/dx[x] = 1
-//   - Different Id: derivative is 0 (constant w.r.t. Var)
+// Wraps the standard Recursive rule set but intercepts nodes that the
+// pattern-based rules can't handle:
 //
-// ============================================================================
-
-namespace diff_detail {
-
-// Compute the derivative of a Sample atom w.r.t. the matching Free variable.
-// For constrained distributions, this is the derivative of the constraint transform.
-template <typename T, typename Var>
-struct SampleDerivative {
-  static constexpr auto compute() { return Constant<0>{}; }
-};
-
-// Atom<Id, Sample<D>> differentiated w.r.t. Atom<Id, Free>:
-// In constrained-space formulation, the Sample atom IS the variable.
-// d/dx[x] = 1 regardless of support type.
-template <typename Id, typename Dist>
-struct SampleDerivative<Atom<Id, Sample<Dist>>, Atom<Id, Free>> {
-  static constexpr auto compute() { return Constant<1>{}; }
-};
-
-// Check if T is a Sample atom
-template <typename T>
-struct IsSampleAtom : std::false_type {};
-
-template <typename Id, typename D>
-struct IsSampleAtom<Atom<Id, Sample<D>>> : std::true_type {};
-
-template <typename T>
-constexpr bool is_sample_atom_v = IsSampleAtom<T>::value;
-
-}  // namespace diff_detail
-
-// ============================================================================
-// DiffRecursive - Recursive with Sample atom awareness
-// ============================================================================
-//
-// Wraps the standard Recursive rule set but intercepts Sample atoms before
-// the pattern-based rules. This keeps Sample-specific logic out of the
-// general strategy framework.
+//   - ReduceOver: distributes diff through SumReduce, applies log-derivative
+//     trick for ProdReduce, softmax weighting for LogSumExpReduce
+//   - Sample/IndexedSample atoms: distribution factories embed parent RVs as
+//     Atom<Id, Sample<D>> in the expression tree (via toSymbolic()). The
+//     pattern rule `rule(Var{}, 1_c)` only matches exact types, so it can't
+//     match a Sample atom when Var is a Free symbol. We intercept these and
+//     compare by Id: same Id → 1, different → 0.
 //
 // ============================================================================
 
@@ -92,21 +58,21 @@ struct DiffRecursive {
       using DimTag = typename E::dim_tag;
 
       if constexpr (isSame<ROp, SumReduce>) {
-        // Linear: d/dx Sigma_i f_i = Sigma_i d/dx f_i
+        // Linear: d/dx Σᵢ fᵢ = Σᵢ d/dx fᵢ
         auto inner_result = apply(expr.expr());
         return expr.rebuild(inner_result);
 
       } else if constexpr (isSame<ROp, ProdReduce>) {
         // Log-derivative trick:
-        // d/dx Prod_i f_i = (Prod_i f_i) * Sigma_i (d/dx f_i / f_i)
+        // d/dx Πᵢ fᵢ = (Πᵢ fᵢ) · Σᵢ (d/dx fᵢ / fᵢ)
         auto body = expr.expr();
         auto dbody = apply(body);
         auto ratio = dbody / body;
         return expr * ReduceOver<SumReduce, DimTag, decltype(ratio)>{ratio};
 
       } else if constexpr (isSame<ROp, LogSumExpReduce>) {
-        // d/dx LSE_i(f_i) = Sigma_i softmax(f_i) * d/dx f_i
-        // where softmax(f_i) = exp(f_i - LSE(f)) = exp(f_i) / Sigma exp(f_i)
+        // d/dx LSEᵢ(fᵢ) = Σᵢ softmax(fᵢ) · d/dx fᵢ
+        // where softmax(fᵢ) = exp(fᵢ - LSE(f))
         auto body = expr.expr();
         auto dbody = apply(body);
         auto weights = exp(body - expr);  // softmax weights
@@ -117,16 +83,29 @@ struct DiffRecursive {
         // MaxReduce: not differentiable symbolically, return unchanged
         return expr;
       }
-    } else if constexpr (diff_detail::is_sample_atom_v<E>) {
-      // Sample atom: compute derivative based on Id match with Var
+    } else if constexpr (is_gather_v<E>) {
+      // Chain rule for Gather: d/dx[gather(a, idx)] = gather(d/dx[a], idx)
+      // The index is data (constant w.r.t. parameters), so d/dx[idx] = 0.
+      // We only need to differentiate the param and keep the same index.
+      auto dparam = apply(expr.param);
+      return Gather<decltype(dparam), typename E::index_type>{dparam, expr.index};
+    } else if constexpr (is_random_var_atom_v<E>) {
+      // Atom<Id, Sample<D>> from toSymbolic(rv) — match by Id against Var
       if constexpr (same_atom_id_v<E, Var>) {
-        return diff_detail::SampleDerivative<E, Var>::compute();
+        return Constant<1>{};
       } else {
-        return Constant<0>{};  // Different Id: constant w.r.t. Var
+        return Constant<0>{};
+      }
+    } else if constexpr (is_indexed_random_var_atom_v<E>) {
+      // Atom<Id, IndexedSample<D, DimsList>> — match by Id against Var
+      if constexpr (std::is_same_v<typename E::id_type, typename Var::id_type>) {
+        return Constant<1>{};
+      } else {
+        return Constant<0>{};
       }
     } else {
-      // Delegate to standard recursive rules (which handle normal atoms,
-      // expressions, constants, etc.)
+      // Delegate to standard recursive rules (which handle Free atoms,
+      // IndexedSymbols, expressions, constants, etc.)
       auto result = detail::applyRecursiveRule(inner.rules, expr, *this);
       if constexpr (isSame<decltype(result), Never>) {
         return expr;  // No rule matched, return unchanged

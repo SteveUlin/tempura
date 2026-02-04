@@ -177,6 +177,24 @@ target_link_libraries(symbolic4_indexed_eval_test PRIVATE symbolic4 unit)
 add_test(NAME symbolic4_indexed_eval_test COMMAND symbolic4_indexed_eval_test)
 set_tests_properties(symbolic4_indexed_eval_test PROPERTIES LABELS "symbolic4;indexed;indexed_eval")
 
+# indexed/gather.h tests
+add_executable(symbolic4_gather_test indexed/gather_test.cc)
+target_link_libraries(symbolic4_gather_test PRIVATE symbolic4 unit)
+add_test(NAME symbolic4_gather_test COMMAND symbolic4_gather_test)
+set_tests_properties(symbolic4_gather_test PROPERTIES LABELS "symbolic4;indexed;gather")
+
+# indexed/gather.h integration tests
+add_executable(symbolic4_gather_infer_test indexed/gather_infer_test.cc)
+target_link_libraries(symbolic4_gather_infer_test PRIVATE symbolic4 tempura::prob unit)
+add_test(NAME symbolic4_gather_infer_test COMMAND symbolic4_gather_infer_test)
+set_tests_properties(symbolic4_gather_infer_test PROPERTIES LABELS "symbolic4;indexed;gather;infer")
+
+# Minimal gather+infer test for debugging
+add_executable(symbolic4_gather_infer_minimal_test indexed/gather_infer_minimal_test.cc)
+target_link_libraries(symbolic4_gather_infer_minimal_test PRIVATE symbolic4 tempura::prob unit)
+add_test(NAME symbolic4_gather_infer_minimal_test COMMAND symbolic4_gather_infer_minimal_test)
+set_tests_properties(symbolic4_gather_infer_minimal_test PROPERTIES LABELS "symbolic4;indexed;gather;infer")
+
 
 # mcmc/posterior.h tests
 add_executable(symbolic4_posterior_test mcmc/posterior_test.cc)
@@ -208,7 +226,7 @@ target_link_libraries(symbolic4_plate_transforms_test PRIVATE symbolic4 tempura:
 add_test(NAME symbolic4_plate_transforms_test COMMAND symbolic4_plate_transforms_test)
 set_tests_properties(symbolic4_plate_transforms_test PROPERTIES LABELS "symbolic4;mcmc;plate_transforms")
 
-# mcmc/hmc_adapter.h tests
+# mcmc/hmc_adapter_test: HMC integration with PlateTransformedPosterior
 add_executable(symbolic4_hmc_adapter_test mcmc/hmc_adapter_test.cc)
 target_link_libraries(symbolic4_hmc_adapter_test PRIVATE symbolic4 tempura::bayes tempura::prob unit)
 add_test(NAME symbolic4_hmc_adapter_test COMMAND symbolic4_hmc_adapter_test)

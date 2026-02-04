@@ -14,7 +14,6 @@
 #include <vector>
 
 #include "matrix3/matrix.h"
-#include "symbolic4/constraints.h"
 #include "symbolic4/distributions/indexed_node.h"
 #include "symbolic4/distributions/random_var.h"
 #include "symbolic4/interpreter/eval.h"
@@ -145,14 +144,12 @@ class Samples {
  private:
   std::vector<ArrayType> draws_;
 
-  // Build bindings for draw i: bind each param's ConstrainedParamSymbol to
-  // the stored constrained value. ConstrainedParamSymbol::operator= applies
-  // the inverse transform, so evaluate() sees proper unconstrained values.
+  // Build bindings for draw i: bind each param's Free symbol to the stored
+  // constrained value. RandomVar expressions use plain Symbol<Id> atoms,
+  // so binding constrained values directly is correct.
   template <std::size_t... Is>
   auto drawBindings(std::size_t i, std::index_sequence<Is...>) const {
-    return BinderPack{
-        (ConstrainedParamSymbol<typename Params::id_type,
-                                typename Params::support_type>{} = draws_[i][Is])...};
+    return BinderPack{(typename Params::symbol_type{} = draws_[i][Is])...};
   }
 };
 
@@ -192,19 +189,16 @@ struct SymbolIndex {
 };
 
 // Get the symbol type used in the samples tuple for a parameter
-// - Scalar RandomVar: uses unconstrained_symbol_type (Atom<Id, Free>)
-// - IndexedRandomVar: uses symbol_type (IndexedSymbol<Id, Dims...>)
+// Both scalar and indexed params use symbol_type directly.
 template <typename P>
-using ParamSymbolType = std::conditional_t<
-    IsIndexedRandomVar<P>,
-    typename P::symbol_type,
-    typename P::unconstrained_symbol_type>;
+using ParamSymbolType = typename P::symbol_type;
 
 }  // namespace samples_detail
 
-template <typename SymbolsTuple, typename SpecsTuple>
+template <typename SymsTuple, typename SpecsTuple>
 class DynamicSamples {
  public:
+  using SymbolsTuple = SymsTuple;  // Expose for type introspection
   static constexpr std::size_t NumSlots = std::tuple_size_v<SymbolsTuple>;
 
   DynamicSamples(SymbolsTuple symbols, SpecsTuple specs, std::size_t state_dim)
@@ -227,8 +221,7 @@ class DynamicSamples {
   template <typename P>
     requires(IsRandomVar<P> && !IsIndexedRandomVar<P>)
   auto operator[](const P& /*p*/) const -> std::vector<double> {
-    // RandomVar stores unconstrained symbols (Atom<Id, Free>) in the samples
-    using SymType = typename P::unconstrained_symbol_type;
+    using SymType = typename P::symbol_type;
     constexpr std::size_t idx = samples_detail::SymbolIndex<SymType, SymbolsTuple>::value;
     static_assert(idx < NumSlots, "Parameter not found in DynamicSamples");
 

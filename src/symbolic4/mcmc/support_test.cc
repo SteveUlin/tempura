@@ -1,8 +1,5 @@
 #include "symbolic4/mcmc/support.h"
 
-#include <cmath>
-
-#include "symbolic4/distributions/joint.h"
 #include "unit.h"
 
 using namespace tempura;
@@ -86,84 +83,6 @@ auto main() -> int {
     auto t = autoTransform(positive(sigma));
 
     static_assert(is_positive_v<decltype(t)>);
-  };
-
-  // =========================================================================
-  // makeAutoTransformedPosterior
-  // =========================================================================
-
-  "makeAutoTransformedPosterior basic"_test = [] {
-    auto mu = normal(0.0, 10.0);
-    auto sigma = halfNormal(5.0);
-
-    auto joint = logProb(mu, sigma);
-    auto posterior = makeAutoTransformedPosterior(joint, mu, sigma).build();
-
-    // sigma gets positive transform, mu gets unconstrained
-    // Test with z values (unconstrained)
-    std::array<double, 2> z = {1.0, 0.5};  // mu_z, sigma_z
-
-    double lp = posterior.logProb(z);
-    expectTrue(std::isfinite(lp));
-
-    auto grad = posterior.gradient(z);
-    expectTrue(std::isfinite(grad[0]));
-    expectTrue(std::isfinite(grad[1]));
-  };
-
-  "makeAutoTransformedPosterior with observed"_test = [] {
-    auto mu = normal(0.0, 10.0);
-    auto sigma = halfNormal(5.0);
-    auto y = normal(mu, sigma);
-
-    auto joint = logProb(mu, sigma, y);
-    auto posterior =
-        makeAutoTransformedPosterior(joint, mu, sigma).observe(y = 3.5);
-
-    std::array<double, 2> z = {0.0, 0.0};  // mu_z=0, sigma_z=0 → sigma=1
-
-    double lp = posterior.logProb(z);
-    expectTrue(std::isfinite(lp));
-  };
-
-  "makeAutoTransformedPosterior beta-binomial"_test = [] {
-    auto theta = beta(2.0, 2.0);
-
-    auto joint = logProb(theta);
-    auto posterior = makeAutoTransformedPosterior(joint, theta).build();
-
-    // theta gets unitInterval transform
-    std::array<double, 1> z = {0.0};  // z=0 → theta=0.5
-
-    double lp = posterior.logProb(z);
-    expectTrue(std::isfinite(lp));
-
-    // Transform back to constrained space
-    double theta_val = posterior.transformOne<0>(z[0]);
-    expectNear(theta_val, 0.5, 1e-10);
-  };
-
-  "Comparison: manual vs auto transforms"_test = [] {
-    auto sigma = halfNormal(5.0);
-    auto mu = normal(0.0, sigma);
-
-    auto joint = logProb(sigma, mu);
-
-    // Manual specification
-    auto manual =
-        makeTransformedPosterior(joint, positive(sigma), unconstrained(mu))
-            .build();
-
-    // Auto inference
-    auto automatic = makeAutoTransformedPosterior(joint, sigma, mu).build();
-
-    // Both should give same results
-    std::array<double, 2> z = {0.5, 1.0};
-
-    double lp_manual = manual.logProb(z);
-    double lp_auto = automatic.logProb(z);
-
-    expectNear(lp_manual, lp_auto, 1e-10);
   };
 
   return TestRegistry::result();

@@ -1,9 +1,6 @@
 #pragma once
 
-#include <tuple>
-#include <type_traits>
-#include <utility>
-
+#include "meta/tuple.h"
 #include "symbolic4/core.h"
 #include "symbolic4/distributions/collect_log_prob.h"
 #include "symbolic4/distributions/random_var.h"
@@ -31,11 +28,7 @@ namespace tempura::symbolic4 {
 
 namespace discover_detail {
 
-// Helper: concatenate tuples
-template <typename A, typename B>
-constexpr auto tupleCat(A a, B b) {
-  return std::tuple_cat(a, b);
-}
+// Use meta::tupleCat directly - no wrapper needed
 
 // Forward declaration
 template <typename Visited, typename Observed, Symbolic E>
@@ -45,7 +38,7 @@ constexpr auto discoverFromExprImpl(Visited visited, Observed observed, E expr);
 // Base case: no children
 template <typename Visited, typename Observed, typename Accum>
 constexpr auto discoverFromChildrenImpl(Visited v, Observed, Accum a) {
-  return std::pair{a, v};
+  return Tuple{a, v};
 }
 
 // Recursive case: process first child, then rest
@@ -59,16 +52,16 @@ constexpr auto discoverFromChildrenImpl(Visited v, Observed observed, Accum a, C
 template <typename Visited, typename Observed, typename Op, SizeT... Is, typename... Args>
 constexpr auto discoverFromExpr(Visited visited, Observed observed,
                                  Expression<Op, Args...> expr, IndexSequence<Is...>) {
-  return discoverFromChildrenImpl(visited, observed, std::tuple<>{}, expr.template arg<Is>()...);
+  return discoverFromChildrenImpl(visited, observed, Tuple<>{}, expr.template arg<Is>()...);
 }
 
 // Check if an Id is in the observed set
 template <typename Id, typename ObservedSet>
-struct IsObservedId : std::false_type {};
+struct IsObservedId : FalseType {};
 
 template <typename Id, typename... ObsIds>
 struct IsObservedId<Id, IdSet<ObsIds...>> {
-  static constexpr bool value = (std::is_same_v<Id, ObsIds> || ...);
+  static constexpr bool value = (isSame<Id, ObsIds> || ...);
 };
 
 template <typename Id, typename ObservedSet>
@@ -84,7 +77,7 @@ constexpr auto discoverFromExprImpl(Visited visited, Observed observed, E expr) 
     using IdType = get_id_t<E>;
 
     if constexpr (id_set_contains_v<IdType, Visited>) {
-      return std::pair{std::tuple<>{}, visited};
+      return Tuple{Tuple<>{}, visited};
     } else if constexpr (is_observed_id_v<IdType, Observed>) {
       using NewVisited = id_set_insert_t<IdType, Visited>;
       using Dist = typename E::effect_type::dist_type;
@@ -101,31 +94,31 @@ constexpr auto discoverFromExprImpl(Visited visited, Observed observed, E expr) 
       auto rv_logprob = rv.logProb();
       auto [parents, final_visited] = discoverFromExprImpl(NewVisited{}, observed, rv_logprob);
 
-      return std::pair{std::tuple_cat(std::make_tuple(rv), parents), final_visited};
+      return Tuple{tupleCat(makeTuple(rv), parents), final_visited};
     }
   } else if constexpr (is_random_var_atom_v<E>) {
     using IdType = get_id_t<E>;
 
     if constexpr (id_set_contains_v<IdType, Visited>) {
-      return std::pair{std::tuple<>{}, visited};
+      return Tuple{Tuple<>{}, visited};
     } else if constexpr (is_observed_id_v<IdType, Observed>) {
       using NewVisited = id_set_insert_t<IdType, Visited>;
-      using DistType = std::decay_t<decltype(expr.effect_.dist_)>;
+      using DistType = DecayT<decltype(expr.effect_.dist_)>;
       auto rv = RandomVar<DistType, IdType>{expr.effect_.dist_};
       auto rv_logprob = rv.logProb();
       return discoverFromExprImpl(NewVisited{}, observed, rv_logprob);
     } else {
       using NewVisited = id_set_insert_t<IdType, Visited>;
-      using DistType = std::decay_t<decltype(expr.effect_.dist_)>;
+      using DistType = DecayT<decltype(expr.effect_.dist_)>;
 
       auto rv = RandomVar<DistType, IdType>{expr.effect_.dist_};
       auto rv_logprob = rv.logProb();
       auto [parents, final_visited] = discoverFromExprImpl(NewVisited{}, observed, rv_logprob);
 
-      return std::pair{std::tuple_cat(std::make_tuple(rv), parents), final_visited};
+      return Tuple{tupleCat(makeTuple(rv), parents), final_visited};
     }
   } else if constexpr (is_terminal_v<E>) {
-    return std::pair{std::tuple<>{}, visited};
+    return Tuple{Tuple<>{}, visited};
   } else {
     // Expression - recurse into children (variadic)
     return discoverFromExpr(visited, observed, expr, MakeIndexSequence<E::arity>{});

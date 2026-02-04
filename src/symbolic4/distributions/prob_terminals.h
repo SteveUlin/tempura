@@ -1,6 +1,5 @@
 #pragma once
 
-#include "symbolic4/constraints.h"
 #include "symbolic4/distributions/effects.h"
 #include "symbolic4/distributions/indexed_node.h"  // For make_indexed_symbol_t
 #include "symbolic4/terminals.h"
@@ -10,8 +9,11 @@
 // ============================================================================
 //
 // Extends BaseTerminals with handling for probabilistic effect types:
-//   - Atom<Id, Sample<D>>: look up by Id, apply constraint transform
+//   - Atom<Id, Sample<D>>: look up by Id via corresponding Free symbol
 //   - Atom<Id, IndexedSample<D, DimsList>>: look up via IndexedSymbol
+//
+// No constraint transforms here — the posterior's TransformPack pre-transforms
+// unconstrained→constrained before binding, so values are already constrained.
 //
 // Falls through to BaseTerminals for all other terminal types.
 //
@@ -33,14 +35,10 @@ struct ProbTerminals {
       using LookupSym = detail::make_indexed_symbol_t<IdType, DimsList>;
       return Interp::template lookupIndexedSymbol<LookupSym>(LookupSym{}, ctx);
     } else if constexpr (is_random_var_atom_v<T>) {
-      // Sample atom: Atom<Id, Sample<Dist>>
-      // Look up by Free symbol (Atom<Id, Free>) and apply constraint transform
-      double z = indexed_eval_detail::lookupByAtomId(term, ctx.scalars);
-
-      // Apply constraint transform based on distribution support
-      using Dist = get_distribution_t<typename T::effect_type>;
-      using Support = typename Dist::support_type;
-      return constraints::applyNumeric<Support>(z);
+      // Sample atom: look up by constructing the corresponding Free symbol.
+      // No constraint transform — TransformPack handles that externally.
+      using FreeSymbol = Atom<get_id_t<T>, Free>;
+      return ctx.scalars[FreeSymbol{}];
     } else {
       return BaseTerminals::eval<Interp>(term, ctx);
     }

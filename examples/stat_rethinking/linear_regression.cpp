@@ -91,7 +91,7 @@ auto main() -> int {
 
   auto samples = posterior.sample(
       HmcConfig{.epsilon = 0.01, .steps = 20, .warmup = 500, .draws = 1000},
-      BinderPack{alpha = 0.0, beta = 0.0, sigma = 0.0},  // init in unconstrained space
+      BinderPack{alpha = 0.0, beta = 0.0, sigma = 1.0},  // init in CONSTRAINED space
       rng);
 
   std::cout << std::format("Collected {} samples\n\n", samples.size());

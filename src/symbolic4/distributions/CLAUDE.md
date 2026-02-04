@@ -59,9 +59,10 @@ Support types drive automatic transform selection:
 
 `RandomVar<Dist, Id>` wraps a distribution with:
 - Unique identity `Id` (generated via `decltype([] {})`)
-- `sym()` - Returns `Atom<Id, Sample<Dist>>` carrying distribution info
-- `freeSym()` - Returns `Symbol<Id>` for bindings
+- `sym()` / `freeSym()` - Returns `Symbol<Id>` (plain Free atom) for bindings
+- `toSymbolic(rv)` - Returns `Atom<Id, Sample<Dist>>` for expression trees + auto-discovery
 - `logProb()` - Symbolic log-probability expression
+- `operator=` - Binds constrained values directly (`sigma = 2.0` → `Symbol<Id> = 2.0`)
 
 Factory functions generate unique IDs per call site:
 ```cpp

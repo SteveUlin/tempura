@@ -1,7 +1,6 @@
 #pragma once
 
 #include "symbolic4/core.h"
-#include "symbolic4/distributions/indexed_node.h"
 #include "symbolic4/distributions/random_var.h"
 #include "symbolic4/distributions/wrappers.h"
 #include "symbolic4/mcmc/transforms.h"
@@ -222,15 +221,6 @@ template <typename T>
   requires(Symbolic<T> && !IsRandomVar<T> && !is_transform_v<T>)
 constexpr auto autoTransform(T t) {
   return unconstrained(t);
-}
-
-// ============================================================================
-// makeAutoTransformedPosterior - Convenience with automatic transforms
-// ============================================================================
-
-template <Symbolic LogProbExpr, typename... Params>
-constexpr auto makeAutoTransformedPosterior(LogProbExpr lp, Params... params) {
-  return makeTransformedPosterior(lp, autoTransform(params)...);
 }
 
 }  // namespace tempura::symbolic4

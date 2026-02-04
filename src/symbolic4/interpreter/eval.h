@@ -1,6 +1,5 @@
 #pragma once
 
-#include "symbolic4/constraints.h"
 #include "symbolic4/core.h"
 #include "symbolic4/indexed/reduce_over.h"         // For is_reduce_over_v
 
@@ -58,13 +57,11 @@ constexpr auto evalImpl(E expr, Bindings& ctx) -> double {
   } else if constexpr (is_literal_v<E>) {
     return static_cast<double>(expr.effect_.value);
   } else if constexpr (is_random_var_atom_v<E>) {
-    // RandomVarSymbol<Id,D> - look up using the corresponding free symbol
+    // Sample<D> atom — look up by ID against Free symbol bindings.
+    // No constraint transform here: the posterior's TransformPack
+    // pre-transforms z→x before binding, so the value is already constrained.
     using FreeSymbol = Atom<get_id_t<E>, Free>;
-    double z = ctx[FreeSymbol{}];
-    // Apply constraint transform based on distribution support
-    using Dist = get_distribution_t<typename E::effect_type>;
-    using Support = typename Dist::support_type;
-    return constraints::applyNumeric<Support>(z);
+    return ctx[FreeSymbol{}];
   } else if constexpr (is_atom_v<E>) {
     return ctx[expr];
   } else if constexpr (is_expression_v<E>) {

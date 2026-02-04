@@ -8,14 +8,12 @@ This directory implements the "boring MCMC" vision: automatic parameter transfor
 
 | File | Purpose |
 |------|---------|
-| `transforms.h` | Parameter transforms (log, logit, Cholesky, simplex) |
-| `support.h` | Distribution → support → transform inference |
+| `transforms.h` | Parameter transform types (log, logit, Cholesky, simplex) |
+| `support.h` | Distribution → support → transform inference (`autoTransform`) |
+| `plate_transforms.h` | `PlateTransformedPosterior` — unified posterior for scalar + indexed params |
 | `posterior.h` | Simple posterior wrapper |
-| `hmc_adapter.h` | Integration with bayes/hmc.h |
-| `plate_transforms.h` | Transforms for indexed parameters, `PlateTransformedPosterior` |
 | `non_centered.h` | Hierarchical model reparameterization |
 | `likelihoods.h` | Numerically stable logistic functions |
-| `BINDING_API_PLAN.md` | Roadmap for binding-centric API |
 
 ### Planned Files (binding-centric API)
 
@@ -65,16 +63,19 @@ Mapping:
 - `UnitIntervalSupport` → `UnitInterval`
 - `SimplexSupport` → `Unconstrained` (TODO: full integration)
 
-## TransformedPosterior
+## PlateTransformedPosterior
 
-The key class for HMC sampling:
+The unified posterior class for HMC sampling, handling both scalar and indexed params:
 
 ```cpp
-auto posterior = makeTransformedPosterior(
-    logProb(mu, sigma, y),
-    unconstrained(mu),
-    positive(sigma)
-).observe(y = 3.5);
+// Via infer():
+auto posterior = infer(y).bind(x = data, y = obs);
+
+// Via model():
+auto posterior = model(mu, sigma, y).posterior().observe(y = 3.5).build();
+
+// Via explicit construction:
+auto posterior = makePlateTransformedPosterior(joint_lp, mu, sigma).observe(y = 3.5);
 ```
 
 Operations:
@@ -82,15 +83,17 @@ Operations:
 - `gradient(z)` - Chain-ruled gradients w.r.t. unconstrained parameters
 - `transform(z)` - Convert unconstrained → constrained
 - `inverse(x)` - Convert constrained → unconstrained
+- `logProbAt(BinderPack{mu=1.0, sigma=2.0})` - Symbolic lookup evaluation
+- `stateDim()` - Runtime state dimension (supports indexed params)
 
 ### Jacobian Correction
 
 In `logProb()`:
 ```cpp
-StateArray x = transform(z);           // z → x
-double lp = evaluate(log_prob_expr_, bindings);  // Model log-prob
-double log_jacobian = (transforms_[I].logJacobian(z[I]) + ...);
-return lp + log_jacobian;  // Add correction
+auto x = transform_pack_.transform(z);  // z → x (per-param transforms)
+double lp = evaluate(log_prob_expr_, bindings);
+double log_jacobian = transform_pack_.logJacobian(z);
+return lp + log_jacobian;
 ```
 
 ### Gradient Chain Rule
@@ -107,14 +110,16 @@ grad_z = grad_x * x + 1.0;  // dx/dz = x, d(log|J|)/dz = 1
 
 ## HMC Integration
 
-### Current (flat arrays, inconsistent)
+### Current
 
-`HMCAdapter` wraps `TransformedPosterior` for use with `bayes::makeHMC`:
+`PlateTransformedPosterior` integrates with `bayes::makeHMCDynamic` via lambdas:
 
 ```cpp
-auto adapter = makeHMCFromPosterior<double>(posterior, epsilon, n_steps);
-auto samples = adapter.sample(initial, n_samples, n_warmup, rng);
-// Returns samples in constrained space - but as flat arrays
+auto posterior = makePlateTransformedPosterior(joint_lp, mu, sigma).observe(y = 3.5);
+auto hmc = bayes::makeHMCDynamic(
+    [&](std::span<const double> z) { return posterior.logProb(z); },
+    [&](std::span<const double> z) { return posterior.gradient(z); },
+    epsilon, n_steps, posterior.stateDim());
 ```
 
 ### Target (binding-aware, unified)
@@ -162,16 +167,14 @@ ncp.addParamGrad(grad, j, d_theta, state);
 ncp.addZPriorGrad(grad, j, state);  // N(0,1) prior contribution
 ```
 
-## SimplePosterior vs TransformedPosterior
+## Posterior Types
 
-| Aspect | SimplePosterior | TransformedPosterior |
-|--------|-----------------|----------------------|
-| Space | Constrained only | Unconstrained (HMC) |
-| Jacobian | None | Automatic |
-| Use case | Verification, prior sampling | Production MCMC |
-| From | `infer()` | `model().posterior().build()` |
+| Type | Space | Jacobian | Use case |
+|------|-------|----------|----------|
+| `PlateTransformedPosterior` | Unconstrained (HMC) | Automatic | Production MCMC — handles both scalar and indexed params |
+| `RawPosterior` (in `infer.h`) | Constrained only | None | Testing/verification only (`inferRaw()`) |
 
-**Note**: `infer()` now returns `PlateTransformedPosteriorBuilder` which includes transforms. The `SimplePosterior` is only used by `inferRaw()` for testing.
+**Note**: The old `TransformedPosterior` (scalar-only, fixed-size `std::array` state) has been deleted. `PlateTransformedPosterior` is now the sole production posterior type, used by both `infer()`, `inferExplicit()`, and `model().posterior().build()`.
 
 ## Adding New Transforms
 
@@ -194,10 +197,12 @@ ncp.addZPriorGrad(grad, j, state);  // N(0,1) prior contribution
    struct IsMyTransform<MyTransform<P>> : std::true_type {};
    ```
 
-3. Add chain rule case in `TransformedPosterior::chainRuleGrad()`:
+3. Add `chainRuleGrad()` method to the transform struct:
    ```cpp
-   } else if constexpr (is_my_transform_v<Transform>) {
-     // Your gradient formula
+   auto chainRuleGrad(double grad_x, double z) const -> double {
+     double dx_dz = ...;  // Derivative of forward transform
+     double dlogJ_dz = ...;  // Derivative of log-Jacobian
+     return grad_x * dx_dz + dlogJ_dz;
    }
    ```
 

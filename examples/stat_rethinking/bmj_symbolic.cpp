@@ -17,8 +17,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <fstream>
-#include <numeric>
 #include <print>
 #include <random>
 #include <string>
@@ -26,7 +26,6 @@
 
 #include "csv.h"
 #include "symbolic4/indexed/data.h"
-#include "symbolic4/indexed/indexed.h"
 #include "symbolic4/infer.h"
 #include "symbolic4/mcmc/samples.h"
 #include "symbolic4/mcmc/sampler.h"
@@ -82,13 +81,9 @@ struct Summary {
   double mean, lo, hi;
 };
 
-auto summarize(std::vector<double> samples) -> Summary {
-  double mean_val = std::accumulate(samples.begin(), samples.end(), 0.0) /
-                    static_cast<double>(samples.size());
-  std::ranges::sort(samples);
-  auto lo_idx = static_cast<std::size_t>(0.055 * static_cast<double>(samples.size() - 1));
-  auto hi_idx = static_cast<std::size_t>(0.945 * static_cast<double>(samples.size() - 1));
-  return {mean_val, samples[lo_idx], samples[hi_idx]};
+// Uses mean() and quantile() from symbolic4/mcmc/samples.h
+auto summarize(const std::vector<double>& samples) -> Summary {
+  return {mean(samples), quantile(samples, 0.055), quantile(samples, 0.945)};
 }
 
 auto invLogit(double x) -> double { return 1.0 / (1.0 + std::exp(-x)); }
@@ -150,11 +145,12 @@ Model: logit(p[L]) = a + sigma * z_b[L]
   auto p = 1_c / (1_c + exp(-(a + sigma * z_b)));
   auto k = plate<Countries>(binomial(n, p));
 
-  // Build posterior - auto-discovers a, sigma, z_b from k's expression tree
-  auto posterior = infer(k)
+  // Build posterior - explicitly list params since auto-discovery has issues
+  // with mixed scalar + indexed params (see discoverParams in discover_params.h)
+  auto posterior = inferExplicit(a, sigma, z_b, k)
       .bind(n = indexed(n_obs), k = indexed(k_obs));
 
-  std::println("Model built with infer() + bind()");
+  std::println("Model built with inferExplicit() + bind()");
   std::println("  State dimension: {} (2 scalar + {} indexed)",
                posterior.stateDim(), kNumCountries);
 
@@ -163,7 +159,9 @@ Model: logit(p[L]) = a + sigma * z_b[L]
   // --------------------------------------------------------------------------
   std::println("\nRunning HMC: warmup 500, draws 2000...");
 
-  // Initialize: a and sigma in unconstrained space, z_b values at 0 (N(0,1) space)
+  // Init values in CONSTRAINED space — posterior applies inverse transforms internally.
+  // For sigma (Positive support): user passes 0.5, posterior uses log(0.5) internally.
+  // For z_b (Real support): identity transform, so 0.0 stays 0.0.
   std::vector<double> z_b_init(kNumCountries, 0.0);
 
   auto samples = posterior.sample(
@@ -176,16 +174,22 @@ Model: logit(p[L]) = a + sigma * z_b[L]
   // --------------------------------------------------------------------------
   // Posterior summaries using symbol-indexed access
   // --------------------------------------------------------------------------
+  // samples[param] provides type-safe access to draws for each parameter:
+  // - samples[a]     → vector<double> of all a draws
+  // - samples[sigma] → vector<double> of all sigma draws
+  // - samples[z_b]   → DynamicDense matrix (draws × countries)
 
-  // Access scalar params - returns vector<double>
+  // Extract draws for scalar parameters
   auto a_draws = samples[a];
   auto sigma_draws = samples[sigma];
+  std::size_t num_draws = a_draws.size();
 
   // Samples are already in constrained space (transforms applied during sampling)
   // sigma_draws are exp(z), a_draws are unconstrained (Real support)
   std::vector<double> global_mean_samples;
-  for (std::size_t i = 0; i < a_draws.size(); ++i) {
-    global_mean_samples.push_back(invLogit(a_draws[i]));
+  global_mean_samples.reserve(num_draws);
+  for (double a_val : a_draws) {
+    global_mean_samples.push_back(invLogit(a_val));
   }
 
   auto global_summary = summarize(global_mean_samples);
@@ -197,17 +201,19 @@ Model: logit(p[L]) = a + sigma * z_b[L]
   std::println("Between-country SD: sigma = {:.3f} [{:.3f}, {:.3f}]\n",
                sigma_summary.mean, sigma_summary.lo, sigma_summary.hi);
 
-  // Access indexed params - z_b are the standardized effects (z-scores)
-  auto z_b_draws = samples[z_b];  // matrix: num_draws × num_countries
+  // Extract indexed parameter draws
+  auto z_b_draws = samples[z_b];  // matrix: draws × countries
 
   // Compute country-specific probabilities
   // b[L] = sigma * z_b[L], so p[L] = logistic(a + sigma * z_b[L])
   std::vector<std::vector<double>> p_samples(kNumCountries);
-  for (std::size_t draw = 0; draw < samples.size(); ++draw) {
+  for (std::size_t draw = 0; draw < num_draws; ++draw) {
+    double a_val = a_draws[draw];
     double sigma_val = sigma_draws[draw];
     for (std::size_t country = 0; country < kNumCountries; ++country) {
-      double b_val = sigma_val * z_b_draws[draw, country];
-      double prob = invLogit(a_draws[draw] + b_val);
+      double z_b_val = z_b_draws[draw, country];
+      double b_val = sigma_val * z_b_val;
+      double prob = invLogit(a_val + b_val);
       p_samples[country].push_back(prob);
     }
   }
