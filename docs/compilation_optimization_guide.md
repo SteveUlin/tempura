@@ -508,7 +508,42 @@ g++ -ftime-report -c model_test.cc 2>&1 | grep -E "(TOTAL|template|phase)"
 2. **Template explosion** — Complex distribution/transform types
 3. **Optimizer overload** — 4.2 GB of RAM processing inline expansions
 
-### Recommended Fixes
+### Experimental Results (2026-02)
+
+We tested several optimization strategies on `model_test`:
+
+| Strategy | Result | Notes |
+|----------|--------|-------|
+| **Disable LTO** | ❌ Worse (62s vs 56s) | LTO helps by deferring codegen to link time (10% faster) |
+| **-O0** | ❌ Worse (72s vs 56s) | Disables LTO's deferred codegen, forces immediate work |
+| **-O1** | ⚠️ Minimal (~3%) | Not worth the complexity |
+| **Precompiled Headers** | ❌ Worse (61s vs 56s) | PCH overhead > parsing benefit |
+| **Extern templates** | ❌ N/A | Not viable — each expression creates unique types |
+
+**Key insight:** The "optimization" phase (71%) is dominated by **code generation**, not traditional optimizer passes. LTO actually **helps** by batching codegen at link time. Strategies that disable or work around LTO make things worse.
+
+**LTO timing breakdown:**
+| Config | Compile | Link | Total |
+|--------|---------|------|-------|
+| With LTO | ~52s | 4.3s | **56.6s** |
+| Without LTO | ~61s | 1.1s | **62.5s** |
+
+Counterintuitively, LTO is 10% faster overall because deferred codegen at link-time is more efficient.
+
+**Why most strategies don't work for expression templates:**
+- Each test expression creates a unique type (`Expression<AddOp, Constant<1.0>, Constant<2.0>>`)
+- These types are specific to each test — nothing to share
+- Forward declarations only help parsing (25%), not codegen (71%)
+- PCH only helps parsing, not template instantiation
+
+**What might actually help:**
+1. **Type erasure** — trade compile time for runtime overhead (against design philosophy)
+2. **Test consolidation** — fewer tests = fewer unique types (reduces coverage)
+3. **ccache** — caches compile results for incremental development
+4. **Parallel builds** — distribute compile time across cores (already using)
+5. **Faster hardware** — more RAM, faster CPU (the honest answer)
+
+### Original Recommendations (may not work as expected)
 
 | Fix | Effort | Expected Improvement |
 |-----|--------|---------------------|
@@ -516,6 +551,8 @@ g++ -ftime-report -c model_test.cc 2>&1 | grep -E "(TOTAL|template|phase)"
 | Split `plate_transforms.h` | 6-8 hours | 20% |
 | Extern templates for `evaluate<>` | 4-5 hours | 10-15% |
 | Precompiled headers | 1 hour | 15% |
+
+**Note:** These estimates were theoretical. Actual testing showed minimal-to-negative impact for expression template codebases.
 
 ---
 
