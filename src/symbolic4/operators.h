@@ -29,7 +29,7 @@
 // 3. The Symbolic concept constrains all operators.
 //    Only types derived from SymbolicTag can be combined. This prevents
 //    accidental mixing of symbolic and non-symbolic types without explicit
-//    conversion (use lit(value) or Constant<V>{} to lift scalars).
+//    conversion (use Constant<V>{} or _c suffix to lift compile-time scalars).
 //
 // 4. Mathematical constants (π, e) are nullary expressions.
 //    Expression<PiOp> is the symbolic representation of π. During evaluation,
@@ -427,24 +427,5 @@ inline constexpr Expression<EOp> e{};
 
 template <auto V>
 inline constexpr Constant<V> c{};
-
-// ============================================================================
-// Literal Constructor
-// ============================================================================
-//
-// lit(value) creates a Literal from a runtime value.
-// Use this when you have a value that isn't known at compile time.
-//
-// Example:
-//   double runtime_value = read_from_file();
-//   auto expr = x + lit(runtime_value);  // Embeds runtime_value in the expression
-//
-// Note: Unlike Constant<V>, Literal carries its value at runtime in the
-// Embedded effect. The expression type doesn't encode the value.
-
-template <typename T>
-constexpr auto lit(T value) {
-  return Literal<T>{Embedded<T>{value}};
-}
 
 }  // namespace tempura::symbolic4

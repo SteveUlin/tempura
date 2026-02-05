@@ -8,6 +8,7 @@ This directory provides the probabilistic layer: distributions, random variables
 
 | File | Purpose |
 |------|---------|
+| `dist_base.h` | CRTP base class for all distributions |
 | `wrappers.h` | Distribution structs (NormalDist, BetaDist, etc.) |
 | `log_prob.h` | Symbolic log-probability functions |
 | `random_var.h` | RandomVar abstraction and factory functions |
@@ -15,19 +16,32 @@ This directory provides the probabilistic layer: distributions, random variables
 | `joint.h` | Manual log-prob composition |
 | `sample.h` | Sampling utilities |
 
-## Distribution Pattern
+## Distribution Pattern (CRTP Base)
 
-Each distribution is a struct with:
+All distributions inherit from `DistBase<Derived, Support, Params...>` (defined in
+`dist_base.h`), which provides:
+- `CompressedTuple<Params...> params_` storage with `[[no_unique_address]]`
+- `logProbFor(x)` — unpacks params and delegates to `Derived::logProbImpl`
+- `unnormalizedLogProbFor(x)` — same for unnormalized variant
+- `param<I>()` — typed access to parameter at index I
+
+Each distribution provides named accessors and static `logProbImpl`/`unnormalizedLogProbImpl`:
 ```cpp
 template <Symbolic Mu, Symbolic Sigma>
-struct NormalDist {
-  using support_type = support::Real;  // or PositiveReal, Unit
-  Mu mu_;
-  Sigma sigma_;
+struct NormalDist : DistBase<NormalDist<Mu, Sigma>, support::Real, Mu, Sigma> {
+  using Base = DistBase<NormalDist, support::Real, Mu, Sigma>;
+  using Base::Base;
+
+  constexpr auto mu() const { return Base::template param<0>(); }
+  constexpr auto sigma() const { return Base::template param<1>(); }
 
   template <Symbolic X>
-  constexpr auto logProbFor(X x) const {
-    return logNormal(x, mu_, sigma_);
+  static constexpr auto logProbImpl(X x, auto mu, auto sigma) {
+    return logNormal(x, mu, sigma);
+  }
+  template <Symbolic X>
+  static constexpr auto unnormalizedLogProbImpl(X x, auto mu, auto sigma) {
+    return unnormalizedLogNormal(x, mu, sigma);
   }
 };
 ```
@@ -36,6 +50,9 @@ Support types drive automatic transform selection:
 - `Real` → unconstrained
 - `PositiveReal` → log transform
 - `Unit` → logit transform
+
+**Note:** Parameters are accessed via named methods (`dist.mu()`, `dist.sigma()`),
+not direct field access. Direct access to `params_` is possible but discouraged.
 
 ## Available Distributions
 
@@ -66,8 +83,8 @@ Support types drive automatic transform selection:
 
 Factory functions generate unique IDs per call site:
 ```cpp
-auto mu = normal(0.0, 10.0);   // Each call gets unique Id
-auto sigma = halfNormal(5.0);
+auto mu = normal(0_c, 10_c);   // Each call gets unique Id
+auto sigma = halfNormal(5_c);
 auto y = normal(mu, sigma);    // mu.sym() and sigma.sym() appear in y's dist
 ```
 
@@ -108,19 +125,31 @@ auto samples = samplePlate(y, 1000, rng, mu = 0.5, sigma = 1.0);
 
 ## Adding New Distributions
 
-1. Add wrapper struct to `wrappers.h`:
+1. Add wrapper struct to `wrappers.h` using the CRTP base:
    ```cpp
    template <Symbolic Shape, Symbolic Rate>
-   struct InverseGammaDist {
-     using support_type = support::PositiveReal;
-     Shape shape_;
-     Rate rate_;
+   struct InverseGammaDist
+       : DistBase<InverseGammaDist<Shape, Rate>, support::PositiveReal, Shape, Rate> {
+     using Base = DistBase<InverseGammaDist, support::PositiveReal, Shape, Rate>;
+     using Base::Base;
+
+     constexpr auto shape() const { return Base::template param<0>(); }
+     constexpr auto rate() const { return Base::template param<1>(); }
 
      template <Symbolic X>
-     constexpr auto logProbFor(X x) const {
-       return logInverseGamma(x, shape_, rate_);
+     static constexpr auto logProbImpl(X x, auto shape, auto rate) {
+       return logInverseGamma(x, shape, rate);
+     }
+     template <Symbolic X>
+     static constexpr auto unnormalizedLogProbImpl(X x, auto shape, auto rate) {
+       return unnormalizedLogInverseGamma(x, shape, rate);
      }
    };
+
+   template <typename Shape, typename Rate>
+   InverseGammaDist(Shape, Rate)
+       -> InverseGammaDist<decltype(toSymbolic(std::declval<Shape>())),
+                           decltype(toSymbolic(std::declval<Rate>()))>;
    ```
 
 2. Add log-prob function to `log_prob.h`:

@@ -19,7 +19,6 @@
 //
 //   1. At terminals:
 //      - Constants/Fractions: return their compile-time value
-//      - Literals: return their embedded runtime value
 //      - Symbols: look up in bindings and return the bound value
 //
 //   2. At expressions:
@@ -54,8 +53,6 @@ constexpr auto evalImpl(E expr, Bindings& ctx) -> double {
     return static_cast<double>(E::value);
   } else if constexpr (is_fraction_v<E>) {
     return E::value;
-  } else if constexpr (is_literal_v<E>) {
-    return static_cast<double>(expr.effect_.value);
   } else if constexpr (is_random_var_atom_v<E>) {
     // Sample<D> atom — look up by ID against Free symbol bindings.
     // No constraint transform here: the posterior's TransformPack

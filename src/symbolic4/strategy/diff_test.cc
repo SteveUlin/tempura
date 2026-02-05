@@ -1,6 +1,8 @@
 // Tests for pattern-matching based differentiation
 #include "symbolic4/strategy/diff.h"
 
+#include "symbolic4/constants.h"
+#include "symbolic4/operators.h"
 #include "unit.h"
 
 using namespace tempura;
@@ -94,16 +96,8 @@ auto main() -> int {
     static_assert(match(digamma(x), differentiate(lgamma(x), x)));
   };
 
-  // =========================================================================
-  // LITERAL PRESERVATION
-  // =========================================================================
-
-  "literals preserved"_test = [&] {
-    auto a = lit(2.5);
-    auto result = differentiate(a * x, x);
-    static_assert(is_literal_v<decltype(result)>);
-    expectNear(result.effect_.value, 2.5);
-  };
+  // Note: Literal<T> tests removed — info-domain diff can't round-trip
+  // runtime embedded values. Use Constant<V> instead.
 
   return TestRegistry::result();
 }

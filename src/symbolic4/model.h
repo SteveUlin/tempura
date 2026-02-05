@@ -22,8 +22,8 @@
 //   5. Support for both scalar RVs and plates (indexed RVs)
 //
 // Usage (scalar only):
-//   auto mu = normal(lit(0), lit(10));
-//   auto sigma = halfNormal(lit(5));
+//   auto mu = normal(0_c, 10_c);
+//   auto sigma = halfNormal(5_c);
 //   auto y = normal(mu, sigma);
 //   auto m = model(mu, sigma, y);
 //
@@ -32,8 +32,8 @@
 //       .build();
 //
 // Usage (with plates):
-//   auto alpha = gamma(lit(2.0), lit(0.1));
-//   auto beta_param = gamma(lit(2.0), lit(0.1));
+//   auto alpha = gamma(2.0_c, 0.1_c);
+//   auto beta_param = gamma(2.0_c, 0.1_c);
 //   auto theta = plate<Countries>(beta(alpha, beta_param));
 //   auto m = model(alpha, beta_param, theta);
 //

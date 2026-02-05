@@ -17,8 +17,8 @@ using namespace tempura::symbolic4;
 
 auto main() -> int {
   "Model basic construction"_test = [] {
-    auto mu = normal(lit(0.0), lit(10.0));
-    auto sigma = halfNormal(lit(5.0));
+    auto mu = normal(0.0_c, 10.0_c);
+    auto sigma = halfNormal(5.0_c);
     auto m = model(mu, sigma);
 
     // Check we can access RVs
@@ -33,8 +33,8 @@ auto main() -> int {
   };
 
   "Model with hierarchical structure"_test = [] {
-    auto mu = normal(lit(0.0), lit(10.0));
-    auto sigma = halfNormal(lit(5.0));
+    auto mu = normal(0.0_c, 10.0_c);
+    auto sigma = halfNormal(5.0_c);
     auto y = normal(mu, sigma);
     auto m = model(mu, sigma, y);
 
@@ -45,8 +45,8 @@ auto main() -> int {
   };
 
   "Model posterior builder - no observations"_test = [] {
-    auto mu = normal(lit(0.0), lit(10.0));
-    auto sigma = halfNormal(lit(5.0));
+    auto mu = normal(0.0_c, 10.0_c);
+    auto sigma = halfNormal(5.0_c);
     auto m = model(mu, sigma);
 
     auto posterior = m.posterior().build();
@@ -63,8 +63,8 @@ auto main() -> int {
   };
 
   "Model posterior builder - with observation"_test = [] {
-    auto mu = normal(lit(0.0), lit(10.0));
-    auto sigma = halfNormal(lit(5.0));
+    auto mu = normal(0.0_c, 10.0_c);
+    auto sigma = halfNormal(5.0_c);
     auto y = normal(mu, sigma);
     auto m = model(mu, sigma, y);
 
@@ -76,8 +76,8 @@ auto main() -> int {
   };
 
   "Model params extraction"_test = [] {
-    auto mu = normal(lit(0.0), lit(10.0));
-    auto sigma = halfNormal(lit(5.0));
+    auto mu = normal(0.0_c, 10.0_c);
+    auto sigma = halfNormal(5.0_c);
     auto m = model(mu, sigma);
 
     auto [mu_sym, sigma_sym] = m.params();
@@ -89,8 +89,8 @@ auto main() -> int {
   };
 
   "Model factory function"_test = [] {
-    auto mu = normal(lit(0.0), lit(1.0));
-    auto sigma = halfNormal(lit(1.0));
+    auto mu = normal(0.0_c, 1.0_c);
+    auto sigma = halfNormal(1.0_c);
 
     // Both syntaxes should work
     auto m1 = Model{mu, sigma};
@@ -110,9 +110,9 @@ auto main() -> int {
     // - HalfNormal -> positive (log/exp)
     // - Beta -> unit interval (logit/sigmoid)
 
-    auto mu = normal(lit(0.0), lit(10.0));
-    auto sigma = halfNormal(lit(5.0));
-    auto p = beta(lit(2.0), lit(2.0));
+    auto mu = normal(0.0_c, 10.0_c);
+    auto sigma = halfNormal(5.0_c);
+    auto p = beta(2.0_c, 2.0_c);
     auto m = model(mu, sigma, p);
 
     auto posterior = m.posterior().build();
@@ -134,8 +134,8 @@ auto main() -> int {
   "Model detects plates"_test = [] {
     struct Countries {};
 
-    auto alpha = gamma(lit(2.0), lit(0.1));
-    auto theta = plate<Countries>(beta(alpha, lit(3.0)));
+    auto alpha = gamma(2.0_c, 0.1_c);
+    auto theta = plate<Countries>(beta(alpha, 3.0_c));
 
     // Scalar-only model
     auto m1 = model(alpha);
@@ -149,8 +149,8 @@ auto main() -> int {
   "Model with plate - posterior builder"_test = [] {
     struct Countries {};
 
-    auto alpha = gamma(lit(2.0), lit(0.1));
-    auto beta_param = gamma(lit(2.0), lit(0.1));
+    auto alpha = gamma(2.0_c, 0.1_c);
+    auto beta_param = gamma(2.0_c, 0.1_c);
     auto theta = plate<Countries>(beta(alpha, beta_param));
 
     auto m = model(alpha, beta_param, theta);
@@ -181,8 +181,8 @@ auto main() -> int {
   "Model with plate - transform"_test = [] {
     struct Countries {};
 
-    auto alpha = gamma(lit(2.0), lit(0.1));
-    auto theta = plate<Countries>(beta(alpha, lit(3.0)));
+    auto alpha = gamma(2.0_c, 0.1_c);
+    auto theta = plate<Countries>(beta(alpha, 3.0_c));
 
     auto m = model(alpha, theta);
     auto posterior = m.posterior()

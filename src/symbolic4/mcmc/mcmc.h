@@ -13,8 +13,8 @@
 //   using namespace tempura::symbolic4;
 //
 //   // Define model
-//   auto mu = normal(lit(0.0), lit(5.0));
-//   auto sigma = halfNormal(lit(2.0));
+//   auto mu = normal(0.0_c, 5.0_c);
+//   auto sigma = halfNormal(2.0_c);
 //   auto y = normal(mu, sigma);
 //
 //   // Create posterior

@@ -15,7 +15,7 @@ auto main() -> int {
   // =========================================================================
 
   "infer returns builder with observe and build"_test = [] {
-    auto mu = normal(lit(0.0), lit(1.0));
+    auto mu = normal(0.0_c, 1.0_c);
 
     // infer() returns a builder
     auto builder = infer(mu);
@@ -35,7 +35,7 @@ auto main() -> int {
   };
 
   "infer with positive parameter includes Jacobian"_test = [] {
-    auto sigma = halfNormal(lit(2.0));
+    auto sigma = halfNormal(2.0_c);
     auto posterior = infer(sigma).build();
 
     // HalfNormal has positive support → exp transform
@@ -56,7 +56,7 @@ auto main() -> int {
   };
 
   "infer gradient includes chain rule"_test = [] {
-    auto sigma = halfNormal(lit(2.0));
+    auto sigma = halfNormal(2.0_c);
     auto posterior = infer(sigma).build();
 
     // At z = 0, sigma = exp(0) = 1
@@ -74,7 +74,7 @@ auto main() -> int {
   };
 
   "infer with unit interval parameter"_test = [] {
-    auto p = beta(lit(2.0), lit(2.0));
+    auto p = beta(2.0_c, 2.0_c);
     auto posterior = infer(p).build();
 
     // Beta has (0,1) support → sigmoid transform
@@ -98,8 +98,8 @@ auto main() -> int {
   // =========================================================================
 
   "infer with hierarchical model"_test = [] {
-    auto mu = normal(lit(0.0), lit(10.0));
-    auto sigma = halfNormal(lit(5.0));
+    auto mu = normal(0.0_c, 10.0_c);
+    auto sigma = halfNormal(5.0_c);
     auto y = normal(mu, sigma);
 
     auto posterior = infer(mu, sigma, y).build();
@@ -116,8 +116,8 @@ auto main() -> int {
   };
 
   "infer with observation"_test = [] {
-    auto mu = normal(lit(0.0), lit(10.0));
-    auto sigma = halfNormal(lit(5.0));
+    auto mu = normal(0.0_c, 10.0_c);
+    auto sigma = halfNormal(5.0_c);
     auto y = normal(mu, sigma);
 
     // Observe y = 3.5 - observe() returns final posterior, no build() needed
@@ -134,8 +134,8 @@ auto main() -> int {
   // =========================================================================
 
   "infer transform and inverse are consistent"_test = [] {
-    auto mu = normal(lit(0.0), lit(10.0));
-    auto sigma = halfNormal(lit(5.0));
+    auto mu = normal(0.0_c, 10.0_c);
+    auto sigma = halfNormal(5.0_c);
     auto posterior = infer(mu, sigma).build();
 
     // z → x → z should round-trip
@@ -157,7 +157,7 @@ auto main() -> int {
   // =========================================================================
 
   "inferRaw operates in constrained space"_test = [] {
-    auto mu = normal(lit(0.0), lit(1.0));
+    auto mu = normal(0.0_c, 1.0_c);
     auto posterior = inferRaw(mu);
 
     // No transform, no Jacobian - just raw log-prob
@@ -167,7 +167,7 @@ auto main() -> int {
   };
 
   "inferRaw gradient in constrained space"_test = [] {
-    auto mu = normal(lit(0.0), lit(1.0));
+    auto mu = normal(0.0_c, 1.0_c);
     auto posterior = inferRaw(mu);
 
     // d/dmu[-0.5 * mu²] = -mu = -0.5
@@ -176,8 +176,8 @@ auto main() -> int {
   };
 
   "inferRaw with hierarchical model"_test = [] {
-    auto mu = normal(lit(0.0), lit(10.0));
-    auto sigma = halfNormal(lit(5.0));
+    auto mu = normal(0.0_c, 10.0_c);
+    auto sigma = halfNormal(5.0_c);
     auto y = normal(mu, sigma);
 
     auto posterior = inferRaw(mu, sigma, y);
@@ -196,8 +196,8 @@ auto main() -> int {
   // =========================================================================
 
   "infer produces consistent transforms"_test = [] {
-    auto mu = normal(lit(0.0), lit(10.0));
-    auto sigma = halfNormal(lit(5.0));
+    auto mu = normal(0.0_c, 10.0_c);
+    auto sigma = halfNormal(5.0_c);
 
     auto posterior = infer(mu, sigma).build();
 
@@ -226,9 +226,9 @@ auto main() -> int {
   };
 
   "infer with three params produces correct transforms"_test = [] {
-    auto mu = normal(lit(0.0), lit(10.0));
-    auto sigma = halfNormal(lit(5.0));
-    auto p = beta(lit(2.0), lit(2.0));
+    auto mu = normal(0.0_c, 10.0_c);
+    auto sigma = halfNormal(5.0_c);
+    auto p = beta(2.0_c, 2.0_c);
 
     auto posterior = infer(mu, sigma, p).build();
 

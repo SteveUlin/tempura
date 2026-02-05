@@ -113,8 +113,8 @@ auto main() -> int {
     struct XId {};
     using Vec = VectorSymbol<XId, 2>;
 
-    auto mu = std::tuple{lit(0.0), lit(0.0)};
-    auto sigma = std::tuple{lit(1.0), lit(1.0)};
+    auto mu = std::tuple{0.0_c, 0.0_c};
+    auto sigma = std::tuple{1.0_c, 1.0_c};
     auto dist = diagMvNormal(mu, sigma);
 
     auto lp = dist.logProbFor(Vec{});
@@ -128,8 +128,8 @@ auto main() -> int {
     using Vec2 = VectorSymbol<XId, 2>;
     using Vec3 = VectorSymbol<XId, 3>;
 
-    auto mu2 = std::tuple{lit(0.0), lit(0.0)};
-    auto sigma2 = std::tuple{lit(1.0), lit(1.0)};
+    auto mu2 = std::tuple{0.0_c, 0.0_c};
+    auto sigma2 = std::tuple{1.0_c, 1.0_c};
     auto dist2 = diagMvNormal(mu2, sigma2);
 
     // This should work
@@ -171,7 +171,7 @@ auto main() -> int {
   };
 
   "mvNormalSigma creates tuple"_test = [] {
-    auto sigma = mvNormalSigma(lit(1.0), lit(2.0), lit(3.0));
+    auto sigma = mvNormalSigma(1.0_c, 2.0_c, 3.0_c);
     static_assert(std::tuple_size_v<decltype(sigma)> == 3);
   };
 
@@ -204,7 +204,7 @@ auto main() -> int {
     auto x0 = Vec::component<0>();
 
     // Mix vector component with scalar
-    auto expr = a * x0 + lit(1.0);
+    auto expr = a * x0 + 1.0_c;
 
     static_assert(Symbolic<decltype(expr)>);
   };

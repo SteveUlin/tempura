@@ -3,7 +3,6 @@
 #include <type_traits>
 
 #include "meta/tags.h"
-#include "meta/type_list.h"
 #include "meta/utility.h"
 #include "symbolic4/compressed.h"
 
@@ -25,12 +24,13 @@
 //
 // Core Abstraction:
 //   Everything in an expression tree is either:
-//     - Atom<Id, Effect>: A leaf node (symbol, constant, literal)
+//     - Atom<Id, Effect>: A leaf node (symbol, random variable, deterministic)
+//     - Constant<V>, Fraction<N,D>: Compile-time constant leaves
 //     - Expression<Op, Args...>: An internal node (addition, multiplication, etc.)
 //
 //   The "Effect" determines how an Atom behaves during evaluation:
 //     - Free: Variable - look up value in bindings (Symbol<X>)
-//     - Embedded<T>: Embedded value - the atom carries its value (Literal<double>)
+//     - (deleted: Embedded<T> — replaced by Constant<V> + binders)
 //     - Sample<D>: Random variable - sample from distribution D
 //     - Compute<E>: Deterministic function - compute from expression E
 //
@@ -70,25 +70,17 @@ class TypeValueBinder;
 //   Free       - A free variable. Value must be provided at evaluation time.
 //                Example: Symbol<struct X> x; evaluate(x + 1, x = 5.0);
 //
-//   Embedded   - Value is baked into the atom. No lookup needed.
-//                Example: Literal<double> lit{3.14}; // carries 3.14
-//
 //   Compute    - Deterministic function of other variables.
 //                Example: DeterministicVar<struct Y, E> y; // y = f(x)
 //
 // Domain-specific effects (e.g., Sample<D>, IndexedSample<D, Dims>) are defined
 // in their respective domain headers (see distributions/effects.h).
+//
+// Compile-time constants use Constant<V> (no effect, just NTTP).
+// Runtime data uses Symbol + binding at eval time.
 
 // Free variable - look up value in bindings at evaluation time
 struct Free {};
-
-// Value embedded directly in the atom (no lookup needed)
-template <typename T>
-struct Embedded {
-  T value;
-  constexpr Embedded() = default;
-  constexpr Embedded(T v) : value{v} {}
-};
 
 // Compute from expression E (deterministic transformation)
 template <typename E>
@@ -108,13 +100,12 @@ struct Compute {
 //   Id     - A unique type that identifies this atom. Used for:
 //            - Type-safe bindings (x = 5 only binds to x, not y)
 //            - DAG representation (detecting shared subexpressions)
-//            For anonymous atoms (like Literal), Id can be void.
+//            Id can be void for anonymous atoms.
 //
-//   Effect - How this atom gets its value (Free, Embedded, Compute, or domain-specific)
+//   Effect - How this atom gets its value (Free, Compute, or domain-specific)
 //
 // The combination of Id + Effect gives us all leaf types:
 //   Symbol<X>        = Atom<X, Free>           - Variable, needs binding
-//   Literal<T>       = Atom<void, Embedded<T>> - Embedded runtime value
 //   DeterministicVar = Atom<X, Compute<E>>     - Computed from expression
 //   Atom<X, Sample<D>>                         - Random variable ~ D (domain effect)
 //
@@ -171,17 +162,6 @@ struct Atom : SymbolicTag {
 // The lambda trick (decltype([] {})) generates a unique type at each usage.
 template <typename Id = decltype([] {})>
 using Symbol = Atom<Id, Free>;
-
-// Literal - A runtime value embedded directly in the expression.
-//
-// Unlike Constant, the value isn't known at compile time - it's stored in
-// the Embedded effect. Has no Id (void) since it's anonymous.
-//
-// Usage:
-//   Literal<double> lit{Embedded{3.14}};
-//   auto expr = lit + x;
-template <typename T>
-using Literal = Atom<void, Embedded<T>>;
 
 // Constant - A compile-time constant value encoded in the type itself.
 //
@@ -302,7 +282,6 @@ struct Expression : SymbolicTag {
 //   is_terminal_v<T>   - Is T a leaf? (same as !is_expression_v<T>)
 //   is_constant_v<T>   - Is T a compile-time constant?
 //   is_fraction_v<T>   - Is T a compile-time rational?
-//   is_literal_v<T>    - Is T a runtime literal value?
 //   has_identity_v<T>  - Does T have a non-void Id? (named vs anonymous)
 //
 // Accessor traits:
@@ -311,135 +290,107 @@ struct Expression : SymbolicTag {
 //   get_op_t<T>        - Extract the Op type from an Expression
 //   get_args_t<T>      - Extract child types as TypeList from an Expression
 
+#include <experimental/meta>
+
+namespace core_traits_detail {
+
+// Check if T (after stripping cv/ref) is a specialization of a given template.
+// This overload works for templates with only type parameters.
+//
+// IMPORTANT: We strip cv in the REFLECTION domain (meta::remove_cvref) rather than
+// the TYPE domain (using U = remove_cv_t<T>; ^^U) because clang-p2996 reflects
+// local type aliases as opaque names — ^^U doesn't see through to the underlying
+// template specialization. Working in the info domain avoids this.
+template <typename T, template <typename...> typename Template>
+consteval bool isSpecOf() {
+  constexpr auto info = std::meta::remove_cvref(^^T);
+  if constexpr (!std::meta::has_template_arguments(info)) return false;
+  else return std::meta::template_of(info) == ^^Template;
+}
+
+// Check if T is a specialization of any template via its reflected info.
+// Works for NTTP templates (Constant<auto V>, Fraction<N,D>, SimplexTransform<K>, etc.)
+// where the template can't be passed as template<typename...> typename.
+template <typename T>
+consteval bool isSpecOf(std::meta::info tmpl) {
+  constexpr auto info = std::meta::remove_cvref(^^T);
+  if constexpr (!std::meta::has_template_arguments(info)) return false;
+  else return std::meta::template_of(info) == tmpl;
+}
+
+}  // namespace core_traits_detail
+
 // Is this type an Atom?
 template <typename T>
-struct IsAtom : std::false_type {};
+constexpr bool is_atom_v = core_traits_detail::isSpecOf<T, Atom>();
 
-template <typename Id, typename S>
-struct IsAtom<Atom<Id, S>> : std::true_type {};
+// Is this type an Expression? (strips cv before checking)
+template <typename T>
+constexpr bool is_expression_v = core_traits_detail::isSpecOf<T, Expression>();
+
+// Is this type a Constant? (NTTP template — info-based isSpecOf)
+template <typename T>
+constexpr bool is_constant_v = core_traits_detail::isSpecOf<T>(^^Constant);
+
+// Is this type a Fraction? (NTTP template — info-based isSpecOf)
+template <typename T>
+constexpr bool is_fraction_v = core_traits_detail::isSpecOf<T>(^^Fraction);
+
+// Does this atom have a non-void Id?
+template <typename T>
+consteval bool hasIdentityImpl() {
+  if constexpr (!is_atom_v<T>) return false;
+  else return std::meta::template_arguments_of(^^T)[0] != ^^void;
+}
 
 template <typename T>
-constexpr bool is_atom_v = IsAtom<T>::value;
-
-// Is this type an Expression?
-template <typename T>
-struct IsExpression : std::false_type {};
-
-template <typename Op, typename... Args>
-struct IsExpression<Expression<Op, Args...>> : std::true_type {};
-
-// Handle cv-qualifications
-template <typename T>
-struct IsExpression<const T> : IsExpression<T> {};
-
-template <typename T>
-struct IsExpression<volatile T> : IsExpression<T> {};
-
-template <typename T>
-struct IsExpression<const volatile T> : IsExpression<T> {};
-
-template <typename T>
-constexpr bool is_expression_v = IsExpression<T>::value;
-
-// Is this type a Constant?
-template <typename T>
-struct IsConstant : std::false_type {};
-
-template <auto V>
-struct IsConstant<Constant<V>> : std::true_type {};
-
-template <typename T>
-constexpr bool is_constant_v = IsConstant<T>::value;
-
-// Is this type a Fraction?
-template <typename T>
-struct IsFraction : std::false_type {};
-
-template <long long N, long long D>
-struct IsFraction<Fraction<N, D>> : std::true_type {};
-
-template <typename T>
-constexpr bool is_fraction_v = IsFraction<std::remove_cv_t<T>>::value;
-
-// Is this type a Literal?
-template <typename T>
-struct IsLiteral : std::false_type {};
-
-template <typename U>
-struct IsLiteral<Atom<void, Embedded<U>>> : std::true_type {};
-
-template <typename T>
-constexpr bool is_literal_v = IsLiteral<T>::value;
-
-// Does this atom have an identity (non-void Id)?
-template <typename T>
-struct HasIdentity : std::false_type {};
-
-template <typename Id, typename S>
-struct HasIdentity<Atom<Id, S>> : std::bool_constant<!std::is_void_v<Id>> {};
-
-template <typename T>
-constexpr bool has_identity_v = HasIdentity<T>::value;
+constexpr bool has_identity_v = hasIdentityImpl<T>();
 
 // Is this a terminal (leaf) node?
-// Terminals are anything that's not an Expression
 template <typename T>
 constexpr bool is_terminal_v = !is_expression_v<T>;
 
-// Get the Id type from an Atom
+// Get the Id type from an Atom (first template argument)
 template <typename T>
-struct GetId;
+  requires is_atom_v<T>
+using get_id_t = [:std::meta::template_arguments_of(^^T)[0]:];
 
-template <typename Id, typename S>
-struct GetId<Atom<Id, S>> {
-  using type = Id;
-};
-
+// Get the Effect type from an Atom (second template argument)
 template <typename T>
-using get_id_t = typename GetId<T>::type;
-
-// Get the Effect type from an Atom
-template <typename T>
-struct GetEffect;
-
-template <typename Id, typename E>
-struct GetEffect<Atom<Id, E>> {
-  using type = E;
-};
-
-template <typename T>
-using get_effect_t = typename GetEffect<T>::type;
+  requires is_atom_v<T>
+using get_effect_t = [:std::meta::template_arguments_of(^^T)[1]:];
 
 // Do two atoms share the same Id (regardless of effect)?
-// Useful when bindings use Atom<Id, Free> but expressions contain Atom<Id, Sample<D>>.
 template <typename A, typename B>
-constexpr bool same_atom_id_v = false;
+consteval bool sameAtomIdImpl() {
+  if constexpr (!is_atom_v<A> || !is_atom_v<B>) return false;
+  else return std::meta::template_arguments_of(^^A)[0]
+           == std::meta::template_arguments_of(^^B)[0];
+}
 
-template <typename Id, typename E1, typename E2>
-constexpr bool same_atom_id_v<Atom<Id, E1>, Atom<Id, E2>> = true;
+template <typename A, typename B>
+constexpr bool same_atom_id_v = sameAtomIdImpl<A, B>();
 
-// Get the Op type from an Expression
+// Get the Op type from an Expression (first template argument)
+// Use meta::remove_cvref in the info domain — ^^std::remove_cv_t<T> has the local-alias bug.
 template <typename T>
-struct GetOp;
+  requires is_expression_v<std::remove_cv_t<T>>
+using get_op_t = [:std::meta::template_arguments_of(std::meta::remove_cvref(^^T))[0]:];
 
-template <typename Op, typename... Args>
-struct GetOp<Expression<Op, Args...>> {
-  using type = Op;
-};
-
+// Get arguments as TypeList from an Expression.
+// Deprecated: symbolic3 only. New code should use template_arguments_of directly.
 template <typename T>
-struct GetOp<const T> : GetOp<T> {};
-
-template <typename T>
-using get_op_t = typename GetOp<T>::type;
-
-// Get arguments as TypeList from an Expression
-template <typename T>
-struct GetArgs;
-
-template <typename Op, typename... Args>
-struct GetArgs<Expression<Op, Args...>> {
-  using type = TypeList<Args...>;
+  requires is_expression_v<T>
+struct GetArgs {
+ private:
+  static consteval auto compute() -> std::meta::info {
+    auto args = std::meta::template_arguments_of(^^T);
+    // Skip first arg (Op), rest are the expression arguments
+    std::vector<std::meta::info> expr_args(args.begin() + 1, args.end());
+    return std::meta::substitute(^^TypeList, expr_args);
+  }
+ public:
+  using type = [:compute():];
 };
 
 template <typename T>

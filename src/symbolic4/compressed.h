@@ -1,6 +1,7 @@
 #pragma once
 
-#include "meta/type_list.h"
+#include <experimental/meta>
+
 #include "meta/utility.h"
 
 // ============================================================================
@@ -109,12 +110,14 @@ CompressedTuple(Ts...) -> CompressedTuple<Ts...>;
 
 template <SizeT I, typename... Ts>
 constexpr auto get(const CompressedTuple<Ts...>& tuple) {
-  return static_cast<const detail::TupleLeaf<I, Get_t<I, Ts...>>&>(tuple).value;
+  using ElemT = [:std::meta::template_arguments_of(^^CompressedTuple<Ts...>)[I]:];
+  return static_cast<const detail::TupleLeaf<I, ElemT>&>(tuple).value;
 }
 
 template <SizeT I, typename... Ts>
 constexpr auto& get(CompressedTuple<Ts...>& tuple) {
-  return static_cast<detail::TupleLeaf<I, Get_t<I, Ts...>>&>(tuple).value;
+  using ElemT = [:std::meta::template_arguments_of(^^CompressedTuple<Ts...>)[I]:];
+  return static_cast<detail::TupleLeaf<I, ElemT>&>(tuple).value;
 }
 
 // ============================================================================

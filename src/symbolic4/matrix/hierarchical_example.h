@@ -218,7 +218,7 @@ struct HierarchicalVaryingSlopes {
   // This would use MVNCholesky with identity covariance in full implementation
   static auto logPriorGamma(auto gamma_vec, auto k) {
     // MVN(0, σ_γ²I) log-prob
-    auto sigma_gamma_lit = lit(sigma_gamma);
+    auto sigma_gamma_lit = 5.0_c;  // sigma_gamma
     auto l_cov_gamma = cholCov<Predictors>();  // σ_γ × I (diagonal)
     return logMVNormalCholesky(gamma_vec, dimVector<Predictors>(),
                                l_cov_gamma, k);
@@ -231,7 +231,7 @@ struct HierarchicalVaryingSlopes {
 
   // Prior on correlation Cholesky: log p(L_Ω | η)
   static auto logPriorCorrelation(auto l_omega) {
-    return lkjCholesky(eta).logProbFor(l_omega);
+    return lkjCholesky(2.0_c).logProbFor(l_omega);
   }
 
   // Prior on auxiliary standard normals: log p(z | I)
@@ -272,8 +272,8 @@ struct HierarchicalVaryingSlopes {
 //
 // // Priors
 // auto gamma_prior = mvnCholesky(zeros<Predictors>(), sigma_gamma * eye<Predictors>());
-// auto tau_prior = plate<Predictors>(halfNormal(lit(2.5)));
-// auto l_omega_prior = lkjCholesky(2.0);
+// auto tau_prior = plate<Predictors>(halfNormal(2.5_c));
+// auto l_omega_prior = lkjCholesky(2.0_c);
 // auto z_prior = plate<Groups>(mvnCholesky(zeros<Predictors>(), eye<Predictors>()));
 //
 // // Derived: group coefficients
@@ -283,7 +283,7 @@ struct HierarchicalVaryingSlopes {
 // };
 //
 // // Likelihood
-// auto sigma_y = halfNormal(lit(1.0));  // Observation noise
+// auto sigma_y = halfNormal(1.0_c);  // Observation noise
 // auto y_rv = plate<Observations>([&](std::size_t i) {
 //   auto j = group[i];
 //   auto mu_i = dot(X[i], beta(j));

@@ -97,37 +97,17 @@ constexpr auto let(E expr) {
 
 // is_let_node_v<T> - check if T is a LetNode
 template <typename T>
-struct IsLetNode : std::false_type {};
+constexpr bool is_let_node_v = core_traits_detail::isSpecOf<T, LetNode>();
 
-template <typename Id, typename E>
-struct IsLetNode<LetNode<Id, E>> : std::true_type {};
-
+// get_let_id_t<T> - extract the Id type from a LetNode (first template argument)
 template <typename T>
-constexpr bool is_let_node_v = IsLetNode<T>::value;
+  requires is_let_node_v<T>
+using get_let_id_t = [:std::meta::template_arguments_of(^^T)[0]:];
 
-// get_let_id_t<T> - extract the Id type from a LetNode
+// get_let_expr_t<T> - extract the expression type from a LetNode (second template argument)
 template <typename T>
-struct GetLetId;
-
-template <typename Id, typename E>
-struct GetLetId<LetNode<Id, E>> {
-  using type = Id;
-};
-
-template <typename T>
-using get_let_id_t = typename GetLetId<T>::type;
-
-// get_let_expr_t<T> - extract the expression type from a LetNode
-template <typename T>
-struct GetLetExpr;
-
-template <typename Id, typename E>
-struct GetLetExpr<LetNode<Id, E>> {
-  using type = E;
-};
-
-template <typename T>
-using get_let_expr_t = typename GetLetExpr<T>::type;
+  requires is_let_node_v<T>
+using get_let_expr_t = [:std::meta::template_arguments_of(^^T)[1]:];
 
 // ============================================================================
 // IdSet - Compile-time set of identity types
@@ -154,17 +134,14 @@ struct IdSet {
   static constexpr SizeT size = sizeof...(Ids);
 };
 
-// id_set_contains_v: linear search through the type list
+// id_set_contains_v: fold expression over the pack (no recursive instantiation)
 template <typename Id, typename Set>
 struct IdSetContains;
 
-template <typename Id>
-struct IdSetContains<Id, IdSet<>> : std::false_type {};
-
-template <typename Id, typename First, typename... Rest>
-struct IdSetContains<Id, IdSet<First, Rest...>>
-    : std::conditional_t<std::is_same_v<Id, First>, std::true_type,
-                         IdSetContains<Id, IdSet<Rest...>>> {};
+template <typename Id, typename... Ids>
+struct IdSetContains<Id, IdSet<Ids...>> {
+  static constexpr bool value = (std::is_same_v<Id, Ids> || ...);
+};
 
 template <typename Id, typename Set>
 constexpr bool id_set_contains_v = IdSetContains<Id, Set>::value;

@@ -1,0 +1,34 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "clang-p2996",
+      "displayName": "Clang P2996 (C++26 Reflection)",
+      "description": "Build with Bloomberg's clang-p2996 and -freflection-latest",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-reflection",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/clang-p2996.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "TEMPURA_PROFILE_COMPILE": "ON",
+        "TEMPURA_BUILD_EXAMPLES": "OFF",
+        "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "clang-p2996",
+      "configurePreset": "clang-p2996"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "clang-p2996",
+      "configurePreset": "clang-p2996",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

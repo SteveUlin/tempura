@@ -16,8 +16,8 @@
 //
 //   struct Observations {};
 //
-//   auto alpha = halfNormal(5.0);
-//   auto theta = plate<Observations>(beta(alpha, lit(3.0)));
+//   auto alpha = halfNormal(5_c);
+//   auto theta = plate<Observations>(beta(alpha, 3.0_c));
 //
 //   // Total log-prob = Σᵢ log Beta(θ[i] | α, 3)
 //   auto lp = jointLogProb(theta);

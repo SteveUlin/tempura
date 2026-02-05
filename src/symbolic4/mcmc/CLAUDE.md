@@ -53,7 +53,7 @@ This directory implements the "boring MCMC" vision: automatic parameter transfor
 Automatically selects transforms based on distribution support:
 
 ```cpp
-auto sigma = halfNormal(2.0);
+auto sigma = halfNormal(2_c);
 auto transform = autoTransform(sigma);  // Returns Positive<sigma>
 ```
 
@@ -189,12 +189,10 @@ ncp.addZPriorGrad(grad, j, state);  // N(0,1) prior contribution
    };
    ```
 
-2. Add type traits in `transforms.h`:
+2. Add type trait in `transforms.h` using reflection:
    ```cpp
    template <typename T>
-   struct IsMyTransform : std::false_type {};
-   template <typename P>
-   struct IsMyTransform<MyTransform<P>> : std::true_type {};
+   constexpr bool is_my_transform_v = core_traits_detail::isSpecOf<T, MyTransform>();
    ```
 
 3. Add `chainRuleGrad()` method to the transform struct:

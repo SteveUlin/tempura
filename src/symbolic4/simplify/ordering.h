@@ -1,7 +1,6 @@
 #pragma once
 
 #include "meta/type_id.h"
-#include "meta/type_list.h"
 #include "symbolic4/core.h"
 #include "symbolic4/operators.h"
 
@@ -14,9 +13,9 @@
 //   - Detecting equivalent subexpressions
 //   - Deterministic simplification behavior
 //
-// IMPORTANT: This is type-level ordering only. Literals with different runtime
-// values but the same type (e.g., two Literal<double>) compare equal. The
-// canonicalize operation preserves runtime data via the fold scheme.
+// IMPORTANT: This is type-level ordering only. Constants with distinct values
+// get distinct types (e.g., Constant<1.0> vs Constant<2.0>), so type-level
+// ordering correctly distinguishes them.
 //
 // Ordering (from "smallest" to "largest"):
 //   1. Expressions (by operator precedence, then lexicographic on args)
@@ -109,12 +108,18 @@ constexpr auto compareFractions(Fraction<LN, LD>, Fraction<RN, RD>) -> Ordering 
 
 template <typename LhsId, typename LhsEffect, typename RhsId, typename RhsEffect>
 constexpr auto compareAtoms(Atom<LhsId, LhsEffect>, Atom<RhsId, RhsEffect>) -> Ordering {
-  // Compare by full type TypeId (includes both Id and Effect)
+  // Compare by full type TypeId (includes both Id and Effect).
+  // P2996's std::meta::info only supports ==, not <. Use display_name_of
+  // for a stable lexicographic ordering (sufficient for canonicalization).
   constexpr auto lhs_id = kMeta<Atom<LhsId, LhsEffect>>;
   constexpr auto rhs_id = kMeta<Atom<RhsId, RhsEffect>>;
-  if constexpr (lhs_id < rhs_id) return Ordering::Less;
-  else if constexpr (lhs_id > rhs_id) return Ordering::Greater;
-  else return Ordering::Equal;
+  if constexpr (lhs_id == rhs_id) return Ordering::Equal;
+  else {
+    constexpr auto lhs_name = std::meta::display_string_of(lhs_id);
+    constexpr auto rhs_name = std::meta::display_string_of(rhs_id);
+    if constexpr (lhs_name < rhs_name) return Ordering::Less;
+    else return Ordering::Greater;
+  }
 }
 
 // ============================================================================
@@ -123,6 +128,8 @@ constexpr auto compareAtoms(Atom<LhsId, LhsEffect>, Atom<RhsId, RhsEffect>) -> O
 
 namespace detail {
 
+// Lexicographic comparison of two argument packs, carried as TypeLists.
+// TypeList here is just a pack carrier (defined in meta/tags.h, not type_list.h).
 constexpr auto compareArgs(TypeList<>, TypeList<>) -> Ordering {
   return Ordering::Equal;
 }

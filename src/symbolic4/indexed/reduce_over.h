@@ -82,37 +82,13 @@ struct ReduceOver : SymbolicTag {
 // ============================================================================
 
 template <typename T>
-struct IsReduceOver : std::false_type {};
+constexpr bool is_reduce_over_v = core_traits_detail::isSpecOf<T, ReduceOver>();
 
-template <typename ROp, typename DimTag, typename Expr>
-struct IsReduceOver<ReduceOver<ROp, DimTag, Expr>> : std::true_type {};
+template <typename T> requires is_reduce_over_v<T>
+using reduce_over_op_t = [:std::meta::template_arguments_of(^^T)[0]:];
 
-template <typename T>
-constexpr bool is_reduce_over_v = IsReduceOver<T>::value;
-
-// Extract dimension tag from any ReduceOver
-template <typename T>
-struct ReduceOverDimTag;
-
-template <typename ROp, typename DimTag, typename Expr>
-struct ReduceOverDimTag<ReduceOver<ROp, DimTag, Expr>> {
-  using type = DimTag;
-};
-
-template <typename T>
-using reduce_over_dim_tag_t = typename ReduceOverDimTag<T>::type;
-
-// Extract reduce op from any ReduceOver
-template <typename T>
-struct ReduceOverOp;
-
-template <typename ROp, typename DimTag, typename Expr>
-struct ReduceOverOp<ReduceOver<ROp, DimTag, Expr>> {
-  using type = ROp;
-};
-
-template <typename T>
-using reduce_over_op_t = typename ReduceOverOp<T>::type;
+template <typename T> requires is_reduce_over_v<T>
+using reduce_over_dim_tag_t = [:std::meta::template_arguments_of(^^T)[1]:];
 
 // ============================================================================
 // Backwards-compatible aliases
@@ -123,25 +99,14 @@ using SumOver = ReduceOver<SumReduce, DimTag, Expr>;
 
 // Backwards-compatible is_sum_over_v — matches SumOver (= ReduceOver<SumReduce, ...>)
 template <typename T>
-struct IsSumOver : std::false_type {};
-
-template <typename DimTag, typename Expr>
-struct IsSumOver<ReduceOver<SumReduce, DimTag, Expr>> : std::true_type {};
-
-template <typename T>
-constexpr bool is_sum_over_v = IsSumOver<T>::value;
+constexpr bool is_sum_over_v = [] consteval {
+    if constexpr (!is_reduce_over_v<T>) return false;
+    else return std::is_same_v<reduce_over_op_t<T>, SumReduce>;
+}();
 
 // Extract dimension tag from SumOver (backwards compat)
-template <typename T>
-struct SumOverDimTag;
-
-template <typename DimTag, typename Expr>
-struct SumOverDimTag<ReduceOver<SumReduce, DimTag, Expr>> {
-  using type = DimTag;
-};
-
-template <typename T>
-using sum_over_dim_tag_t = typename SumOverDimTag<T>::type;
+template <typename T> requires is_sum_over_v<T>
+using sum_over_dim_tag_t = reduce_over_dim_tag_t<T>;
 
 // ============================================================================
 // Factory functions

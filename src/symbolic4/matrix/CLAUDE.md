@@ -130,10 +130,10 @@ State layout:
 struct Dims {};  // K dimensions
 
 // Correlation structure
-auto L_corr = lkjCorr<Dims>(lit(2.0));  // η = 2
+auto L_corr = lkjCorr<Dims>(2_c);  // η = 2
 
 // Scales
-auto sigma = plate<Dims>(halfNormal(lit(1.0)));
+auto sigma = plate<Dims>(halfNormal(1_c));
 
 // Full covariance: Σ = diag(σ) * Ω * diag(σ) where Ω = L_corr * L_corrᵀ
 auto mu = dimVector<Dims>();

@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "bayes/estimation/hmc.h"
-#include "meta/type_list_ops.h"
 #include "symbolic4/core.h"
 #include "symbolic4/distributions/indexed_node.h"
 #include "symbolic4/indexed/indexed_eval.h"
@@ -31,8 +30,8 @@
 // share the same transform (inferred from the distribution).
 //
 // Usage:
-//   auto alpha = gamma(2.0, 0.1);           // scalar, positive
-//   auto theta = plate<Countries>(beta(alpha, lit(3.0)));  // indexed, (0,1)
+//   auto alpha = gamma(2_c, 0.1_c);           // scalar, positive
+//   auto theta = plate<Countries>(beta(alpha, 3.0_c));  // indexed, (0,1)
 //
 //   auto joint = logProb(alpha, theta);
 //
@@ -84,6 +83,30 @@ struct SymbolIndexIn {
     }
   }();
 };
+
+// Check if DimTag is in a TypeList<Dims...> (local fold, no type_list_ops.h)
+template <typename DimTag, typename DimsList>
+struct DimsContains : std::false_type {};
+
+template <typename DimTag, typename... Dims>
+struct DimsContains<DimTag, TypeList<Dims...>> {
+  static constexpr bool value = (std::is_same_v<DimTag, Dims> || ...);
+};
+
+template <typename DimTag, typename DimsList>
+constexpr bool dims_contains_v = DimsContains<DimTag, DimsList>::value;
+
+// Extract first dim from TypeList<Dims...>
+template <typename DimsList>
+struct FirstDim;
+
+template <typename First, typename... Rest>
+struct FirstDim<TypeList<First, Rest...>> {
+  using type = First;
+};
+
+template <typename DimsList>
+using first_dim_t = typename FirstDim<DimsList>::type;
 
 }  // namespace plate_detail
 
@@ -228,13 +251,13 @@ struct ScalarParamSpec {
 };
 
 // Indexed parameter (from a plate)
-template <typename Param, typename Transform, typename DimsList>
+template <typename Param, typename Transform, typename... Dims>
 struct IndexedParamSpec {
   [[no_unique_address]] Transform transform;
   std::size_t size_ = 0;
 
   static constexpr bool is_indexed = true;
-  using dims_list = DimsList;
+  using dims_list = TypeList<Dims...>;
 
   constexpr auto size() const -> std::size_t { return size_; }
 
@@ -263,22 +286,10 @@ struct IndexedParamSpec {
 // ============================================================================
 
 template <typename T>
-struct IsScalarParamSpec : std::false_type {};
-
-template <typename P, typename T>
-struct IsScalarParamSpec<ScalarParamSpec<P, T>> : std::true_type {};
+constexpr bool is_scalar_param_spec_v = core_traits_detail::isSpecOf<T, ScalarParamSpec>();
 
 template <typename T>
-constexpr bool is_scalar_param_spec_v = IsScalarParamSpec<T>::value;
-
-template <typename T>
-struct IsIndexedParamSpec : std::false_type {};
-
-template <typename P, typename T, typename D>
-struct IsIndexedParamSpec<IndexedParamSpec<P, T, D>> : std::true_type {};
-
-template <typename T>
-constexpr bool is_indexed_param_spec_v = IsIndexedParamSpec<T>::value;
+constexpr bool is_indexed_param_spec_v = core_traits_detail::isSpecOf<T, IndexedParamSpec>();
 
 // Extract the Param type (RandomVar) from a spec
 template <typename Spec>
@@ -289,8 +300,8 @@ struct ExtractParamFromSpec<ScalarParamSpec<Param, Transform>> {
   using type = Param;
 };
 
-template <typename Param, typename Transform, typename Dims>
-struct ExtractParamFromSpec<IndexedParamSpec<Param, Transform, Dims>> {
+template <typename Param, typename Transform, typename... Dims>
+struct ExtractParamFromSpec<IndexedParamSpec<Param, Transform, Dims...>> {
   using type = Param;
 };
 
@@ -320,12 +331,28 @@ constexpr auto makeParamSpec(Transform t) {
   return ScalarParamSpec<RV, Transform>{t};
 }
 
-// For IndexedRandomVar (plate)
+// Helper: construct IndexedParamSpec<RV, Transform, Dims...> from IndexedRandomVar<Dist, Id, Dims...>
+template <typename RV, typename Transform>
+struct MakeIndexedParamSpecType {
+ private:
+  static consteval auto compute() -> std::meta::info {
+    auto rv_args = std::meta::template_arguments_of(^^RV);
+    std::vector<std::meta::info> spec_args;
+    spec_args.push_back(^^RV);
+    spec_args.push_back(^^Transform);
+    for (std::size_t i = 2; i < rv_args.size(); ++i)
+      spec_args.push_back(rv_args[i]);
+    return std::meta::substitute(^^IndexedParamSpec, spec_args);
+  }
+ public:
+  using type = [:compute():];
+};
+
+// For IndexedRandomVar (plate) — unpack dims from the RV
 template <typename RV, typename Transform>
   requires IsIndexedRandomVar<RV>
 constexpr auto makeParamSpec(Transform t) {
-  using DimsList = typename RV::dims_list;
-  return IndexedParamSpec<RV, Transform, DimsList>{t, 0};
+  return typename MakeIndexedParamSpecType<RV, Transform>::type{t, 0};
 }
 
 // Extract the underlying transform from wrapped types
@@ -1037,7 +1064,7 @@ class PlateTransformedPosterior {
     auto spec = std::get<I>(specs_);
     if constexpr (is_indexed_param_spec_v<std::decay_t<decltype(spec)>>) {
       using SpecDims = typename std::decay_t<decltype(spec)>::dims_list;
-      if constexpr (Contains_v<DimTag, SpecDims>) {
+      if constexpr (plate_detail::dims_contains_v<DimTag, SpecDims>) {
         spec.size_ = size;
       }
     }
@@ -1189,7 +1216,7 @@ class PlateTransformedPosteriorBuilder {
     auto spec = std::get<I>(specs_);
     if constexpr (is_indexed_param_spec_v<std::decay_t<decltype(spec)>>) {
       using SpecDims = typename std::decay_t<decltype(spec)>::dims_list;
-      if constexpr (Contains_v<DimTag, SpecDims>) {
+      if constexpr (plate_detail::dims_contains_v<DimTag, SpecDims>) {
         spec.size_ = size;
       }
     }
@@ -1277,7 +1304,7 @@ class PlateTransformedPosteriorBuilder {
     if constexpr (is_indexed_param_spec_v<std::decay_t<decltype(spec)>>) {
       // Try to infer size from bindings
       using SpecDims = typename std::decay_t<decltype(spec)>::dims_list;
-      auto size = inferSizeFromBindings<Head_t<SpecDims>>(bindings);
+      auto size = inferSizeFromBindings<plate_detail::first_dim_t<SpecDims>>(bindings);
       if (size > 0) {
         spec.size_ = size;
       }
@@ -1355,8 +1382,7 @@ constexpr auto createPlateParamSpec(const Param& p) {
 
   if constexpr (IsIndexedRandomVar<std::decay_t<decltype(underlying)>>) {
     using RV = std::decay_t<decltype(underlying)>;
-    using DimsList = typename RV::dims_list;
-    return IndexedParamSpec<RV, decltype(transform), DimsList>{transform, 0};
+    return typename detail::MakeIndexedParamSpecType<RV, decltype(transform)>::type{transform, 0};
   } else {
     using RV = std::decay_t<decltype(underlying)>;
     return ScalarParamSpec<RV, decltype(transform)>{transform};
@@ -1394,7 +1420,7 @@ auto makePlateTransformedPosterior(LogProbExpr lp, Params... params) {
   auto symbols = std::make_tuple(plate_detail::extractPlateSymbol(params)...);
 
   // Compute gradient expressions (differentiate log-prob w.r.t. each param)
-  auto grads = std::make_tuple(simplify(diff(lp, plate_detail::extractPlateSymbol(params)))...);
+  auto grads = std::make_tuple(diff(lp, plate_detail::extractPlateSymbol(params))...);
 
   // Start with empty data bindings
   auto empty_data = BinderPack<>{};
@@ -1422,7 +1448,7 @@ auto makePlateTransformedPosteriorWithObs(LogProbExpr lp, ObsBindings obs, Param
 
   // Compute gradient expressions for non-observed params
   auto grads = std::apply([&lp](auto&... p) {
-    return std::make_tuple(simplify(diff(lp, plate_detail::extractPlateSymbol(p)))...);
+    return std::make_tuple(diff(lp, plate_detail::extractPlateSymbol(p))...);
   }, non_observed);
 
   auto empty_data = BinderPack<>{};

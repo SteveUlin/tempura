@@ -22,7 +22,7 @@ auto main() -> int {
   // =========================================================================
 
   "ScalarParamSpec basic"_test = [] {
-    auto sigma = halfNormal(5.0);
+    auto sigma = halfNormal(5_c);
     auto t = autoTransform(sigma);
 
     ScalarParamSpec<decltype(sigma), decltype(t)> spec{t};
@@ -38,8 +38,8 @@ auto main() -> int {
 
   "IndexedParamSpec basic"_test = [] {
     struct Countries {};
-    auto alpha = gamma(2.0, 0.1);
-    auto theta = plate<Countries>(beta(alpha, lit(3.0)));
+    auto alpha = gamma(2_c, 0.1_c);
+    auto theta = plate<Countries>(beta(alpha, 3.0_c));
     auto t = autoTransform(theta);
 
     // IndexedParamSpec would be created by the factory
@@ -72,8 +72,8 @@ auto main() -> int {
   // =========================================================================
 
   "makePlateTransformedPosterior scalar only"_test = [] {
-    auto alpha = gamma(2.0, 0.1);
-    auto beta_param = gamma(2.0, 0.1);
+    auto alpha = gamma(2_c, 0.1_c);
+    auto beta_param = gamma(2_c, 0.1_c);
 
     auto joint = logProb(alpha, beta_param);
     auto posterior = makePlateTransformedPosterior(joint, alpha, beta_param).build();
@@ -94,8 +94,8 @@ auto main() -> int {
   "makePlateTransformedPosterior with plate"_test = [] {
     struct Countries {};
 
-    auto alpha = gamma(2.0, 0.1);
-    auto theta = plate<Countries>(beta(alpha, lit(3.0)));
+    auto alpha = gamma(2_c, 0.1_c);
+    auto theta = plate<Countries>(beta(alpha, 3.0_c));
 
     auto joint = logProb(alpha, theta);
 
@@ -134,8 +134,8 @@ auto main() -> int {
     // beta ~ Gamma(2, 0.1)
     // theta[i] ~ Beta(alpha, beta) for i in Countries
 
-    auto alpha = gamma(lit(2.0), lit(0.1));
-    auto beta_param = gamma(lit(2.0), lit(0.1));
+    auto alpha = gamma(2.0_c, 0.1_c);
+    auto beta_param = gamma(2.0_c, 0.1_c);
     auto theta = plate<Countries>(beta(alpha, beta_param));
 
     auto joint = logProb(alpha, beta_param, theta);
@@ -165,7 +165,7 @@ auto main() -> int {
 
   "scalar constrained: gradient matches finite-diff logProb"_test = [] {
     // halfNormal has Positive support → exp transform → non-trivial Jacobian
-    auto sigma = halfNormal(lit(2.0));
+    auto sigma = halfNormal(2.0_c);
     auto posterior = makePlateTransformedPosterior(logProb(sigma), sigma).build();
 
     std::vector<double> z = {0.7};
@@ -183,7 +183,7 @@ auto main() -> int {
 
   "indexed constrained: gradient matches finite-diff logProb"_test = [] {
     // beta has Unit support → sigmoid transform → non-trivial Jacobian
-    auto theta = plate<TestGroups>(beta(lit(2.0), lit(3.0)));
+    auto theta = plate<TestGroups>(beta(2.0_c, 3.0_c));
     auto posterior = makePlateTransformedPosterior(collectLogProbs(theta), theta)
                          .withDimension<TestGroups>(3)
                          .build();
@@ -204,8 +204,8 @@ auto main() -> int {
   };
 
   "mixed scalar+indexed: gradient matches finite-diff logProb"_test = [] {
-    auto sigma = halfNormal(lit(2.0));
-    auto theta = plate<TestCountries2>(beta(lit(2.0), lit(3.0)));
+    auto sigma = halfNormal(2.0_c);
+    auto theta = plate<TestCountries2>(beta(2.0_c, 3.0_c));
     auto joint = collectLogProbs(sigma, theta);
     auto posterior = makePlateTransformedPosterior(joint, sigma, theta)
                          .withDimension<TestCountries2>(2)
@@ -235,8 +235,8 @@ auto main() -> int {
     // Create a simple model with mixed params:
     // sigma ~ HalfNormal(2)   (scalar)
     // theta[i] ~ Beta(2, 3)   (indexed)
-    auto sigma = halfNormal(lit(2.0));
-    auto theta = plate<TestCountries2>(beta(lit(2.0), lit(3.0)));
+    auto sigma = halfNormal(2.0_c);
+    auto theta = plate<TestCountries2>(beta(2.0_c, 3.0_c));
     auto joint = collectLogProbs(sigma, theta);
     auto posterior = makePlateTransformedPosterior(joint, sigma, theta)
                          .withDimension<TestCountries2>(3)

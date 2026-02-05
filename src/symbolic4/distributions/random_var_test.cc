@@ -15,17 +15,17 @@ auto main() -> int {
   // ===========================================================================
 
   "RandomVar satisfies IsRandomVar"_test = [] {
-    auto mu = normal(lit(0), lit(1));
+    auto mu = normal(0_c, 1_c);
     static_assert(IsRandomVar<decltype(mu)>);
   };
 
   "RandomVar has correct types"_test = [] {
-    auto mu = normal(lit(0.0), lit(1.0));
+    auto mu = normal(0_c, 1_c);
     using Node = decltype(mu);
 
     static_assert(
         std::is_same_v<typename Node::dist_type,
-                       NormalDist<Literal<double>, Literal<double>>>);
+                       NormalDist<Constant<0.0>, Constant<1.0>>>);
   };
 
   // ===========================================================================
@@ -33,7 +33,7 @@ auto main() -> int {
   // ===========================================================================
 
   "RandomVar::sym returns symbol"_test = [] {
-    auto mu = normal(lit(0), lit(1));
+    auto mu = normal(0_c, 1_c);
     auto sym = mu.sym();
 
     static_assert(Symbolic<decltype(sym)>);
@@ -41,8 +41,8 @@ auto main() -> int {
   };
 
   "Different RVs have different symbols"_test = [] {
-    auto mu = normal(lit(0), lit(1));
-    auto sigma = halfNormal(lit(5));
+    auto mu = normal(0_c, 1_c);
+    auto sigma = halfNormal(5_c);
 
     using MuSym = decltype(mu.sym());
     using SigmaSym = decltype(sigma.sym());
@@ -55,14 +55,14 @@ auto main() -> int {
   // ===========================================================================
 
   "RandomVar::logProb returns symbolic expression"_test = [] {
-    auto mu = normal(lit(0), lit(1));
+    auto mu = normal(0_c, 1_c);
     auto lp = mu.logProb();
 
     static_assert(Symbolic<decltype(lp)>);
   };
 
   "RandomVar::logProb evaluates correctly"_test = [] {
-    auto mu = normal(lit(0), lit(1));
+    auto mu = normal(0_c, 1_c);
     auto lp = mu.logProb();
     double val = evaluate(lp, mu = 0.5);
 
@@ -76,7 +76,7 @@ auto main() -> int {
   // ===========================================================================
 
   "RandomVar::unnormalizedLogProb evaluates correctly"_test = [] {
-    auto mu = normal(lit(0), lit(1));
+    auto mu = normal(0_c, 1_c);
     auto lp = mu.unnormalizedLogProb();
     double val = evaluate(lp, mu = 0.5);
 
@@ -89,9 +89,9 @@ auto main() -> int {
   // ===========================================================================
 
   "RandomVar implicitly converts to symbol"_test = [] {
-    auto mu = normal(lit(0), lit(10));
+    auto mu = normal(0_c, 10_c);
     // When mu is used in another distribution, it should convert to its symbol
-    auto y = normal(mu, lit(1));
+    auto y = normal(mu, 1_c);
 
     // y's distribution should have mu's symbol as its mu parameter
     auto y_lp = y.logProb();
@@ -104,7 +104,7 @@ auto main() -> int {
   // ===========================================================================
 
   "RandomVar binding syntax works"_test = [] {
-    auto mu = normal(lit(0), lit(1));
+    auto mu = normal(0_c, 1_c);
     auto binding = mu = 0.5;
 
     // Verify binding works in BinderPack
@@ -118,47 +118,47 @@ auto main() -> int {
   // ===========================================================================
 
   "normal() creates RandomVar"_test = [] {
-    auto mu = normal(lit(0), lit(1));
+    auto mu = normal(0_c, 1_c);
     static_assert(IsRandomVar<decltype(mu)>);
   };
 
   "halfNormal() creates RandomVar"_test = [] {
-    auto sigma = halfNormal(lit(5));
+    auto sigma = halfNormal(5_c);
     static_assert(IsRandomVar<decltype(sigma)>);
   };
 
   "beta() creates RandomVar"_test = [] {
-    auto p = beta(lit(2), lit(5));
+    auto p = beta(2_c, 5_c);
     static_assert(IsRandomVar<decltype(p)>);
   };
 
   "gamma() creates RandomVar"_test = [] {
-    auto x = gamma(lit(3), lit(0.5));
+    auto x = gamma(3_c, 0.5_c);
     static_assert(IsRandomVar<decltype(x)>);
   };
 
   "exponential() creates RandomVar"_test = [] {
-    auto x = exponential(lit(0.5));
+    auto x = exponential(0.5_c);
     static_assert(IsRandomVar<decltype(x)>);
   };
 
   "uniform() creates RandomVar"_test = [] {
-    auto x = uniform(lit(0), lit(1));
+    auto x = uniform(0_c, 1_c);
     static_assert(IsRandomVar<decltype(x)>);
   };
 
   "cauchy() creates RandomVar"_test = [] {
-    auto x = cauchy(lit(0), lit(1));
+    auto x = cauchy(0_c, 1_c);
     static_assert(IsRandomVar<decltype(x)>);
   };
 
   "bernoulli() creates RandomVar"_test = [] {
-    auto x = bernoulli(lit(0.5));
+    auto x = bernoulli(0.5_c);
     static_assert(IsRandomVar<decltype(x)>);
   };
 
   "studentT() creates RandomVar"_test = [] {
-    auto x = studentT(lit(3), lit(0), lit(1));
+    auto x = studentT(3_c, 0_c, 1_c);
     static_assert(IsRandomVar<decltype(x)>);
   };
 
@@ -167,8 +167,8 @@ auto main() -> int {
   // ===========================================================================
 
   "Nested RandomVars work"_test = [] {
-    auto mu = normal(lit(0), lit(10));
-    auto sigma = halfNormal(lit(5));
+    auto mu = normal(0_c, 10_c);
+    auto sigma = halfNormal(5_c);
     auto y = normal(mu, sigma);
 
     static_assert(IsRandomVar<decltype(y)>);
@@ -186,7 +186,7 @@ auto main() -> int {
   // ===========================================================================
 
   "RandomVar::sym returns plain Free symbol"_test = [] {
-    auto mu = normal(lit(0), lit(1));
+    auto mu = normal(0_c, 1_c);
     auto sym = mu.sym();
 
     // sym() now returns Symbol<Id> (Atom<Id, Free>) — no Sample effect
@@ -195,29 +195,29 @@ auto main() -> int {
   };
 
   "freeSym and sym return the same type"_test = [] {
-    auto mu = normal(lit(0), lit(1));
+    auto mu = normal(0_c, 1_c);
     static_assert(std::is_same_v<decltype(mu.sym()), decltype(mu.freeSym())>);
   };
 
   "RandomVar preserves distribution access via dist()"_test = [] {
-    auto mu = normal(lit(5.0), lit(2.0));
+    auto mu = normal(5_c, 2_c);
 
     // Distribution is accessible via dist(), not via the symbol
     auto& dist = mu.dist();
-    expectNear(dist.mu_.effect_.value, 5.0);
-    expectNear(dist.sigma_.effect_.value, 2.0);
+    static_assert(dist.mu().value == 5.0);
+    static_assert(dist.sigma().value == 2.0);
   };
 
   "sym and freeSym are identical"_test = [] {
-    auto mu = normal(lit(0), lit(1));
+    auto mu = normal(0_c, 1_c);
     // Both return the same Symbol<Id> type
     static_assert(std::is_same_v<decltype(mu.sym()), decltype(mu.freeSym())>);
     static_assert(std::is_same_v<get_id_t<decltype(mu.sym())>, get_id_t<decltype(mu.freeSym())>>);
   };
 
   "Expression with RandomVar symbols evaluates directly"_test = [] {
-    auto mu = normal(lit(0), lit(1));
-    auto sigma = halfNormal(lit(5));
+    auto mu = normal(0_c, 1_c);
+    auto sigma = halfNormal(5_c);
 
     // Build expression using Free symbols from RandomVars
     auto expr = mu.sym() + sigma.sym();

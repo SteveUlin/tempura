@@ -31,20 +31,20 @@ auto main() -> int {
     auto x = data<Obs>();
 
     // IndexedData::sym() returns the IndexedSymbol for use in expressions
-    auto expr = x.sym() + lit(1.0);
+    auto expr = x.sym() + 1.0_c;
     static_assert(Symbolic<decltype(expr)>);
 
-    auto expr2 = x.sym() * lit(2.0);
+    auto expr2 = x.sym() * 2.0_c;
     static_assert(Symbolic<decltype(expr2)>);
   };
 
   "data<Obs>() in plate expression"_test = [] {
     struct Obs {};
 
-    auto alpha = normal(0.0, 10.0);
-    auto beta = normal(0.0, 5.0);
+    auto alpha = normal(0_c, 10_c);
+    auto beta = normal(0_c, 5_c);
     auto x = data<Obs>();
-    auto sigma = halfNormal(2.0);
+    auto sigma = halfNormal(2_c);
 
     // Create plate with data-dependent mean
     // Use *alpha, *beta, *sigma to get constrained expressions (using freeSym())
@@ -62,8 +62,8 @@ auto main() -> int {
   "infer() detects indexed parameters"_test = [] {
     struct Obs {};
 
-    auto alpha = normal(0.0, 10.0);
-    auto y = plate<Obs>(normal(alpha, lit(1.0)));
+    auto alpha = normal(0_c, 10_c);
+    auto y = plate<Obs>(normal(alpha, 1.0_c));
 
     // infer() should return PlateTransformedPosteriorBuilder for indexed params
     auto builder = infer(alpha, y);
@@ -74,8 +74,8 @@ auto main() -> int {
   };
 
   "infer() with scalar-only params returns TransformedPosteriorBuilder"_test = [] {
-    auto mu = normal(0.0, 10.0);
-    auto sigma = halfNormal(5.0);
+    auto mu = normal(0_c, 10_c);
+    auto sigma = halfNormal(5_c);
     auto y = normal(mu, sigma);
 
     // Should work the same as before
@@ -92,8 +92,8 @@ auto main() -> int {
     struct Obs {};
 
     // Test: plate model using explicit .sym() for parameter references
-    auto alpha = normal(0.0, 10.0);
-    auto sigma = halfNormal(2.0);
+    auto alpha = normal(0_c, 10_c);
+    auto sigma = halfNormal(2_c);
 
     // Use operator* to get constrained expressions (exp(z) for positive params)
     // This uses the unconstrained symbol that bindings know about
@@ -130,9 +130,9 @@ auto main() -> int {
   "unified bind() with observation and data"_test = [] {
     struct Obs {};
 
-    auto alpha = normal(0.0, 10.0);
-    auto beta = normal(0.0, 5.0);
-    auto sigma = halfNormal(2.0);
+    auto alpha = normal(0_c, 10_c);
+    auto beta = normal(0_c, 5_c);
+    auto sigma = halfNormal(2_c);
     auto x = data<Obs>();
     // Use *alpha, *beta, *sigma for constrained expressions; x.sym() for IndexedData
     auto y = plate<Obs>(normal(*alpha + *beta * x.sym(), *sigma));
@@ -157,10 +157,10 @@ auto main() -> int {
 
   // First, verify that basic symbol evaluation works
   "simple symbol evaluation test"_test = [] {
-    auto alpha = normal(0.0, 10.0);
+    auto alpha = normal(0_c, 10_c);
 
     // Test that we can evaluate an expression with alpha's freeSym
-    auto expr = alpha.freeSym() + lit(1.0);  // z + 1
+    auto expr = alpha.freeSym() + 1.0_c;  // z + 1
 
     // Evaluate with explicit binding
     double result1 = evaluate(expr, alpha.freeSym() = 0.5);
@@ -181,8 +181,8 @@ auto main() -> int {
   "collectLogProbs evaluation test"_test = [] {
     struct Obs {};
 
-    auto alpha = normal(0.0, 10.0);
-    auto sigma = halfNormal(2.0);
+    auto alpha = normal(0_c, 10_c);
+    auto sigma = halfNormal(2_c);
     auto y = plate<Obs>(normal(*alpha, *sigma));
 
     // Get the log-prob expression
@@ -222,8 +222,8 @@ auto main() -> int {
   "manual binding construction test"_test = [] {
     struct Obs {};
 
-    auto alpha = normal(0.0, 10.0);
-    auto sigma = halfNormal(2.0);
+    auto alpha = normal(0_c, 10_c);
+    auto sigma = halfNormal(2_c);
     auto y = plate<Obs>(normal(*alpha, *sigma));
 
     auto lp_expr = collectLogProbs(alpha, sigma, y);
@@ -376,8 +376,8 @@ auto main() -> int {
   "gradients via finite difference match analytic"_test = [] {
     struct Obs {};
 
-    auto alpha = normal(0.0, 10.0);
-    auto sigma = halfNormal(2.0);
+    auto alpha = normal(0_c, 10_c);
+    auto sigma = halfNormal(2_c);
     // Use *alpha, *sigma to get constrained expressions
     auto y = plate<Obs>(normal(*alpha, *sigma));
 
@@ -435,13 +435,13 @@ auto main() -> int {
     //   z[i] ~ Normal(0, 1)           ← standard normal in z-space
     //   theta[i] = mu + sigma * z[i]  ← deterministic transform
     //   y[i] ~ Normal(theta[i], 1)
-    auto mu = normal(0.0, 5.0);
-    auto sigma = exponential(1.0);
-    auto z = plate<Groups>(normal(lit(0.0), lit(1.0)));
+    auto mu = normal(0_c, 5_c);
+    auto sigma = exponential(1_c);
+    auto z = plate<Groups>(normal(0.0_c, 1.0_c));
 
     // Non-centered: theta = mu + sigma * z (used inline in likelihood)
     auto theta_expr = mu + sigma * z;
-    auto y = plate<Groups>(normal(theta_expr, lit(1.0)));
+    auto y = plate<Groups>(normal(theta_expr, 1.0_c));
 
     constexpr std::size_t kN = 5;
     std::vector<double> y_data = {1.2, 2.3, 0.8, 1.5, 2.0};
@@ -488,9 +488,9 @@ auto main() -> int {
     //   z_b[L] ~ Normal(0, 1)
     //   p[L] = logistic(a + sigma * z_b[L])
     //   k[L] ~ Binomial(n[L], p[L])
-    auto a = normal(-2.0, 1.0);
-    auto sigma = exponential(1.0);
-    auto z_b = plate<Countries>(normal(lit(0.0), lit(1.0)));
+    auto a = normal(-2_c, 1_c);
+    auto sigma = exponential(1_c);
+    auto z_b = plate<Countries>(normal(0.0_c, 1.0_c));
 
     auto n = data<Countries>();
 

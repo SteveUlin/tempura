@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "symbolic4/constants.h"
 #include "symbolic4/core.h"
 #include "symbolic4/matrix/eval.h"
 
@@ -49,7 +50,7 @@ struct Unconstrained {
 
   // Symbolic: log|dx/dz| = 0
   template <Symbolic Z>
-  static constexpr auto symbolicLogJacobian([[maybe_unused]] Z) { return lit(0.0); }
+  static constexpr auto symbolicLogJacobian([[maybe_unused]] Z) { return 0.0_c; }
 
   // Chain rule: grad_z = grad_x * dx/dz + d(logJ)/dz = grad_x * 1 + 0 = grad_x
   static constexpr auto chainRuleGrad(double grad_x, [[maybe_unused]] double z) -> double {
@@ -96,8 +97,8 @@ struct UnitInterval {
 
   template <Symbolic Z>
   static constexpr auto symbolicLogJacobian(Z z) {
-    auto x = lit(1.0) / (lit(1.0) + exp(-z));
-    return log(x) + log(lit(1.0) - x);
+    auto x = 1.0_c / (1.0_c + exp(-z));
+    return log(x) + log(1.0_c - x);
   }
 
   // Chain rule: grad_z = grad_x * dx/dz + d(logJ)/dz
@@ -553,85 +554,28 @@ constexpr auto simplexTransform() -> SimplexTransform<K> {
 // Type traits
 // ============================================================================
 
+// Master trait: is this any parametric transform type?
 template <typename T>
-struct IsTransform : std::false_type {};
+constexpr bool is_transform_v =
+    core_traits_detail::isSpecOf<T, Unconstrained>() ||
+    core_traits_detail::isSpecOf<T, Positive>() ||
+    core_traits_detail::isSpecOf<T, UnitInterval>() ||
+    core_traits_detail::isSpecOf<T, LowerBounded>() ||
+    core_traits_detail::isSpecOf<T, UpperBounded>() ||
+    core_traits_detail::isSpecOf<T, Interval>();
 
-template <typename P>
-struct IsTransform<Unconstrained<P>> : std::true_type {};
+// Individual parametric transform traits
+template <typename T> constexpr bool is_unconstrained_v = core_traits_detail::isSpecOf<T, Unconstrained>();
+template <typename T> constexpr bool is_positive_v      = core_traits_detail::isSpecOf<T, Positive>();
+template <typename T> constexpr bool is_unit_interval_v = core_traits_detail::isSpecOf<T, UnitInterval>();
+template <typename T> constexpr bool is_lower_bounded_v = core_traits_detail::isSpecOf<T, LowerBounded>();
+template <typename T> constexpr bool is_upper_bounded_v = core_traits_detail::isSpecOf<T, UpperBounded>();
+template <typename T> constexpr bool is_interval_v      = core_traits_detail::isSpecOf<T, Interval>();
 
-template <typename P>
-struct IsTransform<Positive<P>> : std::true_type {};
+// Non-template type
+template <typename T> constexpr bool is_cholesky_transform_v = std::is_same_v<T, CholeskyTransform>;
 
-template <typename P>
-struct IsTransform<UnitInterval<P>> : std::true_type {};
-
-template <typename P>
-struct IsTransform<LowerBounded<P>> : std::true_type {};
-
-template <typename P>
-struct IsTransform<UpperBounded<P>> : std::true_type {};
-
-template <typename P>
-struct IsTransform<Interval<P>> : std::true_type {};
-
-template <typename T>
-constexpr bool is_transform_v = IsTransform<T>::value;
-
-// Type traits for specific transform types
-template <typename T>
-struct IsUnconstrained : std::false_type {};
-template <typename P>
-struct IsUnconstrained<Unconstrained<P>> : std::true_type {};
-template <typename T>
-constexpr bool is_unconstrained_v = IsUnconstrained<T>::value;
-
-template <typename T>
-struct IsPositive : std::false_type {};
-template <typename P>
-struct IsPositive<Positive<P>> : std::true_type {};
-template <typename T>
-constexpr bool is_positive_v = IsPositive<T>::value;
-
-template <typename T>
-struct IsUnitInterval : std::false_type {};
-template <typename P>
-struct IsUnitInterval<UnitInterval<P>> : std::true_type {};
-template <typename T>
-constexpr bool is_unit_interval_v = IsUnitInterval<T>::value;
-
-template <typename T>
-struct IsLowerBounded : std::false_type {};
-template <typename P>
-struct IsLowerBounded<LowerBounded<P>> : std::true_type {};
-template <typename T>
-constexpr bool is_lower_bounded_v = IsLowerBounded<T>::value;
-
-template <typename T>
-struct IsUpperBounded : std::false_type {};
-template <typename P>
-struct IsUpperBounded<UpperBounded<P>> : std::true_type {};
-template <typename T>
-constexpr bool is_upper_bounded_v = IsUpperBounded<T>::value;
-
-template <typename T>
-struct IsInterval : std::false_type {};
-template <typename P>
-struct IsInterval<Interval<P>> : std::true_type {};
-template <typename T>
-constexpr bool is_interval_v = IsInterval<T>::value;
-
-template <typename T>
-struct IsCholeskyTransform : std::false_type {};
-template <>
-struct IsCholeskyTransform<CholeskyTransform> : std::true_type {};
-template <typename T>
-constexpr bool is_cholesky_transform_v = IsCholeskyTransform<T>::value;
-
-template <typename T>
-struct IsSimplexTransform : std::false_type {};
-template <std::size_t K>
-struct IsSimplexTransform<SimplexTransform<K>> : std::true_type {};
-template <typename T>
-constexpr bool is_simplex_transform_v = IsSimplexTransform<T>::value;
+// NTTP template — info-based isSpecOf handles any template parameter kind
+template <typename T> constexpr bool is_simplex_transform_v = core_traits_detail::isSpecOf<T>(^^SimplexTransform);
 
 }  // namespace tempura::symbolic4

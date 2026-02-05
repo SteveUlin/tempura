@@ -5,7 +5,6 @@
 #include <vector>
 
 #include "meta/tags.h"
-#include "meta/type_list_ops.h"
 #include "symbolic4/core.h"
 
 // ============================================================================
@@ -18,7 +17,7 @@
 //   struct Years {};
 //
 //   auto alpha = plate<Countries>(normal(mu, sigma));        // alpha[c]
-//   auto y = plate<Years>(normal(alpha, lit(1.0)));          // y[c,y]
+//   auto y = plate<Years>(normal(alpha, 1.0_c));             // y[c,y]
 //
 //   // y.sym() is IndexedSymbol<Id, Countries, Years>
 //   // Binding: y = indexed(data, shape<Countries, Years>{10, 20})
@@ -33,40 +32,30 @@ namespace tempura::symbolic4 {
 
 namespace detail {
 
-// At<I, TypeList<...>> - get type at index I
+// At<I, TypeList<...>> — get type at index I via splice
 template <SizeT I, typename List>
 struct AtImpl;
 
-template <SizeT I, typename First, typename... Rest>
-struct AtImpl<I, TypeList<First, Rest...>> {
-  using type = typename AtImpl<I - 1, TypeList<Rest...>>::type;
-};
-
-template <typename First, typename... Rest>
-struct AtImpl<0, TypeList<First, Rest...>> {
-  using type = First;
+template <SizeT I, typename... Ts>
+struct AtImpl<I, TypeList<Ts...>> {
+  using type = [:std::meta::template_arguments_of(^^TypeList<Ts...>)[I]:];
 };
 
 template <SizeT I, typename List>
 using At = typename AtImpl<I, List>::type;
 
-// IndexOf<T, TypeList<...>> - find index of T in list
-template <typename T, typename List, SizeT I = 0>
-struct IndexOfImpl;
-
-template <typename T, SizeT I>
-struct IndexOfImpl<T, TypeList<>, I> {
-  static constexpr SizeT value = static_cast<SizeT>(-1);  // Not found
-};
-
-template <typename T, typename First, typename... Rest, SizeT I>
-struct IndexOfImpl<T, TypeList<First, Rest...>, I> {
-  static constexpr SizeT value =
-      std::is_same_v<T, First> ? I : IndexOfImpl<T, TypeList<Rest...>, I + 1>::value;
-};
+// IndexOf<T, TypeList<...>> — consteval loop
+template <typename T, typename List>
+consteval auto indexOfImpl() -> SizeT {
+  auto args = std::meta::template_arguments_of(^^List);
+  for (SizeT i = 0; i < args.size(); ++i) {
+    if (args[i] == ^^T) return i;
+  }
+  return static_cast<SizeT>(-1);
+}
 
 template <typename T, typename List>
-constexpr SizeT IndexOf = IndexOfImpl<T, List>::value;
+constexpr SizeT IndexOf = indexOfImpl<T, List>();
 
 }  // namespace detail
 
@@ -90,18 +79,12 @@ struct IndexedSymbol : SymbolicTag {
 
   // Check if this symbol is indexed over a specific dimension
   template <typename DimTag>
-  static constexpr bool has_dim = Contains_v<DimTag, dims_list>;
+  static constexpr bool has_dim = (std::is_same_v<DimTag, Dims> || ...);
 };
 
 // Type traits for IndexedSymbol
 template <typename T>
-struct IsIndexedSymbol : std::false_type {};
-
-template <typename Id, typename... Dims>
-struct IsIndexedSymbol<IndexedSymbol<Id, Dims...>> : std::true_type {};
-
-template <typename T>
-constexpr bool is_indexed_symbol_v = IsIndexedSymbol<T>::value;
+constexpr bool is_indexed_symbol_v = core_traits_detail::isSpecOf<T, IndexedSymbol>();
 
 // Get number of dimensions
 template <typename T>
@@ -291,13 +274,7 @@ struct IndexedBinding<Sym, 3> {
 
 // Type traits
 template <typename T>
-struct IsIndexedBinding : std::false_type {};
-
-template <typename Sym, SizeT N>
-struct IsIndexedBinding<IndexedBinding<Sym, N>> : std::true_type {};
-
-template <typename T>
-constexpr bool is_indexed_binding_v = IsIndexedBinding<T>::value;
+constexpr bool is_indexed_binding_v = core_traits_detail::isSpecOf<T>(^^IndexedBinding);
 
 // ============================================================================
 // Helper to get dimension info from binding

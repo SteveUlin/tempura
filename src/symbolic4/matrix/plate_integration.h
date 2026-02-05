@@ -294,8 +294,6 @@ struct MatrixPlateEval {
       return static_cast<double>(T::value);
     } else if constexpr (is_fraction_v<T>) {
       return T::value;
-    } else if constexpr (is_literal_v<T>) {
-      return static_cast<double>(term.effect_.value);
     } else if constexpr (is_indexed_vector_symbol_v<T>) {
       // Look up plate index and return vector view
       return lookupIndexedVector<T>(term, ctx);

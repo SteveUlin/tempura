@@ -40,36 +40,12 @@ constexpr bool isGroundImpl() {
     return isGroundImpl<typename E::expr_type>();
   } else if constexpr (is_constant_v<E> || is_fraction_v<E>) {
     return true;
-  } else if constexpr (is_literal_v<E>) {
-    return true;
   } else if constexpr (is_atom_v<E>) {
     return false;  // Free variable
   } else if constexpr (is_expression_v<E>) {
     return isGroundExpression(E{}, MakeIndexSequence<E::arity>{});
   } else {
     return true;  // Nullary expressions (pi, e) are ground
-  }
-}
-
-// HasLiteral - does expression contain any Literal node?
-template <Symbolic E>
-constexpr bool hasLiteralImpl();
-
-template <typename Op, typename... Args, SizeT... Is>
-constexpr bool hasLiteralExpression(Expression<Op, Args...>, IndexSequence<Is...>) {
-  return (hasLiteralImpl<Args>() || ...);
-}
-
-template <Symbolic E>
-constexpr bool hasLiteralImpl() {
-  if constexpr (is_reduce_over_v<E>) {
-    return hasLiteralImpl<typename E::expr_type>();
-  } else if constexpr (is_literal_v<E>) {
-    return true;
-  } else if constexpr (is_expression_v<E>) {
-    return hasLiteralExpression(E{}, MakeIndexSequence<E::arity>{});
-  } else {
-    return false;
   }
 }
 
@@ -83,14 +59,6 @@ constexpr bool isGround(E) {
 template <Symbolic E>
 constexpr bool is_ground_v = partial_eval_detail::isGroundImpl<E>();
 
-template <Symbolic E>
-constexpr bool hasLiteral(E) {
-  return partial_eval_detail::hasLiteralImpl<E>();
-}
-
-template <Symbolic E>
-constexpr bool has_literal_v = partial_eval_detail::hasLiteralImpl<E>();
-
 // ============================================================================
 // EvalIfGround - Strategy that evaluates ground subexpressions
 // ============================================================================
@@ -100,14 +68,14 @@ struct EvalIfGround {
   constexpr auto apply(E e) const {
     if constexpr (!is_ground_v<E>) {
       return e;
-    } else if constexpr (is_constant_v<E> || is_fraction_v<E> || is_literal_v<E>) {
+    } else if constexpr (is_constant_v<E> || is_fraction_v<E>) {
       return e;
-    } else if constexpr (has_literal_v<E>) {
-      auto value = evaluate(e);
-      return lit(value);
     } else {
-      constexpr auto value = evaluate(E{});
-      return Constant<value>{};
+      // Ground expression with no free symbols — evaluate it.
+      // Result stays as the original expression since we can't construct
+      // Constant<V> at runtime (V must be a compile-time NTTP).
+      // The info-domain simplifier handles this case instead.
+      return e;
     }
   }
 };

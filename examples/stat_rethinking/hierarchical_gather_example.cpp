@@ -106,11 +106,11 @@ and we use gather() to index into group-level parameters.
   struct Obs {};
 
   // Priors
-  auto a_bar = normal(0.0, 1.0);
-  auto sigma = exponential(1.0);
+  auto a_bar = normal(0_c, 1_c);
+  auto sigma = exponential(1_c);
 
   // Non-centered parameterization: z[g] ~ N(0,1), a[g] = a_bar + sigma * z[g]
-  auto z = plate<Groups>(normal(lit(0.0), lit(1.0)));
+  auto z = plate<Groups>(normal(0_c, 1_c));
 
   // Data symbols - district gives which group each observation belongs to
   auto district = data<Obs>();

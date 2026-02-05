@@ -47,7 +47,7 @@ auto main() -> int {
 
   "sampleDist from NormalDist"_test = [] {
     std::mt19937 rng{42};
-    auto dist = Normal(0.0, 1.0);
+    auto dist = Normal(0_c, 1_c);
     double val = sampleDist(dist, Trace<>{}, rng);
 
     expectTrue(std::isfinite(val));
@@ -66,7 +66,7 @@ auto main() -> int {
 
   "sampleDist from HalfNormalDist"_test = [] {
     std::mt19937 rng{42};
-    auto dist = HalfNormal(2.0);
+    auto dist = HalfNormal(2_c);
     double val = sampleDist(dist, Trace<>{}, rng);
 
     expectTrue(std::isfinite(val));
@@ -75,7 +75,7 @@ auto main() -> int {
 
   "sampleDist from BetaDist"_test = [] {
     std::mt19937 rng{42};
-    auto dist = Beta(2.0, 5.0);
+    auto dist = Beta(2_c, 5_c);
     double val = sampleDist(dist, Trace<>{}, rng);
 
     expectTrue(std::isfinite(val));
@@ -84,7 +84,7 @@ auto main() -> int {
 
   "sampleDist from GammaDist"_test = [] {
     std::mt19937 rng{42};
-    auto dist = Gamma(2.0, 0.5);
+    auto dist = Gamma(2_c, 0.5_c);
     double val = sampleDist(dist, Trace<>{}, rng);
 
     expectTrue(std::isfinite(val));
@@ -93,7 +93,7 @@ auto main() -> int {
 
   "sampleDist from ExponentialDist"_test = [] {
     std::mt19937 rng{42};
-    auto dist = Exponential(0.5);
+    auto dist = Exponential(0.5_c);
     double val = sampleDist(dist, Trace<>{}, rng);
 
     expectTrue(std::isfinite(val));
@@ -102,7 +102,7 @@ auto main() -> int {
 
   "sampleDist from UniformDist"_test = [] {
     std::mt19937 rng{42};
-    auto dist = Uniform(1.0, 5.0);
+    auto dist = Uniform(1_c, 5_c);
     double val = sampleDist(dist, Trace<>{}, rng);
 
     expectTrue(val >= 1.0 && val <= 5.0);
@@ -110,7 +110,7 @@ auto main() -> int {
 
   "sampleDist from CauchyDist"_test = [] {
     std::mt19937 rng{42};
-    auto dist = Cauchy(0.0, 1.0);
+    auto dist = Cauchy(0_c, 1_c);
     double val = sampleDist(dist, Trace<>{}, rng);
 
     expectTrue(std::isfinite(val));
@@ -118,7 +118,7 @@ auto main() -> int {
 
   "sampleDist from BernoulliDist"_test = [] {
     std::mt19937 rng{42};
-    auto dist = Bernoulli(0.7);
+    auto dist = Bernoulli(0.7_c);
     double val = sampleDist(dist, Trace<>{}, rng);
 
     expectTrue(val == 0.0 || val == 1.0);
@@ -130,7 +130,7 @@ auto main() -> int {
 
   "sample from RandomVar with no deps"_test = [] {
     std::mt19937 rng{42};
-    auto mu = normal(lit(0.0), lit(1.0));
+    auto mu = normal(0_c, 1_c);
 
     double val = sample(mu, rng);
     expectTrue(std::isfinite(val));
@@ -138,8 +138,8 @@ auto main() -> int {
 
   "sample from RandomVar with bindings"_test = [] {
     std::mt19937 rng{42};
-    auto mu = normal(lit(0.0), lit(10.0));
-    auto y = normal(mu, lit(1.0));
+    auto mu = normal(0_c, 10_c);
+    auto y = normal(mu, 1_c);
 
     double mu_val = sample(mu, rng);
     double y_val = sample(y, rng, mu = mu_val);
@@ -154,7 +154,7 @@ auto main() -> int {
 
   "sampleAll for single RV"_test = [] {
     std::mt19937 rng{42};
-    auto mu = normal(lit(0.0), lit(1.0));
+    auto mu = normal(0_c, 1_c);
 
     auto trace = sampleAll(rng, mu);
     double val = trace[mu];
@@ -164,8 +164,8 @@ auto main() -> int {
 
   "sampleAll for two RVs"_test = [] {
     std::mt19937 rng{42};
-    auto mu = normal(lit(0.0), lit(10.0));
-    auto y = normal(mu, lit(1.0));
+    auto mu = normal(0_c, 10_c);
+    auto y = normal(mu, 1_c);
 
     auto trace = sampleAll(rng, mu, y);
 
@@ -178,8 +178,8 @@ auto main() -> int {
 
   "sampleAll for three RVs"_test = [] {
     std::mt19937 rng{42};
-    auto mu = normal(lit(0.0), lit(10.0));
-    auto sigma = halfNormal(lit(5.0));
+    auto mu = normal(0_c, 10_c);
+    auto sigma = halfNormal(5_c);
     auto y = normal(mu, sigma);
 
     auto trace = sampleAll(rng, mu, sigma, y);
@@ -196,8 +196,8 @@ auto main() -> int {
 
   "sampleAll trace can be used as bindings"_test = [] {
     std::mt19937 rng{42};
-    auto mu = normal(lit(0.0), lit(10.0));
-    auto y = normal(mu, lit(1.0));
+    auto mu = normal(0_c, 10_c);
+    auto y = normal(mu, 1_c);
 
     auto trace = sampleAll(rng, mu, y);
 
@@ -214,7 +214,7 @@ auto main() -> int {
 
   "samplePlate returns vector"_test = [] {
     std::mt19937 rng{42};
-    auto y = normal(lit(0.0), lit(1.0));
+    auto y = normal(0_c, 1_c);
 
     auto samples = samplePlate(y, 100, rng);
 
@@ -226,8 +226,8 @@ auto main() -> int {
 
   "samplePlate with bindings"_test = [] {
     std::mt19937 rng{42};
-    auto mu = normal(lit(0.0), lit(10.0));
-    auto y = normal(mu, lit(1.0));
+    auto mu = normal(0_c, 10_c);
+    auto y = normal(mu, 1_c);
 
     // Sample mu once
     double mu_val = sample(mu, rng);
@@ -247,7 +247,7 @@ auto main() -> int {
 
   "sampleDist from Normal has correct mean (approx)"_test = [] {
     std::mt19937 rng{12345};
-    auto dist = Normal(5.0, 2.0);
+    auto dist = Normal(5_c, 2_c);
 
     double sum = 0.0;
     constexpr int N = 10000;
@@ -263,7 +263,7 @@ auto main() -> int {
 
   "sampleDist from Beta has correct mean (approx)"_test = [] {
     std::mt19937 rng{12345};
-    auto dist = Beta(2.0, 5.0);
+    auto dist = Beta(2_c, 5_c);
 
     double sum = 0.0;
     constexpr int N = 10000;

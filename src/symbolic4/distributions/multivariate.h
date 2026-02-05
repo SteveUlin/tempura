@@ -57,24 +57,12 @@ struct VectorComponent : SymbolicTag {
   static constexpr SizeT index = I;
 };
 
-// Type traits
+// Type traits — VectorSymbol/VectorComponent have SizeT NTTPs, use info-based isSpecOf
 template <typename T>
-struct IsVectorSymbol : std::false_type {};
-
-template <typename Id, SizeT D>
-struct IsVectorSymbol<VectorSymbol<Id, D>> : std::true_type {};
+constexpr bool is_vector_symbol_v = core_traits_detail::isSpecOf<T>(^^VectorSymbol);
 
 template <typename T>
-constexpr bool is_vector_symbol_v = IsVectorSymbol<T>::value;
-
-template <typename T>
-struct IsVectorComponent : std::false_type {};
-
-template <typename Id, SizeT D, SizeT I>
-struct IsVectorComponent<VectorComponent<Id, D, I>> : std::true_type {};
-
-template <typename T>
-constexpr bool is_vector_component_v = IsVectorComponent<T>::value;
+constexpr bool is_vector_component_v = core_traits_detail::isSpecOf<T>(^^VectorComponent);
 
 // ============================================================================
 // VectorBinding - Bind a VectorSymbol to actual values
@@ -112,13 +100,7 @@ struct VectorBinding {
 };
 
 template <typename T>
-struct IsVectorBinding : std::false_type {};
-
-template <typename Sym>
-struct IsVectorBinding<VectorBinding<Sym>> : std::true_type {};
-
-template <typename T>
-constexpr bool is_vector_binding_v = IsVectorBinding<T>::value;
+constexpr bool is_vector_binding_v = core_traits_detail::isSpecOf<T, VectorBinding>();
 
 // ============================================================================
 // MultivariateNormalDist - D-dimensional normal distribution (diagonal cov)

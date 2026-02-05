@@ -26,8 +26,8 @@ auto main() -> int {
   "HMC adapter basic functionality"_test = [] {
     // Model: mu ~ Normal(0, 5), sigma ~ HalfNormal(2), y ~ Normal(mu, sigma)
     // Observed: y = 3.5
-    auto mu = normal(lit(0.0), lit(5.0));
-    auto sigma = halfNormal(lit(2.0));
+    auto mu = normal(0.0_c, 5.0_c);
+    auto sigma = halfNormal(2.0_c);
     auto y = normal(mu.sym(), sigma.sym());
 
     // makePlateTransformedPosterior auto-infers transforms from support
@@ -62,7 +62,7 @@ auto main() -> int {
   "HMC adapter sampling"_test = [] {
     // Simple model: x ~ Normal(2, 0.5)
     // Should recover mean near 2
-    auto x = normal(lit(2.0), lit(0.5));
+    auto x = normal(2.0_c, 0.5_c);
     auto posterior = makePlateTransformedPosterior(
         logProb(x), x
     ).build();
@@ -103,7 +103,7 @@ auto main() -> int {
   "HMC adapter with positive constraint"_test = [] {
     // Model: sigma ~ HalfNormal(2)
     // Should recover positive samples
-    auto sigma = halfNormal(lit(2.0));
+    auto sigma = halfNormal(2.0_c);
     auto posterior = makePlateTransformedPosterior(
         logProb(sigma), sigma
     ).build();
@@ -131,8 +131,8 @@ auto main() -> int {
   };
 
   "HMC adapter inverse transform"_test = [] {
-    auto mu = normal(lit(0.0), lit(1.0));
-    auto sigma = halfNormal(lit(1.0));
+    auto mu = normal(0.0_c, 1.0_c);
+    auto sigma = halfNormal(1.0_c);
 
     auto posterior = makePlateTransformedPosterior(
         logProb(mu, sigma), mu, sigma
@@ -164,9 +164,9 @@ auto main() -> int {
     // a ~ Normal(-2, 1)        (scalar)
     // sigma ~ Exponential(1)   (scalar)
     // z_b[i] ~ Normal(0, 1)    (indexed)
-    auto a = normal(-2.0, 1.0);
-    auto sigma = exponential(1.0);
-    auto z_b = plate<HmcTestCountries>(normal(lit(0.0), lit(1.0)));
+    auto a = normal(-2_c, 1_c);
+    auto sigma = exponential(1_c);
+    auto z_b = plate<HmcTestCountries>(normal(0.0_c, 1.0_c));
 
     // Joint log-prob (simplified - no likelihood for this test)
     auto joint_lp = collectLogProbs(a, sigma, z_b);

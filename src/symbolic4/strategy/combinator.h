@@ -54,8 +54,6 @@
 // ------------------
 //   BottomUp   - Post-order: process children, then node
 //   TopDown    - Pre-order: process node, then children
-//   Innermost  - Bottom-up fixpoint: repeat until no more changes
-//   Outermost  - Top-down fixpoint: repeat until no more changes
 //
 // MISSING FROM STANDARD STRATEGO (potential extensions)
 // -----------------------------------------------------
@@ -79,17 +77,6 @@
 // For our use case (symbolic differentiation, simplification), traditional
 // strategies suffice and integrate naturally with compile-time evaluation.
 //
-// RECURSION AND TERMINATION
-// -------------------------
-// Innermost/Outermost use a MaxDepth parameter to bound recursion. This is
-// necessary because:
-//   1. C++ template instantiation depth is bounded
-//   2. Non-terminating rewrites must fail gracefully
-//   3. Compile-time evaluation needs finite bounds
-//
-// If rewriting doesn't reach a fixpoint within MaxDepth iterations, we
-// return Never{} (failure). Callers should increase MaxDepth or restructure
-// rules if this occurs legitimately.
 //
 // REFERENCES
 // ----------
@@ -245,26 +232,12 @@ struct All {
 // The key insight is that `all` recurses through children while the outer
 // strategy controls when to apply the rule.
 //
-// SINGLE-PASS TRAVERSALS (visit each node once):
 //   bottomup(s) - post-order: children before parent
 //   topdown(s)  - pre-order: parent before children
 //
-// FIXPOINT TRAVERSALS (repeat until no changes):
-//   innermost(s) - bottom-up fixpoint, preferred for normalization
-//   outermost(s) - top-down fixpoint, useful for expansion
-//
-// WHY INNERMOST FOR NORMALIZATION?
-// Innermost rewrites innermost redexes first, which means:
-//   1. Arguments are simplified before the parent rule fires
-//   2. Rule patterns can assume normalized arguments
-//   3. Each rule application sees the "most reduced" children
-//
-// Example: simplify(0 + (1 + x))
-//   Innermost: first simplify (1 + x) → stuck, then 0 + (1+x) → (1+x)
-//   Outermost: try 0 + (1+x) → (1+x), done (one step)
-//
-// For simplification rules that expect normalized arguments (like 0+x → x),
-// innermost ensures arguments are already in normal form.
+// Note: Fixpoint traversals (innermost, outermost) were removed — the
+// info-domain simplifier (strategy/info_simplify.h) now handles fixpoint
+// rewriting without type-level recursion.
 //
 // ============================================================================
 
@@ -310,159 +283,6 @@ struct TopDown {
   }
 };
 
-// Innermost: bottom-up fixpoint iteration.
-// Repeatedly applies s bottom-up until reaching a normal form (no more changes).
-// Mathematical definition: innermost(s) = bottomup(try(s >> innermost(s)))
-//
-// This is the standard strategy for term normalization. It ensures:
-//   - Rules see fully-normalized arguments
-//   - Changes propagate upward correctly
-//   - Termination when rule system is terminating
-//
-// MaxDepth bounds template recursion. If exceeded, returns Never{} (failure).
-// Increase MaxDepth for complex expressions, or restructure rules if
-// non-termination is suspected.
-template <typename S, SizeT MaxDepth = 20>
-struct Innermost {
-  [[no_unique_address]] S s;
-
-  template <Symbolic E>
-  constexpr auto apply(E e) const {
-    return loop<E, 0>(e);
-  }
-
- private:
-  template <Symbolic E, SizeT Depth>
-  constexpr auto loop(E e) const {
-    if constexpr (Depth >= MaxDepth) {
-      return Never{};  // Exceeded depth: likely non-terminating rules
-    } else {
-      // First, recursively normalize all children
-      auto children_done = All<Innermost>{*this}.apply(e);
-      if constexpr (isSame<decltype(children_done), Never>) {
-        return e;  // Child normalization failed, return input
-      } else {
-        // Then try to apply s at this node
-        auto here = s.apply(children_done);
-        if constexpr (isSame<decltype(here), Never> ||
-                      isSame<decltype(here), decltype(children_done)>) {
-          return children_done;  // s didn't apply, we're done here
-        } else {
-          // s succeeded and changed something: recurse on the result
-          return loop<decltype(here), Depth + 1>(here);
-        }
-      }
-    }
-  }
-};
-
-// Outermost: top-down fixpoint iteration.
-// Repeatedly applies s top-down until reaching a normal form.
-// Mathematical definition: outermost(s) = topdown(try(s >> outermost(s)))
-//
-// Useful when:
-//   - Rules expand/unfold definitions
-//   - You want to process outer structure before diving into details
-//   - Rules don't require normalized arguments
-//
-// Generally less common than innermost for simplification tasks.
-template <typename S, SizeT MaxDepth = 20>
-struct Outermost {
-  [[no_unique_address]] S s;
-
-  template <Symbolic E>
-  constexpr auto apply(E e) const {
-    return loop<E, 0>(e);
-  }
-
- private:
-  template <Symbolic E, SizeT Depth>
-  constexpr auto loop(E e) const {
-    if constexpr (Depth >= MaxDepth) {
-      return Never{};  // Exceeded depth: likely non-terminating rules
-    } else {
-      // First try to apply s at this node
-      auto here = s.apply(e);
-      if constexpr (isSame<decltype(here), Never> || isSame<decltype(here), E>) {
-        // s didn't apply here, descend into children
-        return All<Outermost>{*this}.apply(e);
-      } else {
-        // s succeeded: recurse on the transformed result
-        return loop<decltype(here), Depth + 1>(here);
-      }
-    }
-  }
-};
-
-// ============================================================================
-// FIXED-POINT COMBINATOR
-// ============================================================================
-//
-// Fix enables defining recursive strategies compositionally. Instead of
-// creating a dedicated type for each recursive pattern (like BottomUp<S>),
-// you can express the recursion inline:
-//
-//   auto my_bottomup = fix([s](auto rec) { return all(rec) >> s; });
-//
-// This says: "bottomup applies s after recursively processing children."
-// The lambda receives 'rec' (the fixed point itself) and returns a strategy
-// that uses 'rec' for recursive calls.
-//
-// HOW IT WORKS
-// ------------
-// The key insight is that Fix<F> is a finite type, even though it represents
-// infinite recursion. The type F (the lambda) is fixed at compile time;
-// recursion happens at the value level when apply() calls f(*this).
-//
-// Without Fix, writing `bottomup(s) = all(bottomup(s)) >> s` directly creates
-// an infinite type: Seq<All<Seq<All<Seq<...>>>>, S>. With Fix, the type is
-// just Fix<Lambda>, and the unfolding happens during execution.
-//
-// EXAMPLES
-// --------
-// The classic traversals expressed with fix:
-//
-//   bottomup(s) = fix([s](auto rec) { return all(rec) >> s; })
-//   topdown(s)  = fix([s](auto rec) { return s >> all(rec); })
-//
-// More exotic patterns become easy to express:
-//
-//   // Apply s somewhere top-down (first success wins)
-//   oncetd(s) = fix([s](auto rec) { return s | one(rec); })
-//
-//   // Apply s down the leftmost spine only
-//   spinetd(s) = fix([s](auto rec) { return s >> try_(one(rec)); })
-//
-// COMPARISON TO DEDICATED TYPES
-// -----------------------------
-// Fix is more flexible but creates a new strategy object on each recursive
-// call. The dedicated types (BottomUp, TopDown) avoid this by using *this
-// directly. For compile-time evaluation this rarely matters, but for very
-// deep trees you might prefer the dedicated versions.
-//
-// Fix is valuable for:
-//   - Experimenting with new traversal patterns
-//   - One-off recursive strategies
-//   - Understanding the mathematical structure of recursion schemes
-//
-// ============================================================================
-
-template <typename F>
-struct Fix {
-  [[no_unique_address]] F f;
-
-  template <Symbolic E>
-  constexpr auto apply(E e) const {
-    // f(*this) produces a strategy that uses *this for recursive calls
-    return f(*this).apply(e);
-  }
-};
-
-template <typename F>
-constexpr auto fix(F f) {
-  return Fix<F>{f};
-}
-
 // ============================================================================
 // OPERATORS
 // ============================================================================
@@ -499,16 +319,6 @@ constexpr auto bottomup(S s) {
 template <typename S>
 constexpr auto topdown(S s) {
   return TopDown<S>{s};
-}
-
-template <typename S>
-constexpr auto innermost(S s) {
-  return Innermost<S>{s};
-}
-
-template <typename S>
-constexpr auto outermost(S s) {
-  return Outermost<S>{s};
 }
 
 // ============================================================================

@@ -31,13 +31,10 @@ namespace collect_detail {
 
 // Type trait to check if T is Constant<0>
 template <typename T>
-struct IsZeroConstant : std::false_type {};
-
-template <>
-struct IsZeroConstant<Constant<0>> : std::true_type {};
-
-template <typename T>
-constexpr bool is_zero_constant_v = IsZeroConstant<T>::value;
+constexpr bool is_zero_constant_v = [] consteval {
+    if constexpr (is_constant_v<T>) return T::value == 0;
+    else return false;
+}();
 
 // Helper: Add two results, treating Constant<0> as identity for addition
 template <typename A, typename B>
@@ -90,10 +87,8 @@ constexpr auto collectFromExprImpl(Visited visited, E expr) {
       return std::pair{Constant<0>{}, visited};
     } else {
       using NewVisited = id_set_insert_t<IdType, Visited>;
-      using Dist = typename E::effect_type::dist_type;
-      using DimsList = typename E::effect_type::dims_list;
-
-      auto rv = IndexedRandomVar<Dist, IdType, DimsList>{expr.effect_.dist_};
+      using RVType = make_indexed_rv_from_effect_t<typename E::effect_type, IdType>;
+      auto rv = RVType{expr.effect_.dist_};
       auto rv_logprob = rv.logProb();
 
       auto [parent_logprobs, final_visited] =

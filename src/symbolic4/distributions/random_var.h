@@ -16,8 +16,8 @@
 // the type simpler and avoids redundant graph machinery.
 //
 // Usage:
-//   auto mu = normal(lit(0), lit(10));      // mu ~ Normal(0, 10)
-//   auto sigma = halfNormal(lit(5));         // sigma ~ HalfNormal(5)
+//   auto mu = normal(0_c, 10_c);             // mu ~ Normal(0, 10)
+//   auto sigma = halfNormal(5_c);            // sigma ~ HalfNormal(5)
 //   auto y = normal(mu, sigma);              // y ~ Normal(mu, sigma)
 //
 //   // Joint log probability (user lists all RVs)
@@ -180,8 +180,8 @@ constexpr auto poisson(Lambda lambda) {
 // ============================================================================
 //
 // Enables RandomVar to be used directly in expressions:
-//   auto alpha = normal(0, 10);
-//   auto beta = normal(0, 5);
+//   auto alpha = normal(0_c, 10_c);
+//   auto beta = normal(0_c, 5_c);
 //   auto mu = alpha + beta * x;  // Works! No need for *alpha, *beta
 //
 // Returns Atom<Id, Sample<Dist>> — a discoverable atom that carries distribution

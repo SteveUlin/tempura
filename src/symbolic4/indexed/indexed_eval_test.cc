@@ -138,7 +138,7 @@ auto main() -> int {
     XSym x;
 
     // Σᵢ (x[i] - 1.0)
-    auto sum_expr = sumOver<Obs>(x - lit(1.0));
+    auto sum_expr = sumOver<Obs>(x - 1.0_c);
 
     std::vector<double> data = {2.0, 3.0, 4.0};
     IndexedBinding<XSym, 1> x_bind{std::span<const double>(data)};

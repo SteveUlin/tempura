@@ -1,5 +1,6 @@
 add_subdirectory(build_tooling)
 add_subdirectory(idioms)
+add_subdirectory(reflection)
 add_subdirectory(stat_rethinking)
 
 # Examples use target-based includes via target_link_libraries()

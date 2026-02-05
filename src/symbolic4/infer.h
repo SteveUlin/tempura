@@ -193,7 +193,7 @@ constexpr auto inferRaw(const RVs&... rvs) {
   // Use RandomVars for params: their operator= applies inverse transform,
   // ensuring constrained-space values round-trip correctly through eval.
   auto params = makeTuple(rvs...);
-  auto grads = makeTuple(simplify(diff(joint_lp, rvs.freeSym()))...);
+  auto grads = makeTuple(diff(joint_lp, rvs.freeSym())...);
   return RawPosterior{joint_lp, params, grads};
 }
 

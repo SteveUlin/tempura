@@ -13,8 +13,8 @@
 // Bayesian inference where we compute P(params | data) ∝ P(data | params) P(params).
 //
 // Usage:
-//   auto mu = normal(lit(0), lit(10));
-//   auto y = plate<Obs>(normal(mu, lit(1.0)));
+//   auto mu = normal(0_c, 10_c);
+//   auto y = plate<Obs>(normal(mu, 1.0_c));
 //
 //   std::vector<double> y_data = {1.0, 2.0, 3.0};
 //   auto y_obs = observe(y, y_data);
@@ -42,13 +42,7 @@ struct Observed {
 
 // Type traits
 template <typename T>
-struct IsObservedTrait : std::false_type {};
-
-template <typename Node, typename Data>
-struct IsObservedTrait<Observed<Node, Data>> : std::true_type {};
-
-template <typename T>
-constexpr bool is_observed_v = IsObservedTrait<T>::value;
+constexpr bool is_observed_v = core_traits_detail::isSpecOf<T, Observed>();
 
 // ============================================================================
 // observe() - Factory functions

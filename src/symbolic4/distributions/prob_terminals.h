@@ -1,7 +1,7 @@
 #pragma once
 
 #include "symbolic4/distributions/effects.h"
-#include "symbolic4/distributions/indexed_node.h"  // For make_indexed_symbol_t
+#include "symbolic4/distributions/indexed_node.h"  // For make_indexed_rv_from_effect_t
 #include "symbolic4/terminals.h"
 
 // ============================================================================
@@ -29,10 +29,9 @@ struct ProbTerminals {
   template <typename Interp, typename T, typename Ctx>
   static auto eval(T term, Ctx& ctx) -> double {
     if constexpr (is_indexed_random_var_atom_v<T>) {
-      // Atom<Id, IndexedSample<Dist, DimsList>> - look up via IndexedSymbol
-      using DimsList = typename T::effect_type::dims_list;
+      // Atom<Id, IndexedSample<Dist, Dims...>> - look up via IndexedSymbol
       using IdType = typename T::id_type;
-      using LookupSym = detail::make_indexed_symbol_t<IdType, DimsList>;
+      using LookupSym = make_indexed_sym_from_effect_t<typename T::effect_type, IdType>;
       return Interp::template lookupIndexedSymbol<LookupSym>(LookupSym{}, ctx);
     } else if constexpr (is_random_var_atom_v<T>) {
       // Sample atom: look up by constructing the corresponding Free symbol.

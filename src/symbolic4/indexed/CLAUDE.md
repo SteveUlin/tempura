@@ -48,7 +48,7 @@ Examples:
 Create indexed random variables:
 ```cpp
 auto alpha = plate<Countries>(normal(mu, sigma));  // α[c] ~ Normal(μ, σ)
-auto y = plate<Years>(plate<Countries>(normal(alpha, lit(1))));  // y[c,y]
+auto y = plate<Years>(plate<Countries>(normal(alpha, 1_c)));  // y[c,y]
 ```
 
 The resulting `IndexedRandomVar` has:
@@ -123,14 +123,14 @@ Plate support in `model.h`:
 struct Groups {};
 
 // Hyperparameters
-auto mu_0 = normal(0, 10);
-auto sigma_0 = halfNormal(5);
+auto mu_0 = normal(0_c, 10_c);
+auto sigma_0 = halfNormal(5_c);
 
 // Group-level parameters
 auto theta = plate<Groups>(normal(mu_0, sigma_0));  // θ[g]
 
 // Observations (implicit sum over observations)
-auto y = normal(theta, lit(1));
+auto y = normal(theta, 1_c);
 
 auto m = model(mu_0, sigma_0, theta, y);
 auto posterior = m.posterior()

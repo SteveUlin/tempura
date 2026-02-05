@@ -28,8 +28,8 @@
 // Missing dependencies cause compile errors (type-safe!).
 //
 // Example:
-//   auto mu = normal(lit(0), lit(10));
-//   auto sigma = halfNormal(lit(5));
+//   auto mu = normal(0_c, 10_c);
+//   auto sigma = halfNormal(5_c);
 //   auto y = normal(mu, sigma);
 //
 //   std::mt19937 rng{42};

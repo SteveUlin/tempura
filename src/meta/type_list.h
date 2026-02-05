@@ -1,88 +1,71 @@
 #pragma once
 
+#include <experimental/meta>
+
 #include "meta/tags.h"
 #include "meta/utility.h"
 
-// Compile-time type list operations with zero STL dependencies
-// Used for compile-time symbolic expression manipulation
+// Compile-time type list operations via P2996 reflection.
+// template_arguments_of + splice replace recursive template specialization.
 
 namespace tempura {
 
-// TypeList already defined in meta/tags.h, we just add operations
+// TypeList defined in meta/tags.h
 
-// ============================================================================
-// Get - Extract type at index (STL-free)
-// ============================================================================
-
-namespace detail {
-template <SizeT Idx, typename T, typename... Rest>
-struct GetImpl {
-  using type = typename GetImpl<Idx - 1, Rest...>::type;
-};
-
-template <typename T, typename... Rest>
-struct GetImpl<0, T, Rest...> {
-  using type = T;
-};
-}  // namespace detail
-
+// Get<I, TypeList<...>> — extract type at index via splice
 template <SizeT Idx, typename... Types>
-struct Get {
-  using type = typename detail::GetImpl<Idx, Types...>::type;
-};
+struct Get;
 
+// TypeList-wrapped: Get<1, TypeList<int, double>> → double
 template <SizeT Idx, typename... Types>
 struct Get<Idx, TypeList<Types...>> {
-  using type = typename detail::GetImpl<Idx, Types...>::type;
+  using type = [:std::meta::template_arguments_of(^^TypeList<Types...>)[Idx]:];
+};
+
+// Raw type list: Get<0, int, double> → int (used by CompressedTuple)
+template <SizeT Idx, typename First, typename... Rest>
+struct Get<Idx, First, Rest...> {
+  using type = [:std::meta::template_arguments_of(^^TypeList<First, Rest...>)[Idx]:];
 };
 
 template <SizeT Idx, typename... Types>
 using Get_t = typename Get<Idx, Types...>::type;
 
-// ============================================================================
-// Head - Get first type
-// ============================================================================
-
+// Head — first element
 template <typename... Types>
 struct Head;
+
+template <typename... Types>
+struct Head<TypeList<Types...>> {
+  using type = [:std::meta::template_arguments_of(^^TypeList<Types...>)[0]:];
+};
 
 template <typename First, typename... Rest>
 struct Head<First, Rest...> {
   using type = First;
 };
 
-template <typename First, typename... Rest>
-struct Head<TypeList<First, Rest...>> {
-  using type = First;
-};
-
 template <typename... Types>
 using Head_t = typename Head<Types...>::type;
 
-// ============================================================================
-// Tail - Get all types except first
-// ============================================================================
-
+// Tail — all elements except the first
 template <typename... Types>
 struct Tail;
-
-template <typename First, typename... Rest>
-struct Tail<First, Rest...> {
-  using type = TypeList<Rest...>;
-};
 
 template <typename First, typename... Rest>
 struct Tail<TypeList<First, Rest...>> {
   using type = TypeList<Rest...>;
 };
 
+template <typename First, typename... Rest>
+struct Tail<First, Rest...> {
+  using type = TypeList<Rest...>;
+};
+
 template <typename... Types>
 using Tail_t = typename Tail<Types...>::type;
 
-// ============================================================================
-// Size - Get number of types in list
-// ============================================================================
-
+// Size — number of elements
 template <typename... Types>
 struct Size;
 

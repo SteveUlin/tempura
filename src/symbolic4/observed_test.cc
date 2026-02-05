@@ -17,7 +17,7 @@ auto main() -> int {
 
   "observe creates Observed wrapper"_test = [] {
     struct Obs {};
-    auto theta = plate<Obs>(beta(lit(2.0), lit(3.0)));
+    auto theta = plate<Obs>(beta(2.0_c, 3.0_c));
 
     std::vector<double> data = {0.3, 0.5, 0.7};
     auto theta_obs = observe(theta, data);
@@ -28,7 +28,7 @@ auto main() -> int {
 
   "Observed preserves node type"_test = [] {
     struct Obs {};
-    auto theta = plate<Obs>(normal(lit(0.0), lit(1.0)));
+    auto theta = plate<Obs>(normal(0.0_c, 1.0_c));
 
     std::vector<double> data = {1.0, 2.0};
     auto theta_obs = observe(theta, data);
@@ -43,7 +43,7 @@ auto main() -> int {
 
   "makeObservedBinding creates correct 1D binding"_test = [] {
     struct Obs {};
-    auto theta = plate<Obs>(beta(lit(2.0), lit(3.0)));
+    auto theta = plate<Obs>(beta(2.0_c, 3.0_c));
 
     std::vector<double> data = {0.3, 0.5, 0.7};
     auto theta_obs = observe(theta, data);
@@ -61,7 +61,7 @@ auto main() -> int {
 
   "observedLogProb returns log-prob expression"_test = [] {
     struct Obs {};
-    auto theta = plate<Obs>(beta(lit(2.0), lit(3.0)));
+    auto theta = plate<Obs>(beta(2.0_c, 3.0_c));
 
     std::vector<double> data = {0.3, 0.5, 0.7};
     auto theta_obs = observe(theta, data);
@@ -73,7 +73,7 @@ auto main() -> int {
 
   "observed plate log-prob evaluation"_test = [] {
     struct Obs {};
-    auto theta = plate<Obs>(beta(lit(2.0), lit(3.0)));
+    auto theta = plate<Obs>(beta(2.0_c, 3.0_c));
 
     std::vector<double> data = {0.3, 0.5, 0.7};
     auto theta_obs = observe(theta, data);
@@ -99,8 +99,8 @@ auto main() -> int {
 
   "observed with scalar parameter"_test = [] {
     struct Obs {};
-    auto alpha = halfNormal(5.0);
-    auto theta = plate<Obs>(beta(alpha, lit(3.0)));
+    auto alpha = halfNormal(5_c);
+    auto theta = plate<Obs>(beta(alpha, 3.0_c));
 
     std::vector<double> data = {0.3, 0.5, 0.7};
     auto theta_obs = observe(theta, data);
@@ -122,8 +122,8 @@ auto main() -> int {
 
   "observed normal distribution"_test = [] {
     struct Obs {};
-    auto mu = normal(0.0, 10.0);
-    auto y = plate<Obs>(normal(mu, lit(1.0)));
+    auto mu = normal(0_c, 10_c);
+    auto y = plate<Obs>(normal(mu, 1.0_c));
 
     std::vector<double> data = {1.0, 2.0, 3.0};
     auto y_obs = observe(y, data);

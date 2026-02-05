@@ -8,7 +8,7 @@
 // terminals.h - Domain-independent terminal dispatch for evaluation
 // ============================================================================
 //
-// BaseTerminals handles all core terminal types: Constants, Fractions, Literals,
+// BaseTerminals handles all core terminal types: Constants, Fractions,
 // Free atoms, IndexedSymbol, and IndexedData. It knows nothing about
 // probabilistic effects (Sample, IndexedSample) or constraint transforms.
 //
@@ -23,7 +23,7 @@ namespace tempura::symbolic4 {
 // BaseTerminals - Domain-independent terminal handler
 // ============================================================================
 //
-// Handles: Constant, Fraction, Literal, IndexedSymbol, IndexedData, Free atoms.
+// Handles: Constant, Fraction, IndexedSymbol, IndexedData, Free atoms.
 // Does NOT handle: Sample, IndexedSample, or any probabilistic effects.
 //
 // The Ctx type must have:
@@ -41,8 +41,6 @@ struct BaseTerminals {
       return static_cast<double>(T::value);
     } else if constexpr (is_fraction_v<T>) {
       return T::value;
-    } else if constexpr (is_literal_v<T>) {
-      return static_cast<double>(term.effect_.value);
     } else if constexpr (is_indexed_symbol_v<T>) {
       return Interp::template lookupIndexedSymbol<T>(term, ctx);
     } else if constexpr (is_indexed_data_v<T>) {

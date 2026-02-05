@@ -75,7 +75,7 @@ constexpr auto logMVNormalCholesky(Y y, Mu mu, LCov l_cov, K k) {
   constexpr double log_2pi = 1.8378770664093453;
   auto residual = y - mu;
   // -K/2 log(2π) - logDetChol(L) - ½ ||L⁻¹(y-μ)||²
-  return Fraction<-1, 2>{} * k * lit(log_2pi) - logDetChol(l_cov) -
+  return Fraction<-1, 2>{} * k * Constant<log_2pi>{} - logDetChol(l_cov) -
          Fraction<1, 2>{} * quadFormChol(residual, l_cov);
 }
 

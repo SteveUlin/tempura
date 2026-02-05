@@ -16,7 +16,7 @@ auto main() -> int {
 
   "collectLogProbs with no parent RVs"_test = [] {
     // mu has literal parameters, so no parent RVs to discover
-    auto mu = normal(lit(0.0), lit(10.0));
+    auto mu = normal(0.0_c, 10.0_c);
     auto collected = collectLogProbs(mu);
     auto manual = mu.logProb();
 
@@ -32,8 +32,8 @@ auto main() -> int {
 
   "collectLogProbs discovers parent RV"_test = [] {
     // mu is a parent of y
-    auto mu = normal(lit(0.0), lit(10.0));
-    auto y = normal(mu, lit(1.0));
+    auto mu = normal(0.0_c, 10.0_c);
+    auto y = normal(mu, 1.0_c);
 
     auto collected = collectLogProbs(y);
     auto manual = logProb(mu, y);
@@ -45,8 +45,8 @@ auto main() -> int {
   };
 
   "collectLogProbs discovers multiple parent RVs"_test = [] {
-    auto mu = normal(lit(0.0), lit(10.0));
-    auto sigma = halfNormal(lit(5.0));
+    auto mu = normal(0.0_c, 10.0_c);
+    auto sigma = halfNormal(5.0_c);
     auto y = normal(mu, sigma);
 
     auto collected = collectLogProbs(y);
@@ -63,7 +63,7 @@ auto main() -> int {
 
   "collectLogProbs does not double-count shared RVs"_test = [] {
     // theta appears in both alpha and beta parameters of the likelihood
-    auto theta = beta(lit(1.0), lit(1.0));
+    auto theta = beta(1.0_c, 1.0_c);
     auto y = bernoulli(theta);
 
     // If theta is counted once, joint = log P(theta) + log P(y|theta)
@@ -82,8 +82,8 @@ auto main() -> int {
   "collectLogProbs matches manual logProb for hierarchical model"_test = [] {
     // Hierarchical model: alpha, beta -> theta -> y
     // (Simplified - in practice alpha/beta would be priors on hyperparameters)
-    auto alpha = gamma(lit(2.0), lit(0.1));
-    auto beta_param = gamma(lit(2.0), lit(0.1));
+    auto alpha = gamma(2.0_c, 0.1_c);
+    auto beta_param = gamma(2.0_c, 0.1_c);
     auto theta = beta(alpha, beta_param);
 
     auto collected = collectLogProbs(theta);

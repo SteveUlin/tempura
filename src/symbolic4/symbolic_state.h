@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <cstddef>
+#include <experimental/meta>
 #include <span>
 #include <tuple>
 #include <type_traits>
@@ -74,19 +75,20 @@ struct SlotType {
 template <typename SymbolsTuple, typename SpecsTuple, std::size_t I>
 using slot_type_t = typename SlotType<SymbolsTuple, SpecsTuple, I>::type;
 
-// Find the index of a symbol in a symbols tuple
-template <typename Sym, typename SymbolsTuple, std::size_t I = 0>
+// Find the index of a symbol in a symbols tuple — consteval linear search
+template <typename Sym, typename SymbolsTuple>
 struct SymbolIndex {
-  static constexpr std::size_t value = [] {
-    if constexpr (I >= std::tuple_size_v<SymbolsTuple>) {
-      return std::size_t(-1);
-    } else if constexpr (std::is_same_v<std::decay_t<Sym>,
-                                        std::decay_t<std::tuple_element_t<I, SymbolsTuple>>>) {
-      return I;
-    } else {
-      return SymbolIndex<Sym, SymbolsTuple, I + 1>::value;
+ private:
+  static consteval auto compute() -> std::size_t {
+    constexpr auto n = std::tuple_size_v<SymbolsTuple>;
+    auto args = std::meta::template_arguments_of(^^SymbolsTuple);
+    for (std::size_t i = 0; i < n; ++i) {
+      if (std::meta::remove_cvref(args[i]) == std::meta::remove_cvref(^^Sym)) return i;
     }
-  }();
+    return std::size_t(-1);
+  }
+ public:
+  static constexpr std::size_t value = compute();
 };
 
 }  // namespace symbolic_state_detail

@@ -11,8 +11,8 @@
 // No DAG traversal, no deduplication - just explicit composition.
 //
 // Usage:
-//   auto mu = normal(lit(0), lit(10));
-//   auto sigma = halfNormal(lit(5));
+//   auto mu = normal(0_c, 10_c);
+//   auto sigma = halfNormal(5_c);
 //   auto y = normal(mu, sigma);
 //
 //   // Joint: user explicitly lists all RVs

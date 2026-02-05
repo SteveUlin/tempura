@@ -13,9 +13,9 @@ auto main() -> int {
   struct Obs {};
 
   // Simple model: a_bar + sigma * z[idx]
-  auto a_bar = normal(0.0, 1.0);
-  auto sigma = exponential(1.0);
-  auto z = plate<Groups>(normal(lit(0.0), lit(1.0)));
+  auto a_bar = normal(0_c, 1_c);
+  auto sigma = exponential(1_c);
+  auto z = plate<Groups>(normal(0.0_c, 1.0_c));
   auto idx = data<Obs>();
 
   auto group_effect = a_bar + sigma * z[idx];  // Natural bracket syntax!

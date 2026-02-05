@@ -29,7 +29,7 @@ auto main() -> int {
 
   "logNormal with literal parameters"_test = [] {
     Symbol<struct X> x;
-    auto lp = logNormal(x, lit(0.0), lit(1.0));
+    auto lp = logNormal(x, 0_c, 1_c);
     double val = evaluate(lp, x = 1.0);
 
     double expected = -0.5 * 1.0 - 0.0 - 0.9189385332046727;

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "meta/type_list_ops.h"
 #include "symbolic4/distributions/random_var.h"
 #include "symbolic4/indexed/dim.h"
 #include "symbolic4/indexed/gather.h"
@@ -16,7 +15,7 @@
 //
 // Single plate:
 //   struct Countries {};
-//   auto theta = plate<Countries>(beta(lit(2), lit(3)));
+//   auto theta = plate<Countries>(beta(2_c, 3_c));
 //   // theta.sym() is IndexedSymbol<Id, Countries>
 //
 // Nested plates:
@@ -35,53 +34,53 @@ namespace tempura::symbolic4 {
 
 namespace detail {
 
-// Base case: no dimensions left - return expression as-is
-template <typename DimsToSum, typename Expr>
-struct BuildNestedSumOver {
-  static constexpr auto build(Expr e) { return e; }
-};
-
-// Recursive case: wrap in SumOver for first dim, recurse for rest
-template <typename First, typename... Rest, typename Expr>
-struct BuildNestedSumOver<TypeList<First, Rest...>, Expr> {
-  static constexpr auto build(Expr e) {
-    return sumOver<First>(BuildNestedSumOver<TypeList<Rest...>, Expr>::build(e));
-  }
-};
-
-template <typename DimsToSum, typename Expr>
+// Build nested SumOver from a dimension pack: SumOver<D0, SumOver<D1, ... expr>>
+// Base case: no dimensions left
+template <Symbolic Expr>
 constexpr auto buildNestedSumOver(Expr e) {
-  return BuildNestedSumOver<DimsToSum, Expr>::build(e);
+  return e;
 }
 
-// Helper to convert TypeList<Dims...> to IndexedSymbol<Id, Dims...>
-template <typename Id, typename DimsList>
-struct MakeIndexedSymbol;
-
-template <typename Id, typename... Dims>
-struct MakeIndexedSymbol<Id, TypeList<Dims...>> {
-  using type = IndexedSymbol<Id, Dims...>;
-};
-
-template <typename Id, typename DimsList>
-using make_indexed_symbol_t = typename MakeIndexedSymbol<Id, DimsList>::type;
+// Recursive case: wrap in SumOver for first dim, recurse for rest
+template <typename First, typename... Rest, Symbolic Expr>
+constexpr auto buildNestedSumOver(Expr e) {
+  return sumOver<First>(buildNestedSumOver<Rest...>(e));
+}
 
 }  // namespace detail
+
+// Reconstruct IndexedSymbol<Id, Dims...> from an IndexedSample effect.
+// Defined here (before IndexedRandomVar) because IndexedSymbol is already declared.
+template <typename EffectType, typename IdType>
+struct MakeIndexedSymFromEffect {
+ private:
+  static consteval auto compute() -> std::meta::info {
+    auto effect_args = std::meta::template_arguments_of(^^EffectType);
+    // effect_args = [Dist, Dims...] — skip Dist, prepend Id
+    std::vector<std::meta::info> sym_args;
+    sym_args.push_back(^^IdType);
+    for (std::size_t i = 1; i < effect_args.size(); ++i)
+      sym_args.push_back(effect_args[i]);
+    return std::meta::substitute(^^IndexedSymbol, sym_args);
+  }
+ public:
+  using type = [:compute():];
+};
+
+template <typename EffectType, typename IdType>
+using make_indexed_sym_from_effect_t = typename MakeIndexedSymFromEffect<EffectType, IdType>::type;
 
 // ============================================================================
 // IndexedRandomVar - A plate of random variables
 // ============================================================================
 
-template <typename Dist, typename Id, typename DimsList>
+template <typename Dist, typename Id, typename... Dims>
 struct IndexedRandomVar {
   using id_type = Id;
   using dist_type = Dist;
-  using dims_list = DimsList;
-  using symbol_type = detail::make_indexed_symbol_t<Id, DimsList>;
-  using discoverable_type = Atom<Id, IndexedSample<Dist, DimsList>>;
-
-  // For backward compatibility: single-dim case exposes dim_tag
-  using dim_tag = Head_t<DimsList>;
+  using dims_list = TypeList<Dims...>;
+  using symbol_type = IndexedSymbol<Id, Dims...>;
+  using discoverable_type = Atom<Id, IndexedSample<Dist, Dims...>>;
 
   [[no_unique_address]] Dist dist_;
 
@@ -89,7 +88,7 @@ struct IndexedRandomVar {
 
   // Discoverable symbol (for use in expressions - carries dist info)
   // Enables auto-discovery by collectLogProbs and discoverParams
-  constexpr auto sym() const { return discoverable_type{IndexedSample<Dist, DimsList>{dist_}}; }
+  constexpr auto sym() const { return discoverable_type{IndexedSample<Dist, Dims...>{dist_}}; }
 
   // Free symbol for bindings (IndexedSymbol - no effect, just identity + dims)
   static constexpr auto freeSym() { return symbol_type{}; }
@@ -103,12 +102,12 @@ struct IndexedRandomVar {
   // Total log-probability = nested SumOver for all dimensions
   // For dims = [C, Y], returns SumOver<C, SumOver<Y, logProb>>
   constexpr auto logProb() const {
-    return detail::buildNestedSumOver<DimsList>(instanceLogProb());
+    return detail::buildNestedSumOver<Dims...>(instanceLogProb());
   }
 
   // Unnormalized version for MCMC
   constexpr auto unnormalizedLogProb() const {
-    return detail::buildNestedSumOver<DimsList>(dist_.unnormalizedLogProbFor(sym()));
+    return detail::buildNestedSumOver<Dims...>(dist_.unnormalizedLogProbFor(sym()));
   }
 
   // Access the distribution
@@ -136,13 +135,7 @@ struct IndexedRandomVar {
 
 // Type traits for IndexedRandomVar
 template <typename T>
-struct IsIndexedRandomVarTrait : std::false_type {};
-
-template <typename Dist, typename Id, typename DimsList>
-struct IsIndexedRandomVarTrait<IndexedRandomVar<Dist, Id, DimsList>> : std::true_type {};
-
-template <typename T>
-constexpr bool is_indexed_random_var_v = IsIndexedRandomVarTrait<T>::value;
+constexpr bool is_indexed_random_var_v = core_traits_detail::isSpecOf<T, IndexedRandomVar>();
 
 // Concept for IndexedRandomVar
 template <typename T>
@@ -159,7 +152,7 @@ concept IsIndexedRandomVar = requires(const T& node) {
 // ============================================================================
 //
 // Single-plate usage:
-//   auto theta = plate<Countries>(beta(lit(2), lit(3)));
+//   auto theta = plate<Countries>(beta(2_c, 3_c));
 //
 // Creates IndexedRandomVar with dims_list = TypeList<Countries>
 
@@ -167,8 +160,7 @@ template <typename DimTag, typename Id = decltype([] {}), IsRandomVar RV>
   requires (!IsIndexedRandomVar<RV>)
 constexpr auto plate(const RV& rv) {
   using Dist = typename RV::dist_type;
-  using DimsList = TypeList<DimTag>;
-  return IndexedRandomVar<Dist, Id, DimsList>{rv.dist()};
+  return IndexedRandomVar<Dist, Id, DimTag>{rv.dist()};
 }
 
 // ============================================================================
@@ -182,20 +174,41 @@ constexpr auto plate(const RV& rv) {
 //   plate<Countries>(...) has dims = [Countries]
 //   plate<Years>(plate<Countries>(...)) has dims = [Countries, Years]
 
-template <typename DimTag, typename Id = decltype([] {}), IsIndexedRandomVar RV>
-constexpr auto plate(const RV& rv) {
-  using Dist = typename RV::dist_type;
-  using OldDims = typename RV::dims_list;
-  using NewDims = Concat_t<OldDims, TypeList<DimTag>>;
-  return IndexedRandomVar<Dist, Id, NewDims>{rv.dist()};
+// Nested plate: append DimTag to existing dims pack.
+// We extract the existing Dims... from the inner IndexedRandomVar and expand with DimTag.
+template <typename DimTag, typename Id = decltype([] {}),
+          typename Dist, typename OldId, typename... OldDims>
+constexpr auto plate(const IndexedRandomVar<Dist, OldId, OldDims...>& rv) {
+  return IndexedRandomVar<Dist, Id, OldDims..., DimTag>{rv.dist()};
 }
 
 // ============================================================================
+// Reconstruct IndexedRandomVar<Dist, Id, Dims...> from an IndexedSample effect.
+// Must be after IndexedRandomVar definition since it references ^^IndexedRandomVar.
+template <typename EffectType, typename IdType>
+struct MakeIndexedRVFromEffect {
+ private:
+  static consteval auto compute() -> std::meta::info {
+    auto effect_args = std::meta::template_arguments_of(^^EffectType);
+    std::vector<std::meta::info> rv_args;
+    rv_args.push_back(effect_args[0]); // Dist
+    rv_args.push_back(^^IdType);       // Id
+    for (std::size_t i = 1; i < effect_args.size(); ++i)
+      rv_args.push_back(effect_args[i]); // Dims...
+    return std::meta::substitute(^^IndexedRandomVar, rv_args);
+  }
+ public:
+  using type = [:compute():];
+};
+
+template <typename EffectType, typename IdType>
+using make_indexed_rv_from_effect_t = typename MakeIndexedRVFromEffect<EffectType, IdType>::type;
+
 // toSymbolic overload for IndexedRandomVar
 // ============================================================================
 
-template <typename Dist, typename Id, typename DimsList>
-constexpr auto toSymbolic(const IndexedRandomVar<Dist, Id, DimsList>& node) {
+template <typename Dist, typename Id, typename... Dims>
+constexpr auto toSymbolic(const IndexedRandomVar<Dist, Id, Dims...>& node) {
   return node.sym();
 }
 

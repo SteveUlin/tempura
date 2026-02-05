@@ -92,8 +92,8 @@ auto main() -> int {
 
   "canonicalize preserves literal values - addition"_test = [] {
     // Create two literals with distinct values
-    auto a = lit(3.14);
-    auto b = lit(2.71);
+    auto a = 3.14_c;
+    auto b = 2.71_c;
 
     // Create expressions with literals in different orders
     auto e1 = a + b;  // 3.14 + 2.71
@@ -118,8 +118,8 @@ auto main() -> int {
   };
 
   "canonicalize preserves literal values - multiplication"_test = [] {
-    auto a = lit(7.0);
-    auto b = lit(3.0);
+    auto a = 7.0_c;
+    auto b = 3.0_c;
 
     auto e1 = a * b;  // 7 * 3
     auto e2 = b * a;  // 3 * 7
@@ -136,10 +136,10 @@ auto main() -> int {
 
   "canonicalize preserves literal values - nested expression"_test = [] {
     // More complex: (a * b) + (c * d) with different orderings
-    auto a = lit(2.0);
-    auto b = lit(3.0);
-    auto c = lit(5.0);
-    auto d = lit(7.0);
+    auto a = 2.0_c;
+    auto b = 3.0_c;
+    auto c = 5.0_c;
+    auto d = 7.0_c;
 
     // (2*3) + (5*7) = 6 + 35 = 41
     auto e1 = (a * b) + (c * d);
@@ -159,8 +159,8 @@ auto main() -> int {
   };
 
   "canonicalize preserves literal values - mixed with symbols"_test = [] {
-    auto a = lit(10.0);
-    auto b = lit(2.0);
+    auto a = 10.0_c;
+    auto b = 2.0_c;
 
     // a + x + b with different orderings
     auto e1 = a + x + b;  // ((10 + x) + 2)
@@ -180,20 +180,19 @@ auto main() -> int {
   };
 
   "canonicalize preserves distinct literal values in same expression"_test = [] {
-    // Key insight: lit(3.14) and lit(2.71) have the SAME TYPE
-    // (Atom<void, Embedded<double>>). The type system doesn't distinguish
-    // literal values - only runtime values differ.
-    auto pi_approx = lit(3.14159);
-    auto e_approx = lit(2.71828);
+    // With Constant<V>, each distinct value is a distinct type:
+    // Constant<3.14159> ≠ Constant<2.71828>.
+    auto pi_approx = 3.14159_c;
+    auto e_approx = 2.71828_c;
 
-    // Both expressions have the same type (SubOp with two Literal<double>)
+    // Both expressions have the same type (SubOp with two Constant<...>)
     auto e1 = pi_approx - e_approx;  // 3.14159 - 2.71828 ≈ 0.42331
     auto e2 = e_approx - pi_approx;  // 2.71828 - 3.14159 ≈ -0.42331
 
     auto c1 = canonicalize(e1);
     auto c2 = canonicalize(e2);
 
-    // Types ARE the same (both are Expression<SubOp, Literal<double>, Literal<double>>)
+    // Types ARE the same (both are Expression<SubOp, Constant<...>, Constant<...>>)
     static_assert(std::is_same_v<decltype(c1), decltype(c2)>);
 
     // But the VALUES must be preserved correctly - this is the real test!
@@ -211,8 +210,8 @@ auto main() -> int {
     // Test that values are preserved through canonicalization
     // Note: canonicalize only does binary commutation, NOT associative restructuring
     // So (a + x) + b and (b + x) + a will NOT become the same type
-    auto a = lit(100.0);
-    auto b = lit(1.0);
+    auto a = 100.0_c;
+    auto b = 1.0_c;
 
     // Build: ((a + x) + b) = ((100 + x) + 1)
     // With x=0: should be 101
@@ -236,8 +235,8 @@ auto main() -> int {
   "canonicalize stress test - literals must not swap values"_test = [] {
     // Use subtraction to make order matter for verification
     // If literals get confused, we'll compute wrong results
-    auto big = lit(1000.0);
-    auto small = lit(1.0);
+    auto big = 1000.0_c;
+    auto small = 1.0_c;
 
     // (big + x) - (small + y) = (1000 + x) - (1 + y)
     // With x=0, y=0: should be 999
@@ -254,7 +253,7 @@ auto main() -> int {
     // These should NOT have the same type (subtraction is not commutative)
     // Actually they DO have the same type because the inner expressions
     // canonicalize to the same form... let's check
-    // (big + x) and (small + x) have same type: Expression<AddOp, Literal<double>, Symbol<X>>
+    // (big + x) and (small + x) have same type: Expression<AddOp, Constant<...>, Symbol<X>>
     // So both e1 and e2 have type: Expression<SubOp, Expression<AddOp, L, S>, Expression<AddOp, L, S>>
     static_assert(std::is_same_v<decltype(c1), decltype(c2)>);
 
@@ -265,10 +264,10 @@ auto main() -> int {
 
   "canonicalize deeply nested with multiple literals"_test = [] {
     // Deep nesting: ((a * x) + (b * y)) * ((c + x) + (d + y))
-    auto a = lit(2.0);
-    auto b = lit(3.0);
-    auto c = lit(5.0);
-    auto d = lit(7.0);
+    auto a = 2.0_c;
+    auto b = 3.0_c;
+    auto c = 5.0_c;
+    auto d = 7.0_c;
 
     auto e = ((a * x) + (b * y)) * ((c + x) + (d + y));
     auto can = canonicalize(e);
@@ -287,11 +286,11 @@ auto main() -> int {
   };
 
   "canonicalize two literals of same type - ordering edge case"_test = [] {
-    // CRITICAL: Two Literal<double> have the SAME TYPE, so compare() returns Equal.
+    // CRITICAL: Two Constant<...> have the SAME TYPE, so compare() returns Equal.
     // When Equal, we DON'T swap. This means a+b and b+a stay in their original order!
     // This is fine because the TYPE is the same and addition is commutative.
-    auto a = lit(100.0);
-    auto b = lit(1.0);
+    auto a = 100.0_c;
+    auto b = 1.0_c;
 
     auto e1 = a + b;  // 100 + 1
     auto e2 = b + a;  // 1 + 100
@@ -299,7 +298,7 @@ auto main() -> int {
     auto c1 = canonicalize(e1);
     auto c2 = canonicalize(e2);
 
-    // Same type (both Expression<AddOp, Literal<double>, Literal<double>>)
+    // Same type (both Expression<AddOp, Constant<...>, Constant<...>>)
     static_assert(std::is_same_v<decltype(c1), decltype(c2)>);
 
     // Both evaluate correctly (addition is commutative)
@@ -308,13 +307,13 @@ auto main() -> int {
     expectNear(evaluate(c2, bindings), 101.0, 1e-10);
   };
 
-  "canonicalize literal vs symbol ordering"_test = [] {
-    // When Literal<double> meets Symbol<X>, they have DIFFERENT types
+  "canonicalize constant vs symbol ordering"_test = [] {
+    // When Constant<100.0> meets Symbol<X>, they have DIFFERENT types
     // The ordering depends on TypeId, but should be consistent
-    auto a = lit(100.0);
+    auto a = 100.0_c;
 
     // Determine the actual ordering
-    constexpr auto lit_vs_sym = compare(Literal<double>{}, x);
+    constexpr auto const_vs_sym = compare(decltype(a){}, x);
 
     auto e1 = a + x;  // lit + symbol
     auto e2 = x + a;  // symbol + lit
@@ -333,8 +332,8 @@ auto main() -> int {
   "canonicalize mixed literals and symbols - multiplication"_test = [] {
     // Test that (a * x) * b and (b * x) * a handle literals correctly
     // These have DIFFERENT tree structures and may produce different types
-    auto a = lit(10.0);
-    auto b = lit(2.0);
+    auto a = 10.0_c;
+    auto b = 2.0_c;
 
     auto e1 = (a * x) * b;  // (10 * x) * 2 = 20x
     auto e2 = (b * x) * a;  // (2 * x) * 10 = 20x
@@ -351,10 +350,10 @@ auto main() -> int {
   };
 
   "canonicalize complex polynomial with multiple literals"_test = [] {
-    // User test case: lit(3.) * x * lit(2.) + lit(1.) + lit(5.) * x
-    // Parses as: (((lit(3.) * x) * lit(2.)) + lit(1.)) + (lit(5.) * x)
+    // User test case: 3.0_c * x * 2.0_c + 1.0_c + 5.0_c * x
+    // Parses as: (((3.0_c * x) * 2.0_c) + 1.0_c) + (5.0_c * x)
     // = (3x * 2) + 1 + 5x = 6x + 1 + 5x = 11x + 1
-    auto expr = lit(3.) * x * lit(2.) + lit(1.) + lit(5.) * x;
+    auto expr = 3.0_c * x * 2.0_c + 1.0_c + 5.0_c * x;
     auto can = canonicalize(expr);
 
     // With x = 10: 3*10*2 + 1 + 5*10 = 60 + 1 + 50 = 111
@@ -367,7 +366,7 @@ auto main() -> int {
     expectNear(evaluate(can, BinderPack{x = 1.0}), 12.0, 1e-10);
 
     // Try a variation with different ordering
-    auto expr2 = lit(5.) * x + lit(1.) + lit(3.) * x * lit(2.);
+    auto expr2 = 5.0_c * x + 1.0_c + 3.0_c * x * 2.0_c;
     auto can2 = canonicalize(expr2);
 
     // Should give the same numerical results
@@ -379,10 +378,10 @@ auto main() -> int {
   "canonicalize different orderings produce same canonical result"_test = [] {
     // The acid test: same expression built in different orders
     // must canonicalize to same type AND same runtime value
-    auto a = lit(11.0);
-    auto b = lit(13.0);
-    auto c = lit(17.0);
-    auto d = lit(19.0);
+    auto a = 11.0_c;
+    auto b = 13.0_c;
+    auto c = 17.0_c;
+    auto d = 19.0_c;
 
     // All of these should canonicalize to the same form:
     auto e1 = (a * x) + (b * y);      // (11x + 13y)

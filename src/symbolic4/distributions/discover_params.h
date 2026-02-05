@@ -80,17 +80,14 @@ constexpr auto discoverFromExprImpl(Visited visited, Observed observed, E expr) 
       return Tuple{Tuple<>{}, visited};
     } else if constexpr (is_observed_id_v<IdType, Observed>) {
       using NewVisited = id_set_insert_t<IdType, Visited>;
-      using Dist = typename E::effect_type::dist_type;
-      using DimsList = typename E::effect_type::dims_list;
-      auto rv = IndexedRandomVar<Dist, IdType, DimsList>{expr.effect_.dist_};
+      using RVType = make_indexed_rv_from_effect_t<typename E::effect_type, IdType>;
+      auto rv = RVType{expr.effect_.dist_};
       auto rv_logprob = rv.logProb();
       return discoverFromExprImpl(NewVisited{}, observed, rv_logprob);
     } else {
       using NewVisited = id_set_insert_t<IdType, Visited>;
-      using Dist = typename E::effect_type::dist_type;
-      using DimsList = typename E::effect_type::dims_list;
-
-      auto rv = IndexedRandomVar<Dist, IdType, DimsList>{expr.effect_.dist_};
+      using RVType = make_indexed_rv_from_effect_t<typename E::effect_type, IdType>;
+      auto rv = RVType{expr.effect_.dist_};
       auto rv_logprob = rv.logProb();
       auto [parents, final_visited] = discoverFromExprImpl(NewVisited{}, observed, rv_logprob);
 

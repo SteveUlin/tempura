@@ -141,7 +141,7 @@ struct EvalIfGroundExact {
   constexpr auto apply(E e) const {
     if constexpr (!is_ground_v<E>) {
       return e;
-    } else if constexpr (is_constant_v<E> || is_fraction_v<E> || is_literal_v<E>) {
+    } else if constexpr (is_constant_v<E> || is_fraction_v<E>) {
       return e;
     } else if constexpr (is_exact_v<E>) {
       return exactEval(E{});

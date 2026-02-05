@@ -40,24 +40,9 @@ namespace tempura::symbolic4 {
 template <typename E>
 struct Grad;
 
-// Type trait: detect Grad<...> (handles const/volatile qualifiers)
+// Type trait: detect Grad<...> (handles const/volatile qualifiers via remove_cv)
 template <typename T>
-struct IsGrad : std::false_type {};
-
-template <typename E>
-struct IsGrad<Grad<E>> : std::true_type {};
-
-template <typename T>
-struct IsGrad<const T> : IsGrad<T> {};
-
-template <typename T>
-struct IsGrad<volatile T> : IsGrad<T> {};
-
-template <typename T>
-struct IsGrad<const volatile T> : IsGrad<T> {};
-
-template <typename T>
-constexpr bool is_grad_v = IsGrad<T>::value;
+constexpr bool is_grad_v = core_traits_detail::isSpecOf<std::remove_cv_t<T>, Grad>();
 
 // Grad wraps an expression (or another Grad) and computes derivatives on demand.
 // NOT a SymbolicTag -- Grad is a tensor lookup object, not an expression node.

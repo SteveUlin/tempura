@@ -5,8 +5,9 @@
 - Don't sacrifice correctness for micro-optimizations
 - constexpr-by-default (maximum compile-time evaluation)
 - Prefer `std::` by default unless there's a reason to use a custom implementation
-- Avoid STL in heavy template metaprogramming (e.g., `meta/` type lists) where it bloats compile times
-- Using **GCC C++26** (not C++20/23) - mainly for constexpr math, also `operator[]` multidimensional indexing, etc.
+- Using **Clang P2996** (Bloomberg's C++26 reflection fork) as primary compiler
+- C++26 reflection (`^^T`, `[:r:]`, `template for`) used throughout `meta/` and `symbolic4/`
+- `nix develop .#reflection` for dev shell; `cmake --preset clang-p2996` to configure
 
 ## Code Style
 
@@ -106,20 +107,6 @@
   // PERF: bounds check removed - see benchmark results in maps/README.md
   ```
 - Better to crash than return wrong results
-
-## Exploration vs Consolidation
-
-This codebase is primarily in **exploration mode**:
-
-- API inconsistencies between similar components are OK - we'll refactor later
-- Match existing patterns in the file you're editing
-- Don't block exploration to fix API mismatches - that's a separate refactoring step
-- For containers: follow standard library APIs where reasonable, consolidate into concepts later
-
-**Numeric types:**
-
-- Prefer generic implementations that work across numeric types when feasible
-- Specific types (e.g., `double`) are fine when genericity isn't needed
 
 ## Code Organization
 

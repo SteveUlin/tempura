@@ -84,6 +84,24 @@ GPU shader programs (compiled once, executed on millions of data points).
 - `grad(f)[x]` — partial derivative (covector component)
 - `grad(grad(f))[x, y]` — Hessian entry (rank-2 tensor, C++26 multidim `operator[]`)
 
+## Compiler & Reflection
+
+symbolic4 requires **Clang P2996** (Bloomberg's C++26 reflection fork). GCC is not
+supported. Use `nix develop .#reflection` for the dev shell and `cmake --preset clang-p2996`
+to configure.
+
+C++26 reflection (`<experimental/meta>`) is used throughout:
+- **`meta/type_list.h`, `meta/type_list_ops.h`** — `template_arguments_of` + `template for` + `substitute`
+  replace recursive template metaprogramming for `Get`, `Filter`, `Contains`, `Unique`, etc.
+- **`meta/type_id.h`** — `^^T` provides unique compile-time type identity (replaces stateful friend injection)
+- **`core.h` type traits** — `template_of()` queries replace 15 template specialization pairs
+  (`is_atom_v`, `is_expression_v`, `get_id_t`, `same_atom_id_v`, etc.)
+- **`symbolic_state.h`** — consteval loop for symbol lookup (replaces recursive `SymbolIndex`)
+- **`indexed/dim.h`** — consteval loop for `IndexOf`, splice for `At`
+
+All type traits use reflection, including NTTP templates (`Constant`, `Fraction`,
+`SimplexTransform`, `VectorSymbol`, etc.) via an info-based `isSpecOf(^^Template)` overload.
+
 ## Active Migration: Strategy Unification
 
 **See `migration/README.md` for the full execution plan.**
@@ -127,7 +145,7 @@ RandomVar/IndexedRandomVar work directly in expressions without `.constrainedExp
 
 **Core effects** (domain-independent, defined in `core.h`):
 - `Free` — Variable needing binding (`Symbol<X>`)
-- `Embedded<T>` — Runtime literal value
+- *(deleted)* `Embedded<T>` was runtime literal — replaced by `Constant<V>` + binders
 - `Compute<E>` — Deterministic function
 
 **Probabilistic effects** (domain-specific, should live in `distributions/`):
@@ -360,13 +378,18 @@ Changes should be verified against the symbolic4 tests AND the examples, since t
 examples exercise deeper template instantiation paths (full model → posterior →
 gradient → HMC chains) that unit tests may not cover.
 
+**Requires Clang P2996** — run inside `nix develop .#reflection`:
+
 ```bash
+# Configure (once)
+cmake --preset clang-p2996
+
 # Fast: unit tests only (~seconds)
-ctest --test-dir build -R symbolic4
+ctest --test-dir build-reflection -R symbolic4
 
 # Thorough: also build examples (~minutes, heavy template instantiation)
-cmake --build build --target bmj_symbolic
-cmake --build build --target linear_regression
+cmake --build build-reflection --target bmj_symbolic
+cmake --build build-reflection --target linear_regression
 ```
 
 ⚠️ **The stat_rethinking examples are slow to compile** — deep expression trees with

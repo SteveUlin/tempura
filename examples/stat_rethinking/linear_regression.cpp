@@ -63,9 +63,9 @@ auto main() -> int {
   struct Obs {};  // Dimension tag for observations
 
   // Priors
-  auto alpha = normal(0.0, 10.0);
-  auto beta = normal(0.0, 5.0);
-  auto sigma = halfNormal(2.0);
+  auto alpha = normal(0_c, 10_c);
+  auto beta = normal(0_c, 5_c);
+  auto sigma = halfNormal(2_c);
 
   // Covariate (external data, not a parameter)
   auto x = data<Obs>();

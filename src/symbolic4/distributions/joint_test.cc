@@ -17,7 +17,7 @@ auto main() -> int {
   // ===========================================================================
 
   "logProb for single normal"_test = [] {
-    auto mu = normal(lit(0.0), lit(1.0));
+    auto mu = normal(0_c, 1_c);
     auto lp = logProb(mu);
 
     static_assert(Symbolic<decltype(lp)>);
@@ -28,7 +28,7 @@ auto main() -> int {
   };
 
   "logProb for halfNormal"_test = [] {
-    auto sigma = halfNormal(lit(5.0));
+    auto sigma = halfNormal(5_c);
     auto lp = logProb(sigma);
 
     double val = evaluate(lp, sigma = 2.0);
@@ -41,8 +41,8 @@ auto main() -> int {
   // ===========================================================================
 
   "logProb for two RVs"_test = [] {
-    auto mu = normal(lit(0.0), lit(10.0));
-    auto y = normal(mu, lit(1.0));
+    auto mu = normal(0_c, 10_c);
+    auto y = normal(mu, 1_c);
 
     // User explicitly lists both RVs
     auto lp = logProb(mu, y);
@@ -67,8 +67,8 @@ auto main() -> int {
   // ===========================================================================
 
   "logProb for three RVs"_test = [] {
-    auto mu = normal(lit(0.0), lit(10.0));
-    auto sigma = halfNormal(lit(5.0));
+    auto mu = normal(0_c, 10_c);
+    auto sigma = halfNormal(5_c);
     auto y = normal(mu, sigma);
 
     // User explicitly lists all three RVs
@@ -97,7 +97,7 @@ auto main() -> int {
   // ===========================================================================
 
   "logProb with beta"_test = [] {
-    auto p = beta(lit(2.0), lit(5.0));
+    auto p = beta(2_c, 5_c);
     auto lp = logProb(p);
 
     double val = evaluate(lp, p = 0.3);
@@ -114,8 +114,8 @@ auto main() -> int {
   // ===========================================================================
 
   "logProb for likelihood only"_test = [] {
-    auto mu = normal(lit(0.0), lit(10.0));
-    auto y = normal(mu, lit(1.0));
+    auto mu = normal(0_c, 10_c);
+    auto y = normal(mu, 1_c);
 
     // Only include y - this is the likelihood (useful when mu is a point estimate)
     auto likelihood = logProb(y);
@@ -133,12 +133,12 @@ auto main() -> int {
   // ===========================================================================
 
   "diff of logProb wrt parameter"_test = [] {
-    auto mu = normal(lit(0.0), lit(10.0));
-    auto y = normal(mu, lit(1.0));
+    auto mu = normal(0_c, 10_c);
+    auto y = normal(mu, 1_c);
 
     auto lp = logProb(mu, y);
     // Use freeSym() because that's what appears in the log-prob expressions
-    auto d_mu = simplify(diff(lp, mu.freeSym()));
+    auto d_mu = diff(lp, mu.freeSym());
 
     // gradient at mu=0.5, y=1.0
     double val = evaluate(d_mu, mu = 0.5, y = 1.0);
@@ -152,12 +152,12 @@ auto main() -> int {
   };
 
   "diff of logProb wrt sigma"_test = [] {
-    auto sigma = halfNormal(lit(5.0));
-    auto y = normal(lit(0.0), sigma);
+    auto sigma = halfNormal(5_c);
+    auto y = normal(0_c, sigma);
 
     auto lp = logProb(sigma, y);
     // Use freeSym() because that's what appears in the log-prob expressions
-    auto d_sigma = simplify(diff(lp, sigma.freeSym()));
+    auto d_sigma = diff(lp, sigma.freeSym());
 
     // At sigma=2, y=1
     double val = evaluate(d_sigma, sigma = 2.0, y = 1.0);
@@ -178,7 +178,7 @@ auto main() -> int {
   // ===========================================================================
 
   "unnormalizedLogProb omits constants"_test = [] {
-    auto mu = normal(lit(0.0), lit(1.0));
+    auto mu = normal(0_c, 1_c);
     auto lp = unnormalizedLogProb(mu);
 
     double val = evaluate(lp, mu = 0.5);

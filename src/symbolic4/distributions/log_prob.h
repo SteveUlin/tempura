@@ -34,7 +34,7 @@ constexpr auto logNormal(X x, Mu mu, Sigma sigma) {
   auto z = (x - mu) / sigma;
   // -0.5 * z² - log(σ) - 0.5 * log(2π)
   // log(√(2π)) ≈ 0.9189385332046727
-  return Fraction<-1, 2>{} * z * z - log(sigma) - lit(0.9189385332046727);
+  return Fraction<-1, 2>{} * z * z - log(sigma) - Constant<0.9189385332046727>{};
 }
 
 template <Symbolic X, Symbolic Mu, Symbolic Sigma>
@@ -52,7 +52,7 @@ constexpr auto unnormalizedLogNormal(X x, Mu mu, Sigma sigma) {
 template <Symbolic X, Symbolic Sigma>
 constexpr auto logHalfNormal(X x, Sigma sigma) {
   // log(√(2/π)) ≈ 0.2257913526447274
-  return lit(0.2257913526447274) - log(sigma) -
+  return Constant<0.2257913526447274>{} - log(sigma) -
          x * x / (2_c * sigma * sigma);
 }
 
@@ -142,7 +142,7 @@ template <Symbolic X, Symbolic X0, Symbolic Gamma>
 constexpr auto logCauchy(X x, X0 x0, Gamma gamma) {
   auto z = (x - x0) / gamma;
   // log(π) ≈ 1.1447298858494002
-  return -lit(1.1447298858494002) - log(gamma) - log(1_c + z * z);
+  return -Constant<1.1447298858494002>{} - log(gamma) - log(1_c + z * z);
 }
 
 template <Symbolic X, Symbolic X0, Symbolic Gamma>
@@ -219,7 +219,7 @@ constexpr auto logStudentT(X x, Nu nu, Mu mu, Sigma sigma) {
   auto nu_half = nu / 2_c;
   // log(π) ≈ 1.1447298858494002
   auto log_normalizer = lgamma(nu_plus_1_half) - lgamma(nu_half) -
-                        Fraction<1, 2>{} * log(nu * lit(3.14159265358979323846)) -
+                        Fraction<1, 2>{} * log(nu * Constant<3.14159265358979323846>{}) -
                         log(sigma);
   return log_normalizer - nu_plus_1_half * log(1_c + z * z / nu);
 }

@@ -1,14 +1,15 @@
 #pragma once
 
 #include "symbolic4/constants.h"
+#include "symbolic4/distributions/dist_base.h"
 #include "symbolic4/distributions/log_prob.h"
 
 // ============================================================================
 // wrappers.h - Distribution wrappers with symbolic parameters
 // ============================================================================
 //
-// Each wrapper stores symbolic parameters and provides logProbFor(x) method
-// returning a symbolic expression. This enables compositional model building.
+// Each wrapper stores symbolic parameters via a CRTP base (DistBase) and
+// provides logProbFor(x) returning a symbolic expression.
 //
 // Each distribution declares its support via a support_type alias:
 //   - Unbounded: (-∞, ∞) - no transform needed
@@ -58,81 +59,76 @@ concept HasSymbol = requires(const T& t) {
   { t.sym() } -> Symbolic;
 };
 
-// Convert anything to a symbolic type
+// Convert symbolic-compatible types to symbolic expressions
+// NOTE: The else branch only accepts arithmetic types to prevent accidental
+// matches with iterators and other non-symbolic types (clang's stricter
+// concept checking requires this constraint).
 template <typename T>
-constexpr auto toSymbolic(T x) {
+constexpr auto toSymbolic(T x)
+  requires Symbolic<T> || HasSymbol<T> || std::is_arithmetic_v<T>
+{
   if constexpr (Symbolic<T>) {
     return x;
   } else if constexpr (HasSymbol<T>) {
     // RandomVar or similar - use its symbol (now non-static, carries distribution)
     return x.sym();
   } else {
-    return lit(static_cast<double>(x));
+    static_assert(!std::is_arithmetic_v<T>,
+        "Use _c suffix for constants: normal(0_c, 1_c). "
+        "For runtime data, use a Symbol and bind at eval time.");
   }
 }
 
 // ============================================================================
-// Normal distribution wrapper
+// Normal distribution
 // ============================================================================
 
 template <Symbolic Mu, Symbolic Sigma>
-struct NormalDist {
-  using support_type = support::Real;
+struct NormalDist : DistBase<NormalDist<Mu, Sigma>, support::Real, Mu, Sigma> {
+  using Base = DistBase<NormalDist, support::Real, Mu, Sigma>;
+  using Base::Base;
 
-  [[no_unique_address]] Mu mu_;
-  [[no_unique_address]] Sigma sigma_;
-
-  constexpr NormalDist() = default;
-  constexpr NormalDist(Mu mu, Sigma sigma) : mu_{mu}, sigma_{sigma} {}
+  constexpr auto mu() const { return Base::template param<0>(); }
+  constexpr auto sigma() const { return Base::template param<1>(); }
 
   template <Symbolic X>
-  constexpr auto logProbFor(X x) const {
-    return logNormal(x, mu_, sigma_);
+  static constexpr auto logProbImpl(X x, auto mu, auto sigma) {
+    return logNormal(x, mu, sigma);
   }
-
   template <Symbolic X>
-  constexpr auto unnormalizedLogProbFor(X x) const {
-    return unnormalizedLogNormal(x, mu_, sigma_);
+  static constexpr auto unnormalizedLogProbImpl(X x, auto mu, auto sigma) {
+    return unnormalizedLogNormal(x, mu, sigma);
   }
-
-  constexpr auto mu() const { return mu_; }
-  constexpr auto sigma() const { return sigma_; }
 };
 
 template <typename Mu, typename Sigma>
 NormalDist(Mu, Sigma) -> NormalDist<decltype(toSymbolic(std::declval<Mu>())),
                                     decltype(toSymbolic(std::declval<Sigma>()))>;
 
-// Factory function
 template <typename Mu, typename Sigma>
 constexpr auto Normal(Mu mu, Sigma sigma) {
   return NormalDist{toSymbolic(mu), toSymbolic(sigma)};
 }
 
 // ============================================================================
-// Half-Normal distribution wrapper
+// Half-Normal distribution
 // ============================================================================
 
 template <Symbolic Sigma>
-struct HalfNormalDist {
-  using support_type = support::PositiveReal;
+struct HalfNormalDist : DistBase<HalfNormalDist<Sigma>, support::PositiveReal, Sigma> {
+  using Base = DistBase<HalfNormalDist, support::PositiveReal, Sigma>;
+  using Base::Base;
 
-  [[no_unique_address]] Sigma sigma_;
-
-  constexpr HalfNormalDist() = default;
-  constexpr explicit HalfNormalDist(Sigma sigma) : sigma_{sigma} {}
+  constexpr auto sigma() const { return Base::template param<0>(); }
 
   template <Symbolic X>
-  constexpr auto logProbFor(X x) const {
-    return logHalfNormal(x, sigma_);
+  static constexpr auto logProbImpl(X x, auto sigma) {
+    return logHalfNormal(x, sigma);
   }
-
   template <Symbolic X>
-  constexpr auto unnormalizedLogProbFor(X x) const {
-    return unnormalizedLogHalfNormal(x, sigma_);
+  static constexpr auto unnormalizedLogProbImpl(X x, auto sigma) {
+    return unnormalizedLogHalfNormal(x, sigma);
   }
-
-  constexpr auto sigma() const { return sigma_; }
 };
 
 template <typename Sigma>
@@ -144,32 +140,25 @@ constexpr auto HalfNormal(Sigma sigma) {
 }
 
 // ============================================================================
-// Beta distribution wrapper
+// Beta distribution
 // ============================================================================
 
 template <Symbolic Alpha, Symbolic Beta>
-struct BetaDist {
-  using support_type = support::Unit;
+struct BetaDist : DistBase<BetaDist<Alpha, Beta>, support::Unit, Alpha, Beta> {
+  using Base = DistBase<BetaDist, support::Unit, Alpha, Beta>;
+  using Base::Base;
 
-  [[no_unique_address]] Alpha alpha_;
-  [[no_unique_address]] Beta beta_;
-
-  constexpr BetaDist() = default;
-  constexpr BetaDist(Alpha alpha, Beta beta) : alpha_{alpha}, beta_{beta} {}
-
-  // Full normalized log-probability (uses lgamma for normalization constant)
-  template <Symbolic X>
-  constexpr auto logProbFor(X x) const {
-    return logBeta(x, alpha_, beta_);
-  }
+  constexpr auto alpha() const { return Base::template param<0>(); }
+  constexpr auto beta() const { return Base::template param<1>(); }
 
   template <Symbolic X>
-  constexpr auto unnormalizedLogProbFor(X x) const {
-    return unnormalizedLogBeta(x, alpha_, beta_);
+  static constexpr auto logProbImpl(X x, auto alpha, auto beta) {
+    return logBeta(x, alpha, beta);
   }
-
-  constexpr auto alpha() const { return alpha_; }
-  constexpr auto beta() const { return beta_; }
+  template <Symbolic X>
+  static constexpr auto unnormalizedLogProbImpl(X x, auto alpha, auto beta) {
+    return unnormalizedLogBeta(x, alpha, beta);
+  }
 };
 
 template <typename A, typename B>
@@ -182,32 +171,25 @@ constexpr auto Beta(A alpha, B beta) {
 }
 
 // ============================================================================
-// Gamma distribution wrapper
+// Gamma distribution
 // ============================================================================
 
 template <Symbolic Alpha, Symbolic Beta>
-struct GammaDist {
-  using support_type = support::PositiveReal;
+struct GammaDist : DistBase<GammaDist<Alpha, Beta>, support::PositiveReal, Alpha, Beta> {
+  using Base = DistBase<GammaDist, support::PositiveReal, Alpha, Beta>;
+  using Base::Base;
 
-  [[no_unique_address]] Alpha alpha_;
-  [[no_unique_address]] Beta beta_;
-
-  constexpr GammaDist() = default;
-  constexpr GammaDist(Alpha alpha, Beta beta) : alpha_{alpha}, beta_{beta} {}
-
-  // Full normalized log-probability (uses lgamma for normalization constant)
-  template <Symbolic X>
-  constexpr auto logProbFor(X x) const {
-    return logGamma(x, alpha_, beta_);
-  }
+  constexpr auto alpha() const { return Base::template param<0>(); }
+  constexpr auto beta() const { return Base::template param<1>(); }
 
   template <Symbolic X>
-  constexpr auto unnormalizedLogProbFor(X x) const {
-    return unnormalizedLogGamma(x, alpha_, beta_);
+  static constexpr auto logProbImpl(X x, auto alpha, auto beta) {
+    return logGamma(x, alpha, beta);
   }
-
-  constexpr auto alpha() const { return alpha_; }
-  constexpr auto beta() const { return beta_; }
+  template <Symbolic X>
+  static constexpr auto unnormalizedLogProbImpl(X x, auto alpha, auto beta) {
+    return unnormalizedLogGamma(x, alpha, beta);
+  }
 };
 
 template <typename Alpha, typename Beta>
@@ -220,29 +202,24 @@ constexpr auto Gamma(Alpha alpha, Beta beta) {
 }
 
 // ============================================================================
-// Exponential distribution wrapper
+// Exponential distribution
 // ============================================================================
 
 template <Symbolic Lambda>
-struct ExponentialDist {
-  using support_type = support::PositiveReal;
+struct ExponentialDist : DistBase<ExponentialDist<Lambda>, support::PositiveReal, Lambda> {
+  using Base = DistBase<ExponentialDist, support::PositiveReal, Lambda>;
+  using Base::Base;
 
-  [[no_unique_address]] Lambda lambda_;
-
-  constexpr ExponentialDist() = default;
-  constexpr explicit ExponentialDist(Lambda lambda) : lambda_{lambda} {}
+  constexpr auto lambda() const { return Base::template param<0>(); }
 
   template <Symbolic X>
-  constexpr auto logProbFor(X x) const {
-    return logExponential(x, lambda_);
+  static constexpr auto logProbImpl(X x, auto lambda) {
+    return logExponential(x, lambda);
   }
-
   template <Symbolic X>
-  constexpr auto unnormalizedLogProbFor(X x) const {
-    return unnormalizedLogExponential(x, lambda_);
+  static constexpr auto unnormalizedLogProbImpl(X x, auto lambda) {
+    return unnormalizedLogExponential(x, lambda);
   }
-
-  constexpr auto lambda() const { return lambda_; }
 };
 
 template <typename Lambda>
@@ -254,31 +231,27 @@ constexpr auto Exponential(Lambda lambda) {
 }
 
 // ============================================================================
-// Uniform distribution wrapper
+// Uniform distribution
 // ============================================================================
 
 template <Symbolic A, Symbolic B>
-struct UniformDist {
-  using support_type = support::Real;  // General interval; specialize for Unit if (0,1)
+struct UniformDist : DistBase<UniformDist<A, B>, support::Real, A, B> {
+  using Base = DistBase<UniformDist, support::Real, A, B>;
+  using Base::Base;
 
-  [[no_unique_address]] A a_;
-  [[no_unique_address]] B b_;
-
-  constexpr UniformDist() = default;
-  constexpr UniformDist(A a, B b) : a_{a}, b_{b} {}
+  constexpr auto a() const { return Base::template param<0>(); }
+  constexpr auto b() const { return Base::template param<1>(); }
 
   template <Symbolic X>
-  constexpr auto logProbFor(X x) const {
-    return logUniform(x, a_, b_);
+  static constexpr auto logProbImpl(X x, auto a, auto b) {
+    return logUniform(x, a, b);
   }
-
   template <Symbolic X>
-  constexpr auto unnormalizedLogProbFor([[maybe_unused]] X x) const {
+  static constexpr auto unnormalizedLogProbImpl([[maybe_unused]] X x,
+                                                [[maybe_unused]] auto a,
+                                                [[maybe_unused]] auto b) {
     return 0_c;
   }
-
-  constexpr auto a() const { return a_; }
-  constexpr auto b() const { return b_; }
 };
 
 template <typename A, typename B>
@@ -291,31 +264,25 @@ constexpr auto Uniform(A a, B b) {
 }
 
 // ============================================================================
-// Cauchy distribution wrapper
+// Cauchy distribution
 // ============================================================================
 
 template <Symbolic X0, Symbolic Gamma>
-struct CauchyDist {
-  using support_type = support::Real;
+struct CauchyDist : DistBase<CauchyDist<X0, Gamma>, support::Real, X0, Gamma> {
+  using Base = DistBase<CauchyDist, support::Real, X0, Gamma>;
+  using Base::Base;
 
-  [[no_unique_address]] X0 x0_;
-  [[no_unique_address]] Gamma gamma_;
-
-  constexpr CauchyDist() = default;
-  constexpr CauchyDist(X0 x0, Gamma gamma) : x0_{x0}, gamma_{gamma} {}
+  constexpr auto x0() const { return Base::template param<0>(); }
+  constexpr auto gamma() const { return Base::template param<1>(); }
 
   template <Symbolic X>
-  constexpr auto logProbFor(X x) const {
-    return logCauchy(x, x0_, gamma_);
+  static constexpr auto logProbImpl(X x, auto x0, auto gamma) {
+    return logCauchy(x, x0, gamma);
   }
-
   template <Symbolic X>
-  constexpr auto unnormalizedLogProbFor(X x) const {
-    return unnormalizedLogCauchy(x, x0_, gamma_);
+  static constexpr auto unnormalizedLogProbImpl(X x, auto x0, auto gamma) {
+    return unnormalizedLogCauchy(x, x0, gamma);
   }
-
-  constexpr auto x0() const { return x0_; }
-  constexpr auto gamma() const { return gamma_; }
 };
 
 template <typename X0, typename Gamma>
@@ -328,29 +295,24 @@ constexpr auto Cauchy(X0 x0, Gamma gamma) {
 }
 
 // ============================================================================
-// Bernoulli distribution wrapper
+// Bernoulli distribution
 // ============================================================================
 
 template <Symbolic P>
-struct BernoulliDist {
-  using support_type = support::Unit;  // {0, 1} ⊂ (0, 1)
+struct BernoulliDist : DistBase<BernoulliDist<P>, support::Unit, P> {
+  using Base = DistBase<BernoulliDist, support::Unit, P>;
+  using Base::Base;
 
-  [[no_unique_address]] P p_;
-
-  constexpr BernoulliDist() = default;
-  constexpr explicit BernoulliDist(P p) : p_{p} {}
+  constexpr auto p() const { return Base::template param<0>(); }
 
   template <Symbolic X>
-  constexpr auto logProbFor(X x) const {
-    return logBernoulli(x, p_);
+  static constexpr auto logProbImpl(X x, auto p) {
+    return logBernoulli(x, p);
   }
-
   template <Symbolic X>
-  constexpr auto unnormalizedLogProbFor(X x) const {
-    return logBernoulli(x, p_);  // No normalizing constant
+  static constexpr auto unnormalizedLogProbImpl(X x, auto p) {
+    return logBernoulli(x, p);  // No normalizing constant
   }
-
-  constexpr auto p() const { return p_; }
 };
 
 template <typename P>
@@ -362,33 +324,25 @@ constexpr auto Bernoulli(P p) {
 }
 
 // ============================================================================
-// Binomial distribution wrapper
+// Binomial distribution
 // ============================================================================
-// Models k successes in n trials with probability p
-// k ~ Binomial(n, p)
 
 template <Symbolic N, Symbolic P>
-struct BinomialDist {
-  using support_type = support::Real;  // Discrete: {0, 1, ..., n}
+struct BinomialDist : DistBase<BinomialDist<N, P>, support::Real, N, P> {
+  using Base = DistBase<BinomialDist, support::Real, N, P>;
+  using Base::Base;
 
-  [[no_unique_address]] N n_;
-  [[no_unique_address]] P p_;
-
-  constexpr BinomialDist() = default;
-  constexpr BinomialDist(N n, P p) : n_{n}, p_{p} {}
+  constexpr auto n() const { return Base::template param<0>(); }
+  constexpr auto p() const { return Base::template param<1>(); }
 
   template <Symbolic K>
-  constexpr auto logProbFor(K k) const {
-    return logBinomial(k, n_, p_);
+  static constexpr auto logProbImpl(K k, auto n, auto p) {
+    return logBinomial(k, n, p);
   }
-
   template <Symbolic K>
-  constexpr auto unnormalizedLogProbFor(K k) const {
-    return unnormalizedLogBinomial(k, n_, p_);
+  static constexpr auto unnormalizedLogProbImpl(K k, auto n, auto p) {
+    return unnormalizedLogBinomial(k, n, p);
   }
-
-  constexpr auto n() const { return n_; }
-  constexpr auto p() const { return p_; }
 };
 
 template <typename N, typename P>
@@ -401,29 +355,24 @@ constexpr auto Binomial(N n, P p) {
 }
 
 // ============================================================================
-// Poisson distribution wrapper
+// Poisson distribution
 // ============================================================================
 
 template <Symbolic Lambda>
-struct PoissonDist {
-  using support_type = support::Real;  // Discrete: {0, 1, 2, ...}
+struct PoissonDist : DistBase<PoissonDist<Lambda>, support::Real, Lambda> {
+  using Base = DistBase<PoissonDist, support::Real, Lambda>;
+  using Base::Base;
 
-  [[no_unique_address]] Lambda lambda_;
-
-  constexpr PoissonDist() = default;
-  constexpr explicit PoissonDist(Lambda lambda) : lambda_{lambda} {}
+  constexpr auto lambda() const { return Base::template param<0>(); }
 
   template <Symbolic X>
-  constexpr auto logProbFor(X x) const {
-    return logPoisson(x, lambda_);
+  static constexpr auto logProbImpl(X x, auto lambda) {
+    return logPoisson(x, lambda);
   }
-
   template <Symbolic X>
-  constexpr auto unnormalizedLogProbFor(X x) const {
-    return unnormalizedLogPoisson(x, lambda_);
+  static constexpr auto unnormalizedLogProbImpl(X x, auto lambda) {
+    return unnormalizedLogPoisson(x, lambda);
   }
-
-  constexpr auto lambda() const { return lambda_; }
 };
 
 template <typename Lambda>
@@ -435,35 +384,26 @@ constexpr auto Poisson(Lambda lambda) {
 }
 
 // ============================================================================
-// Student's t distribution wrapper
+// Student's t distribution
 // ============================================================================
 
 template <Symbolic Nu, Symbolic Mu, Symbolic Sigma>
-struct StudentTDist {
-  using support_type = support::Real;
+struct StudentTDist : DistBase<StudentTDist<Nu, Mu, Sigma>, support::Real, Nu, Mu, Sigma> {
+  using Base = DistBase<StudentTDist, support::Real, Nu, Mu, Sigma>;
+  using Base::Base;
 
-  [[no_unique_address]] Nu nu_;
-  [[no_unique_address]] Mu mu_;
-  [[no_unique_address]] Sigma sigma_;
-
-  constexpr StudentTDist() = default;
-  constexpr StudentTDist(Nu nu, Mu mu, Sigma sigma)
-      : nu_{nu}, mu_{mu}, sigma_{sigma} {}
-
-  // Full normalized log-probability (uses lgamma for normalization constant)
-  template <Symbolic X>
-  constexpr auto logProbFor(X x) const {
-    return logStudentT(x, nu_, mu_, sigma_);
-  }
+  constexpr auto nu() const { return Base::template param<0>(); }
+  constexpr auto mu() const { return Base::template param<1>(); }
+  constexpr auto sigma() const { return Base::template param<2>(); }
 
   template <Symbolic X>
-  constexpr auto unnormalizedLogProbFor(X x) const {
-    return unnormalizedLogStudentT(x, nu_, mu_, sigma_);
+  static constexpr auto logProbImpl(X x, auto nu, auto mu, auto sigma) {
+    return logStudentT(x, nu, mu, sigma);
   }
-
-  constexpr auto nu() const { return nu_; }
-  constexpr auto mu() const { return mu_; }
-  constexpr auto sigma() const { return sigma_; }
+  template <Symbolic X>
+  static constexpr auto unnormalizedLogProbImpl(X x, auto nu, auto mu, auto sigma) {
+    return unnormalizedLogStudentT(x, nu, mu, sigma);
+  }
 };
 
 template <typename Nu, typename Mu, typename Sigma>
@@ -478,31 +418,25 @@ constexpr auto StudentT(Nu nu, Mu mu, Sigma sigma) {
 }
 
 // ============================================================================
-// Dirichlet distribution wrapper
+// Dirichlet distribution
 // ============================================================================
-// For use with plates/indexed variables where each component has symbolic alpha
 
 template <Symbolic Alpha>
-struct DirichletDist {
-  using support_type = support::Unit;  // Simplex: sum = 1, each component in (0, 1)
+struct DirichletDist : DistBase<DirichletDist<Alpha>, support::Unit, Alpha> {
+  using Base = DistBase<DirichletDist, support::Unit, Alpha>;
+  using Base::Base;
 
-  [[no_unique_address]] Alpha alpha_;
-
-  constexpr DirichletDist() = default;
-  constexpr explicit DirichletDist(Alpha alpha) : alpha_{alpha} {}
+  constexpr auto alpha() const { return Base::template param<0>(); }
 
   // Only unnormalized (lgamma not symbolic)
   template <Symbolic X>
-  constexpr auto logProbFor(X x) const {
-    return unnormalizedLogDirichlet(x, alpha_);
+  static constexpr auto logProbImpl(X x, auto alpha) {
+    return unnormalizedLogDirichlet(x, alpha);
   }
-
   template <Symbolic X>
-  constexpr auto unnormalizedLogProbFor(X x) const {
-    return unnormalizedLogDirichlet(x, alpha_);
+  static constexpr auto unnormalizedLogProbImpl(X x, auto alpha) {
+    return unnormalizedLogDirichlet(x, alpha);
   }
-
-  constexpr auto alpha() const { return alpha_; }
 };
 
 template <typename Alpha>
@@ -514,32 +448,24 @@ constexpr auto Dirichlet(Alpha alpha) {
 }
 
 // ============================================================================
-// Categorical distribution wrapper
+// Categorical distribution
 // ============================================================================
-// Represents discrete distribution over K categories
-// Uses log-probability parameterization for numerical stability
 
 template <Symbolic LogP>
-struct CategoricalDist {
-  using support_type = support::Real;  // Discrete: {0, 1, ..., K-1}
+struct CategoricalDist : DistBase<CategoricalDist<LogP>, support::Real, LogP> {
+  using Base = DistBase<CategoricalDist, support::Real, LogP>;
+  using Base::Base;
 
-  [[no_unique_address]] LogP log_p_;
-
-  constexpr CategoricalDist() = default;
-  constexpr explicit CategoricalDist(LogP log_p) : log_p_{log_p} {}
-
-  // log p(x=k) where x is one-hot encoded (or probability of category)
-  template <Symbolic X>
-  constexpr auto logProbFor(X x) const {
-    return logCategorical(x, log_p_);
-  }
+  constexpr auto logP() const { return Base::template param<0>(); }
 
   template <Symbolic X>
-  constexpr auto unnormalizedLogProbFor(X x) const {
-    return logCategorical(x, log_p_);
+  static constexpr auto logProbImpl(X x, auto log_p) {
+    return logCategorical(x, log_p);
   }
-
-  constexpr auto logP() const { return log_p_; }
+  template <Symbolic X>
+  static constexpr auto unnormalizedLogProbImpl(X x, auto log_p) {
+    return logCategorical(x, log_p);
+  }
 };
 
 template <typename LogP>

@@ -21,13 +21,6 @@ auto main() -> int {
     static_assert(!std::is_same_v<get_id_t<decltype(x)>, get_id_t<decltype(y)>>);
   };
 
-  "Literal has void identity"_test = [] {
-    auto l = Literal<double>{Embedded<double>{3.14}};
-    static_assert(is_atom_v<decltype(l)>);
-    static_assert(is_literal_v<decltype(l)>);
-    static_assert(!has_identity_v<decltype(l)>);
-  };
-
   "Constant is symbolic"_test = [] {
     Constant<42> c;
     static_assert(Symbolic<decltype(c)>);
@@ -65,12 +58,6 @@ auto main() -> int {
     static_assert(c<-100>.value == -100);
   };
 
-  "lit helper creates Literal"_test = [] {
-    auto l = lit(3.14);
-    static_assert(is_literal_v<decltype(l)>);
-    expectNear(l.effect_.value, 3.14);
-  };
-
   "Expression stores operator and args"_test = [] {
     Symbol<struct X> x;
     Symbol<struct Y> y;
@@ -96,12 +83,10 @@ auto main() -> int {
     Symbol<struct X> x;
     Constant<1> c;
     Fraction<1, 2> f;
-    auto l = Literal<int>{Embedded<int>{42}};
 
     static_assert(is_terminal_v<decltype(x)>);
     static_assert(is_terminal_v<decltype(c)>);
     static_assert(is_terminal_v<decltype(f)>);
-    static_assert(is_terminal_v<decltype(l)>);
   };
 
   "BinderPack lookup"_test = [] {
@@ -136,7 +121,6 @@ auto main() -> int {
     struct DummyDist {};
     static_assert(is_sample_effect_v<Sample<DummyDist>>);
     static_assert(!is_sample_effect_v<Free>);
-    static_assert(!is_sample_effect_v<Embedded<double>>);
     static_assert(!is_sample_effect_v<Compute<int>>);
   };
 
@@ -144,11 +128,11 @@ auto main() -> int {
     struct DummyDist {};
     using RVAtom = Atom<struct Id1, Sample<DummyDist>>;
     using FreeAtom = Atom<struct Id1, Free>;
-    using LitAtom = Atom<void, Embedded<double>>;
+    using ConstAtom = Constant<3.14>;
 
     static_assert(is_random_var_atom_v<RVAtom>);
     static_assert(!is_random_var_atom_v<FreeAtom>);
-    static_assert(!is_random_var_atom_v<LitAtom>);
+    static_assert(!is_random_var_atom_v<ConstAtom>);
   };
 
   "get_distribution_t extracts distribution from Sample effect"_test = [] {

@@ -15,8 +15,8 @@
 //   using namespace tempura::symbolic4;
 //
 //   // Define hierarchical model
-//   auto mu = normal(0.0, 10.0);        // mu ~ Normal(0, 10)
-//   auto sigma = halfNormal(5.0);       // sigma ~ HalfNormal(5)
+//   auto mu = normal(0_c, 10_c);        // mu ~ Normal(0, 10)
+//   auto sigma = halfNormal(5_c);       // sigma ~ HalfNormal(5)
 //   auto y = normal(mu, sigma);         // y ~ Normal(mu, sigma)
 //
 //   // Symbolic log-probability (differentiable)

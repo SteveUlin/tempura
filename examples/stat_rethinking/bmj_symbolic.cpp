@@ -129,13 +129,13 @@ Model: logit(p[L]) = a + sigma * z_b[L]
   struct Countries {};
 
   // Priors (scalar)
-  auto a = normal(-2.0, 1.0);
-  auto sigma = exponential(1.0);
+  auto a = normal(-2_c, 1_c);
+  auto sigma = exponential(1_c);
 
   // Non-centered parameterization: z_b[L] ~ N(0, 1), b[L] = sigma * z_b[L]
   // This decouples the geometry of sigma from the country effects,
   // eliminating the "funnel" that makes centered parameterization hard to sample.
-  auto z_b = plate<Countries>(normal(lit(0.0), lit(1.0)));
+  auto z_b = plate<Countries>(normal(0_c, 1_c));
 
   // Data symbols
   auto n = data<Countries>();

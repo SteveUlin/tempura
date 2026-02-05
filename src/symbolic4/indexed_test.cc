@@ -136,8 +136,8 @@ auto main() -> int {
 
   "plate creates IndexedStochasticNode"_test = [] {
     struct Obs {};
-    auto alpha = halfNormal(5.0);
-    auto theta = plate<Obs>(beta(alpha, lit(3.0)));
+    auto alpha = halfNormal(5_c);
+    auto theta = plate<Obs>(beta(alpha, 3_c));
 
     static_assert(is_indexed_random_var_v<decltype(theta)>);
     static_assert(IsIndexedRandomVar<decltype(theta)>);
@@ -145,7 +145,7 @@ auto main() -> int {
 
   "IndexedStochasticNode::freeSym returns IndexedSymbol"_test = [] {
     struct Obs {};
-    auto theta = plate<Obs>(beta(lit(2.0), lit(3.0)));
+    auto theta = plate<Obs>(beta(2.0_c, 3.0_c));
     // sym() returns Atom<Id, IndexedSample<...>> (discoverable type)
     // freeSym() returns IndexedSymbol<Id, Dims...> (the symbol type)
     auto sym = theta.freeSym();
@@ -155,7 +155,7 @@ auto main() -> int {
 
   "IndexedStochasticNode::logProb returns SumOver"_test = [] {
     struct Obs {};
-    auto theta = plate<Obs>(beta(lit(2.0), lit(3.0)));
+    auto theta = plate<Obs>(beta(2.0_c, 3.0_c));
     auto lp = theta.logProb();
 
     static_assert(is_sum_over_v<decltype(lp)>);
@@ -192,7 +192,7 @@ auto main() -> int {
 
   "plate with beta distribution logProb"_test = [] {
     struct Obs {};
-    auto theta = plate<Obs>(beta(lit(2.0), lit(3.0)));
+    auto theta = plate<Obs>(beta(2.0_c, 3.0_c));
     auto lp = theta.logProb();
 
     std::vector<double> theta_vals = {0.3, 0.5, 0.7};
@@ -211,8 +211,8 @@ auto main() -> int {
 
   "plate with scalar parameter"_test = [] {
     struct Obs {};
-    auto alpha = halfNormal(5.0);
-    auto theta = plate<Obs>(beta(alpha, lit(3.0)));
+    auto alpha = halfNormal(5_c);
+    auto theta = plate<Obs>(beta(alpha, 3.0_c));
 
     // Just the plate's log-prob (not joint)
     auto lp = theta.logProb();
@@ -299,7 +299,7 @@ auto main() -> int {
     struct Years {};
 
     // plate<Years>(plate<Countries>(...)) creates 2D symbol
-    auto theta = plate<Years>(plate<Countries>(normal(lit(0.0), lit(1.0))));
+    auto theta = plate<Years>(plate<Countries>(normal(0.0_c, 1.0_c)));
 
     using NodeType = decltype(theta);
     using DimsType = typename NodeType::dims_list;
@@ -342,7 +342,7 @@ auto main() -> int {
     struct Years {};
 
     // y[c,y] explicitly indexed by both Countries and Years
-    auto y = plate<Years>(plate<Countries>(normal(lit(0.0), lit(1.0))));
+    auto y = plate<Years>(plate<Countries>(normal(0.0_c, 1.0_c)));
 
     using YDims = typename decltype(y)::dims_list;
     static_assert(std::is_same_v<YDims, TypeList<Countries, Years>>);
@@ -388,7 +388,7 @@ auto main() -> int {
 
   "observe creates Observed wrapper"_test = [] {
     struct Obs {};
-    auto theta = plate<Obs>(beta(lit(2.0), lit(3.0)));
+    auto theta = plate<Obs>(beta(2.0_c, 3.0_c));
 
     std::vector<double> data = {0.3, 0.5, 0.7};
     auto theta_obs = observe(theta, data);
@@ -399,7 +399,7 @@ auto main() -> int {
 
   "makeObservedBinding creates correct binding"_test = [] {
     struct Obs {};
-    auto theta = plate<Obs>(beta(lit(2.0), lit(3.0)));
+    auto theta = plate<Obs>(beta(2.0_c, 3.0_c));
 
     std::vector<double> data = {0.3, 0.5, 0.7};
     auto theta_obs = observe(theta, data);
@@ -411,7 +411,7 @@ auto main() -> int {
 
   "observed plate log-prob evaluation"_test = [] {
     struct Obs {};
-    auto theta = plate<Obs>(beta(lit(2.0), lit(3.0)));
+    auto theta = plate<Obs>(beta(2.0_c, 3.0_c));
 
     std::vector<double> data = {0.3, 0.5, 0.7};
     auto theta_obs = observe(theta, data);
@@ -437,8 +437,8 @@ auto main() -> int {
 
   "observed with scalar parameter"_test = [] {
     struct Obs {};
-    auto alpha = halfNormal(5.0);
-    auto theta = plate<Obs>(beta(alpha, lit(3.0)));
+    auto alpha = halfNormal(5_c);
+    auto theta = plate<Obs>(beta(alpha, 3.0_c));
 
     std::vector<double> data = {0.3, 0.5, 0.7};
     auto theta_obs = observe(theta, data);
@@ -498,8 +498,8 @@ auto main() -> int {
     using Vec = VectorSymbol<XId, 2>;
 
     // 2D MVN with diagonal covariance
-    auto mu = std::tuple{lit(0.0), lit(0.0)};
-    auto sigma = std::tuple{lit(1.0), lit(2.0)};
+    auto mu = std::tuple{0.0_c, 0.0_c};
+    auto sigma = std::tuple{1.0_c, 2.0_c};
     auto dist = diagMvNormal(mu, sigma);
 
     auto lp = dist.logProbFor(Vec{});

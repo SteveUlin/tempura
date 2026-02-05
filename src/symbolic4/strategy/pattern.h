@@ -2,8 +2,9 @@
 
 #include <type_traits>
 
+#include <experimental/meta>
+
 #include "meta/type_id.h"
-#include "meta/type_list.h"
 #include "meta/utility.h"
 #include "symbolic4/compressed.h"
 #include "symbolic4/core.h"
@@ -18,11 +19,8 @@
 // Pattern matching for the Atom<Id, Effect> model. Key insight:
 //
 //   Symbol<X>  = Atom<X, Free>           - Variable, needs binding
-//   Literal<T> = Atom<void, Embedded<T>> - Runtime value baked in
-//
-// CRITICAL: Literals carry runtime values in their Effect.
-// When a pattern variable captures a Literal, the binding stores the actual
-// Atom object (with its embedded value) to preserve runtime state.
+//   Constant<V>                          - Compile-time constant (NTTP)
+//   Fraction<N,D>                        - Exact rational (NTTP pair)
 //
 // ============================================================================
 
@@ -40,13 +38,7 @@ struct PatternVar : SymbolicTag {
 };
 
 template <typename T>
-struct IsPatternVar : std::false_type {};
-
-template <typename U>
-struct IsPatternVar<PatternVar<U>> : std::true_type {};
-
-template <typename T>
-constexpr bool is_pattern_var_v = IsPatternVar<T>::value;
+constexpr bool is_pattern_var_v = core_traits_detail::isSpecOf<T, PatternVar>();
 
 // Predefined pattern variables
 inline constexpr PatternVar x_;
@@ -71,7 +63,6 @@ struct AnyExpr : SymbolicTag {};
 struct AnyConstant : SymbolicTag {};  // Matches Constant<V> and Fraction<N,D>
 struct AnyFraction : SymbolicTag {};  // Matches only Fraction<N,D>
 struct AnySymbol : SymbolicTag {};
-struct AnyLiteral : SymbolicTag {};
 struct Never : SymbolicTag {};
 
 // ============================================================================
@@ -132,20 +123,10 @@ constexpr bool match(AnySymbol, IndexedSymbol<Id, Dims...>) {
   return true;
 }
 
-template <typename T>
-constexpr bool match(AnyLiteral, Atom<void, Embedded<T>>) {
-  return true;
-}
-
 // Exact matching for atoms
 template <typename Id1, typename Id2>
 constexpr bool match(Atom<Id1, Free>, Atom<Id2, Free>) {
   return isSame<Id1, Id2>;
-}
-
-template <typename T1, typename T2>
-constexpr bool match(Atom<void, Embedded<T1>>, Atom<void, Embedded<T2>>) {
-  return isSame<T1, T2>;
 }
 
 template <typename Id1, typename E1, typename Id2, typename E2>
@@ -237,7 +218,7 @@ struct BindingContext {
     } else if constexpr (Idx >= sizeof...(Entries)) {
       return false;
     } else {
-      using CurrentEntry = Get_t<Idx, Entries...>;
+      using CurrentEntry = [:std::meta::template_arguments_of(^^BindingContext<Entries...>)[Idx]:];
       if constexpr (CurrentEntry::var_id == VarId) {
         return true;
       } else {
@@ -253,7 +234,7 @@ struct BindingContext {
       // Should not reach here for well-formed patterns
       return get<0>(entries_).bound_expr;  // Fallback
     } else {
-      using CurrentEntry = Get_t<Idx, Entries...>;
+      using CurrentEntry = [:std::meta::template_arguments_of(^^BindingContext<Entries...>)[Idx]:];
       if constexpr (CurrentEntry::var_id == VarId) {
         return get<Idx>(entries_).bound_expr;
       } else {
@@ -402,11 +383,6 @@ constexpr auto extractBindingsImpl(AnySymbol, S, Context ctx) {
 }
 
 template <Symbolic S, typename Context>
-constexpr auto extractBindingsImpl(AnyLiteral, S, Context ctx) {
-  return ctx;
-}
-
-template <Symbolic S, typename Context>
 constexpr auto extractBindingsImpl(AnyFraction, S, Context ctx) {
   return ctx;
 }
@@ -515,11 +491,6 @@ constexpr auto substituteImpl(AnySymbol, Context) {
 }
 
 template <typename Context>
-constexpr auto substituteImpl(AnyLiteral, Context) {
-  return AnyLiteral{};
-}
-
-template <typename Context>
 constexpr auto substituteImpl(AnyFraction, Context) {
   return AnyFraction{};
 }
@@ -604,17 +575,6 @@ struct IsSymbol {
 };
 
 template <typename PatVar>
-struct IsLiteral {
-  [[no_unique_address]] PatVar var{};
-
-  template <typename Context>
-  constexpr bool operator()(Context const& ctx) const {
-    using BoundType = decltype(get(ctx, var));
-    return is_literal_v<BoundType>;
-  }
-};
-
-template <typename PatVar>
 struct IsExpression {
   [[no_unique_address]] PatVar var{};
 
@@ -655,11 +615,6 @@ constexpr auto var_is_constant(PatVar var) {
 template <typename PatVar>
 constexpr auto var_is_symbol(PatVar var) {
   return IsSymbol<PatVar>{var};
-}
-
-template <typename PatVar>
-constexpr auto var_is_literal(PatVar var) {
-  return IsLiteral<PatVar>{var};
 }
 
 template <typename PatVar>

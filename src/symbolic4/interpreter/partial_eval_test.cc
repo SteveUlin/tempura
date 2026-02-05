@@ -22,11 +22,6 @@ auto main() -> int {
     static_assert(is_ground_v<decltype(0_c)>);
   };
 
-  "literals are ground"_test = [] {
-    auto l = lit(3.14);
-    static_assert(is_ground_v<decltype(l)>);
-  };
-
   "symbols are NOT ground"_test = [&] {
     static_assert(!is_ground_v<decltype(x)>);
     static_assert(!is_ground_v<decltype(y)>);
@@ -55,113 +50,38 @@ auto main() -> int {
   };
 
   // =========================================================================
-  // HasLiteral tests
-  // =========================================================================
-
-  "constants don't have literals"_test = [] {
-    static_assert(!has_literal_v<decltype(1_c)>);
-    static_assert(!has_literal_v<decltype(1_c + 2_c)>);
-  };
-
-  "literals have literals"_test = [] {
-    auto l = lit(3.14);
-    static_assert(has_literal_v<decltype(l)>);
-  };
-
-  "mixed constant/literal expressions have literals"_test = [] {
-    auto l = lit(3.14);
-    static_assert(has_literal_v<decltype(l + 1_c)>);
-    static_assert(has_literal_v<decltype(1_c + l)>);
-    static_assert(has_literal_v<decltype(sin(l))>);
-  };
-
-  // =========================================================================
   // EvalIfGround tests
   // =========================================================================
+  // After deleting Embedded<T>, EvalIfGround returns ground expressions
+  // unchanged (can't construct Constant<V> at runtime). The info-domain
+  // simplifier handles actual constant folding. These tests verify the
+  // passthrough behavior.
 
-  "EvalIfGround: constant arithmetic -> constant"_test = [] {
+  "EvalIfGround: constants pass through"_test = [] {
     auto expr = 1_c + 2_c;
     auto result = EvalIfGround{}.apply(expr);
 
-    // Should be Constant<3.0>
-    static_assert(is_constant_v<decltype(result)>);
-    static_assert(decltype(result)::value == 3.0);
+    // Ground but not a leaf constant — returned unchanged
+    static_assert(is_ground_v<decltype(result)>);
+    static_assert(is_expression_v<decltype(result)>);
   };
 
-  "EvalIfGround: nested constant expr -> constant"_test = [] {
-    auto expr = (1_c + 2_c) * 4_c;
-    auto result = EvalIfGround{}.apply(expr);
-
-    static_assert(is_constant_v<decltype(result)>);
-    static_assert(decltype(result)::value == 12.0);
-  };
-
-  "EvalIfGround: expression with literal -> literal"_test = [] {
-    auto l = lit(2.0);
-    auto expr = l + 3_c;
-    auto result = EvalIfGround{}.apply(expr);
-
-    static_assert(is_literal_v<decltype(result)>);
-    expectNear(result.effect_.value, 5.0);
-  };
-
-  "EvalIfGround: trig of constant -> constant"_test = [] {
-    auto expr = sin(0_c);
-    auto result = EvalIfGround{}.apply(expr);
+  "EvalIfGround: leaf constants stay as-is"_test = [] {
+    auto result = EvalIfGround{}.apply(5_c);
 
     static_assert(is_constant_v<decltype(result)>);
-    expectNear(decltype(result)::value, 0.0, 1e-10);
   };
 
-  "EvalIfGround: expression with symbol -> unchanged"_test = [&] {
+  "EvalIfGround: expression with symbol → unchanged"_test = [&] {
     auto expr = x + 1_c;
     auto result = EvalIfGround{}.apply(expr);
 
-    // Should be unchanged (same type)
     static_assert(isSame<decltype(result), decltype(expr)>);
   };
 
   // =========================================================================
   // partialEval (bottom-up application)
   // =========================================================================
-
-  "partialEval: evaluates ground subexpressions"_test = [&] {
-    // (1 + 2) * x should become 3 * x
-    auto expr = (1_c + 2_c) * x;
-    auto result = partialEval(expr);
-
-    // Result should be Constant<3> * x
-    static_assert(is_expression_v<decltype(result)>);
-    static_assert(isSame<get_op_t<decltype(result)>, MulOp>);
-
-    auto lhs = result.template arg<0>();
-    static_assert(is_constant_v<decltype(lhs)>);
-    static_assert(decltype(lhs)::value == 3.0);
-
-    auto rhs = result.template arg<1>();
-    static_assert(isSame<decltype(rhs), decltype(x)>);
-  };
-
-  "partialEval: nested ground terms"_test = [&] {
-    // sin(0) * x + cos(0) * y
-    // sin(0) = 0, cos(0) = 1
-    // -> 0 * x + 1 * y
-    auto expr = sin(0_c) * x + cos(0_c) * y;
-    auto result = partialEval(expr);
-
-    // Check structure: Constant<0> * x + Constant<1> * y
-    static_assert(is_expression_v<decltype(result)>);
-    static_assert(isSame<get_op_t<decltype(result)>, AddOp>);
-  };
-
-  "partialEval: fully ground expression"_test = [] {
-    auto expr = sin(1_c + 2_c) * cos(0_c);
-    auto result = partialEval(expr);
-
-    // sin(3) * cos(0) = sin(3) * 1 = sin(3)
-    static_assert(is_constant_v<decltype(result)>);
-    expectNear(decltype(result)::value, std::sin(3.0), 1e-10);
-  };
 
   "partialEval: preserves symbolic structure"_test = [&] {
     // x + y should be unchanged
@@ -171,12 +91,25 @@ auto main() -> int {
     static_assert(isSame<decltype(result), decltype(expr)>);
   };
 
-  "partialEval: pi and e evaluate"_test = [] {
-    auto expr = pi + e;
+  "partialEval: mixed expression preserves shape"_test = [&] {
+    auto expr = (1_c + 2_c) * x;
     auto result = partialEval(expr);
 
-    static_assert(is_constant_v<decltype(result)>);
-    expectNear(decltype(result)::value, M_PI + M_E, 1e-10);
+    // Structure preserved: still a MulOp expression
+    static_assert(is_expression_v<decltype(result)>);
+    static_assert(isSame<get_op_t<decltype(result)>, MulOp>);
+
+    // RHS is still x
+    auto rhs = result.template arg<1>();
+    static_assert(isSame<decltype(rhs), decltype(x)>);
+  };
+
+  "partialEval: nested ground terms maintain structure"_test = [&] {
+    auto expr = sin(0_c) * x + cos(0_c) * y;
+    auto result = partialEval(expr);
+
+    static_assert(is_expression_v<decltype(result)>);
+    static_assert(isSame<get_op_t<decltype(result)>, AddOp>);
   };
 
   return TestRegistry::result();

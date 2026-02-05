@@ -232,7 +232,7 @@ auto main() -> int {
 
   "LKJCholeskyDist creates expressions"_test = [] {
     auto l_corr = cholCorr<Features>();
-    auto dist = lkjCholesky(lit(2.0));
+    auto dist = lkjCholesky(2.0_c);
     auto lp = dist.logProbFor(l_corr);
 
     static_assert(is_expression_v<decltype(lp)>);
@@ -253,7 +253,7 @@ auto main() -> int {
 
   "LKJ log-prob evaluation"_test = [] {
     auto l_corr = cholCorr<Features>();
-    auto dist = lkjCholesky(lit(2.0));
+    auto dist = lkjCholesky(2.0_c);
     auto lp_expr = dist.logProbFor(l_corr);
 
     // Create a 3x3 correlation Cholesky factor

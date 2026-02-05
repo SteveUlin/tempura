@@ -31,7 +31,7 @@ auto main() -> int {
 
   "DiscreteDist with literal probabilities"_test = [] {
     // Create distribution with makeDiscreteDist
-    auto dist = makeDiscreteDist<Choice>(lit(0.5), lit(0.3), lit(0.2));
+    auto dist = makeDiscreteDist<Choice>(0.5_c, 0.3_c, 0.2_c);
 
     static_assert(decltype(dist)::K == 3);
 
@@ -61,14 +61,14 @@ auto main() -> int {
 
   "Select basic"_test = [] {
     Symbol<struct I> idx;
-    auto s = select(idx, lit(10.0), lit(20.0), lit(30.0));
+    auto s = select(idx, 10_c, 20_c, 30_c);
 
     static_assert(is_select_v<decltype(s)>);
     static_assert(decltype(s)::num_values == 3);
   };
 
   "discreteDist factory function"_test = [] {
-    auto dist = discreteDist<Choice>(0.25, 0.5, 0.25);
+    auto dist = discreteDist<Choice>(0.25_c, 0.5_c, 0.25_c);
 
     auto p0 = dist.template probAt<0>();
     auto p1 = dist.template probAt<1>();

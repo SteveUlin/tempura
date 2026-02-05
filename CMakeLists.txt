@@ -13,10 +13,22 @@ option(TEMPURA_PROFILE_COMPILE "Add -ftime-report (GCC) or -ftime-trace (Clang)"
 # ============================================================================
 # External Dependencies
 # ============================================================================
+# Graphics packages only needed for examples — make optional so core lib builds
+# without them (e.g., in the reflection devShell which lacks glfw/Vulkan).
 
-find_package(glfw3 REQUIRED)
-find_package(OpenGL REQUIRED)
-find_package(Vulkan REQUIRED)
+if(TEMPURA_BUILD_EXAMPLES)
+  find_package(glfw3 QUIET)
+  find_package(OpenGL QUIET)
+  find_package(Vulkan QUIET)
+  if(NOT glfw3_FOUND OR NOT OpenGL_FOUND OR NOT Vulkan_FOUND)
+    message(WARNING "Some graphics packages not found — disabling graphics examples")
+  endif()
+else()
+  # Try to find them anyway for other targets, but don't fail
+  find_package(glfw3 QUIET)
+  find_package(OpenGL QUIET)
+  find_package(Vulkan QUIET)
+endif()
 
 # ============================================================================
 # Compilation Database and IDE Support
@@ -35,9 +47,11 @@ endif()
 # Global Build Settings
 # ============================================================================
 
-# Enable link time optimization
+# Enable link time optimization (unless preset/cache overrides it to OFF)
 # LTO helps template-heavy code by deferring codegen to link-time (10% faster overall)
-set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+if(NOT DEFINED CMAKE_INTERPROCEDURAL_OPTIMIZATION)
+  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+endif()
 
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 
@@ -53,30 +67,29 @@ target_compile_options(tempura_compiler_flags INTERFACE
   -g
   -std=c++2c
   -Wno-unknown-pragmas
-  -Wno-unused-but-set-variable
   -Wno-unused-variable
-  -Wno-unused-local-typedefs
   -Wno-unused-parameter
   -Wno-sign-compare
-  -mavx512f
-  -mavx512dq
-  -mavx512bw
-  -mavx512vl
-  -mavx512vbmi
-  -mavx512vbmi2
-  -mavx512bitalg
-  -mavx512vpopcntdq
-  -mavx512vnni
-  -mgfni
-  -mvaes
-  -mvpclmulqdq
-  -maes
-  -mrdseed
-  -mbmi
-  -mbmi2
   -ftemplate-depth=2048
   -fconstexpr-depth=2048
+  # GCC-specific warning flags
+  $<$<CXX_COMPILER_ID:GNU>:-Wno-unused-but-set-variable>
+  $<$<CXX_COMPILER_ID:GNU>:-Wno-unused-local-typedefs>
+  # Clang spells it without trailing 's'
+  $<$<CXX_COMPILER_ID:Clang>:-Wno-unused-local-typedef>
 )
+
+# AVX-512 flags — guarded because the P2996 Clang fork may not support all of them
+option(TEMPURA_ENABLE_AVX512 "Enable AVX-512 instruction set flags" ON)
+if(TEMPURA_ENABLE_AVX512)
+  target_compile_options(tempura_compiler_flags INTERFACE
+    -mavx512f -mavx512dq -mavx512bw -mavx512vl
+    -mavx512vbmi -mavx512vbmi2 -mavx512bitalg
+    -mavx512vpopcntdq -mavx512vnni
+    -mgfni -mvaes -mvpclmulqdq
+    -maes -mrdseed -mbmi -mbmi2
+  )
+endif()
 
 # Release-specific optimization flags
 add_library(tempura_release_flags INTERFACE)

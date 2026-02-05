@@ -52,7 +52,9 @@ Model:
   // Define posterior using symbolic4 - conjugate Beta-Binomial update
   // Prior: Beta(1, 1) = Uniform
   // Posterior: Beta(1 + k, 1 + (n - k)) = Beta(112, 61)
-  auto p_posterior = beta(lit(1.0 + k), lit(1.0 + (n - k)));
+  // k and n are constexpr, so the posterior parameters are compile-time constants:
+  // Beta(1 + 111, 1 + (171 - 111)) = Beta(112, 61)
+  auto p_posterior = beta(112.0_c, 61.0_c);
 
   // Show the log-probability expression (compile-time symbolic)
   auto lp = logProb(p_posterior);
@@ -143,8 +145,8 @@ hierarchical model: mu -> y
 )");
 
   // Define hierarchical model - expression graph built at compile time
-  auto mu = normal(lit(0.0), lit(10.0));
-  auto y = normal(mu, lit(1.0));
+  auto mu = normal(0_c, 10_c);
+  auto y = normal(mu, 1_c);
 
   // Joint log-probability is a symbolic expression
   auto joint_lp = logProb(mu, y);

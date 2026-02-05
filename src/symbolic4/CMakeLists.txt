@@ -69,12 +69,6 @@ target_link_libraries(symbolic4_let_test PRIVATE symbolic4 unit)
 add_test(NAME symbolic4_let_test COMMAND symbolic4_let_test)
 set_tests_properties(symbolic4_let_test PROPERTIES LABELS "symbolic4;let")
 
-# interpreter/simplify.h tests
-add_executable(symbolic4_simplify_test interpreter/simplify_test.cc)
-target_link_libraries(symbolic4_simplify_test PRIVATE symbolic4 unit)
-add_test(NAME symbolic4_simplify_test COMMAND symbolic4_simplify_test)
-set_tests_properties(symbolic4_simplify_test PROPERTIES LABELS "symbolic4;interpreter;simplify")
-
 # interpreter/partial_eval.h tests
 add_executable(symbolic4_partial_eval_test interpreter/partial_eval_test.cc)
 target_link_libraries(symbolic4_partial_eval_test PRIVATE symbolic4 unit)
@@ -280,11 +274,23 @@ target_link_libraries(symbolic4_reduce_over_test PRIVATE symbolic4 unit)
 add_test(NAME symbolic4_reduce_over_test COMMAND symbolic4_reduce_over_test)
 set_tests_properties(symbolic4_reduce_over_test PROPERTIES LABELS "symbolic4;strategy;reduce_over")
 
-# strategy/recursive.h tests
-add_executable(symbolic4_recursive_test strategy/recursive_test.cc)
-target_link_libraries(symbolic4_recursive_test PRIVATE symbolic4 unit)
-add_test(NAME symbolic4_recursive_test COMMAND symbolic4_recursive_test)
-set_tests_properties(symbolic4_recursive_test PROPERTIES LABELS "symbolic4;strategy;recursive")
+# strategy/info_simplify: NTTP feasibility and info-domain tests
+add_executable(symbolic4_info_simplify_test strategy/info_simplify_test.cc)
+target_link_libraries(symbolic4_info_simplify_test PRIVATE symbolic4 unit)
+add_test(NAME symbolic4_info_simplify_test COMMAND symbolic4_info_simplify_test)
+set_tests_properties(symbolic4_info_simplify_test PROPERTIES LABELS "symbolic4;strategy;info_simplify")
+
+# strategy/info_diff: info-domain differentiation tests
+add_executable(symbolic4_info_diff_test strategy/info_diff_test.cc)
+target_link_libraries(symbolic4_info_diff_test PRIVATE symbolic4 unit)
+add_test(NAME symbolic4_info_diff_test COMMAND symbolic4_info_diff_test)
+set_tests_properties(symbolic4_info_diff_test PROPERTIES LABELS "symbolic4;strategy;info_diff")
+
+# strategy/bench_*: compile-time benchmarks (not run as tests)
+add_executable(bench_info_simplify strategy/bench_info_simplify.cc)
+target_link_libraries(bench_info_simplify PRIVATE symbolic4)
+add_executable(bench_info_diff strategy/bench_info_diff.cc)
+target_link_libraries(bench_info_diff PRIVATE symbolic4)
 
 # distributions/collect_log_prob.h tests
 add_executable(symbolic4_collect_log_prob_test collect_log_prob_test.cc)
@@ -335,8 +341,12 @@ add_test(NAME symbolic4_symbolic_state_test COMMAND symbolic4_symbolic_state_tes
 set_tests_properties(symbolic4_symbolic_state_test PROPERTIES LABELS "symbolic4;symbolic_state")
 
 # plate_infer_test.cc - plate inference API tests
+# Info-domain diff+simplify on large plate expressions exceeds Clang's default
+# constexpr step limit (1M). The joint log-prob for a 3-param plate model produces
+# deep expression types that require many reflection operations to differentiate.
 add_executable(plate_infer_test plate_infer_test.cc)
 target_link_libraries(plate_infer_test PRIVATE symbolic4 tempura::prob unit)
+target_compile_options(plate_infer_test PRIVATE -fconstexpr-steps=10000000)
 add_test(NAME plate_infer_test COMMAND plate_infer_test)
 set_tests_properties(plate_infer_test PROPERTIES LABELS "symbolic4;plate;infer")
 

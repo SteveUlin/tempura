@@ -109,8 +109,8 @@ auto main() -> int {
   printHeader("Symbolic Model Definition");
 
   // Define random variables
-  auto mu = normal(0.0, 5.0);       // mu ~ Normal(0, 5)
-  auto sigma = halfNormal(2.0);     // sigma ~ HalfNormal(2)
+  auto mu = normal(0_c, 5_c);       // mu ~ Normal(0, 5)
+  auto sigma = halfNormal(2_c);     // sigma ~ HalfNormal(2)
 
   // For likelihood, we need to sum over observations
   // Since we're doing manual HMC, we'll construct the log-posterior directly

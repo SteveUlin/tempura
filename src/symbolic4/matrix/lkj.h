@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstddef>
 
+#include "symbolic4/constants.h"
 #include "symbolic4/core.h"
 #include "symbolic4/operators.h"
 
@@ -152,18 +153,13 @@ LKJCholeskyDist(Eta) -> LKJCholeskyDist<Eta>;
 // lkjCholesky(eta) creates an LKJCholeskyDist with the given shape parameter.
 //
 // Examples:
-//   auto prior = lkjCholesky(2.0);        // η=2, shrinks toward identity
-//   auto uniform = lkjCholesky(1.0);      // η=1, uniform over correlations
+//   auto prior = lkjCholesky(2.0_c);      // η=2, shrinks toward identity
+//   auto uniform = lkjCholesky(1.0_c);    // η=1, uniform over correlations
 //   auto prior = lkjCholesky(eta_symbol); // Symbolic eta for inference
 
-template <typename Eta>
+template <Symbolic Eta>
 constexpr auto lkjCholesky(Eta eta) {
-  if constexpr (Symbolic<Eta>) {
-    return LKJCholeskyDist{eta};
-  } else {
-    // Convert numeric literals to symbolic
-    return LKJCholeskyDist{lit(static_cast<double>(eta))};
-  }
+  return LKJCholeskyDist{eta};
 }
 
 // ============================================================================
@@ -172,12 +168,12 @@ constexpr auto lkjCholesky(Eta eta) {
 
 // LKJ(1) is uniform over correlation matrices
 inline auto uniformCorrelation() {
-  return lkjCholesky(1.0);
+  return lkjCholesky(1.0_c);
 }
 
 // LKJ(2) is a common weakly informative prior
 inline auto weaklyInformativeCorrelation() {
-  return lkjCholesky(2.0);
+  return lkjCholesky(2.0_c);
 }
 
 }  // namespace tempura::symbolic4

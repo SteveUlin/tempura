@@ -67,13 +67,7 @@ struct Gather : SymbolicTag {
 // ============================================================================
 
 template <typename T>
-struct IsGather : std::false_type {};
-
-template <typename P, typename I>
-struct IsGather<Gather<P, I>> : std::true_type {};
-
-template <typename T>
-constexpr bool is_gather_v = IsGather<T>::value;
+constexpr bool is_gather_v = core_traits_detail::isSpecOf<T, Gather>();
 
 // Concept for use in if constexpr
 template <typename T>
@@ -118,10 +112,10 @@ struct FindIndexedDim {
 };
 
 // Base case: IndexedSymbol directly
-template <typename Id, typename... Dims>
-struct FindIndexedDim<IndexedSymbol<Id, Dims...>> {
+template <typename Id, typename FirstDim, typename... RestDims>
+struct FindIndexedDim<IndexedSymbol<Id, FirstDim, RestDims...>> {
   static constexpr bool found = true;
-  using type = Head_t<TypeList<Dims...>>;
+  using type = FirstDim;
 };
 
 // Recursive case: Expression — search children left to right
@@ -160,10 +154,9 @@ template <typename T>
 struct GatherIndexDim;
 
 // When index is an IndexedSymbol, extract its first dimension
-template <typename P, typename I>
-  requires is_indexed_symbol_v<I>
-struct GatherIndexDim<Gather<P, I>> {
-  using type = Head_t<typename I::dims_list>;
+template <typename P, typename Id, typename FirstDim, typename... RestDims>
+struct GatherIndexDim<Gather<P, IndexedSymbol<Id, FirstDim, RestDims...>>> {
+  using type = FirstDim;
 };
 
 template <typename T>

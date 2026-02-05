@@ -10,7 +10,6 @@
 #include "symbolic4/distributions/random_var.h"
 #include "symbolic4/strategy/diff.h"
 #include "symbolic4/interpreter/eval.h"
-#include "symbolic4/interpreter/simplify.h"
 
 // ============================================================================
 // posterior.h - Posterior wrapper for MCMC inference
@@ -21,8 +20,8 @@
 //
 // Usage:
 //   // Define model
-//   auto mu = normal(lit(0.0), lit(5.0));
-//   auto sigma = halfNormal(lit(2.0));
+//   auto mu = normal(0.0_c, 5.0_c);
+//   auto sigma = halfNormal(2.0_c);
 //   auto y = normal(mu, sigma);
 //
 //   // Create posterior conditioned on observed y
@@ -143,7 +142,7 @@ namespace detail {
 
 template <Symbolic LogProbExpr, typename ParamsTuple, std::size_t... Is>
 auto makeGradExprs(LogProbExpr lp, ParamsTuple params, std::index_sequence<Is...>) {
-  return std::make_tuple(simplify(diff(lp, std::get<Is>(params)))...);
+  return std::make_tuple(diff(lp, std::get<Is>(params))...);
 }
 
 }  // namespace detail

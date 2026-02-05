@@ -14,8 +14,8 @@ using namespace tempura::symbolic4;
 
 auto main() -> int {
   "TransformPack scalar-only transform round-trip"_test = [] {
-    auto alpha = normal(0.0, 10.0);  // Real → unconstrained
-    auto sigma = halfNormal(2.0);    // Positive → exp transform
+    auto alpha = normal(0_c, 10_c);  // Real → unconstrained
+    auto sigma = halfNormal(2_c);    // Positive → exp transform
 
     auto specs = std::make_tuple(
         ScalarParamSpec<decltype(alpha), Unconstrained<decltype(alpha)>>{
@@ -43,7 +43,7 @@ auto main() -> int {
   };
 
   "TransformPack logJacobian"_test = [] {
-    auto sigma = halfNormal(2.0);  // Positive → log-Jacobian = z
+    auto sigma = halfNormal(2_c);  // Positive → log-Jacobian = z
 
     auto specs = std::make_tuple(
         ScalarParamSpec<decltype(sigma), Positive<decltype(sigma)>>{
@@ -60,8 +60,8 @@ auto main() -> int {
   };
 
   "TransformPack chainRuleGrad"_test = [] {
-    auto alpha = normal(0.0, 10.0);
-    auto sigma = halfNormal(2.0);
+    auto alpha = normal(0_c, 10_c);
+    auto sigma = halfNormal(2_c);
 
     auto specs = std::make_tuple(
         ScalarParamSpec<decltype(alpha), Unconstrained<decltype(alpha)>>{
@@ -89,8 +89,8 @@ auto main() -> int {
   "TransformPack with indexed params"_test = [] {
     struct Countries {};
 
-    auto sigma = halfNormal(2.0);
-    auto theta = plate<Countries>(beta(lit(2.0), lit(3.0)));
+    auto sigma = halfNormal(2_c);
+    auto theta = plate<Countries>(beta(2.0_c, 3.0_c));
 
     // Build specs like the posterior does
     auto sigma_spec = ScalarParamSpec<decltype(sigma), Positive<decltype(sigma)>>{
@@ -129,8 +129,8 @@ auto main() -> int {
   "TransformPack symbol lookup offset/size"_test = [] {
     struct Countries {};
 
-    auto alpha = normal(0.0, 10.0);
-    auto theta = plate<Countries>(beta(lit(2.0), lit(3.0)));
+    auto alpha = normal(0_c, 10_c);
+    auto theta = plate<Countries>(beta(2.0_c, 3.0_c));
 
     auto alpha_spec = ScalarParamSpec<decltype(alpha), Unconstrained<decltype(alpha)>>{
         Unconstrained<decltype(alpha)>{alpha}};

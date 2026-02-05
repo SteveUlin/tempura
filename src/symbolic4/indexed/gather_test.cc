@@ -176,10 +176,10 @@ auto main() -> int {
     auto g = gather(a, idx);
 
     // Test that operators compile and produce Expression types
-    auto add_expr = g + lit(1.0);
-    auto sub_expr = g - lit(2.0);
-    auto mul_expr = g * lit(3.0);
-    auto div_expr = g / lit(4.0);
+    auto add_expr = g + 1.0_c;
+    auto sub_expr = g - 2.0_c;
+    auto mul_expr = g * 3.0_c;
+    auto div_expr = g / 4.0_c;
     auto neg_expr = -g;
 
     expectTrue(is_expression_v<decltype(add_expr)>);

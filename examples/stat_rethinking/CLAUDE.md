@@ -28,9 +28,9 @@ The `sample()` method only supports **scalar latent parameters**. Models with in
 // ~115 lines with fully automatic sampling!
 struct Obs {};  // Dimension tag
 
-auto alpha = normal(0.0, 10.0);
-auto beta = normal(0.0, 5.0);
-auto sigma = halfNormal(2.0);
+auto alpha = normal(0_c, 10_c);
+auto beta = normal(0_c, 5_c);
+auto sigma = halfNormal(2_c);
 auto x = data<Obs>();  // Covariate plate
 auto y = plate<Obs>(normal(alpha + beta * x, sigma));
 
@@ -55,8 +55,8 @@ std::cout << "sigma: " << mean(samples[sigma]) << "\n";
 // ~115 lines with fully automatic sampling!
 struct Obs {};
 
-auto alpha = normal(0.0, 5.0);
-auto beta = normal(0.0, 2.5);
+auto alpha = normal(0_c, 5_c);
+auto beta = normal(0_c, 2.5_c);
 auto x = data<Obs>();
 auto y = plate<Obs>(bernoulli(logistic(alpha + beta * x)));
 
@@ -76,9 +76,9 @@ std::cout << "beta:  " << mean(samples[beta]) << "\n";
 ```cpp
 // Current: ~600 lines with manual state layout, gradients, transforms
 // Target:
-auto a_bar = normal(0, 1);
-auto sigma_a = exponential(1);
-auto z_a = plate<Districts>(normal(0, 1));
+auto a_bar = normal(0_c, 1_c);
+auto sigma_a = exponential(1_c);
+auto z_a = plate<Districts>(normal(0_c, 1_c));
 auto a = a_bar + sigma_a * z_a;  // Non-centered
 
 auto delta = dirichlet({2, 2, 2});  // Ordered monotonic
@@ -115,7 +115,7 @@ a[district]  // district is data, indexes into the plate
 auto a = plate<Districts>(normal(a_bar, sigma_a));
 
 // Non-centered (good geometry):
-auto z = plate<Districts>(normal(0, 1));
+auto z = plate<Districts>(normal(0_c, 1_c));
 auto a = a_bar + sigma_a * z;  // Deterministic transform
 ```
 

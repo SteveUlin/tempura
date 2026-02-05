@@ -320,8 +320,6 @@ auto matrixEvalTerminal(T term, Bindings& ctx) {
     return static_cast<double>(T::value);
   } else if constexpr (is_fraction_v<T>) {
     return T::value;
-  } else if constexpr (is_literal_v<T>) {
-    return static_cast<double>(term.effect_.value);
   } else if constexpr (is_dim_vector_symbol_v<T> || is_cholesky_symbol_v<T>) {
     return ctx[term];
   } else if constexpr (is_atom_v<T>) {

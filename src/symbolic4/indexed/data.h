@@ -46,9 +46,6 @@ struct IndexedData : SymbolicTag {
   using symbol_type = IndexedSymbol<Id, Dims...>;
   static constexpr SizeT ndims = sizeof...(Dims);
 
-  // For backward compatibility: single-dim case exposes dim_tag
-  using dim_tag = Head_t<dims_list>;
-
   // Get the indexed symbol representing this data
   static constexpr auto sym() { return symbol_type{}; }
 
@@ -67,13 +64,7 @@ struct IndexedData : SymbolicTag {
 
 // Type traits
 template <typename T>
-struct IsIndexedData : std::false_type {};
-
-template <typename Id, typename... Dims>
-struct IsIndexedData<IndexedData<Id, Dims...>> : std::true_type {};
-
-template <typename T>
-constexpr bool is_indexed_data_v = IsIndexedData<T>::value;
+constexpr bool is_indexed_data_v = core_traits_detail::isSpecOf<T, IndexedData>();
 
 // Concept
 template <typename T>

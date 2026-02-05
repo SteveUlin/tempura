@@ -429,8 +429,6 @@ auto toStringTerminal(T, Ctx& ctx) -> StringResult {
       return {std::format("{}/{}", T::numerator, T::denominator),
               Precedence::kMultiplication};
     }
-  } else if constexpr (is_literal_v<T>) {
-    return {std::format("{}", T{}.effect_.value), Precedence::kAtomic};
   } else if constexpr (is_atom_v<T>) {
     return {ctx.template lookup<typename T::id_type>(), Precedence::kAtomic};
   } else {

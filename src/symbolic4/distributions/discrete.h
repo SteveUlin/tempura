@@ -74,24 +74,12 @@ struct DiscreteBinding {
   }
 };
 
-// Type traits
+// Type traits — DiscreteSymbol has NTTP (enum), use info-based isSpecOf
 template <typename T>
-struct IsDiscreteSymbol : std::false_type {};
-
-template <typename Id, prob::DiscreteEnum E>
-struct IsDiscreteSymbol<DiscreteSymbol<Id, E>> : std::true_type {};
+constexpr bool is_discrete_symbol_v = core_traits_detail::isSpecOf<T>(^^DiscreteSymbol);
 
 template <typename T>
-constexpr bool is_discrete_symbol_v = IsDiscreteSymbol<T>::value;
-
-template <typename T>
-struct IsDiscreteBinding : std::false_type {};
-
-template <typename Sym>
-struct IsDiscreteBinding<DiscreteBinding<Sym>> : std::true_type {};
-
-template <typename T>
-constexpr bool is_discrete_binding_v = IsDiscreteBinding<T>::value;
+constexpr bool is_discrete_binding_v = core_traits_detail::isSpecOf<T, DiscreteBinding>();
 
 // ============================================================================
 // Select - Symbolic expression that selects one of N values based on index
@@ -126,13 +114,7 @@ constexpr auto select(IndexExpr idx, Values... vals) {
 
 // Type trait
 template <typename T>
-struct IsSelect : std::false_type {};
-
-template <typename I, Symbolic... Vs>
-struct IsSelect<Select<I, Vs...>> : std::true_type {};
-
-template <typename T>
-constexpr bool is_select_v = IsSelect<T>::value;
+constexpr bool is_select_v = core_traits_detail::isSpecOf<T, Select>();
 
 // ============================================================================
 // DiscreteDist - Symbolic discrete distribution
@@ -187,26 +169,16 @@ constexpr auto makeDiscreteDist(Probs... ps) {
   return DiscreteDist<E, Probs...>{ps...};
 }
 
-// Convenience: create from double values - converts to Literal<double>
-template <prob::DiscreteEnum E, typename... Ts>
-  requires(sizeof...(Ts) == prob::EnumTraits<E>::count &&
-           (std::convertible_to<Ts, double> && ...))
+// Convenience: create from Constant values
+// Use _c suffix: discreteDist<E>(0.3_c, 0.7_c)
+template <prob::DiscreteEnum E, Symbolic... Ts>
+  requires(sizeof...(Ts) == prob::EnumTraits<E>::count)
 constexpr auto discreteDist(Ts... ps) {
-  return DiscreteDist<E, decltype(lit(static_cast<double>(ps)))...>{
-      lit(static_cast<double>(ps))...};
+  return DiscreteDist<E, Ts...>{ps...};
 }
 
-// Create from array of doubles
-template <prob::DiscreteEnum E, std::size_t... Is>
-constexpr auto makeDiscreteDistImpl(const std::array<double, prob::EnumTraits<E>::count>& probs,
-                                     std::index_sequence<Is...>) {
-  return discreteDist<E>(probs[Is]...);
-}
-
-template <prob::DiscreteEnum E>
-constexpr auto makeDiscreteDistFromArray(std::array<double, prob::EnumTraits<E>::count> probs) {
-  return makeDiscreteDistImpl<E>(probs, std::make_index_sequence<prob::EnumTraits<E>::count>{});
-}
+// Note: runtime double arrays can no longer create symbolic distributions.
+// Use Constant<V> or Symbol + binding for runtime data.
 
 // ============================================================================
 // Evaluation support for Select and DiscreteSymbol

@@ -1,16 +1,16 @@
 #pragma once
 
+#include <experimental/meta>
+#include <vector>
+
 #include "meta/tags.h"
 
-// Type list operations for completion signature manipulation
-// Extends the basic type_list.h with operations needed for P2300
+// Type list operations via P2996 reflection.
+// template for + substitute replace recursive template instantiation.
 
 namespace tempura {
 
-// ============================================================================
-// Concatenate - Merge multiple TypeLists
-// ============================================================================
-
+// Concat — merge multiple TypeLists
 template <typename... Lists>
 struct Concat;
 
@@ -32,108 +32,132 @@ struct Concat<TypeList<Ts...>, TypeList<Us...>, Rest...> {
 template <typename... Lists>
 using Concat_t = typename Concat<Lists...>::Type;
 
-// ============================================================================
-// Filter - Keep only types matching a predicate
-// ============================================================================
-
+// Filter — keep types matching predicate using template for
 template <template <typename> class Pred, typename List>
 struct Filter;
 
-template <template <typename> class Pred>
-struct Filter<Pred, TypeList<>> {
-  using Type = TypeList<>;
-};
+template <template <typename> class Pred, typename... Ts>
+struct Filter<Pred, TypeList<Ts...>> {
+ private:
+  static consteval auto compute() -> std::meta::info {
+    std::vector<std::meta::info> result;
+    template for (constexpr auto arg : std::meta::template_arguments_of(^^TypeList<Ts...>)) {
+      using Elem = [:arg:];
+      if (Pred<Elem>::value) {
+        result.push_back(arg);
+      }
+    }
+    return std::meta::substitute(^^TypeList, result);
+  }
 
-template <template <typename> class Pred, typename T, typename... Rest>
-struct Filter<Pred, TypeList<T, Rest...>> {
-  using RestFiltered = typename Filter<Pred, TypeList<Rest...>>::Type;
-  using Type = std::conditional_t<Pred<T>::value,
-                                  Concat_t<TypeList<T>, RestFiltered>,
-                                  RestFiltered>;
+ public:
+  using Type = [:compute():];
 };
 
 template <template <typename> class Pred, typename List>
 using Filter_t = typename Filter<Pred, List>::Type;
 
-// ============================================================================
-// Transform - Apply a metafunction to each element
-// ============================================================================
-
+// Transform — apply metafunction to each element
 template <template <typename> class MetaFn, typename List>
 struct Transform;
 
-template <template <typename> class MetaFn>
-struct Transform<MetaFn, TypeList<>> {
-  using Type = TypeList<>;
-};
+template <template <typename> class MetaFn, typename... Ts>
+struct Transform<MetaFn, TypeList<Ts...>> {
+ private:
+  static consteval auto compute() -> std::meta::info {
+    std::vector<std::meta::info> result;
+    template for (constexpr auto arg : std::meta::template_arguments_of(^^TypeList<Ts...>)) {
+      using Elem = [:arg:];
+      result.push_back(^^typename MetaFn<Elem>::Type);
+    }
+    return std::meta::substitute(^^TypeList, result);
+  }
 
-template <template <typename> class MetaFn, typename T, typename... Rest>
-struct Transform<MetaFn, TypeList<T, Rest...>> {
-  using Type = Concat_t<TypeList<typename MetaFn<T>::Type>,
-                        typename Transform<MetaFn, TypeList<Rest...>>::Type>;
+ public:
+  using Type = [:compute():];
 };
 
 template <template <typename> class MetaFn, typename List>
 using Transform_t = typename Transform<MetaFn, List>::Type;
 
-// ============================================================================
-// FlatMap - Transform each element and concatenate results
-// ============================================================================
-
-// MetaFn should return a TypeList
+// FlatMap — transform each element into a TypeList, then concatenate
 template <template <typename> class MetaFn, typename List>
 struct FlatMap;
 
-template <template <typename> class MetaFn>
-struct FlatMap<MetaFn, TypeList<>> {
-  using Type = TypeList<>;
-};
+template <template <typename> class MetaFn, typename... Ts>
+struct FlatMap<MetaFn, TypeList<Ts...>> {
+ private:
+  static consteval auto compute() -> std::meta::info {
+    std::vector<std::meta::info> result;
+    template for (constexpr auto arg : std::meta::template_arguments_of(^^TypeList<Ts...>)) {
+      // MetaFn<T>::Type must be a TypeList — unpack its args
+      using Elem = [:arg:];
+      using Mapped = typename MetaFn<Elem>::Type;
+      for (auto inner : std::meta::template_arguments_of(^^Mapped)) {
+        result.push_back(inner);
+      }
+    }
+    return std::meta::substitute(^^TypeList, result);
+  }
 
-template <template <typename> class MetaFn, typename T, typename... Rest>
-struct FlatMap<MetaFn, TypeList<T, Rest...>> {
-  using Type = Concat_t<typename MetaFn<T>::Type,
-                        typename FlatMap<MetaFn, TypeList<Rest...>>::Type>;
+ public:
+  using Type = [:compute():];
 };
 
 template <template <typename> class MetaFn, typename List>
 using FlatMap_t = typename FlatMap<MetaFn, List>::Type;
 
-// ============================================================================
-// Contains - Check if a type is in the list
-// ============================================================================
-
+// Contains — O(N) consteval loop, no type instantiation.
+// Uses a regular for loop (not template for) since we only compare info values,
+// no splicing needed. template for with template_arguments_of has heap-allocation
+// issues in clang-p2996 that prevent constexpr range initialization.
 template <typename T, typename List>
 struct Contains;
 
-template <typename T>
-struct Contains<T, TypeList<>> : std::false_type {};
+template <typename T, typename... Ts>
+struct Contains<T, TypeList<Ts...>> {
+ private:
+  static consteval bool compute() {
+    auto args = std::meta::template_arguments_of(^^TypeList<Ts...>);
+    for (auto arg : args) {
+      if (^^T == arg) return true;
+    }
+    return false;
+  }
 
-template <typename T, typename First, typename... Rest>
-struct Contains<T, TypeList<First, Rest...>>
-    : std::conditional_t<std::is_same_v<T, First>, std::true_type,
-                         Contains<T, TypeList<Rest...>>> {};
+ public:
+  static constexpr bool value = compute();
+};
 
 template <typename T, typename List>
 inline constexpr bool Contains_v = Contains<T, List>::value;
 
-// ============================================================================
-// Unique - Remove duplicate types
-// ============================================================================
-
+// Unique — remove duplicates (O(N²) consteval, no recursive instantiation).
+// Same as Contains: uses regular for loops to avoid template for heap issues.
 template <typename List>
 struct Unique;
 
-template <>
-struct Unique<TypeList<>> {
-  using Type = TypeList<>;
-};
+template <typename... Ts>
+struct Unique<TypeList<Ts...>> {
+ private:
+  static consteval auto compute() -> std::meta::info {
+    auto all_args = std::meta::template_arguments_of(^^TypeList<Ts...>);
+    std::vector<std::meta::info> result;
+    for (auto arg : all_args) {
+      bool found = false;
+      for (auto existing : result) {
+        if (existing == arg) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) result.push_back(arg);
+    }
+    return std::meta::substitute(^^TypeList, result);
+  }
 
-template <typename T, typename... Rest>
-struct Unique<TypeList<T, Rest...>> {
-  using RestUnique = typename Unique<TypeList<Rest...>>::Type;
-  using Type =
-      std::conditional_t<Contains_v<T, RestUnique>, RestUnique,
-                         Concat_t<TypeList<T>, RestUnique>>;
+ public:
+  using Type = [:compute():];
 };
 
 template <typename List>

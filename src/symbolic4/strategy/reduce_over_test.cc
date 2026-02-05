@@ -2,8 +2,6 @@
 #include "symbolic4/indexed/reduce_over.h"
 #include "symbolic4/strategy/combinator.h"
 #include "symbolic4/strategy/diff.h"
-#include "symbolic4/strategy/recursive.h"
-#include "symbolic4/strategy/rule.h"
 #include "unit.h"
 
 using namespace tempura;
@@ -150,87 +148,7 @@ auto main() -> int {
   };
 
   // ===========================================================================
-  // All<S> traverses into ReduceOver
-  // ===========================================================================
-
-  "All applies strategy inside ReduceOver"_test = [&] {
-    // A rule that replaces x with 0
-    auto zero_x = rule(x, 0_c);
-    auto sum = sumOver<Obs>(x);
-
-    auto result = All<decltype(zero_x)>{zero_x}.apply(sum);
-    // Should have applied rule to inner expr: SumOver<Obs, Constant<0>>
-    static_assert(is_sum_over_v<decltype(result)>);
-    static_assert(is_constant_v<typename decltype(result)::expr_type>);
-  };
-
-  "All applies strategy inside ProdOver"_test = [&] {
-    auto zero_x = rule(x, 0_c);
-    auto prod = prodOver<Obs>(x);
-
-    auto result = All<decltype(zero_x)>{zero_x}.apply(prod);
-    static_assert(is_reduce_over_v<decltype(result)>);
-    static_assert(isSame<reduce_over_op_t<decltype(result)>, ProdReduce>);
-  };
-
-  // ===========================================================================
-  // Innermost simplifies inside ReduceOver
-  // ===========================================================================
-
-  "Innermost simplifies inside ReduceOver"_test = [&] {
-    // x + 0 → x rule
-    auto zero_rule = rule(x + 0_c, x);
-    auto strat = innermost(zero_rule);
-
-    // SumOver<Obs, x + 0> should simplify to SumOver<Obs, x>
-    auto sum = sumOver<Obs>(x + 0_c);
-    auto result = strat.apply(sum);
-
-    static_assert(is_sum_over_v<decltype(result)>);
-    static_assert(is_atom_v<typename decltype(result)::expr_type>);
-  };
-
-  // ===========================================================================
-  // Recursive recurses into ReduceOver
-  // ===========================================================================
-
-  "Recursive applies rules inside ReduceOver"_test = [&] {
-    constexpr auto f_ = PatternVar<struct F_>{};
-    constexpr auto g_ = PatternVar<struct G_>{};
-
-    // Simple "double everything" recursive rule
-    auto doubler = recursive(
-        rrule(f_ + g_, rec(f_) + rec(g_))
-      | rule(x, x + x)
-      | rule(AnySymbol{}, 0_c)
-      | rule(AnyConstant{}, 0_c)
-    );
-
-    // Apply to SumOver<Obs, x>
-    auto sum = sumOver<Obs>(x);
-    auto result = doubler.apply(sum);
-
-    // Should get SumOver<Obs, x + x>
-    static_assert(is_sum_over_v<decltype(result)>);
-    static_assert(is_expression_v<typename decltype(result)::expr_type>);
-  };
-
-  "Recursive applies to ProdOver"_test = [&] {
-    auto constant_rule = recursive(
-        rule(x, 42_c)
-      | rule(AnySymbol{}, 0_c)
-    );
-
-    auto prod = prodOver<Groups>(x);
-    auto result = constant_rule.apply(prod);
-
-    static_assert(is_reduce_over_v<decltype(result)>);
-    static_assert(isSame<reduce_over_op_t<decltype(result)>, ProdReduce>);
-    static_assert(is_constant_v<typename decltype(result)::expr_type>);
-  };
-
-  // ===========================================================================
-  // differentiate() works through ReduceOver via Recursive
+  // differentiate() works through ReduceOver
   // ===========================================================================
 
   "differentiate distributes through SumOver"_test = [&] {

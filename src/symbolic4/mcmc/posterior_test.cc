@@ -13,7 +13,7 @@ auto main() -> int {
   // ===========================================================================
 
   "Posterior with single parameter"_test = [] {
-    auto mu = normal(lit(0.0), lit(1.0));
+    auto mu = normal(0.0_c, 1.0_c);
     auto posterior = makePosterior(logProb(mu), mu).build();
 
     double lp = posterior.logProb(0.5);
@@ -23,7 +23,7 @@ auto main() -> int {
   };
 
   "Posterior gradient with single parameter"_test = [] {
-    auto mu = normal(lit(0.0), lit(1.0));
+    auto mu = normal(0.0_c, 1.0_c);
     auto posterior = makePosterior(logProb(mu), mu).build();
 
     auto grad = posterior.gradient(0.5);
@@ -32,8 +32,8 @@ auto main() -> int {
   };
 
   "Posterior with two parameters"_test = [] {
-    auto mu = normal(lit(0.0), lit(10.0));
-    auto sigma = halfNormal(lit(5.0));
+    auto mu = normal(0.0_c, 10.0_c);
+    auto sigma = halfNormal(5.0_c);
 
     auto lp_expr = logProb(mu, sigma);
     auto posterior = makePosterior(lp_expr, mu, sigma).build();
@@ -51,8 +51,8 @@ auto main() -> int {
   // ===========================================================================
 
   "Posterior with observed data"_test = [] {
-    auto mu = normal(lit(0.0), lit(10.0));
-    auto y = normal(mu, lit(1.0));
+    auto mu = normal(0.0_c, 10.0_c);
+    auto y = normal(mu, 1.0_c);
 
     // Observe y = 3.0
     auto posterior = makePosterior(logProb(mu, y), mu).observe(y = 3.0);
@@ -68,8 +68,8 @@ auto main() -> int {
   };
 
   "Posterior gradient with observed data"_test = [] {
-    auto mu = normal(lit(0.0), lit(10.0));
-    auto y = normal(mu, lit(1.0));
+    auto mu = normal(0.0_c, 10.0_c);
+    auto y = normal(mu, 1.0_c);
 
     auto posterior = makePosterior(logProb(mu, y), mu).observe(y = 3.0);
 
@@ -87,8 +87,8 @@ auto main() -> int {
   // ===========================================================================
 
   "Two-parameter posterior with observation"_test = [] {
-    auto mu = normal(lit(0.0), lit(5.0));
-    auto sigma = halfNormal(lit(2.0));
+    auto mu = normal(0.0_c, 5.0_c);
+    auto sigma = halfNormal(2.0_c);
     auto y = normal(mu, sigma);
 
     auto posterior = makePosterior(logProb(mu, sigma, y), mu, sigma).observe(y = 3.5);
@@ -107,8 +107,8 @@ auto main() -> int {
   // ===========================================================================
 
   "Gradient matches finite differences"_test = [] {
-    auto mu = normal(lit(0.0), lit(5.0));
-    auto sigma = halfNormal(lit(2.0));
+    auto mu = normal(0.0_c, 5.0_c);
+    auto sigma = halfNormal(2.0_c);
     auto y = normal(mu, sigma);
 
     auto posterior = makePosterior(logProb(mu, sigma, y), mu, sigma).observe(y = 3.5);

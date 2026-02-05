@@ -14,8 +14,8 @@ using namespace tempura::symbolic4;
 
 auto main() -> int {
   "SymbolicState scalar-only access"_test = [] {
-    auto alpha = normal(0.0, 10.0);
-    auto beta_rv = normal(0.0, 5.0);
+    auto alpha = normal(0_c, 10_c);
+    auto beta_rv = normal(0_c, 5_c);
 
     auto specs = std::make_tuple(
         ScalarParamSpec<decltype(alpha), Unconstrained<decltype(alpha)>>{
@@ -43,8 +43,8 @@ auto main() -> int {
   "SymbolicState mixed scalar+indexed"_test = [] {
     struct Countries {};
 
-    auto alpha = normal(0.0, 10.0);
-    auto theta = plate<Countries>(beta(lit(2.0), lit(3.0)));
+    auto alpha = normal(0_c, 10_c);
+    auto theta = plate<Countries>(beta(2.0_c, 3.0_c));
 
     auto alpha_spec = ScalarParamSpec<decltype(alpha), Unconstrained<decltype(alpha)>>{
         Unconstrained<decltype(alpha)>{alpha}};
@@ -84,7 +84,7 @@ auto main() -> int {
   };
 
   "SymbolicState construct from existing data"_test = [] {
-    auto mu = normal(0.0, 1.0);
+    auto mu = normal(0_c, 1_c);
 
     auto specs = std::make_tuple(
         ScalarParamSpec<decltype(mu), Unconstrained<decltype(mu)>>{
@@ -100,7 +100,7 @@ auto main() -> int {
   "SymbolicState const access returns const span"_test = [] {
     struct Groups {};
 
-    auto theta = plate<Groups>(normal(lit(0.0), lit(1.0)));
+    auto theta = plate<Groups>(normal(0.0_c, 1.0_c));
 
     auto theta_spec = IndexedParamSpec<decltype(theta),
                                         Unconstrained<decltype(theta)>,

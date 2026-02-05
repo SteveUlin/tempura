@@ -98,7 +98,7 @@ auto main() -> int {
 
   "NormalDist logProbFor works"_test = [] {
     Symbol<struct X> x;
-    auto dist = Normal(1.0, 0.5);
+    auto dist = Normal(1_c, 0.5_c);
     auto lp = dist.logProbFor(x);
     double val = evaluate(lp, x = 2.0);
 
@@ -108,7 +108,7 @@ auto main() -> int {
 
   "HalfNormalDist logProbFor works"_test = [] {
     Symbol<struct X> x;
-    auto dist = HalfNormal(2.0);
+    auto dist = HalfNormal(2_c);
     auto lp = dist.logProbFor(x);
     double val = evaluate(lp, x = 1.0);
 
@@ -118,7 +118,7 @@ auto main() -> int {
 
   "BetaDist unnormalizedLogProbFor works"_test = [] {
     Symbol<struct X> x;
-    auto dist = Beta(2.0, 5.0);
+    auto dist = Beta(2_c, 5_c);
     auto lp = dist.unnormalizedLogProbFor(x);
     double val = evaluate(lp, x = 0.3);
 
@@ -132,12 +132,12 @@ auto main() -> int {
   // =========================================================================
 
   "normal() creates StochasticNode"_test = [] {
-    auto mu = normal(0.0, 1.0);
+    auto mu = normal(0_c, 1_c);
     static_assert(IsRandomVar<decltype(mu)>);
   };
 
   "StochasticNode::logProb returns symbolic expression"_test = [] {
-    auto mu = normal(0.0, 1.0);
+    auto mu = normal(0_c, 1_c);
     auto lp = mu.logProb();
     double val = evaluate(lp, mu = 0.5);
 
@@ -147,7 +147,7 @@ auto main() -> int {
   };
 
   "StochasticNode::sym returns symbol"_test = [] {
-    auto mu = normal(0.0, 1.0);
+    auto mu = normal(0_c, 1_c);
     auto sym = mu.sym();
     static_assert(Symbolic<decltype(sym)>);
   };
@@ -157,7 +157,7 @@ auto main() -> int {
   // =========================================================================
 
   "logProb for single node"_test = [] {
-    auto mu = normal(0.0, 1.0);
+    auto mu = normal(0_c, 1_c);
     auto lp = logProb(mu);
 
     double val = evaluate(lp, mu = 0.5);
@@ -166,8 +166,8 @@ auto main() -> int {
   };
 
   "logProb for joint model"_test = [] {
-    auto mu = normal(0.0, 10.0);
-    auto sigma = halfNormal(5.0);
+    auto mu = normal(0_c, 10_c);
+    auto sigma = halfNormal(5_c);
     auto y = normal(mu, sigma);
 
     // Joint = log P(mu) + log P(sigma) + log P(y|mu,sigma)
@@ -200,7 +200,7 @@ auto main() -> int {
     Symbol<struct Sigma> sigma;
 
     auto lp = logNormal(x, mu, sigma);
-    auto d_mu = simplify(diff(lp, mu));
+    auto d_mu = diff(lp, mu);
 
     // d/d_mu log N(x|mu,sigma) = (x - mu) / sigma^2
     double val = evaluate(d_mu, x = 2.0, mu = 1.0, sigma = 0.5);
@@ -214,7 +214,7 @@ auto main() -> int {
     Symbol<struct Sigma> sigma;
 
     auto lp = logNormal(x, mu, sigma);
-    auto d_sigma = simplify(diff(lp, sigma));
+    auto d_sigma = diff(lp, sigma);
 
     // d/d_sigma [-0.5*z^2 - log(sigma) - c] where z = (x-mu)/sigma
     // = -0.5 * 2 * z * d/d_sigma[(x-mu)/sigma] - 1/sigma
@@ -229,13 +229,13 @@ auto main() -> int {
   };
 
   "diff of logProb wrt parameter"_test = [] {
-    auto mu = normal(0.0, 10.0);
-    auto y = normal(mu, lit(1.0));
+    auto mu = normal(0_c, 10_c);
+    auto y = normal(mu, 1_c);
 
     // Joint log-prob: log P(mu) + log P(y|mu)
     auto lp = logProb(mu, y);
     // Use freeSym() because that's what appears in the log-prob expression
-    auto d_mu = simplify(diff(lp, mu.freeSym()));
+    auto d_mu = diff(lp, mu.freeSym());
 
     // gradient at mu=0.5, y=1.0
     double val = evaluate(d_mu, mu = 0.5, y = 1.0);
