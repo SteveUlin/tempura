@@ -15,9 +15,9 @@ auto main() -> int {
   // DimIndexMap
   // ===========================================================================
 
-  "DimIndexMap stores and retrieves indices"_test = [] {
+  "StaticDimIndexMap stores and retrieves indices"_test = [] {
     struct Obs {};
-    DimIndexMap map;
+    StaticDimIndexMap<Obs> map;
 
     map.set<Obs>(5, 10);
 
@@ -26,22 +26,23 @@ auto main() -> int {
     expectTrue(map.has<Obs>());
   };
 
-  "DimIndexMap returns 0 for missing dimension"_test = [] {
+  "StaticDimIndexMap returns 0 for missing dimension"_test = [] {
     struct Obs {};
     struct Other {};
-    DimIndexMap map;
+    StaticDimIndexMap<Obs> map;
 
     map.set<Obs>(5, 10);
 
+    // Other is not in the dim map, so get returns 0 and has returns false
     expectEq(0UL, map.get<Other>());
     expectFalse(map.has<Other>());
   };
 
-  "DimIndexMap handles multiple dimensions"_test = [] {
+  "StaticDimIndexMap handles multiple dimensions"_test = [] {
     struct Countries {};
     struct Years {};
 
-    DimIndexMap map;
+    StaticDimIndexMap<Countries, Years> map;
     map.set<Countries>(2, 10);
     map.set<Years>(7, 20);
 

@@ -2,12 +2,14 @@
 
 #include <array>
 #include <cstddef>
+#include <experimental/meta>
 #include <tuple>
 #include <type_traits>
 #include <utility>
 
 #include "symbolic4/core.h"
 #include "symbolic4/distributions/random_var.h"
+#include "symbolic4/symbolic_state.h"
 
 // ============================================================================
 // state.h - ParameterState: the universal glue for binding-centric MCMC
@@ -37,41 +39,6 @@
 
 namespace tempura::symbolic4 {
 
-namespace state_detail {
-
-// Find index of Target in a parameter pack by matching symbol_type
-template <typename Target, typename... Ts>
-struct IndexOf;
-
-template <typename Target>
-struct IndexOf<Target> {
-  static constexpr std::size_t value = 0;  // Not found, compilation will fail elsewhere
-};
-
-template <typename Target, typename First, typename... Rest>
-struct IndexOf<Target, First, Rest...> {
-  static constexpr std::size_t value =
-      std::is_same_v<Target, First> ? 0 : 1 + IndexOf<Target, Rest...>::value;
-};
-
-template <typename Target, typename... Ts>
-inline constexpr std::size_t index_of_v = IndexOf<Target, Ts...>::value;
-
-// Extract symbol type from a binder
-template <typename Binder>
-struct BinderSymbol {
-  using type = typename Binder::symbol_type;
-};
-
-// Check if binder's symbol matches param's symbol
-template <typename Param, typename Binder>
-struct BinderMatchesParam {
-  static constexpr bool value =
-      std::is_same_v<typename Param::symbol_type,
-                     typename std::decay_t<Binder>::symbol_type>;
-};
-
-}  // namespace state_detail
 
 // ============================================================================
 // ParameterState - Type-safe parameter container with symbol-based access
@@ -128,8 +95,8 @@ class ParameterState {
   template <typename P>
   static constexpr auto indexOfParam() -> std::size_t {
     using TargetSym = typename P::symbol_type;
-    return state_detail::index_of_v<TargetSym,
-                                    typename Params::symbol_type...>;
+    return symbolic_state_detail::SymbolIndex<TargetSym,
+        std::tuple<typename Params::symbol_type...>>::value;
   }
 
  private:

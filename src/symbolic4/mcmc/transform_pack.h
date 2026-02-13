@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <cstddef>
+#include <experimental/meta>
 #include <span>
 #include <tuple>
 #include <type_traits>
@@ -9,6 +10,7 @@
 #include <vector>
 
 #include "symbolic4/mcmc/transforms.h"
+#include "symbolic4/symbolic_state.h"
 
 // ============================================================================
 // transform_pack.h - Uniform transform layer for all parameter types
@@ -150,22 +152,9 @@ class TransformPack {
 
   template <typename P>
   static constexpr std::size_t findSymbolIndex() {
-    if constexpr (requires { typename P::symbol_type; }) {
-      return findByType<typename P::symbol_type>();
-    } else {
-      return findByType<P>();
-    }
-  }
-
-  template <typename Sym, std::size_t I = 0>
-  static constexpr std::size_t findByType() {
-    if constexpr (I >= NumParams) {
-      return NumParams;  // Not found
-    } else if constexpr (std::is_same_v<Sym, std::tuple_element_t<I, SymbolsTuple>>) {
-      return I;
-    } else {
-      return findByType<Sym, I + 1>();
-    }
+    using Sym = std::conditional_t<requires { typename P::symbol_type; },
+                                    typename P::symbol_type, P>;
+    return symbolic_state_detail::SymbolIndex<Sym, SymbolsTuple>::value;
   }
 
   // -------------------------------------------------------------------------

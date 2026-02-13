@@ -1,8 +1,6 @@
 #pragma once
 
-#include <unordered_map>
-#include <typeindex>
-
+#include "meta/type_list_ops.h"
 #include "symbolic4/core.h"
 #include "symbolic4/distributions/prob_terminals.h"  // ProbTerminals (default handler)
 #include "symbolic4/indexed/data.h"
@@ -30,37 +28,95 @@
 namespace tempura::symbolic4 {
 
 // ============================================================================
-// DimIndex - Type-erased dimension index storage
+// StaticDimIndexMap — compile-time dispatch replaces runtime RTTI
 // ============================================================================
+//
+// Each DimTag becomes a base class carrying its current index and size.
+// Lookup is a zero-cost static_cast, not a hash map probe.
 
-class DimIndexMap {
-  std::unordered_map<std::type_index, SizeT> indices_;
-  std::unordered_map<std::type_index, SizeT> sizes_;
+template <typename DimTag>
+struct DimState {
+  SizeT index = 0;
+  SizeT size = 0;
+};
 
- public:
-  template <typename DimTag>
-  void set(SizeT index, SizeT size) {
-    indices_[std::type_index(typeid(DimTag))] = index;
-    sizes_[std::type_index(typeid(DimTag))] = size;
+template <typename... DimTags>
+struct StaticDimIndexMap : DimState<DimTags>... {
+  template <typename D>
+  void set(SizeT i, SizeT s) {
+    if constexpr ((std::is_same_v<D, DimTags> || ...)) {
+      DimState<D>::index = i;
+      DimState<D>::size = s;
+    }
   }
 
-  template <typename DimTag>
-  SizeT get() const {
-    auto it = indices_.find(std::type_index(typeid(DimTag)));
-    return it != indices_.end() ? it->second : 0;
+  template <typename D>
+  auto get() const -> SizeT {
+    if constexpr ((std::is_same_v<D, DimTags> || ...)) {
+      return DimState<D>::index;
+    } else {
+      return 0;
+    }
   }
 
-  template <typename DimTag>
-  SizeT getSize() const {
-    auto it = sizes_.find(std::type_index(typeid(DimTag)));
-    return it != sizes_.end() ? it->second : 0;
+  template <typename D>
+  auto getSize() const -> SizeT {
+    if constexpr ((std::is_same_v<D, DimTags> || ...)) {
+      return DimState<D>::size;
+    } else {
+      return 0;
+    }
   }
 
-  template <typename DimTag>
-  bool has() const {
-    return indices_.find(std::type_index(typeid(DimTag))) != indices_.end();
+  template <typename D>
+  auto has() const -> bool {
+    return (std::is_same_v<D, DimTags> || ...);
   }
 };
+
+// Empty specialization: no indexed bindings → no dims to track
+template <>
+struct StaticDimIndexMap<> {
+  template <typename D> void set(SizeT, SizeT) {}
+  template <typename D> auto get() const -> SizeT { return 0; }
+  template <typename D> auto getSize() const -> SizeT { return 0; }
+  template <typename D> auto has() const -> bool { return false; }
+};
+
+// ============================================================================
+// Collect DimTags from IndexedBindings
+// ============================================================================
+
+namespace dim_map_detail {
+
+template <typename B>
+struct DimsOf {
+  using Type = TypeList<>;
+};
+
+template <typename B>
+  requires is_indexed_binding_v<B>
+struct DimsOf<B> {
+  using Type = typename B::symbol_type::dims_list;
+};
+
+template <typename IndexedBindings>
+struct CollectDims;
+
+template <typename... Binders>
+struct CollectDims<BinderPack<Binders...>> {
+  using Type = Unique_t<Concat_t<typename DimsOf<Binders>::Type...>>;
+};
+
+template <typename DimsList>
+struct MakeDimMap;
+
+template <typename... DimTags>
+struct MakeDimMap<TypeList<DimTags...>> {
+  using Type = StaticDimIndexMap<DimTags...>;
+};
+
+}  // namespace dim_map_detail
 
 // ============================================================================
 // IndexedEval - Interpreter for expressions with indexed bindings
@@ -80,11 +136,13 @@ template <typename ScalarBindings, typename IndexedBindings,
           typename Terminals = ProbTerminals>
 struct IndexedEval {
   using result_type = double;
+  using DimMapType = typename dim_map_detail::MakeDimMap<
+      typename dim_map_detail::CollectDims<IndexedBindings>::Type>::Type;
 
   struct context_type {
     ScalarBindings scalars;
     IndexedBindings indexed;
-    DimIndexMap dim_indices;
+    DimMapType dim_indices;
   };
 
   // Terminal handling — delegates to Terminals policy
@@ -109,8 +167,8 @@ struct IndexedEval {
   }
 
  private:
-  template <typename Sym, typename Binding, SizeT... Is>
-  static auto lookupAtIndices(const Binding& binding, const DimIndexMap& dim_indices,
+  template <typename Sym, typename Binding, typename DimMap, SizeT... Is>
+  static auto lookupAtIndices(const Binding& binding, const DimMap& dim_indices,
                               std::index_sequence<Is...>) -> double {
     return binding.at(dim_indices.template get<detail::At<Is, typename Sym::dims_list>>()...);
   }

@@ -18,6 +18,7 @@
 #include "symbolic4/distributions/random_var.h"
 #include "symbolic4/interpreter/eval.h"
 #include "symbolic4/mcmc/state.h"
+#include "symbolic4/symbolic_state.h"
 
 // ============================================================================
 // samples.h - Samples container with symbol-based access
@@ -174,20 +175,6 @@ class Samples {
 
 namespace samples_detail {
 
-// Helper to find symbol index in tuple
-template <typename Sym, typename SymsTuple, std::size_t I = 0>
-struct SymbolIndex {
-  static constexpr std::size_t value = [] {
-    if constexpr (I >= std::tuple_size_v<SymsTuple>) {
-      return std::size_t(-1);
-    } else if constexpr (std::is_same_v<Sym, std::tuple_element_t<I, SymsTuple>>) {
-      return I;
-    } else {
-      return SymbolIndex<Sym, SymsTuple, I + 1>::value;
-    }
-  }();
-};
-
 // Get the symbol type used in the samples tuple for a parameter
 // Both scalar and indexed params use symbol_type directly.
 template <typename P>
@@ -222,7 +209,7 @@ class DynamicSamples {
     requires(IsRandomVar<P> && !IsIndexedRandomVar<P>)
   auto operator[](const P& /*p*/) const -> std::vector<double> {
     using SymType = typename P::symbol_type;
-    constexpr std::size_t idx = samples_detail::SymbolIndex<SymType, SymbolsTuple>::value;
+    constexpr std::size_t idx = symbolic_state_detail::SymbolIndex<SymType, SymbolsTuple>::value;
     static_assert(idx < NumSlots, "Parameter not found in DynamicSamples");
 
     std::size_t offset = offsets_[idx];
@@ -240,7 +227,7 @@ class DynamicSamples {
   auto operator[](const P& /*p*/) const -> matrix3::DynamicDense<double> {
     // IndexedRandomVar's symbol_type is IndexedSymbol<Id, Dims...>
     using SymType = typename P::symbol_type;
-    constexpr std::size_t idx = samples_detail::SymbolIndex<SymType, SymbolsTuple>::value;
+    constexpr std::size_t idx = symbolic_state_detail::SymbolIndex<SymType, SymbolsTuple>::value;
     static_assert(idx < NumSlots, "Parameter not found in DynamicSamples");
 
     std::size_t offset = offsets_[idx];
@@ -267,7 +254,7 @@ class DynamicSamples {
   template <typename P>
   auto offset(const P& /*p*/) const -> std::size_t {
     using SymType = samples_detail::ParamSymbolType<P>;
-    constexpr std::size_t idx = samples_detail::SymbolIndex<SymType, SymbolsTuple>::value;
+    constexpr std::size_t idx = symbolic_state_detail::SymbolIndex<SymType, SymbolsTuple>::value;
     static_assert(idx < NumSlots, "Parameter not found in DynamicSamples");
     return offsets_[idx];
   }
@@ -276,7 +263,7 @@ class DynamicSamples {
   template <typename P>
   auto paramSize(const P& /*p*/) const -> std::size_t {
     using SymType = samples_detail::ParamSymbolType<P>;
-    constexpr std::size_t idx = samples_detail::SymbolIndex<SymType, SymbolsTuple>::value;
+    constexpr std::size_t idx = symbolic_state_detail::SymbolIndex<SymType, SymbolsTuple>::value;
     static_assert(idx < NumSlots, "Parameter not found in DynamicSamples");
     return std::get<idx>(specs_).size();
   }

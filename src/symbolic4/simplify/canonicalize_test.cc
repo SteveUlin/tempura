@@ -2,6 +2,7 @@
 
 #include "symbolic4/constants.h"
 #include "symbolic4/interpreter/eval.h"
+#include "symbolic4/simplify/ordering.h"
 #include "unit.h"
 
 using namespace tempura;
@@ -185,22 +186,21 @@ auto main() -> int {
     auto pi_approx = 3.14159_c;
     auto e_approx = 2.71828_c;
 
-    // Both expressions have the same type (SubOp with two Constant<...>)
+    // Subtraction is NOT commutative, so swapped operands produce different types
     auto e1 = pi_approx - e_approx;  // 3.14159 - 2.71828 ≈ 0.42331
     auto e2 = e_approx - pi_approx;  // 2.71828 - 3.14159 ≈ -0.42331
 
     auto c1 = canonicalize(e1);
     auto c2 = canonicalize(e2);
 
-    // Types ARE the same (both are Expression<SubOp, Constant<...>, Constant<...>>)
-    static_assert(std::is_same_v<decltype(c1), decltype(c2)>);
+    // Different types — Sub is non-commutative, operands stay in place
+    static_assert(!std::is_same_v<decltype(c1), decltype(c2)>);
 
-    // But the VALUES must be preserved correctly - this is the real test!
+    // Values preserved correctly
     auto bindings = BinderPack{};
     double r1 = evaluate(c1, bindings);
     double r2 = evaluate(c2, bindings);
 
-    // Despite same types, the runtime values should be different and correct
     expectNear(r1, 3.14159 - 2.71828, 1e-10);
     expectNear(r2, 2.71828 - 3.14159, 1e-10);
     expectNear(r1, -r2, 1e-10);  // Should be negatives of each other
@@ -250,14 +250,11 @@ auto main() -> int {
     auto c2 = canonicalize(e2);
     expectNear(evaluate(c2, BinderPack{x = 0.0, y = 0.0}), -999.0, 1e-10);
 
-    // These should NOT have the same type (subtraction is not commutative)
-    // Actually they DO have the same type because the inner expressions
-    // canonicalize to the same form... let's check
-    // (big + x) and (small + x) have same type: Expression<AddOp, Constant<...>, Symbol<X>>
-    // So both e1 and e2 have type: Expression<SubOp, Expression<AddOp, L, S>, Expression<AddOp, L, S>>
-    static_assert(std::is_same_v<decltype(c1), decltype(c2)>);
+    // Different types: inner additions canonicalize x before constant,
+    // but (x + 1000) - (y + 1) ≠ (x + 1) - (y + 1000) as types
+    static_assert(!std::is_same_v<decltype(c1), decltype(c2)>);
 
-    // But the values MUST be different!
+    // Values MUST be different — subtraction is non-commutative
     expectTrue(evaluate(c1, BinderPack{x = 0.0, y = 0.0}) > 0);
     expectTrue(evaluate(c2, BinderPack{x = 0.0, y = 0.0}) < 0);
   };

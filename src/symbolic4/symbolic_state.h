@@ -146,6 +146,20 @@ class SymbolicState {
     }
   }
 
+  // Accepts anything with a symbol_type (RandomVars, IndexedRandomVars, etc.)
+  // Domain-independent: any type with a nested symbol_type alias works.
+  template <typename T>
+    requires (requires { typename T::symbol_type; } && !Symbolic<T>)
+  auto operator[](const T&) -> decltype(auto) {
+    return (*this)[typename T::symbol_type{}];
+  }
+
+  template <typename T>
+    requires (requires { typename T::symbol_type; } && !Symbolic<T>)
+  auto operator[](const T&) const -> decltype(auto) {
+    return (*this)[typename T::symbol_type{}];
+  }
+
   // -----------------------------------------------------------------------
   // Flat vector access for HMC
   // -----------------------------------------------------------------------

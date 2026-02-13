@@ -276,15 +276,49 @@ constexpr bool is_vector_like_v =
 //   MatrixBindings  - Bindings for DimVectorSymbol and CholeskySymbol
 //   IndexedBindings - Bindings for IndexedVectorSymbol (plates of vectors)
 
+namespace matrix_dim_detail {
+
+// Collect plate dims from IndexedVectorBindings in a BinderPack
+template <typename B>
+struct VecDimsOf {
+  using Type = TypeList<>;
+};
+
+template <typename B>
+  requires is_indexed_vector_binding_v<B>
+struct VecDimsOf<B> {
+  using Type = TypeList<typename B::plate_dim>;
+};
+
+template <typename IndexedBindings>
+struct CollectVecDims;
+
+template <typename... Binders>
+struct CollectVecDims<BinderPack<Binders...>> {
+  using Type = Unique_t<Concat_t<typename VecDimsOf<Binders>::Type...>>;
+};
+
+template <typename DimsList>
+struct MakeVecDimMap;
+
+template <typename... DimTags>
+struct MakeVecDimMap<TypeList<DimTags...>> {
+  using Type = StaticDimIndexMap<DimTags...>;
+};
+
+}  // namespace matrix_dim_detail
+
 template <typename ScalarBindings, typename MatrixBindings, typename IndexedBindings>
 struct MatrixPlateEval {
   using result_type = double;
+  using DimMapType = typename matrix_dim_detail::MakeVecDimMap<
+      typename matrix_dim_detail::CollectVecDims<IndexedBindings>::Type>::Type;
 
   struct context_type {
     ScalarBindings scalars;
     MatrixBindings matrices;
     IndexedBindings indexed_vecs;
-    DimIndexMap dim_indices;
+    DimMapType dim_indices;
   };
 
   // Terminal handling - dispatch based on terminal type

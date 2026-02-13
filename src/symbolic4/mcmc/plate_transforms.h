@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstddef>
+#include <experimental/meta>
 #include <random>
 #include <span>
 #include <tuple>
@@ -20,6 +21,7 @@
 #include "symbolic4/mcmc/support.h"
 #include "symbolic4/mcmc/transform_pack.h"
 #include "symbolic4/mcmc/transforms.h"
+#include "symbolic4/symbolic_state.h"
 
 // ============================================================================
 // plate_transforms.h - Integration of plates with automatic MCMC transforms
@@ -53,36 +55,7 @@ namespace tempura::symbolic4 {
 // DimSizes - Runtime dimension sizes for plates
 // ============================================================================
 
-// Helper: Find index of a type in a pack
 namespace plate_detail {
-
-template <typename Target, typename... Ts>
-struct TypeIndexIn;
-
-template <typename Target, typename First, typename... Rest>
-struct TypeIndexIn<Target, First, Rest...> {
-  static constexpr std::size_t value =
-      std::is_same_v<Target, First> ? 0 : 1 + TypeIndexIn<Target, Rest...>::value;
-};
-
-template <typename Target>
-struct TypeIndexIn<Target> {
-  static constexpr std::size_t value = 0;  // Not found, but should never reach here
-};
-
-// Find index of symbol in a symbols tuple
-template <typename Sym, typename SymsTuple, std::size_t I = 0>
-struct SymbolIndexIn {
-  static constexpr std::size_t value = [] {
-    if constexpr (I >= std::tuple_size_v<SymsTuple>) {
-      return std::size_t(-1);  // Not found
-    } else if constexpr (std::is_same_v<Sym, std::tuple_element_t<I, SymsTuple>>) {
-      return I;
-    } else {
-      return SymbolIndexIn<Sym, SymsTuple, I + 1>::value;
-    }
-  }();
-};
 
 // Check if DimTag is in a TypeList<Dims...> (local fold, no type_list_ops.h)
 template <typename DimTag, typename DimsList>
@@ -111,101 +84,6 @@ using first_dim_t = typename FirstDim<DimsList>::type;
 }  // namespace plate_detail
 
 // ============================================================================
-// GradientResult - Gradient values queryable by symbols
-// ============================================================================
-//
-// Wraps a gradient vector with metadata for type-safe querying by symbol.
-// Usage:
-//   auto grad = posterior.gradientResult(z);
-//   double d_alpha = grad[alpha];  // Query by RandomVar
-//
-// Also supports array-style access for HMC: grad.values()
-//
-template <typename SymbolsTuple, typename SpecsTuple>
-class GradientResult {
- public:
-  GradientResult(std::vector<double> grad, SymbolsTuple symbols, SpecsTuple specs)
-      : grad_{std::move(grad)}, symbols_{symbols}, specs_{specs} {
-    // Compute offsets for each symbol
-    computeOffsets();
-  }
-
-  // Access underlying gradient values (for HMC and other algorithms)
-  auto values() const -> const std::vector<double>& { return grad_; }
-  auto values() -> std::vector<double>& { return grad_; }
-
-  // Array-style element access
-  auto operator[](std::size_t i) const -> double { return grad_[i]; }
-  auto operator[](std::size_t i) -> double& { return grad_[i]; }
-
-  // Size
-  auto size() const -> std::size_t { return grad_.size(); }
-
-  // Query gradient by RandomVar
-  // Returns double for scalar params, std::span<const double> for indexed params
-  template <typename RV>
-    requires requires { typename RV::id_type; }
-  auto operator[](const RV& /*rv*/) const {
-    constexpr std::size_t idx = findSymbolIndex<RV>();
-    static_assert(idx < std::tuple_size_v<SymbolsTuple>, "Symbol not found in posterior");
-
-    using SpecType = std::tuple_element_t<idx, SpecsTuple>;
-    if constexpr (!SpecType::is_indexed) {
-      return grad_[offsets_[idx]];
-    } else {
-      return std::span<const double>(grad_.data() + offsets_[idx],
-                                      std::get<idx>(specs_).size());
-    }
-  }
-
-  // Get offset for a RandomVar (useful for indexed params)
-  template <typename RV>
-    requires requires { typename RV::id_type; }
-  auto offset(const RV& /*rv*/) const -> std::size_t {
-    constexpr std::size_t idx = findSymbolIndex<RV>();
-    static_assert(idx < std::tuple_size_v<SymbolsTuple>, "Symbol not found in posterior");
-    return offsets_[idx];
-  }
-
-  // Get size for a RandomVar (1 for scalar, N for indexed)
-  template <typename RV>
-    requires requires { typename RV::id_type; }
-  auto paramSize(const RV& /*rv*/) const -> std::size_t {
-    constexpr std::size_t idx = findSymbolIndex<RV>();
-    static_assert(idx < std::tuple_size_v<SymbolsTuple>, "Symbol not found in posterior");
-    return std::get<idx>(specs_).size();
-  }
-
- private:
-  std::vector<double> grad_;
-  SymbolsTuple symbols_;
-  SpecsTuple specs_;
-  std::array<std::size_t, std::tuple_size_v<SymbolsTuple>> offsets_;
-
-  // Find the index of RV's symbol in our symbols tuple
-  template <typename RV>
-  static constexpr std::size_t findSymbolIndex() {
-    return plate_detail::SymbolIndexIn<typename RV::symbol_type, SymbolsTuple>::value;
-  }
-
-  void computeOffsets() {
-    computeOffsetsImpl(std::make_index_sequence<std::tuple_size_v<SymbolsTuple>>{});
-  }
-
-  template <std::size_t... Is>
-  void computeOffsetsImpl(std::index_sequence<Is...>) {
-    std::size_t running = 0;
-    ((offsets_[Is] = running, running += std::get<Is>(specs_).size()), ...);
-  }
-};
-
-// Factory function
-template <typename SymbolsTuple, typename SpecsTuple>
-auto makeGradientResult(std::vector<double> grad, SymbolsTuple symbols, SpecsTuple specs) {
-  return GradientResult<SymbolsTuple, SpecsTuple>{std::move(grad), symbols, specs};
-}
-
-// ============================================================================
 // DimSizes - Runtime dimension sizes for plates
 // ============================================================================
 
@@ -215,7 +93,8 @@ struct DimSizes {
 
   template <typename DimTag>
   constexpr auto get() const -> std::size_t {
-    constexpr std::size_t idx = plate_detail::TypeIndexIn<DimTag, DimTags...>::value;
+    constexpr std::size_t idx = symbolic_state_detail::SymbolIndex<DimTag,
+        std::tuple<DimTags...>>::value;
     return sizes[idx];
   }
 };
@@ -436,13 +315,13 @@ class PlateTransformedPosterior {
     return gradientImpl(z, std::make_index_sequence<NumParamSlots>{});
   }
 
-  // Evaluate gradient and return a result queryable by symbols
+  // Evaluate gradient and return a SymbolicState queryable by symbols
   // Usage:
   //   auto grad = posterior.gradientResult(z);
-  //   double d_alpha = grad[alpha];  // Query by RandomVar
+  //   double d_alpha = grad[alpha];  // Query by RandomVar (via symbol_type unwrap)
   auto gradientResult(std::span<const double> z) const {
     auto grad = gradientImpl(z, std::make_index_sequence<NumParamSlots>{});
-    return makeGradientResult(std::move(grad), symbols_, specs_);
+    return makeSymbolicState(symbols_, specs_, std::move(grad));
   }
 
   // =========================================================================
