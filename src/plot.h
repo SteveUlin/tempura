@@ -213,12 +213,13 @@ constexpr auto buildBarChartText(auto&& bars) -> std::string {
   std::string result;
   const auto bar_count = std::ranges::size(bars);
 
-  for (auto [i, bar] : bars | std::views::enumerate | std::views::as_const) {
+  size_t i = 0;
+  for (const auto& bar : bars) {
     result += std::format("{:>{}} ", bar.label, label_length);
 
     if (i == 0) {
       result += "┌";
-    } else if (static_cast<size_t>(i) == bar_count - 1) {
+    } else if (i == bar_count - 1) {
       result += "└";
     } else {
       result += "├";
@@ -235,6 +236,7 @@ constexpr auto buildBarChartText(auto&& bars) -> std::string {
     }
 
     result += std::format(" {}\n", bar.end_text);
+    ++i;
   }
 
   return result;

@@ -11,7 +11,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "TEMPURA_PROFILE_COMPILE": "ON",
-        "TEMPURA_BUILD_EXAMPLES": "OFF",
+        "TEMPURA_BUILD_EXAMPLES": "ON",
         "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "OFF"
       }
     }
