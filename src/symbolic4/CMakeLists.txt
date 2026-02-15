@@ -356,6 +356,12 @@ target_link_libraries(symbolic4_grad_test PRIVATE symbolic4 unit)
 add_test(NAME symbolic4_grad_test COMMAND symbolic4_grad_test)
 set_tests_properties(symbolic4_grad_test PROPERTIES LABELS "symbolic4;grad")
 
+# matrix_algebra/ tests
+add_executable(symbolic4_matrix_algebra_test matrix_algebra/matrix_algebra_test.cc)
+target_link_libraries(symbolic4_matrix_algebra_test PRIVATE symbolic4 unit)
+add_test(NAME symbolic4_matrix_algebra_test COMMAND symbolic4_matrix_algebra_test)
+set_tests_properties(symbolic4_matrix_algebra_test PROPERTIES LABELS "symbolic4;matrix_algebra")
+
 # Demo executable to see toString output
 add_executable(symbolic4_to_string_demo interpreter/to_string_demo.cc)
 target_link_libraries(symbolic4_to_string_demo PRIVATE symbolic4)
