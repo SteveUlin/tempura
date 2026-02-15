@@ -56,7 +56,7 @@ auto main() -> int {
     ASym a;
     IdxSym idx;
 
-    auto expr = sumOver<Obs>(gather(a, idx));
+    auto expr = sumOver(gather(a, idx), Obs{});
 
     std::vector<double> a_data = {10.0, 20.0, 30.0};
     std::vector<double> idx_data = {1.0, 0.0, 2.0, 1.0};
@@ -86,7 +86,7 @@ auto main() -> int {
     IdxSym idx;
     Symbol<struct C> c;
 
-    auto expr = sumOver<Obs>(gather(a, idx) + c);
+    auto expr = sumOver(gather(a, idx) + c, Obs{});
 
     std::vector<double> a_data = {10.0, 20.0, 30.0};
     std::vector<double> idx_data = {0.0, 1.0, 2.0};
@@ -116,7 +116,7 @@ auto main() -> int {
     ASym a;
     IdxSym idx;
 
-    auto expr = sumOver<Obs>(gather(a, idx));
+    auto expr = sumOver(gather(a, idx), Obs{});
 
     std::vector<double> a_data = {10.0, 20.0, 30.0};
     std::vector<double> idx_data = {1.0, 1.0, 1.0, 1.0};
@@ -146,7 +146,7 @@ auto main() -> int {
     IdxSym idx;
     Symbol<struct Scale> scale;
 
-    auto expr = sumOver<Obs>(gather(a, idx) * scale);
+    auto expr = sumOver(gather(a, idx) * scale, Obs{});
 
     std::vector<double> a_data = {1.0, 2.0, 3.0};
     std::vector<double> idx_data = {0.0, 1.0, 2.0, 0.0};
@@ -270,7 +270,7 @@ auto main() -> int {
     IndexedSymbol<struct IdxId, Obs> idx;
     Symbol<struct Mu> mu;
 
-    auto f = sumOver<Obs>(gather(a * mu, idx));
+    auto f = sumOver(gather(a * mu, idx), Obs{});
     auto df = diff(f, mu);
 
     std::vector<double> a_data = {1.0, 2.0, 3.0};

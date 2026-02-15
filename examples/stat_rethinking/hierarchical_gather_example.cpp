@@ -110,11 +110,11 @@ and we use gather() to index into group-level parameters.
   auto sigma = exponential(1_c);
 
   // Non-centered parameterization: z[g] ~ N(0,1), a[g] = a_bar + sigma * z[g]
-  auto z = plate<Groups>(normal(0_c, 1_c));
+  auto z = plate(normal(0_c, 1_c), Groups{});
 
   // Data symbols - district gives which group each observation belongs to
-  auto district = data<Obs>();
-  auto n = data<Groups>();  // Not used in Bernoulli, but available
+  auto district = data(Obs{});
+  auto n = data(Groups{});  // Not used in Bernoulli, but available
 
   // The key pattern: z[district] gives z[district[i]] for each observation
   // Then a[district[i]] = a_bar + sigma * z[district[i]]
@@ -122,7 +122,7 @@ and we use gather() to index into group-level parameters.
 
   // Likelihood - plate over observations
   auto p = 1_c / (1_c + exp(-group_effect));
-  auto y = plate<Obs>(bernoulli(p));
+  auto y = plate(bernoulli(p), Obs{});
 
   // ========================================================================
   // Build posterior and sample
@@ -130,7 +130,7 @@ and we use gather() to index into group-level parameters.
   std::println("Building posterior with inferExplicit()...");
 
   auto posterior = inferExplicit(a_bar, sigma, z, y)
-      .withDimension<Groups>(kNumGroups)  // Must set Groups dimension explicitly
+      .withDimension(Groups{}, kNumGroups)  // Must set Groups dimension explicitly
       .bind(district = indexed(group_idx), y = indexed(y_obs));
 
   std::println("State dimension: {} (2 scalar + {} indexed)", posterior.stateDim(), kNumGroups);

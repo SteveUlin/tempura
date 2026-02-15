@@ -109,27 +109,48 @@ template <typename T> requires is_sum_over_v<T>
 using sum_over_dim_tag_t = reduce_over_dim_tag_t<T>;
 
 // ============================================================================
-// Factory functions
+// Named reduction op instances for reduce(expr, dim, op) syntax
 // ============================================================================
 
-template <typename DimTag, Symbolic Expr>
-constexpr auto sumOver(Expr expr) {
-  return ReduceOver<SumReduce, DimTag, Expr>{expr};
+inline constexpr SumReduce sum{};
+inline constexpr ProdReduce prod{};
+inline constexpr MaxReduce max_reduce{};
+inline constexpr LogSumExpReduce log_sum_exp{};
+
+// ============================================================================
+// Value-based reduction factories
+// ============================================================================
+//
+// Unified: reduce(expr, dim, op) — works with any ReduceOp and any dim type
+//   auto total = reduce(x * x, obs, sum);
+//   auto product = reduce(p, obs, prod);
+//
+// Convenience: sumOver(expr, dim), prodOver(expr, dim), etc.
+//   auto lp = sumOver(logProb, obs);
+
+template <Symbolic Expr, typename D, typename ROp>
+constexpr auto reduce(Expr expr, D, ROp) {
+  return ReduceOver<ROp, D, Expr>{expr};
 }
 
-template <typename DimTag, Symbolic Expr>
-constexpr auto prodOver(Expr expr) {
-  return ReduceOver<ProdReduce, DimTag, Expr>{expr};
+template <Symbolic Expr, typename D>
+constexpr auto sumOver(Expr expr, D) {
+  return ReduceOver<SumReduce, D, Expr>{expr};
 }
 
-template <typename DimTag, Symbolic Expr>
-constexpr auto maxOver(Expr expr) {
-  return ReduceOver<MaxReduce, DimTag, Expr>{expr};
+template <Symbolic Expr, typename D>
+constexpr auto prodOver(Expr expr, D) {
+  return ReduceOver<ProdReduce, D, Expr>{expr};
 }
 
-template <typename DimTag, Symbolic Expr>
-constexpr auto logSumExpOver(Expr expr) {
-  return ReduceOver<LogSumExpReduce, DimTag, Expr>{expr};
+template <Symbolic Expr, typename D>
+constexpr auto maxOver(Expr expr, D) {
+  return ReduceOver<MaxReduce, D, Expr>{expr};
+}
+
+template <Symbolic Expr, typename D>
+constexpr auto logSumExpOver(Expr expr, D) {
+  return ReduceOver<LogSumExpReduce, D, Expr>{expr};
 }
 
 // ============================================================================

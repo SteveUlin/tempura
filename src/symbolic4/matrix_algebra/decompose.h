@@ -46,7 +46,7 @@ constexpr auto element(MatMulExpr<A, B>, Tag<I>, Tag<J>) {
   using K = col_dim_t<A>;
   auto a_ik = element(A{}, Tag<I>{}, Tag<K>{});
   auto b_kj = element(B{}, Tag<K>{}, Tag<J>{});
-  return sumOver<K>(a_ik * b_kj);
+  return sumOver(a_ik * b_kj, K{});
 }
 
 // Transpose: element(Aᵀ, i, j) = element(A, j, i)
@@ -66,7 +66,7 @@ template <MatrixExprLike A>
   requires(is_square_matrix_v<A>)
 constexpr auto traceDecompose(A) {
   using Dim = row_dim_t<A>;
-  return sumOver<Dim>(element(A{}, Tag<Dim>{}, Tag<Dim>{}));
+  return sumOver(element(A{}, Tag<Dim>{}, Tag<Dim>{}), Dim{});
 }
 
 // ============================================================================

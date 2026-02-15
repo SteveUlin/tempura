@@ -82,7 +82,7 @@ auto main() -> int {
     struct Obs {};
     Symbol<struct X> x;
 
-    auto sum = sumOver<Obs>(x * x);
+    auto sum = sumOver(x * x, Obs{});
     static_assert(is_sum_over_v<decltype(sum)>);
     static_assert(std::is_same_v<typename decltype(sum)::dim_tag, Obs>);
   };
@@ -92,7 +92,7 @@ auto main() -> int {
     struct ThetaId {};
 
     IndexedSymbol<ThetaId, Obs> theta;
-    auto sum = sumOver<Obs>(theta * theta);
+    auto sum = sumOver(theta * theta, Obs{});
 
     std::vector<double> values = {1.0, 2.0, 3.0};
     auto binding = IndexedBinding<IndexedSymbol<ThetaId, Obs>>{values};
@@ -137,7 +137,7 @@ auto main() -> int {
   "plate creates IndexedStochasticNode"_test = [] {
     struct Obs {};
     auto alpha = halfNormal(5_c);
-    auto theta = plate<Obs>(beta(alpha, 3_c));
+    auto theta = plate(beta(alpha, 3_c), Obs{});
 
     static_assert(is_indexed_random_var_v<decltype(theta)>);
     static_assert(IsIndexedRandomVar<decltype(theta)>);
@@ -145,7 +145,7 @@ auto main() -> int {
 
   "IndexedStochasticNode::freeSym returns IndexedSymbol"_test = [] {
     struct Obs {};
-    auto theta = plate<Obs>(beta(2.0_c, 3.0_c));
+    auto theta = plate(beta(2.0_c, 3.0_c), Obs{});
     // sym() returns Atom<Id, IndexedSample<...>> (discoverable type)
     // freeSym() returns IndexedSymbol<Id, Dims...> (the symbol type)
     auto sym = theta.freeSym();
@@ -155,7 +155,7 @@ auto main() -> int {
 
   "IndexedStochasticNode::logProb returns SumOver"_test = [] {
     struct Obs {};
-    auto theta = plate<Obs>(beta(2.0_c, 3.0_c));
+    auto theta = plate(beta(2.0_c, 3.0_c), Obs{});
     auto lp = theta.logProb();
 
     static_assert(is_sum_over_v<decltype(lp)>);
@@ -175,7 +175,7 @@ auto main() -> int {
     Symbol<AlphaId> alpha;
 
     // Expression: sum_i(alpha * theta[i])
-    auto expr = sumOver<Obs>(alpha * theta);
+    auto expr = sumOver(alpha * theta, Obs{});
 
     std::vector<double> theta_vals = {1.0, 2.0, 3.0};
     auto theta_binding = IndexedBinding<IndexedSymbol<ThetaId, Obs>>{theta_vals};
@@ -192,7 +192,7 @@ auto main() -> int {
 
   "plate with beta distribution logProb"_test = [] {
     struct Obs {};
-    auto theta = plate<Obs>(beta(2.0_c, 3.0_c));
+    auto theta = plate(beta(2.0_c, 3.0_c), Obs{});
     auto lp = theta.logProb();
 
     std::vector<double> theta_vals = {0.3, 0.5, 0.7};
@@ -212,7 +212,7 @@ auto main() -> int {
   "plate with scalar parameter"_test = [] {
     struct Obs {};
     auto alpha = halfNormal(5_c);
-    auto theta = plate<Obs>(beta(alpha, 3.0_c));
+    auto theta = plate(beta(alpha, 3.0_c), Obs{});
 
     // Just the plate's log-prob (not joint)
     auto lp = theta.logProb();
@@ -243,7 +243,7 @@ auto main() -> int {
     // sum_i(x * y[i]) where y is indexed
     // diff w.r.t. x should give sum_i(y[i])
     // But for simplicity, test with just x: sum_i(x^2) -> sum_i(2*x)
-    auto sum = sumOver<Obs>(x * x);
+    auto sum = sumOver(x * x, Obs{});
     auto d_sum = diff(sum, x);
 
     static_assert(is_sum_over_v<decltype(d_sum)>);
@@ -257,7 +257,7 @@ auto main() -> int {
     Symbol<struct Alpha> alpha;
 
     // sum_i(alpha * theta[i]) -> diff w.r.t alpha = sum_i(theta[i])
-    auto sum = sumOver<Obs>(alpha * theta);
+    auto sum = sumOver(alpha * theta, Obs{});
     auto d_alpha = diff(sum, alpha);
 
     std::vector<double> theta_vals = {1.0, 2.0, 3.0};
@@ -279,7 +279,7 @@ auto main() -> int {
     IndexedSymbol<ThetaId, Obs> theta;
     Symbol<struct C> c;
 
-    auto sum = sumOver<Obs>(theta);
+    auto sum = sumOver(theta, Obs{});
     auto expr = sum + c;
 
     std::vector<double> theta_vals = {1.0, 2.0, 3.0};
@@ -298,8 +298,8 @@ auto main() -> int {
     struct Countries {};
     struct Years {};
 
-    // plate<Years>(plate<Countries>(...)) creates 2D symbol
-    auto theta = plate<Years>(plate<Countries>(normal(0.0_c, 1.0_c)));
+    // plate(plate(..., Countries{}), Years{}) creates 2D symbol
+    auto theta = plate(plate(normal(0.0_c, 1.0_c), Countries{}), Years{});
 
     using NodeType = decltype(theta);
     using DimsType = typename NodeType::dims_list;
@@ -322,7 +322,7 @@ auto main() -> int {
 
     // 2D symbol varying over both dimensions
     IndexedSymbol<YId, Countries, Years> y;
-    auto sum = sumOver<Countries>(sumOver<Years>(y));
+    auto sum = sumOver(sumOver(y, Years{}), Countries{});
 
     // 2x3 data
     std::vector<double> data = {1, 2, 3, 4, 5, 6};
@@ -342,7 +342,7 @@ auto main() -> int {
     struct Years {};
 
     // y[c,y] explicitly indexed by both Countries and Years
-    auto y = plate<Years>(plate<Countries>(normal(0.0_c, 1.0_c)));
+    auto y = plate(plate(normal(0.0_c, 1.0_c), Countries{}), Years{});
 
     using YDims = typename decltype(y)::dims_list;
     static_assert(std::is_same_v<YDims, TypeList<Countries, Years>>);
@@ -364,7 +364,7 @@ auto main() -> int {
     // Expression: sum over both dims of (y - alpha)^2
     // Each y[c,y] uses alpha[c] (broadcasting)
     auto diff_sq = (y_sym - alpha_sym) * (y_sym - alpha_sym);
-    auto expr = sumOver<Countries>(sumOver<Years>(diff_sq));
+    auto expr = sumOver(sumOver(diff_sq, Years{}), Countries{});
 
     // Data: alpha = [1, 2] (2 countries)
     //       y = [[1, 2, 3], [4, 5, 6]] (2 countries x 3 years)
@@ -388,7 +388,7 @@ auto main() -> int {
 
   "observe creates Observed wrapper"_test = [] {
     struct Obs {};
-    auto theta = plate<Obs>(beta(2.0_c, 3.0_c));
+    auto theta = plate(beta(2.0_c, 3.0_c), Obs{});
 
     std::vector<double> data = {0.3, 0.5, 0.7};
     auto theta_obs = observe(theta, data);
@@ -399,7 +399,7 @@ auto main() -> int {
 
   "makeObservedBinding creates correct binding"_test = [] {
     struct Obs {};
-    auto theta = plate<Obs>(beta(2.0_c, 3.0_c));
+    auto theta = plate(beta(2.0_c, 3.0_c), Obs{});
 
     std::vector<double> data = {0.3, 0.5, 0.7};
     auto theta_obs = observe(theta, data);
@@ -411,7 +411,7 @@ auto main() -> int {
 
   "observed plate log-prob evaluation"_test = [] {
     struct Obs {};
-    auto theta = plate<Obs>(beta(2.0_c, 3.0_c));
+    auto theta = plate(beta(2.0_c, 3.0_c), Obs{});
 
     std::vector<double> data = {0.3, 0.5, 0.7};
     auto theta_obs = observe(theta, data);
@@ -438,7 +438,7 @@ auto main() -> int {
   "observed with scalar parameter"_test = [] {
     struct Obs {};
     auto alpha = halfNormal(5_c);
-    auto theta = plate<Obs>(beta(alpha, 3.0_c));
+    auto theta = plate(beta(alpha, 3.0_c), Obs{});
 
     std::vector<double> data = {0.3, 0.5, 0.7};
     auto theta_obs = observe(theta, data);

@@ -180,7 +180,7 @@ class PosteriorBuilderFromModel<ModelT, true> {
 
   // Set dimension for indexed parameters
   template <typename DimTag>
-  auto withDimension(std::size_t size) const {
+  auto withDimension(DimTag, std::size_t size) const {
     return WithDimBuilder<DimTag>{model_, size};
   }
 
@@ -214,7 +214,7 @@ class PosteriorBuilderFromModel<ModelT, true> {
 
     // Chain more dimensions
     template <typename DimTag2>
-    auto withDimension(std::size_t size2) const {
+    auto withDimension(DimTag2, std::size_t size2) const {
       // For now, support single dimension. Multi-dim would need more infrastructure.
       return WithDimBuilder<DimTag2, DataBindings>{model_, size2, data_bindings_};
     }
@@ -246,7 +246,7 @@ class PosteriorBuilderFromModel<ModelT, true> {
     auto buildImpl(IndexSequence<Is...>) const {
       auto lp = model_.jointLogProb();
       return makePlateTransformedPosterior(lp, get<Is>(model_.rvs())...)
-          .template withDimension<DimTag>(size_)
+          .withDimension(DimTag{}, size_)
           .bindData(data_bindings_)
           .build();
     }
@@ -286,7 +286,7 @@ class PosteriorBuilderFromModel<ModelT, true> {
       auto posterior = makePlateTransformedPosteriorWithObs(
           lp, observations_, get<Is>(model_.rvs())...);
       return posterior
-          .template withDimension<DimTag>(size_)
+          .withDimension(DimTag{}, size_)
           .withData(data_bindings_);
     }
   };
@@ -336,7 +336,7 @@ class ObservedPosteriorBuilder<ModelT, ObsBindings, true> {
 
   // Set dimension for indexed parameters
   template <typename DimTag>
-  auto withDimension(std::size_t size) const {
+  auto withDimension(DimTag, std::size_t size) const {
     return WithDimObservedBuilder<DimTag>{model_, observations_, size};
   }
 
@@ -374,7 +374,7 @@ class ObservedPosteriorBuilder<ModelT, ObsBindings, true> {
     auto buildImpl(IndexSequence<Is...>) const {
       auto lp = model_.jointLogProb();
       return makePlateTransformedPosterior(lp, get<Is>(model_.rvs())...)
-          .template withDimension<DimTag>(size_)
+          .withDimension(DimTag{}, size_)
           .build();
     }
   };

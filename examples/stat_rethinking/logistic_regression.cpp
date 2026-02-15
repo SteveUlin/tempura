@@ -92,12 +92,12 @@ auto main() -> int {
   auto beta = normal(0_c, 2.5_c);
 
   // Covariate (external data, not a parameter)
-  auto x = data<Obs>();
+  auto x = data(Obs{});
 
   // Likelihood - plate over observations
   // alpha, beta, x are automatically converted to their symbolic forms
   // logistic(eta) = 1 / (1 + exp(-eta))
-  auto y = plate<Obs>(bernoulli(logistic(alpha + beta * x)));
+  auto y = plate(bernoulli(logistic(alpha + beta * x)), Obs{});
 
   // Build posterior with automatic transforms and gradients
   // .bind() accepts both data (x) and observations (y)

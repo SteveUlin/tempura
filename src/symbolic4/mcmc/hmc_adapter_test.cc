@@ -166,13 +166,13 @@ auto main() -> int {
     // z_b[i] ~ Normal(0, 1)    (indexed)
     auto a = normal(-2_c, 1_c);
     auto sigma = exponential(1_c);
-    auto z_b = plate<HmcTestCountries>(normal(0.0_c, 1.0_c));
+    auto z_b = plate(normal(0.0_c, 1.0_c), HmcTestCountries{});
 
     // Joint log-prob (simplified - no likelihood for this test)
     auto joint_lp = collectLogProbs(a, sigma, z_b);
 
     auto posterior = makePlateTransformedPosterior(joint_lp, a, sigma, z_b)
-                         .withDimension<HmcTestCountries>(3)
+                         .withDimension(HmcTestCountries{}, 3)
                          .build();
 
     // State dim: a (1) + sigma (1) + z_b (3) = 5

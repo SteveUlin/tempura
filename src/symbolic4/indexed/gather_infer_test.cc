@@ -29,7 +29,7 @@ auto main() -> int {
 
     // Simple sum of squared gathered values
     auto gathered = gather(a, idx);
-    auto total = sumOver<Obs>(gathered * gathered);
+    auto total = sumOver(gathered * gathered, Obs{});
 
     // Data
     std::vector<double> a_data = {1.0, 2.0, 3.0};  // Group values
@@ -60,7 +60,7 @@ auto main() -> int {
     IndexedSymbol<struct AId, Groups> a;
     IndexedSymbol<struct IdxId, Obs> idx;
 
-    auto f = sumOver<Obs>(gather(a, idx) * gather(a, idx));
+    auto f = sumOver(gather(a, idx) * gather(a, idx), Obs{});
 
     std::vector<double> a_data = {1.0, 2.0};  // 2 groups
     std::vector<double> idx_data = {0.0, 0.0, 1.0};  // [group0, group0, group1]

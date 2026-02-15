@@ -159,6 +159,12 @@ target_link_libraries(symbolic4_dim_test PRIVATE symbolic4 unit)
 add_test(NAME symbolic4_dim_test COMMAND symbolic4_dim_test)
 set_tests_properties(symbolic4_dim_test PROPERTIES LABELS "symbolic4;indexed;dim")
 
+# Value-based dim/plate/data/reduce API tests
+add_executable(symbolic4_dim_api_test indexed/dim_api_test.cc)
+target_link_libraries(symbolic4_dim_api_test PRIVATE symbolic4 unit)
+add_test(NAME symbolic4_dim_api_test COMMAND symbolic4_dim_api_test)
+set_tests_properties(symbolic4_dim_api_test PROPERTIES LABELS "symbolic4;indexed;dim_api")
+
 # indexed/sum_over.h tests
 add_executable(symbolic4_sum_over_test indexed/sum_over_test.cc)
 target_link_libraries(symbolic4_sum_over_test PRIVATE symbolic4 unit)
@@ -189,12 +195,6 @@ target_link_libraries(symbolic4_gather_infer_minimal_test PRIVATE symbolic4 temp
 add_test(NAME symbolic4_gather_infer_minimal_test COMMAND symbolic4_gather_infer_minimal_test)
 set_tests_properties(symbolic4_gather_infer_minimal_test PROPERTIES LABELS "symbolic4;indexed;gather;infer")
 
-
-# mcmc/posterior.h tests
-add_executable(symbolic4_posterior_test mcmc/posterior_test.cc)
-target_link_libraries(symbolic4_posterior_test PRIVATE symbolic4 tempura::prob unit)
-add_test(NAME symbolic4_posterior_test COMMAND symbolic4_posterior_test)
-set_tests_properties(symbolic4_posterior_test PROPERTIES LABELS "symbolic4;mcmc;posterior")
 
 # mcmc/transforms.h tests
 add_executable(symbolic4_transforms_test mcmc/transforms_test.cc)
@@ -310,19 +310,13 @@ target_link_libraries(symbolic4_matrix_test PRIVATE symbolic4 unit)
 add_test(NAME symbolic4_matrix_test COMMAND symbolic4_matrix_test)
 set_tests_properties(symbolic4_matrix_test PROPERTIES LABELS "symbolic4;matrix")
 
-# mcmc/matrix_mcmc_test.cc tests
-add_executable(symbolic4_matrix_mcmc_test mcmc/matrix_mcmc_test.cc)
-target_link_libraries(symbolic4_matrix_mcmc_test PRIVATE symbolic4 unit)
-add_test(NAME symbolic4_matrix_mcmc_test COMMAND symbolic4_matrix_mcmc_test)
-set_tests_properties(symbolic4_matrix_mcmc_test PROPERTIES LABELS "symbolic4;mcmc;matrix")
-
 # mcmc/non_centered.h tests
 add_executable(symbolic4_non_centered_test mcmc/non_centered_test.cc)
 target_link_libraries(symbolic4_non_centered_test PRIVATE symbolic4 unit)
 add_test(NAME symbolic4_non_centered_test COMMAND symbolic4_non_centered_test)
 set_tests_properties(symbolic4_non_centered_test PROPERTIES LABELS "symbolic4;mcmc;non_centered")
 
-# mcmc/state.h and mcmc/samples.h tests
+# mcmc/samples.h tests (Samples container + statistics helpers)
 add_executable(symbolic4_state_test mcmc/state_test.cc)
 target_link_libraries(symbolic4_state_test PRIVATE symbolic4 tempura::bayes tempura::prob unit)
 add_test(NAME symbolic4_state_test COMMAND symbolic4_state_test)

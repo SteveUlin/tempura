@@ -15,13 +15,13 @@ auto main() -> int {
   // Simple model: a_bar + sigma * z[idx]
   auto a_bar = normal(0_c, 1_c);
   auto sigma = exponential(1_c);
-  auto z = plate<Groups>(normal(0.0_c, 1.0_c));
-  auto idx = data<Obs>();
+  auto z = plate(normal(0.0_c, 1.0_c), Groups{});
+  auto idx = data(Obs{});
 
   auto group_effect = a_bar + sigma * z[idx];  // Natural bracket syntax!
 
   auto p = 1_c / (1_c + exp(-group_effect));
-  auto y = plate<Obs>(bernoulli(p));
+  auto y = plate(bernoulli(p), Obs{});
 
   auto posterior = inferExplicit(a_bar, sigma, z, y);
 
@@ -30,7 +30,7 @@ auto main() -> int {
   std::vector<double> y_data = {1.0, 0.0, 1.0, 1.0};
 
   auto bound_posterior = posterior
-      .withDimension<Groups>(2)  // Must set Groups dimension explicitly
+      .withDimension(Groups{}, 2)  // Must set Groups dimension explicitly
       .bind(idx = indexed(idx_data), y = indexed(y_data));
 
   // Verify state dimension: 2 scalar + 2 indexed

@@ -39,7 +39,7 @@ auto main() -> int {
   "IndexedParamSpec basic"_test = [] {
     struct Countries {};
     auto alpha = gamma(2_c, 0.1_c);
-    auto theta = plate<Countries>(beta(alpha, 3.0_c));
+    auto theta = plate(beta(alpha, 3.0_c), Countries{});
     auto t = autoTransform(theta);
 
     // IndexedParamSpec would be created by the factory
@@ -95,13 +95,13 @@ auto main() -> int {
     struct Countries {};
 
     auto alpha = gamma(2_c, 0.1_c);
-    auto theta = plate<Countries>(beta(alpha, 3.0_c));
+    auto theta = plate(beta(alpha, 3.0_c), Countries{});
 
     auto joint = logProb(alpha, theta);
 
     // Create posterior with dimension specified
     auto posterior = makePlateTransformedPosterior(joint, alpha, theta)
-                         .withDimension<Countries>(5)
+                         .withDimension(Countries{}, 5)
                          .build();
 
     // State: [z_alpha, z_theta[0], ..., z_theta[4]]
@@ -136,12 +136,12 @@ auto main() -> int {
 
     auto alpha = gamma(2.0_c, 0.1_c);
     auto beta_param = gamma(2.0_c, 0.1_c);
-    auto theta = plate<Countries>(beta(alpha, beta_param));
+    auto theta = plate(beta(alpha, beta_param), Countries{});
 
     auto joint = logProb(alpha, beta_param, theta);
 
     auto posterior = makePlateTransformedPosterior(joint, alpha, beta_param, theta)
-                         .withDimension<Countries>(3)
+                         .withDimension(Countries{}, 3)
                          .build();
 
     // State: [z_alpha, z_beta, z_theta[0], z_theta[1], z_theta[2]]
@@ -183,9 +183,9 @@ auto main() -> int {
 
   "indexed constrained: gradient matches finite-diff logProb"_test = [] {
     // beta has Unit support → sigmoid transform → non-trivial Jacobian
-    auto theta = plate<TestGroups>(beta(2.0_c, 3.0_c));
+    auto theta = plate(beta(2.0_c, 3.0_c), TestGroups{});
     auto posterior = makePlateTransformedPosterior(collectLogProbs(theta), theta)
-                         .withDimension<TestGroups>(3)
+                         .withDimension(TestGroups{}, 3)
                          .build();
 
     std::vector<double> z = {0.2, -0.5, 1.0};
@@ -205,10 +205,10 @@ auto main() -> int {
 
   "mixed scalar+indexed: gradient matches finite-diff logProb"_test = [] {
     auto sigma = halfNormal(2.0_c);
-    auto theta = plate<TestCountries2>(beta(2.0_c, 3.0_c));
+    auto theta = plate(beta(2.0_c, 3.0_c), TestCountries2{});
     auto joint = collectLogProbs(sigma, theta);
     auto posterior = makePlateTransformedPosterior(joint, sigma, theta)
-                         .withDimension<TestCountries2>(2)
+                         .withDimension(TestCountries2{}, 2)
                          .build();
 
     // State: [z_sigma, z_theta[0], z_theta[1]]
@@ -228,22 +228,21 @@ auto main() -> int {
   };
 
   // =========================================================================
-  // DynamicSamples symbol-indexed access
+  // Samples symbol-indexed access
   // =========================================================================
 
-  "DynamicSamples symbol access for mixed scalar+indexed params"_test = [] {
+  "Samples symbol access for mixed scalar+indexed params"_test = [] {
     // Create a simple model with mixed params:
     // sigma ~ HalfNormal(2)   (scalar)
     // theta[i] ~ Beta(2, 3)   (indexed)
     auto sigma = halfNormal(2.0_c);
-    auto theta = plate<TestCountries2>(beta(2.0_c, 3.0_c));
+    auto theta = plate(beta(2.0_c, 3.0_c), TestCountries2{});
     auto joint = collectLogProbs(sigma, theta);
     auto posterior = makePlateTransformedPosterior(joint, sigma, theta)
-                         .withDimension<TestCountries2>(3)
+                         .withDimension(TestCountries2{}, 3)
                          .build();
 
-    // Get the DynamicSamples type
-    using SamplesType = typename std::decay_t<decltype(posterior)>::DynamicSamplesType;
+    using SamplesType = typename std::decay_t<decltype(posterior)>::SamplesType;
 
     // Verify the symbols tuple type matches what we expect
     // NonObservedSymbolsTuple should contain:
@@ -263,7 +262,7 @@ auto main() -> int {
     static_assert(std::is_same_v<Sym1, typename decltype(theta)::symbol_type>,
                   "Second symbol should match theta's symbol_type");
 
-    // Verify the DynamicSamplesType can be instantiated and used
+    // Verify the SamplesType can be instantiated and used
     // The key test: can we access samples by symbol for both scalar and indexed params?
 
     // For now, just verify the type structure is correct.

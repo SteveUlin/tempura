@@ -90,7 +90,7 @@ auto main() -> int {
     struct Countries {};
 
     auto sigma = halfNormal(2_c);
-    auto theta = plate<Countries>(beta(2.0_c, 3.0_c));
+    auto theta = plate(beta(2.0_c, 3.0_c), Countries{});
 
     // Build specs like the posterior does
     auto sigma_spec = ScalarParamSpec<decltype(sigma), Positive<decltype(sigma)>>{
@@ -130,7 +130,7 @@ auto main() -> int {
     struct Countries {};
 
     auto alpha = normal(0_c, 10_c);
-    auto theta = plate<Countries>(beta(2.0_c, 3.0_c));
+    auto theta = plate(beta(2.0_c, 3.0_c), Countries{});
 
     auto alpha_spec = ScalarParamSpec<decltype(alpha), Unconstrained<decltype(alpha)>>{
         Unconstrained<decltype(alpha)>{alpha}};

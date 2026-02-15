@@ -1,120 +1,23 @@
-#include "symbolic4/mcmc/state.h"
+#include "symbolic4/mcmc/samples.h"
 
 #include <random>
 
+#include "symbolic4/constants.h"
+#include "symbolic4/distributions/collect_log_prob.h"
 #include "symbolic4/distributions/random_var.h"
-#include "symbolic4/indexed/data.h"
 #include "symbolic4/indexed/indexed.h"
-#include "symbolic4/infer.h"
-#include "symbolic4/mcmc/samples.h"
+#include "symbolic4/mcmc/plate_transforms.h"
 #include "symbolic4/mcmc/sampler.h"
 #include "unit.h"
 
 using namespace tempura;
 using namespace tempura::symbolic4;
 
+namespace {
+struct TestDim {};
+}  // namespace
+
 auto main() -> int {
-  "ParameterState basic construction"_test = [] {
-    auto alpha = normal(0.0, 10.0);
-    auto beta = normal(0.0, 5.0);
-
-    // Construct from bindings
-    auto state = ParameterState<decltype(alpha), decltype(beta)>{
-        BinderPack{alpha = 1.5, beta = 2.5}};
-
-    expectNear(1.5, state[alpha], 1e-10);
-    expectNear(2.5, state[beta], 1e-10);
-  };
-
-  "ParameterState array access"_test = [] {
-    auto alpha = normal(0.0, 10.0);
-    auto beta = normal(0.0, 5.0);
-
-    auto state = ParameterState<decltype(alpha), decltype(beta)>{
-        BinderPack{alpha = 1.0, beta = 2.0}};
-
-    // Array access
-    auto& arr = state.array();
-    expectNear(1.0, arr[0], 1e-10);
-    expectNear(2.0, arr[1], 1e-10);
-
-    // Modify via symbol
-    state[alpha] = 3.0;
-    expectNear(3.0, arr[0], 1e-10);
-  };
-
-  "ParameterState from array"_test = [] {
-    auto alpha = normal(0.0, 10.0);
-    auto beta = normal(0.0, 5.0);
-
-    std::array<double, 2> arr{5.0, 6.0};
-    auto state = ParameterState<decltype(alpha), decltype(beta)>{arr};
-
-    expectNear(5.0, state[alpha], 1e-10);
-    expectNear(6.0, state[beta], 1e-10);
-  };
-
-  "Samples container basic"_test = [] {
-    auto alpha = normal(0.0, 10.0);
-    auto beta = normal(0.0, 5.0);
-
-    Samples<decltype(alpha), decltype(beta)> samples;
-    samples.push_back({1.0, 2.0});
-    samples.push_back({1.1, 2.1});
-    samples.push_back({0.9, 1.9});
-
-    expectEq(3u, samples.size());
-
-    // Access by parameter
-    auto alpha_draws = samples[alpha];
-    expectEq(3u, alpha_draws.size());
-    expectNear(1.0, alpha_draws[0], 1e-10);
-    expectNear(1.1, alpha_draws[1], 1e-10);
-    expectNear(0.9, alpha_draws[2], 1e-10);
-
-    auto beta_draws = samples[beta];
-    expectNear(2.0, beta_draws[0], 1e-10);
-    expectNear(2.1, beta_draws[1], 1e-10);
-    expectNear(1.9, beta_draws[2], 1e-10);
-  };
-
-  "Samples single draw access"_test = [] {
-    auto alpha = normal(0.0, 10.0);
-    auto beta = normal(0.0, 5.0);
-
-    Samples<decltype(alpha), decltype(beta)> samples;
-    samples.push_back({1.0, 2.0});
-    samples.push_back({3.0, 4.0});
-
-    auto draw0 = samples[0];
-    expectNear(1.0, draw0[alpha], 1e-10);
-    expectNear(2.0, draw0[beta], 1e-10);
-
-    auto draw1 = samples[1];
-    expectNear(3.0, draw1[alpha], 1e-10);
-    expectNear(4.0, draw1[beta], 1e-10);
-  };
-
-  "Samples iteration"_test = [] {
-    auto alpha = normal(0.0, 10.0);
-    auto beta = normal(0.0, 5.0);
-
-    Samples<decltype(alpha), decltype(beta)> samples;
-    samples.push_back({1.0, 10.0});
-    samples.push_back({2.0, 20.0});
-    samples.push_back({3.0, 30.0});
-
-    double sum_alpha = 0.0;
-    double sum_beta = 0.0;
-    for (const auto& draw : samples) {
-      sum_alpha += draw[alpha];
-      sum_beta += draw[beta];
-    }
-
-    expectNear(6.0, sum_alpha, 1e-10);
-    expectNear(60.0, sum_beta, 1e-10);
-  };
-
   "Statistics helpers"_test = [] {
     std::vector<double> values{1.0, 2.0, 3.0, 4.0, 5.0};
 
@@ -127,91 +30,93 @@ auto main() -> int {
     expectNear(5.0, quantile(values, 1.0), 1e-10);
   };
 
-  "posterior.sample() with linear model"_test = [] {
-    struct Obs {};
+  // =========================================================================
+  // Samples: expression evaluation, draw access, iteration
+  // =========================================================================
 
-    // Simple model: y ~ Normal(alpha, sigma)
-    auto alpha = normal(0.0, 10.0);
-    auto sigma = halfNormal(2.0);
-    auto y = plate<Obs>(normal(alpha, sigma));
+  "Samples[expr] evaluates expression across draws"_test = [] {
+    auto a = normal(0_c, 10_c);
+    auto sigma = exponential(1_c);
+    auto z_b = plate(normal(0_c, 1_c), TestDim{});
 
-    // Data: just a few observations around 5.0
-    std::vector<double> y_data{4.8, 5.0, 5.2, 4.9, 5.1};
-
-    auto posterior = infer(alpha, sigma, y)
-        .bind(y = indexed(y_data));
+    auto joint_lp = collectLogProbs(a, sigma, z_b);
+    auto posterior = makePlateTransformedPosterior(joint_lp, a, sigma, z_b)
+                         .withDimension(TestDim{}, 3)
+                         .build();
 
     std::mt19937_64 rng{42};
-
-    // Run sampling — init values are in constrained space
-    // alpha = 5.0 (close to data mean), sigma = 1.0 (HalfNormal/Positive: z=log(1)=0)
     auto samples = posterior.sample(
-        HmcConfig{.epsilon = 0.05, .steps = 10, .warmup = 200, .draws = 200},
-        BinderPack{alpha = 5.0, sigma = 1.0},
+        HmcConfig{.epsilon = 0.1, .steps = 10, .warmup = 10, .draws = 5},
+        BinderPack{a = 0.0, sigma = 1.0, z_b = std::vector<double>{0.0, 0.0, 0.0}},
         rng);
 
-    expectEq(200u, samples.size());
+    // Evaluate arithmetic expression: a + sigma (scalar)
+    auto expr_draws = samples[a + sigma];
+    expectEq(5u, expr_draws.size());
 
-    // Check that posterior mean for alpha is close to 5.0 (the data mean)
-    auto alpha_draws = samples[alpha];
-    double alpha_mean = mean(alpha_draws);
-    // With limited samples, we allow some tolerance
-    expectTrue(alpha_mean > 4.0 && alpha_mean < 6.0);
-
-    // Sigma should be positive and reasonable
+    // Each draw should equal a_val + sigma_val
+    auto a_draws = samples[a];
     auto sigma_draws = samples[sigma];
-    double sigma_mean = mean(sigma_draws);
-    expectTrue(sigma_mean > 0.0 && sigma_mean < 2.0);
+    for (std::size_t i = 0; i < 5; ++i) {
+      expectNear(a_draws[i] + sigma_draws[i], expr_draws[i], 1e-10);
+    }
   };
 
-  "logProbAt with bindings"_test = [] {
-    struct Obs {};
+  "Samples[i] returns queryable SymbolicState"_test = [] {
+    auto a = normal(0_c, 10_c);
+    auto sigma = exponential(1_c);
+    auto z_b = plate(normal(0_c, 1_c), TestDim{});
 
-    auto alpha = normal(0.0, 10.0);
-    auto sigma = halfNormal(2.0);
-    auto y = plate<Obs>(normal(alpha, sigma));
+    auto joint_lp = collectLogProbs(a, sigma, z_b);
+    auto posterior = makePlateTransformedPosterior(joint_lp, a, sigma, z_b)
+                         .withDimension(TestDim{}, 3)
+                         .build();
 
-    std::vector<double> y_data{4.8, 5.0, 5.2, 4.9, 5.1};
+    std::mt19937_64 rng{42};
+    auto samples = posterior.sample(
+        HmcConfig{.epsilon = 0.1, .steps = 10, .warmup = 10, .draws = 5},
+        BinderPack{a = 0.0, sigma = 1.0, z_b = std::vector<double>{0.0, 0.0, 0.0}},
+        rng);
 
-    auto posterior = infer(alpha, sigma, y)
-        .bind(y = indexed(y_data));
+    // Access draw 0 as SymbolicState
+    auto draw = samples[std::size_t{0}];
 
-    // Evaluate log-prob using binding syntax (constrained space)
-    // sigma = 1.0 → z = log(1.0) = 0.0 via inverse transform
-    double lp1 = posterior.logProbAt(BinderPack{alpha = 5.0, sigma = 1.0});
+    // Scalar param access
+    double a_val = draw[a];
+    auto a_draws = samples[a];
+    expectNear(a_draws[0], a_val, 1e-10);
 
-    // Compare with array-based evaluation (unconstrained space)
-    // z = {5.0, 0.0} matches alpha=5.0, sigma=exp(0)=1.0
-    std::array<double, 2> z{5.0, 0.0};
-    double lp2 = posterior.logProb(z);
-
-    expectNear(lp1, lp2, 1e-10);
+    // Indexed param access — returns span
+    auto z_span = draw[z_b];
+    expectEq(3u, z_span.size());
   };
 
-  "gradientAt with bindings"_test = [] {
-    struct Obs {};
+  "Samples range-for iteration"_test = [] {
+    auto a = normal(0_c, 10_c);
+    auto sigma = exponential(1_c);
 
-    auto alpha = normal(0.0, 10.0);
-    auto sigma = halfNormal(2.0);
-    auto y = plate<Obs>(normal(alpha, sigma));
+    auto joint_lp = collectLogProbs(a, sigma);
+    auto posterior = makePlateTransformedPosterior(joint_lp, a, sigma).build();
 
-    std::vector<double> y_data{4.8, 5.0, 5.2, 4.9, 5.1};
+    std::mt19937_64 rng{42};
+    auto samples = posterior.sample(
+        HmcConfig{.epsilon = 0.1, .steps = 10, .warmup = 10, .draws = 5},
+        BinderPack{a = 0.0, sigma = 1.0},
+        rng);
 
-    auto posterior = infer(alpha, sigma, y)
-        .bind(y = indexed(y_data));
+    double sum_a = 0.0;
+    std::size_t count = 0;
+    for (const auto& draw : samples) {
+      sum_a += draw[a];
+      ++count;
+    }
+    expectEq(5u, count);
 
-    // Evaluate gradient using both APIs and compare
-    // Constrained values: alpha=5.0, sigma=1.0
-    // Unconstrained values: z = {5.0, log(1.0)} = {5.0, 0.0}
-    std::vector<double> z{5.0, 0.0};
-    auto grad_arr = posterior.gradient(z);
-
-    auto grad = posterior.gradientAt(BinderPack{alpha = 5.0, sigma = 1.0});
-    double d_alpha = grad[alpha];
-    double d_sigma = grad[sigma];
-
-    expectNear(d_alpha, grad_arr[0], 1e-10);
-    expectNear(d_sigma, grad_arr[1], 1e-10);
+    // Sum should match manual computation
+    auto a_draws = samples[a];
+    double expected_sum = 0.0;
+    for (double v : a_draws) expected_sum += v;
+    expectNear(expected_sum, sum_a, 1e-10);
   };
 
   return TestRegistry::result();

@@ -11,20 +11,62 @@
 // dim.h - Dimension tags and indexed symbols for plate notation
 // ============================================================================
 //
-// Supports multi-dimensional indexing for hierarchical models:
+// Named dimensions as function domains. Every indexed thing — plate variables,
+// data vectors, matrices — is a function from dimension indices to values.
 //
-//   struct Countries {};
-//   struct Years {};
+//   auto countries = dim();
+//   auto years     = dim();
+//   auto embed     = dim<8>();       // compile-time sized
 //
-//   auto alpha = plate<Countries>(normal(mu, sigma));        // alpha[c]
-//   auto y = plate<Years>(normal(alpha, 1.0_c));             // y[c,y]
+//   auto alpha = plate(normal(mu, sigma), countries);           // α[c]
+//   auto y     = plate(normal(alpha, 1.0_c), countries, years); // y[c,y]
 //
-//   // y.sym() is IndexedSymbol<Id, Countries, Years>
-//   // Binding: y = indexed(data, shape<Countries, Years>{10, 20})
+//   // y.sym() is IndexedSymbol<Id, Dim<λ₁>, Dim<λ₂>>
+//   // Binding: y = indexed(data, Shape<Dim<λ₁>, Dim<λ₂>>{10, 20})
 //
 // ============================================================================
 
 namespace tempura::symbolic4 {
+
+// ============================================================================
+// Dim - Named dimension (replaces bare empty struct tags)
+// ============================================================================
+//
+// Each call to dim() produces a unique type via decltype([] {}).
+// kDynamic (0) means size determined at runtime from bound data.
+// dim<N>() encodes a compile-time size for structural dimensions
+// (embedding width, spatial coords, small fixed matrices).
+
+inline constexpr SizeT kDynamic = 0;
+
+template <typename Tag, SizeT Size = kDynamic>
+struct Dim {};
+
+template <SizeT N = kDynamic, typename Tag = decltype([] {})>
+constexpr auto dim() -> Dim<Tag, N> {
+  return {};
+}
+
+// Type traits
+template <typename T>
+constexpr bool is_dim_v = core_traits_detail::isSpecOf<T>(^^Dim);
+
+template <typename T>
+concept IsDim = is_dim_v<T>;
+
+// Extract compile-time size from a Dim (kDynamic if runtime-sized or bare struct)
+template <typename T>
+struct DimSize {
+  static constexpr SizeT value = kDynamic;
+};
+
+template <typename Tag, SizeT N>
+struct DimSize<Dim<Tag, N>> {
+  static constexpr SizeT value = N;
+};
+
+template <typename T>
+constexpr SizeT dim_size_v = DimSize<T>::value;
 
 // ============================================================================
 // Local type list helpers (in symbolic4 namespace)

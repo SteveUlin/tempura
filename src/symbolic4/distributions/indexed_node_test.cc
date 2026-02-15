@@ -2,6 +2,7 @@
 #include "symbolic4/distributions/indexed_node.h"
 #include "symbolic4/distributions/wrappers.h"
 #include "symbolic4/indexed/indexed_eval.h"
+#include "meta/type_list.h"
 #include "unit.h"
 
 #include <cmath>
@@ -26,7 +27,7 @@ auto main() -> int {
 
   "plate creates IndexedStochasticNode"_test = [] {
     struct Obs {};
-    auto theta = plate<Obs>(beta(2.0_c, 3.0_c));
+    auto theta = plate(beta(2.0_c, 3.0_c), Obs{});
 
     static_assert(is_indexed_random_var_v<decltype(theta)>);
     static_assert(IsIndexedRandomVar<decltype(theta)>);
@@ -34,7 +35,7 @@ auto main() -> int {
 
   "IndexedStochasticNode has correct types"_test = [] {
     struct Obs {};
-    auto theta = plate<Obs>(normal(0.0_c, 1.0_c));
+    auto theta = plate(normal(0.0_c, 1.0_c), Obs{});
 
     using Node = decltype(theta);
     static_assert(std::is_same_v<typename Node::dims_list, TypeList<Obs>>);
@@ -46,7 +47,7 @@ auto main() -> int {
 
   "IndexedStochasticNode::sym returns discoverable atom"_test = [] {
     struct Obs {};
-    auto theta = plate<Obs>(beta(2.0_c, 3.0_c));
+    auto theta = plate(beta(2.0_c, 3.0_c), Obs{});
     auto sym = theta.sym();
 
     // sym() returns Atom<Id, IndexedSample<Dist, DimsList>> for auto-discovery
@@ -62,7 +63,7 @@ auto main() -> int {
 
   "IndexedStochasticNode::logProb returns SumOver"_test = [] {
     struct Obs {};
-    auto theta = plate<Obs>(beta(2.0_c, 3.0_c));
+    auto theta = plate(beta(2.0_c, 3.0_c), Obs{});
     auto lp = theta.logProb();
 
     static_assert(is_sum_over_v<decltype(lp)>);
@@ -70,7 +71,7 @@ auto main() -> int {
 
   "IndexedStochasticNode::logProb evaluates correctly"_test = [] {
     struct Obs {};
-    auto theta = plate<Obs>(beta(2.0_c, 3.0_c));
+    auto theta = plate(beta(2.0_c, 3.0_c), Obs{});
     auto lp = theta.logProb();
 
     std::vector<double> theta_vals = {0.3, 0.5, 0.7};
@@ -92,7 +93,7 @@ auto main() -> int {
   "plate with scalar parameter"_test = [] {
     struct Obs {};
     auto alpha = halfNormal(5.0_c);
-    auto theta = plate<Obs>(beta(alpha, 3.0_c));
+    auto theta = plate(beta(alpha, 3.0_c), Obs{});
 
     static_assert(IsIndexedRandomVar<decltype(theta)>);
 
@@ -118,7 +119,7 @@ auto main() -> int {
     struct Countries {};
     struct Years {};
 
-    auto theta = plate<Years>(plate<Countries>(normal(0.0_c, 1.0_c)));
+    auto theta = plate(plate(normal(0.0_c, 1.0_c), Countries{}), Years{});
 
     using NodeType = decltype(theta);
     using DimsType = typename NodeType::dims_list;
@@ -138,7 +139,7 @@ auto main() -> int {
     struct Countries {};
     struct Years {};
 
-    auto theta = plate<Years>(plate<Countries>(normal(0.0_c, 1.0_c)));
+    auto theta = plate(plate(normal(0.0_c, 1.0_c), Countries{}), Years{});
     auto lp = theta.logProb();
 
     // Should be SumOver<Countries, SumOver<Years, ...>>
@@ -151,7 +152,7 @@ auto main() -> int {
 
   "IndexedStochasticNode binding with indexed()"_test = [] {
     struct Obs {};
-    auto theta = plate<Obs>(beta(2.0_c, 3.0_c));
+    auto theta = plate(beta(2.0_c, 3.0_c), Obs{});
 
     std::vector<double> data = {0.3, 0.5};
     auto binding = theta = indexed(data);
@@ -166,7 +167,7 @@ auto main() -> int {
 
   "toSymbolic returns discoverable atom"_test = [] {
     struct Obs {};
-    auto theta = plate<Obs>(normal(0.0_c, 1.0_c));
+    auto theta = plate(normal(0.0_c, 1.0_c), Obs{});
     auto sym = toSymbolic(theta);
 
     // toSymbolic() delegates to sym(), returning Atom<Id, IndexedSample<...>>
@@ -175,7 +176,7 @@ auto main() -> int {
 
   "toSymbolic works for IndexedRandomVar"_test = [] {
     struct Obs {};
-    auto theta = plate<Obs>(normal(0.0_c, 1.0_c));
+    auto theta = plate(normal(0.0_c, 1.0_c), Obs{});
     auto sym = toSymbolic(theta);
 
     static_assert(is_indexed_random_var_atom_v<decltype(sym)>);
@@ -187,7 +188,7 @@ auto main() -> int {
 
   "plate with normal distribution"_test = [] {
     struct Obs {};
-    auto y = plate<Obs>(normal(0.0_c, 1.0_c));
+    auto y = plate(normal(0.0_c, 1.0_c), Obs{});
     auto lp = y.logProb();
 
     std::vector<double> y_vals = {-1.0, 0.0, 1.0};
@@ -198,7 +199,7 @@ auto main() -> int {
 
   "plate with gamma distribution"_test = [] {
     struct Obs {};
-    auto x = plate<Obs>(gamma(2.0_c, 0.5_c));
+    auto x = plate(gamma(2.0_c, 0.5_c), Obs{});
     auto lp = x.logProb();
 
     std::vector<double> x_vals = {1.0, 2.0, 3.0};

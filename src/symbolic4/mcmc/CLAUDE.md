@@ -10,18 +10,11 @@ This directory implements the "boring MCMC" vision: automatic parameter transfor
 |------|---------|
 | `transforms.h` | Parameter transform types (log, logit, Cholesky, simplex) |
 | `support.h` | Distribution → support → transform inference (`autoTransform`) |
-| `plate_transforms.h` | `PlateTransformedPosterior` — unified posterior for scalar + indexed params |
-| `posterior.h` | Simple posterior wrapper |
+| `plate_transforms.h` | `PlateTransformedPosterior` — sole production posterior for scalar + indexed params |
+| `samples.h` | `Samples` — unified MCMC draw container with symbol-indexed access |
+| `sampler.h` | `HmcConfig` and `posterior.sample()` integration |
 | `non_centered.h` | Hierarchical model reparameterization |
 | `likelihoods.h` | Numerically stable logistic functions |
-
-### Planned Files (binding-centric API)
-
-| File | Purpose |
-|------|---------|
-| `state.h` | `ParameterState` - symbol-indexed parameter container |
-| `samples.h` | `Samples` - symbol-indexed sample container |
-| `sampler.h` | `posterior.sample()` integration |
 
 ## Transform System
 
@@ -122,36 +115,36 @@ auto hmc = bayes::makeHMCDynamic(
     epsilon, n_steps, posterior.stateDim());
 ```
 
-### Target (binding-aware, unified)
+### Sampling API (binding-aware, unified)
 
-HMC should work directly with bindings, not flat arrays:
+`posterior.sample()` accepts `BinderPack` init values and returns a `Samples` object
+with full symbol-indexed access:
 
 ```cpp
-// Posterior already knows its parameters
-auto posterior = infer(alpha, beta, sigma, y).bind(x = data, y = obs);
+auto posterior = makePlateTransformedPosterior(joint_lp, alpha, sigma, z_b)
+                     .withDimension<Districts>(N)
+                     .build();
 
-// Sample with binding syntax
 auto samples = posterior.sample(
-    hmc(epsilon = 0.01, steps = 20),
-    init = (alpha = 0.0, beta = 0.0, sigma = 0.0),
-    warmup = 500,
-    draws = 1000,
+    HmcConfig{.epsilon = 0.1, .steps = 10, .warmup = 500, .draws = 1000},
+    BinderPack{alpha = 0.0, sigma = 1.0, z_b = std::vector<double>(N, 0.0)},
     rng);
 
-// Access by symbol
-for (auto& draw : samples) {
+// Symbol-indexed access
+mean(samples[alpha]);           // posterior mean (scalar)
+samples[z_b];                   // DynamicDense matrix (draws × districts)
+samples[logistic(alpha + sigma * z_b)];  // derived expression across draws
+
+// Per-draw access
+auto draw = samples[std::size_t{0}];
+double a_val = draw[alpha];      // scalar lookup
+auto z_span = draw[z_b];        // span<const double> (indexed)
+
+// Range-for iteration
+for (const auto& draw : samples) {
     double a = draw[alpha];
-    double b = draw[beta];
 }
 ```
-
-The binding syntax is unified across:
-- Data binding: `bind(x = x_data)`
-- Observation binding: `bind(y = y_data)`
-- Parameter evaluation: `logProb(alpha = 0.5, beta = 1.0, ...)`
-- Gradient queries: `grad[alpha]`
-- Initial state: `init = (alpha = 0.0, ...)`
-- Sample access: `draw[alpha]`
 
 ## Non-Centered Parameterization
 
@@ -171,10 +164,10 @@ ncp.addZPriorGrad(grad, j, state);  // N(0,1) prior contribution
 
 | Type | Space | Jacobian | Use case |
 |------|-------|----------|----------|
-| `PlateTransformedPosterior` | Unconstrained (HMC) | Automatic | Production MCMC — handles both scalar and indexed params |
+| `PlateTransformedPosterior` | Unconstrained (HMC) | Automatic | Production MCMC — sole posterior type for scalar + indexed params |
 | `RawPosterior` (in `infer.h`) | Constrained only | None | Testing/verification only (`inferRaw()`) |
 
-**Note**: The old `TransformedPosterior` (scalar-only, fixed-size `std::array` state) has been deleted. `PlateTransformedPosterior` is now the sole production posterior type, used by both `infer()`, `inferExplicit()`, and `model().posterior().build()`.
+`PlateTransformedPosterior` is the sole production posterior, used by `infer()`, `inferExplicit()`, `model().posterior().build()`, and direct `makePlateTransformedPosterior()` construction.
 
 ## Adding New Transforms
 
@@ -212,12 +205,8 @@ ncp.addZPriorGrad(grad, j, state);  // N(0,1) prior contribution
    };
    ```
 
-## Next Steps
+## Remaining Gaps
 
-See `BINDING_API_PLAN.md` for the detailed implementation roadmap.
-
-Priority order:
-1. **ParameterState** - Foundation for binding-based operations
-2. **Binding-based evaluation** - `posterior(alpha = 0.5, ...)`
-3. **Samples container** - Symbol-indexed results
-4. **Integrated sampler** - `posterior.sample(hmc(...), ...)`
+- **Constrained init values** — users currently pass unconstrained init (`sigma = std::log(0.5)`). The posterior has `inverse()` — apply it to init values automatically.
+- **Indexed gradient spans** — `grad[z_b]` should return `span<const double>`, not require manual offset arithmetic.
+- **MCMC diagnostics** — ESS, R-hat, divergences. Currently not tracked.

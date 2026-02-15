@@ -68,12 +68,12 @@ auto main() -> int {
   auto sigma = halfNormal(2_c);
 
   // Covariate (external data, not a parameter)
-  auto x = data<Obs>();
+  auto x = data(Obs{});
 
   // Likelihood - plate over observations
   // alpha, beta, sigma, x are automatically converted to their symbolic forms
   // For sigma (HalfNormal), this is exp(z); for Normal params, it's just z
-  auto y = plate<Obs>(normal(alpha + beta * x, sigma));
+  auto y = plate(normal(alpha + beta * x, sigma), Obs{});
 
   // Build posterior with automatic transforms and gradients
   // infer(y) automatically discovers alpha, beta, sigma from y's expression tree

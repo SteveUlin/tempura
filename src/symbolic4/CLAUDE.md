@@ -40,7 +40,8 @@ H.row(mu)         // ∂f/∂μ row — explicit rank-1 covector extraction
 // grad³(scalar)      → rank 3 tensor      → [x, y, z] extracts scalar
 
 // For MCMC: the posterior knows its parameters
-auto posterior = infer(y).bind(y = data);
+auto obs = dim();
+auto posterior = infer(y).bind(y = indexed(data));
 auto g = posterior.grad();
 g[mu]           // scalar gradient expression
 g[theta]        // indexed gradient (a family over plates)
@@ -132,6 +133,7 @@ composed via `recursive()`, `innermost()`, etc.
 | 7.4 | Unify posteriors | ✓ Done (RandomVar uses Free symbols, eval no longer applies transforms, ConstrainedParamSymbol deleted) |
 | 7.5 | Remove lookupByAtomId | ✓ Done (ProbTerminals/BaseTerminals use direct Free symbol lookup, lookupByAtomId deleted) |
 | 7.6 | Diff cleanup | ✓ Done (removed SampleDerivative/same_symbolic_id_v, simplified to same_atom_id_v; wrappers.h include removed) |
+| 7.7 | Unify MCMC containers | ✓ Done (deleted ParameterState/state.h, old Samples<Params...>, posterior.h, mcmc.h, matrix_mcmc.h; unified on Samples + SymbolicState; eliminated scalar/dynamic sampling fork) |
 
 **Standalone fix (no phase dependency):** ✓ Done. Relax `operators.h` `requires` clause so
 RandomVar/IndexedRandomVar work directly in expressions without `.constrainedExpr()`/`.sym()`.
@@ -162,9 +164,13 @@ completes the posterior unification.
 - AST construction: `x + y` builds the type
 - Evaluation: `AddOp{}(3.0, 4.0)` returns `7.0`
 
-### Reductions (indexed operations)
+### Reductions (dimension elimination)
 
-`ReduceOver<ReduceOp, DimTag, Expr>` — a monoidal fold over an indexed family.
+`ReduceOver<ReduceOp, DimTag, Expr>` — eliminates a dimension by folding over its
+domain. In function terms: takes `f : (A, B) → ℝ` and returns `g : A → ℝ` where
+`g(a) = ⊕_b f(a, b)`. This single mechanism covers plate log-prob summation,
+matrix contraction, and statistical marginalization.
+
 `SumOver<DimTag, Expr>` is an alias for `ReduceOver<SumReduce, DimTag, Expr>`.
 
 Each ReduceOp defines: `identity()`, `combine(a, b)`, `symbol()`.
@@ -255,7 +261,7 @@ if constexpr (is_reduce_over_v<E>) {
 ║    distributions/  RandomVar<Dist,Id>  collectLogProbs  model()   ║
 ║                                                                   ║
 ║  MCMC Layer                                                       ║
-║    TransformedPosterior  HMC  support inference                   ║
+║    PlateTransformedPosterior  Samples  HMC  support inference     ║
 ║                                                                   ║
 ║  Domain Transforms (probabilistic-specific)                       ║
 ║    exp/logit for support types  Cholesky  Jacobian corrections    ║
@@ -272,8 +278,8 @@ if constexpr (is_reduce_over_v<E>) {
 ║    BinderPack  SymbolicState  IndexedBinding                      ║
 ║    compressed tuples with type-dispatched operator[]               ║
 ║                                                                   ║
-║  Indexed / Reduction Layer                                        ║
-║    ReduceOver<ROp, DimTag, Expr>  dimension tags                  ║
+║  Indexed / Reduction Layer (function algebra over named dims)      ║
+║    ReduceOver<ROp, DimTag, Expr>  dim()  Gather (= composition)   ║
 ║    monoidal folds: Sum, Product, Max, LogSumExp                   ║
 ║                                                                   ║
 ║  Expression Algebra                                               ║
@@ -311,11 +317,11 @@ container[expr]     // → evaluate expr at container's values
 3. **Heterogeneous return types** — each symbol can return a different type (double,
    span, matrix), because each slot defines its own `operator[]`
 
-**Current problem:** The MCMC layer (ParameterState, GradientResult, Samples)
-rolls its own flat-array containers with type-to-index lookup, losing heterogeneity.
-This forces the constraint-transform asymmetry between scalar and indexed params
-and prevents matrix params from fitting naturally. Phase 7 unifies all containers
-on the BinderPack pattern. See `migration/phase7.md`.
+The MCMC layer now follows this pattern: `Samples` stores draws in a flat matrix
+but exposes symbol-typed access (`samples[alpha]`, `samples[expr]`, `draw[z_b]`).
+Per-draw states are `SymbolicState` objects — compressed-tuple containers with the
+same `operator[]` dispatch. GradientResult still uses flat arrays with manual offsets
+(migrating it to spans is a future cleanup).
 
 ### Runtime Dependency Rule
 
@@ -400,26 +406,32 @@ before committing.
 ### What "Complete" Looks Like
 
 ```cpp
+auto districts = dim();
+auto obs       = dim();
+
 // Hyperpriors
 auto a_bar = normal(0, 1);
 auto sigma_a = exponential(1);
 
 // Varying intercepts (non-centered)
 // RandomVars work directly in expressions — no .constrainedExpr()/.sym() needed
-auto z_a = plate<Districts>(normal(0, 1));
+auto z_a = plate(normal(0, 1), districts);
 auto a = a_bar + sigma_a * z_a;
 
-// Likelihood
-auto y = plate<Obs>(bernoulli(logistic(a[district] + beta * x)));
+// Data and likelihood
+auto district_idx = data(obs);
+auto x = data(obs);
+auto y = plate(bernoulli(logistic(a[district_idx] + beta * x)), obs);
 
 // One line to get posterior
-auto posterior = infer(y).bind(x = x_data, y = y_data);
+auto posterior = infer(y).bind(
+    x = indexed(x_data), district_idx = indexed(idx_data), y = indexed(y_data));
 
 // Gradients via symbol lookup
 auto g = posterior.grad();
 g[a_bar]     // scalar gradient
 g[sigma_a]   // scalar gradient (through log transform)
-g[z_a]       // std::span<const double> — indexed gradient family over Districts
+g[z_a]       // std::span<const double> — indexed gradient family over districts
 
 // Sample — init values in CONSTRAINED space (posterior handles inverse)
 auto samples = posterior.sample(
@@ -438,14 +450,14 @@ samples[logistic(a)]     // transformed quantities, no manual loops
 
 ### API Gaps to Close
 
-1. **RandomVars in expressions**: `a + sigma * z_b` without `.constrainedExpr()`/`.sym()`
-2. **`samples[expr]`**: Evaluate derived symbolic quantities across draws
+1. ~~**RandomVars in expressions**~~: ✓ Done (operators.h `requires` relaxed)
+2. ~~**`samples[expr]`**~~: ✓ Done (Phase 7.7 — evaluateIndexed across draws)
 3. **Constrained init**: `sample(config, {sigma = 0.5}, rng)` — not `sigma = log(0.5)`
 4. **Indexed gradient spans**: `grad[z_b]` → `span<const double>`, not manual offset/size
-5. **Data-dependent likelihoods**: `plate<Obs>(normal(mu, sigma))` with external covariates `x[i]`
-6. **Non-centered parameterization**: Built into plate notation
-7. **Ordered monotonic effects**: Simplex → cumulative transform
-8. **Varying effects syntax**: `a[district]` indexing into plates
+5. **Unified dim/plate API**: `dim()` objects replace empty struct tags; `plate(dist, dims...)` takes values not template params
+6. **Unified evaluator**: Merge `evaluate` and `evaluateIndexed` — scalar is nullary function, indexed is n-ary
+7. **Non-centered parameterization**: Built into plate notation
+8. **Ordered monotonic effects**: Simplex → cumulative transform
 
 ## Symbol-Lookup-Forward MCMC
 
@@ -540,10 +552,11 @@ constructs `Atom<get_id_t<T>, Free>` directly for compile-time lookup. BaseTermi
 uses `ctx.scalars[term]` for Free atoms. `constraints.h` no longer imported by any
 evaluator path.
 
-### MCMC containers bypass BinderPack
-ParameterState, GradientResult, Samples each roll their own type-to-index + flat array
-lookup. Loses heterogeneous return types, forces offset arithmetic, prevents matrix
-params from fitting naturally. Fix: unify on compressed-tuple symbolic lookup (phase 7).
+### ✓ Fixed: MCMC containers unified on SymbolicState/Samples
+Phase 7.7 deleted ParameterState and the old Samples<Params...>. The unified `Samples`
+class uses `SymbolicState` for per-draw access. Both scalar and indexed params flow
+through the same `TransformPack` → `DynamicDense` matrix path. Symbol-indexed lookup
+(`samples[alpha]`, `samples[expr]`, `draw[z_b]`) replaces manual offset arithmetic.
 
 ## Mathematical Direction
 
@@ -554,13 +567,42 @@ The symbol-lookup pattern extends naturally into deeper mathematics:
 - `grad(grad(f))[x, y]` — Hessian components (rank 2 tensor)
 - Indexed reductions: Sum, Product, LogSumExp
 
-**Level 1.5 (matrix algebra): Symbolic matrices unified with scalars**
-- `MatrixSymbol<Id, RowDim, ColDim, Structure>` with compile-time structure tags
-- `(A * B)[i, j]` decomposes to `SumOver<K>(A[i,k] * B[k,j])` — Einstein summation IS ReduceOver
-- `trace(A)`, `logDet(A)` — matrix→scalar boundary connects to existing expression system
-- `grad(f)[matrix_sym]` returns matrix gradient respecting structure
-- Cholesky, inverse, eigendecomposition in matrix3 (numeric backend)
-- See `matrix_algebra/README.md` for full plan (Track A numeric + Track B symbolic)
+**Level 1.5 (unified indexing): Named dimensions as function domains**
+
+All indexing — plates, matrices, tensors, data — is function application. A plate
+variable `z` isn't "an array indexed by g"; it's a function `z : Groups → ℝ`. This
+insight unifies the indexed and matrix systems into one algebra.
+
+Three operations cover everything:
+- **Define**: `plate(dist, dim)` creates `f : Dim → sample(dist)`. `data(dim)` creates
+  `f : Dim → ℝ` bound to observed values. Multi-dim: `plate(dist, rows, cols)`.
+- **Compose**: `z[idx]` is `z ∘ idx`. If `z : Groups → ℝ` and `idx : Obs → Groups`,
+  then `z ∘ idx : Obs → ℝ`. This replaces the special "gather" concept.
+- **Integrate**: `reduce(expr, dim, op)` eliminates an argument by folding over its
+  domain. Plate log-prob, matrix contraction, and marginalization are the same operation.
+
+Broadcasting is implicit domain extension — `x : Features → ℝ` lifts to
+`(Obs, Features) → ℝ` by ignoring the argument it doesn't depend on.
+
+Matrix multiply is compose + integrate:
+`C(i,j) = reduce(A(i,k) * B(k,j), k, sum)` — elementwise product broadcasts to
+`{i, j, k}`, reducing over `k` yields `{i, j}`.
+
+**Design changes from this unification:**
+- Replace empty struct dimension tags with `dim()` objects (unique type via
+  `decltype([] {})`). Size is runtime, determined by bound data, not the dim object.
+- `plate(dist, dims...)` takes dim values, not template parameters. Variadic dims
+  replace nested `plate<A>(plate<B>(dist))`.
+- `data(dim)` takes a dim value. Returns a bindable data placeholder.
+- One evaluator, not two — `evaluate` (scalar) and `evaluateIndexed` merge.
+  A scalar expression is a nullary function. The `reduce` node drives the loop.
+- `StaticDimIndexMap` is partial application — the current set of bound arguments
+  as the evaluator traverses nested reductions.
+- Opaque nodes (Cholesky, QR, solve) consume and produce dimensioned expressions
+  but call dense routines internally. They compose with the rest of the system
+  through shared dimension metadata.
+
+See `matrix_algebra/README.md` for numeric backend (Track A) and symbolic types (Track B).
 
 **Level 2: Tensor algebra for Riemannian methods**
 - Fisher information metric: `fisher(model)[x, y]`
@@ -572,8 +614,9 @@ The symbol-lookup pattern extends naturally into deeper mathematics:
 - Wedge products
 - Integration on manifolds
 
-For now, focus on Level 1 — it covers all practical MCMC needs. The design
-should not preclude Levels 2-3 but shouldn't over-engineer toward them.
+For now, focus on Levels 1 and 1.5 — they cover all practical MCMC and linear
+model needs. The design should not preclude Levels 2-3 but shouldn't over-engineer
+toward them.
 
 ## Extensibility Beyond Mathematics
 
@@ -618,8 +661,9 @@ at compile time, this framework isn't the right tool.
 | ~~Done~~ | ~~Relax operator `requires` clause~~ | ~~`operators.h:156`~~ |
 | ~~Done~~ | ~~Symbol-forward MCMC (phase 6)~~ | ~~`migration/phase6.md`~~ |
 | ~~Done~~ | ~~Decouple infrastructure from domain (phase 7)~~ | `migration/phase7.md` |
+| **Next** | Unified indexing: `dim()` objects, `plate(dist, dims...)`, merge evaluators | — |
 | **Next** | Matrix algebra: Track A (Cholesky, inverse in matrix3) | `matrix_algebra/track_a_numeric.md` |
-| **Later** | Matrix algebra: Track B (symbolic matrix types + ops) | `matrix_algebra/track_b_symbolic.md` |
+| **Later** | Matrix algebra: Track B (symbolic matrix types + ops via unified dim system) | `matrix_algebra/track_b_symbolic.md` |
 | **Later** | `Grad<Expr>` with typed rank via nesting | `migration/phase4.md` |
 | **Later** | MCMC diagnostics (ESS, R-hat) via `diag[alpha].ess` | — |
 | **Later** | Riemannian HMC with Fisher metric | — |

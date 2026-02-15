@@ -14,7 +14,7 @@ auto main() -> int {
   "SumOver is recognized by type trait"_test = [] {
     struct Obs {};
     Symbol<struct X> x;
-    auto sum = sumOver<Obs>(x);
+    auto sum = sumOver(x, Obs{});
 
     static_assert(is_sum_over_v<decltype(sum)>);
     static_assert(!is_sum_over_v<Symbol<struct X>>);
@@ -23,7 +23,7 @@ auto main() -> int {
   "SumOver satisfies Symbolic"_test = [] {
     struct Obs {};
     Symbol<struct X> x;
-    auto sum = sumOver<Obs>(x);
+    auto sum = sumOver(x, Obs{});
 
     static_assert(Symbolic<decltype(sum)>);
   };
@@ -36,7 +36,7 @@ auto main() -> int {
     struct Observations {};
     Symbol<struct Theta> theta;
 
-    auto sum = sumOver<Observations>(theta);
+    auto sum = sumOver(theta, Observations{});
 
     static_assert(is_sum_over_v<decltype(sum)>);
     static_assert(std::is_same_v<typename decltype(sum)::dim_tag, Observations>);
@@ -45,7 +45,7 @@ auto main() -> int {
   "SumOver stores expression"_test = [] {
     struct D {};
     Symbol<struct X> x;
-    auto sum = sumOver<D>(x);
+    auto sum = sumOver(x, D{});
     auto expr = sum.expr();
 
     static_assert(std::is_same_v<decltype(expr), Symbol<struct X>>);
@@ -72,7 +72,7 @@ auto main() -> int {
     Symbol<struct X> x;
     Symbol<struct Y> y;
 
-    auto sum = sumOver<D>(x);
+    auto sum = sumOver(x, D{});
     auto result = sum + y;
 
     static_assert(Symbolic<decltype(result)>);
@@ -84,7 +84,7 @@ auto main() -> int {
     Symbol<struct X> x;
     Symbol<struct Y> y;
 
-    auto sum = sumOver<D>(x);
+    auto sum = sumOver(x, D{});
     auto result = y + sum;
 
     static_assert(Symbolic<decltype(result)>);
@@ -97,8 +97,8 @@ auto main() -> int {
     Symbol<struct X> x;
     Symbol<struct Y> y;
 
-    auto sum1 = sumOver<D1>(x);
-    auto sum2 = sumOver<D2>(y);
+    auto sum1 = sumOver(x, D1{});
+    auto sum2 = sumOver(y, D2{});
     auto result = sum1 + sum2;
 
     static_assert(Symbolic<decltype(result)>);
@@ -115,7 +115,7 @@ auto main() -> int {
     Symbol<struct Y> y;
 
     auto expr = x * y;
-    auto sum = sumOver<D>(expr);
+    auto sum = sumOver(expr, D{});
 
     static_assert(is_sum_over_v<decltype(sum)>);
     static_assert(is_expression_v<typename decltype(sum)::expr_type>);

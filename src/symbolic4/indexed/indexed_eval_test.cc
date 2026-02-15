@@ -63,7 +63,7 @@ auto main() -> int {
     Sym x;
 
     // Sum of x[i] for i in [0, 3)
-    auto sum_expr = sumOver<Obs>(x);
+    auto sum_expr = sumOver(x, Obs{});
 
     std::vector<double> data = {1.0, 2.0, 3.0};
     IndexedBinding<Sym, 1> binding{std::span<const double>(data)};
@@ -80,7 +80,7 @@ auto main() -> int {
     Symbol<struct A> a;
 
     // Σᵢ (x[i] + a)
-    auto sum_expr = sumOver<Obs>(x + a);
+    auto sum_expr = sumOver(x + a, Obs{});
 
     std::vector<double> data = {1.0, 2.0, 3.0};
     IndexedBinding<XSym, 1> x_bind{std::span<const double>(data)};
@@ -97,7 +97,7 @@ auto main() -> int {
     Symbol<struct Scale> scale;
 
     // Σᵢ (x[i] * scale)
-    auto sum_expr = sumOver<Obs>(x * scale);
+    auto sum_expr = sumOver(x * scale, Obs{});
 
     std::vector<double> data = {1.0, 2.0, 3.0};
     IndexedBinding<XSym, 1> x_bind{std::span<const double>(data)};
@@ -118,7 +118,7 @@ auto main() -> int {
     YSym y;
 
     // Nested sum: Σ_c Σ_y y[c,y]
-    auto sum_expr = sumOver<Countries>(sumOver<Years>(y));
+    auto sum_expr = sumOver(sumOver(y, Years{}), Countries{});
 
     // 2 countries x 3 years
     std::vector<double> data = {1.0, 2.0, 3.0, 4.0, 5.0, 6.0};
@@ -139,7 +139,7 @@ auto main() -> int {
     XSym x;
 
     // Σᵢ (x[i] - 1.0)
-    auto sum_expr = sumOver<Obs>(x - 1.0_c);
+    auto sum_expr = sumOver(x - 1.0_c, Obs{});
 
     std::vector<double> data = {2.0, 3.0, 4.0};
     IndexedBinding<XSym, 1> x_bind{std::span<const double>(data)};
@@ -190,7 +190,7 @@ auto main() -> int {
     XSym x;
 
     // Σᵢ x[i]²
-    auto sum_expr = sumOver<Obs>(x * x);
+    auto sum_expr = sumOver(x * x, Obs{});
 
     std::vector<double> data = {1.0, 2.0, 3.0};
     IndexedBinding<XSym, 1> x_bind{std::span<const double>(data)};
@@ -207,7 +207,7 @@ auto main() -> int {
     Symbol<struct Sigma> sigma;
 
     // Σᵢ x[i] / sigma
-    auto sum_expr = sumOver<Obs>(x / sigma);
+    auto sum_expr = sumOver(x / sigma, Obs{});
 
     std::vector<double> data = {2.0, 4.0, 6.0};
     IndexedBinding<XSym, 1> x_bind{std::span<const double>(data)};

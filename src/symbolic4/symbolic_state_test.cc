@@ -44,7 +44,7 @@ auto main() -> int {
     struct Countries {};
 
     auto alpha = normal(0_c, 10_c);
-    auto theta = plate<Countries>(beta(2.0_c, 3.0_c));
+    auto theta = plate(beta(2.0_c, 3.0_c), Countries{});
 
     auto alpha_spec = ScalarParamSpec<decltype(alpha), Unconstrained<decltype(alpha)>>{
         Unconstrained<decltype(alpha)>{alpha}};
@@ -100,7 +100,7 @@ auto main() -> int {
   "SymbolicState const access returns const span"_test = [] {
     struct Groups {};
 
-    auto theta = plate<Groups>(normal(0.0_c, 1.0_c));
+    auto theta = plate(normal(0.0_c, 1.0_c), Groups{});
 
     auto theta_spec = IndexedParamSpec<decltype(theta),
                                         Unconstrained<decltype(theta)>,

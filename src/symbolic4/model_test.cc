@@ -135,7 +135,7 @@ auto main() -> int {
     struct Countries {};
 
     auto alpha = gamma(2.0_c, 0.1_c);
-    auto theta = plate<Countries>(beta(alpha, 3.0_c));
+    auto theta = plate(beta(alpha, 3.0_c), Countries{});
 
     // Scalar-only model
     auto m1 = model(alpha);
@@ -151,13 +151,13 @@ auto main() -> int {
 
     auto alpha = gamma(2.0_c, 0.1_c);
     auto beta_param = gamma(2.0_c, 0.1_c);
-    auto theta = plate<Countries>(beta(alpha, beta_param));
+    auto theta = plate(beta(alpha, beta_param), Countries{});
 
     auto m = model(alpha, beta_param, theta);
 
     // Build posterior with dimension
     auto posterior = m.posterior()
-        .withDimension<Countries>(5)
+        .withDimension(Countries{}, 5)
         .build();
 
     // State: [z_alpha, z_beta, z_theta[0], ..., z_theta[4]]
@@ -182,11 +182,11 @@ auto main() -> int {
     struct Countries {};
 
     auto alpha = gamma(2.0_c, 0.1_c);
-    auto theta = plate<Countries>(beta(alpha, 3.0_c));
+    auto theta = plate(beta(alpha, 3.0_c), Countries{});
 
     auto m = model(alpha, theta);
     auto posterior = m.posterior()
-        .withDimension<Countries>(3)
+        .withDimension(Countries{}, 3)
         .build();
 
     // z = [log(2), 0, 0, 0] -> x = [2, 0.5, 0.5, 0.5]

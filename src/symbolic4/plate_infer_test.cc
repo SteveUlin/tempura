@@ -20,7 +20,7 @@ auto main() -> int {
 
   "data<Obs>() creates IndexedData"_test = [] {
     struct Obs {};
-    auto x = data<Obs>();
+    auto x = data(Obs{});
 
     // Verify it's an IndexedData type
     static_assert(is_indexed_data_v<decltype(x)>);
@@ -28,7 +28,7 @@ auto main() -> int {
 
   "data<Obs>() converts to IndexedSymbol for arithmetic"_test = [] {
     struct Obs {};
-    auto x = data<Obs>();
+    auto x = data(Obs{});
 
     // IndexedData::sym() returns the IndexedSymbol for use in expressions
     auto expr = x.sym() + 1.0_c;
@@ -43,13 +43,13 @@ auto main() -> int {
 
     auto alpha = normal(0_c, 10_c);
     auto beta = normal(0_c, 5_c);
-    auto x = data<Obs>();
+    auto x = data(Obs{});
     auto sigma = halfNormal(2_c);
 
     // Create plate with data-dependent mean
     // Use *alpha, *beta, *sigma to get constrained expressions (using freeSym())
     // x.sym() is correct since x is IndexedData, not RandomVar
-    auto y = plate<Obs>(normal(*alpha + *beta * x.sym(), *sigma));
+    auto y = plate(normal(*alpha + *beta * x.sym(), *sigma), Obs{});
 
     // Verify it's an indexed random variable
     static_assert(is_indexed_random_var_v<decltype(y)>);
@@ -63,13 +63,13 @@ auto main() -> int {
     struct Obs {};
 
     auto alpha = normal(0_c, 10_c);
-    auto y = plate<Obs>(normal(alpha, 1.0_c));
+    auto y = plate(normal(alpha, 1.0_c), Obs{});
 
     // infer() should return PlateTransformedPosteriorBuilder for indexed params
     auto builder = infer(alpha, y);
 
     // Should have withDimension method
-    auto builder2 = builder.withDimension<Obs>(10);
+    auto builder2 = builder.withDimension(Obs{}, 10);
     (void)builder2;
   };
 
@@ -97,7 +97,7 @@ auto main() -> int {
 
     // Use operator* to get constrained expressions (exp(z) for positive params)
     // This uses the unconstrained symbol that bindings know about
-    auto y = plate<Obs>(normal(*alpha, *sigma));
+    auto y = plate(normal(*alpha, *sigma), Obs{});
 
     std::vector<double> y_data = {2.1, 4.0, 5.9};
 
@@ -106,7 +106,7 @@ auto main() -> int {
 
     // Add dimension and observe
     auto posterior = builder
-        .withDimension<Obs>(3)
+        .withDimension(Obs{}, 3)
         .observe(y = indexed(y_data));
 
     std::cout << "Plate test stateDim: " << posterior.stateDim() << "\n";
@@ -133,9 +133,9 @@ auto main() -> int {
     auto alpha = normal(0_c, 10_c);
     auto beta = normal(0_c, 5_c);
     auto sigma = halfNormal(2_c);
-    auto x = data<Obs>();
+    auto x = data(Obs{});
     // Use *alpha, *beta, *sigma for constrained expressions; x.sym() for IndexedData
-    auto y = plate<Obs>(normal(*alpha + *beta * x.sym(), *sigma));
+    auto y = plate(normal(*alpha + *beta * x.sym(), *sigma), Obs{});
 
     std::vector<double> x_data = {1.0, 2.0, 3.0};
     std::vector<double> y_data = {2.0, 4.0, 6.0};
@@ -183,7 +183,7 @@ auto main() -> int {
 
     auto alpha = normal(0_c, 10_c);
     auto sigma = halfNormal(2_c);
-    auto y = plate<Obs>(normal(*alpha, *sigma));
+    auto y = plate(normal(*alpha, *sigma), Obs{});
 
     // Get the log-prob expression
     auto lp_expr = collectLogProbs(alpha, sigma, y);
@@ -214,7 +214,7 @@ auto main() -> int {
     // The builder stores symbols internally - let's see if the types match
     // by doing a simpler test: create posterior and test with direct bindings
 
-    auto posterior = builder.withDimension<Obs>(3).observe(y_binding);
+    auto posterior = builder.withDimension(Obs{}, 3).observe(y_binding);
     std::cout << "\nPosterior stateDim: " << posterior.stateDim() << "\n";
   };
 
@@ -224,7 +224,7 @@ auto main() -> int {
 
     auto alpha = normal(0_c, 10_c);
     auto sigma = halfNormal(2_c);
-    auto y = plate<Obs>(normal(*alpha, *sigma));
+    auto y = plate(normal(*alpha, *sigma), Obs{});
 
     auto lp_expr = collectLogProbs(alpha, sigma, y);
     std::vector<double> y_data = {1.0, 2.0, 3.0};
@@ -255,7 +255,7 @@ auto main() -> int {
 
     // Now test via PlateTransformedPosterior
     auto posterior = infer(alpha, sigma, y)
-        .withDimension<Obs>(3)
+        .withDimension(Obs{}, 3)
         .observe(y = indexed(y_data));
 
     double lp3 = posterior.logProb(z);
@@ -379,13 +379,13 @@ auto main() -> int {
     auto alpha = normal(0_c, 10_c);
     auto sigma = halfNormal(2_c);
     // Use *alpha, *sigma to get constrained expressions
-    auto y = plate<Obs>(normal(*alpha, *sigma));
+    auto y = plate(normal(*alpha, *sigma), Obs{});
 
     std::vector<double> y_data = {1.0, 2.0, 3.0};
 
     // .observe() returns PlateTransformedPosterior directly, no .build() needed
     auto posterior = infer(alpha, sigma, y)
-        .withDimension<Obs>(3)
+        .withDimension(Obs{}, 3)
         .observe(y = indexed(y_data));
 
     // Test gradients at some point
@@ -437,11 +437,11 @@ auto main() -> int {
     //   y[i] ~ Normal(theta[i], 1)
     auto mu = normal(0_c, 5_c);
     auto sigma = exponential(1_c);
-    auto z = plate<Groups>(normal(0.0_c, 1.0_c));
+    auto z = plate(normal(0.0_c, 1.0_c), Groups{});
 
     // Non-centered: theta = mu + sigma * z (used inline in likelihood)
     auto theta_expr = mu + sigma * z;
-    auto y = plate<Groups>(normal(theta_expr, 1.0_c));
+    auto y = plate(normal(theta_expr, 1.0_c), Groups{});
 
     constexpr std::size_t kN = 5;
     std::vector<double> y_data = {1.2, 2.3, 0.8, 1.5, 2.0};
@@ -490,13 +490,13 @@ auto main() -> int {
     //   k[L] ~ Binomial(n[L], p[L])
     auto a = normal(-2_c, 1_c);
     auto sigma = exponential(1_c);
-    auto z_b = plate<Countries>(normal(0.0_c, 1.0_c));
+    auto z_b = plate(normal(0.0_c, 1.0_c), Countries{});
 
-    auto n = data<Countries>();
+    auto n = data(Countries{});
 
     // p = sigmoid(a + sigma * z_b)
     auto p = 1_c / (1_c + exp(-(a + sigma * z_b)));
-    auto k = plate<Countries>(binomial(n, p));
+    auto k = plate(binomial(n, p), Countries{});
 
     // Small test data: 4 countries
     constexpr std::size_t kNumCountries = 4;

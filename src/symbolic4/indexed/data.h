@@ -71,23 +71,29 @@ template <typename T>
 concept IsIndexedDataType = is_indexed_data_v<T>;
 
 // ============================================================================
-// Factory: data<DimTag>() - Create indexed data placeholder
+// data(dims...) - Value-based data factories
 // ============================================================================
+//
+// Usage:
+//   auto obs = dim();
+//   auto n = data(obs);              // 1D data placeholder
+//   auto X = data(obs, features);    // 2D data (design matrix)
+//
+// Bare struct tags still work: data(Countries{})
 
-template <typename DimTag, typename Id = decltype([] {})>
-constexpr auto data() {
-  return IndexedData<Id, DimTag>{};
+template <typename Id = decltype([] {}), typename D>
+constexpr auto data(D) {
+  return IndexedData<Id, D>{};
 }
 
-// For multiple dimensions
-template <typename Dim1, typename Dim2, typename Id = decltype([] {})>
-constexpr auto data() {
-  return IndexedData<Id, Dim1, Dim2>{};
+template <typename Id = decltype([] {}), typename D1, typename D2>
+constexpr auto data(D1, D2) {
+  return IndexedData<Id, D1, D2>{};
 }
 
-template <typename Dim1, typename Dim2, typename Dim3, typename Id = decltype([] {})>
-constexpr auto data() {
-  return IndexedData<Id, Dim1, Dim2, Dim3>{};
+template <typename Id = decltype([] {}), typename D1, typename D2, typename D3>
+constexpr auto data(D1, D2, D3) {
+  return IndexedData<Id, D1, D2, D3>{};
 }
 
 // ============================================================================

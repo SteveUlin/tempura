@@ -27,7 +27,7 @@ auto main() -> int {
   };
 
   "SumOver alias is backwards compatible"_test = [&] {
-    auto sum = sumOver<Obs>(x);
+    auto sum = sumOver(x, Obs{});
     static_assert(is_sum_over_v<decltype(sum)>);
     static_assert(is_reduce_over_v<decltype(sum)>);
     static_assert(Symbolic<decltype(sum)>);
@@ -39,7 +39,7 @@ auto main() -> int {
   };
 
   "ProdReduce is not SumOver"_test = [&] {
-    auto prod = prodOver<Obs>(x);
+    auto prod = prodOver(x, Obs{});
     static_assert(is_reduce_over_v<decltype(prod)>);
     static_assert(!is_sum_over_v<decltype(prod)>);
   };
@@ -76,10 +76,10 @@ auto main() -> int {
   // ===========================================================================
 
   "factory functions create correct types"_test = [&] {
-    auto s = sumOver<Obs>(x);
-    auto p = prodOver<Obs>(x);
-    auto m = maxOver<Obs>(x);
-    auto l = logSumExpOver<Obs>(x);
+    auto s = sumOver(x, Obs{});
+    auto p = prodOver(x, Obs{});
+    auto m = maxOver(x, Obs{});
+    auto l = logSumExpOver(x, Obs{});
 
     static_assert(isSame<reduce_over_op_t<decltype(s)>, SumReduce>);
     static_assert(isSame<reduce_over_op_t<decltype(p)>, ProdReduce>);
@@ -92,7 +92,7 @@ auto main() -> int {
   // ===========================================================================
 
   "rebuild preserves ReduceOp and DimTag"_test = [&] {
-    auto sum = sumOver<Obs>(x);
+    auto sum = sumOver(x, Obs{});
     auto rebuilt = sum.rebuild(y);
 
     static_assert(is_sum_over_v<decltype(rebuilt)>);
@@ -106,7 +106,7 @@ auto main() -> int {
   // ===========================================================================
 
   "ReduceOver arithmetic operators"_test = [&] {
-    auto sum = sumOver<Obs>(x);
+    auto sum = sumOver(x, Obs{});
 
     // ReduceOver op Symbolic
     auto a = sum + y;
@@ -134,8 +134,8 @@ auto main() -> int {
   };
 
   "ReduceOver + ReduceOver"_test = [&] {
-    auto s1 = sumOver<Obs>(x);
-    auto s2 = prodOver<Groups>(y);
+    auto s1 = sumOver(x, Obs{});
+    auto s2 = prodOver(y, Groups{});
 
     auto a = s1 + s2;
     auto b = s1 - s2;
@@ -152,7 +152,7 @@ auto main() -> int {
   // ===========================================================================
 
   "differentiate distributes through SumOver"_test = [&] {
-    auto sum = sumOver<Obs>(x * x);
+    auto sum = sumOver(x * x, Obs{});
     auto result = differentiate(sum, x);
 
     // d/dx[Σ(x²)] = Σ(2x) = SumOver<Obs, x + x>

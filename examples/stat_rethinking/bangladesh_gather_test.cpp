@@ -95,7 +95,7 @@ Testing cross-plate indexing with gather():
   IndexedBinding<decltype(idx), 1> idx_bind{std::span<const double>(district_idx)};
 
   // Sum of gathered values (should equal sum of a_true[district_idx[i]])
-  auto sum_gathered = sumOver<Obs>(gathered);
+  auto sum_gathered = sumOver(gathered, Obs{});
   double sum_val = evaluateIndexed(sum_gathered, a_bind, idx_bind);
 
   double expected_sum = 0.0;
@@ -114,7 +114,7 @@ Testing cross-plate indexing with gather():
   std::println("\n--- Test 2: Gather with expression ---");
 
   Symbol<struct Scale> scale;
-  auto scaled_gathered = sumOver<Obs>(gather(a * scale, idx));
+  auto scaled_gathered = sumOver(gather(a * scale, idx), Obs{});
   double scaled_val = evaluateIndexed(scaled_gathered, a_bind, idx_bind, scale = 2.0);
   std::println("Sum of scaled gathered: {:.4f} (expected: {:.4f})",
                scaled_val, expected_sum * 2.0);
@@ -128,7 +128,7 @@ Testing cross-plate indexing with gather():
   // f(mu) = SumOver<Obs>(gather(a + mu, idx))
   // df/dmu = number of observations (since d(a+mu)/dmu = 1 for each)
   Symbol<struct Mu> mu;
-  auto f_mu = sumOver<Obs>(gather(a + mu, idx));
+  auto f_mu = sumOver(gather(a + mu, idx), Obs{});
   auto df_dmu = diff(f_mu, mu);
 
   double grad_val = evaluateIndexed(df_dmu, a_bind, idx_bind, mu = 0.0);
@@ -158,7 +158,7 @@ Testing cross-plate indexing with gather():
   // log-lik ≈ sum_i [y[i] * a[idx[i]] - log(1 + exp(a[idx[i]]))]
   // For simplicity, just compute sum_i [y[i] * a[idx[i]]]
   IndexedSymbol<struct YId, Obs> y;
-  auto weighted_sum = sumOver<Obs>(y * gather(a, idx));
+  auto weighted_sum = sumOver(y * gather(a, idx), Obs{});
 
   IndexedBinding<decltype(y), 1> y_bind{std::span<const double>(y_data)};
 

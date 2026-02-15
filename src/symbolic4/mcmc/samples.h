@@ -1,7 +1,6 @@
 #pragma once
 
 #include <algorithm>
-#include <array>
 #include <cassert>
 #include <cmath>
 #include <cstddef>
@@ -16,179 +15,55 @@
 #include "matrix3/matrix.h"
 #include "symbolic4/distributions/indexed_node.h"
 #include "symbolic4/distributions/random_var.h"
-#include "symbolic4/interpreter/eval.h"
-#include "symbolic4/mcmc/state.h"
+#include "symbolic4/indexed/indexed_eval.h"
 #include "symbolic4/symbolic_state.h"
 
 // ============================================================================
-// samples.h - Samples container with symbol-based access
+// samples.h - Unified MCMC samples container
 // ============================================================================
 //
-// Stores MCMC draws and provides type-safe access by parameter symbol.
+// Samples<SymsTuple, SpecsTuple> stores MCMC draws in a flat DynamicDense matrix
+// (draws × state_dim) with symbol-indexed access. Handles both scalar and indexed
+// parameters uniformly — TransformPack treats size=1 and size=N the same way.
 //
 // Usage:
-//   Samples<decltype(alpha), decltype(beta)> samples;
-//   samples.push_back({1.0, 2.0});
-//   samples.push_back({1.1, 2.1});
+//   auto samples = posterior.sample(config, init, rng);
 //
-//   // Access all draws for one parameter (for statistics)
-//   auto alpha_draws = samples[alpha];  // vector<double>
-//   double m = mean(alpha_draws);
+//   // Access all draws for one parameter
+//   auto alpha_draws = samples[alpha];     // vector<double> (scalar)
+//   auto theta_draws = samples[theta];     // DynamicDense (indexed: draws × groups)
 //
-//   // Access single draw
-//   auto draw = samples[0];  // ParameterState
-//   double a = draw[alpha];
+//   // Evaluate derived expressions across draws
+//   auto logit_p = samples[logistic(a + sigma * z)];
+//
+//   // Access single draw as SymbolicState
+//   auto draw = samples[0];
+//   double a_val = draw[alpha];
 //
 //   // Iteration
 //   for (const auto& draw : samples) {
-//     std::cout << draw[alpha] << "\n";
+//     double a_val = draw[alpha];
 //   }
 //
 // ============================================================================
 
 namespace tempura::symbolic4 {
 
-// ============================================================================
-// Samples - Container for MCMC draws with symbol-based access
-// ============================================================================
-
-template <typename... Params>
-class Samples {
- public:
-  static constexpr std::size_t N = sizeof...(Params);
-  using StateType = ParameterState<Params...>;
-  using ArrayType = std::array<double, N>;
-
-  // Add a draw
-  void push_back(const ArrayType& draw) { draws_.push_back(draw); }
-
-  void reserve(std::size_t n) { draws_.reserve(n); }
-
-  auto size() const -> std::size_t { return draws_.size(); }
-
-  auto empty() const -> bool { return draws_.empty(); }
-
-  // Access all values for one parameter (for statistics)
-  template <typename P>
-    requires IsRandomVar<P>
-  auto operator[](const P&) const -> std::vector<double> {
-    constexpr std::size_t idx = StateType::template indexOfParam<P>();
-    static_assert(idx < N, "Parameter not found in Samples");
-
-    std::vector<double> result;
-    result.reserve(draws_.size());
-    for (const auto& d : draws_) {
-      result.push_back(d[idx]);
-    }
-    return result;
-  }
-
-  // Evaluate a symbolic expression across all draws
-  // Usage: samples[alpha + beta] returns vector<double> of per-draw evaluations
-  template <Symbolic E>
-  auto operator[](E expr) const -> std::vector<double> {
-    std::vector<double> result;
-    result.reserve(draws_.size());
-    for (std::size_t i = 0; i < draws_.size(); ++i) {
-      auto bindings = drawBindings(i, std::index_sequence_for<Params...>{});
-      result.push_back(evaluate(expr, bindings));
-    }
-    return result;
-  }
-
-  // Access single draw as ParameterState
-  auto operator[](std::size_t i) const -> StateType {
-    return StateType{draws_[i]};
-  }
-
-  // Raw access to underlying storage
-  auto draws() const -> const std::vector<ArrayType>& { return draws_; }
-
-  // -------------------------------------------------------------------------
-  // Iterator support - iterates over draws as ParameterState
-  // -------------------------------------------------------------------------
-
-  class Iterator {
-   public:
-    using iterator_category = std::forward_iterator_tag;
-    using difference_type = std::ptrdiff_t;
-    using value_type = StateType;
-    using pointer = void;  // No pointer type for proxy iterator
-    using reference = StateType;  // Returns by value (proxy)
-
-    Iterator() = default;
-    explicit Iterator(typename std::vector<ArrayType>::const_iterator it) : it_{it} {}
-
-    auto operator*() const -> StateType { return StateType{*it_}; }
-
-    auto operator++() -> Iterator& {
-      ++it_;
-      return *this;
-    }
-
-    auto operator++(int) -> Iterator {
-      Iterator tmp = *this;
-      ++it_;
-      return tmp;
-    }
-
-    auto operator==(const Iterator& other) const -> bool { return it_ == other.it_; }
-    auto operator!=(const Iterator& other) const -> bool { return it_ != other.it_; }
-
-   private:
-    typename std::vector<ArrayType>::const_iterator it_;
-  };
-
-  auto begin() const -> Iterator { return Iterator{draws_.begin()}; }
-  auto end() const -> Iterator { return Iterator{draws_.end()}; }
-
- private:
-  std::vector<ArrayType> draws_;
-
-  // Build bindings for draw i: bind each param's Free symbol to the stored
-  // constrained value. RandomVar expressions use plain Symbol<Id> atoms,
-  // so binding constrained values directly is correct.
-  template <std::size_t... Is>
-  auto drawBindings(std::size_t i, std::index_sequence<Is...>) const {
-    return BinderPack{(typename Params::symbol_type{} = draws_[i][Is])...};
-  }
-};
-
-// ============================================================================
-// DynamicSamples - Samples container for models with indexed latent params
-// ============================================================================
-//
-// For models where parameter dimensions are determined at runtime (plate models),
-// this container uses matrix3::DynamicDense for efficient storage.
-//
-// Usage:
-//   DynamicSamples<SymbolsTuple, SpecsTuple> samples(symbols, specs, state_dim);
-//   samples.push_back(draw_span);
-//
-//   // Scalar param: returns vector<double> of all draws
-//   auto mu_draws = samples[mu];
-//
-//   // Indexed param: returns DynamicDense<double> (draws × groups)
-//   auto theta_draws = samples[theta];  // matrix: num_draws × group_size
-//
-// ============================================================================
-
 namespace samples_detail {
 
 // Get the symbol type used in the samples tuple for a parameter
-// Both scalar and indexed params use symbol_type directly.
 template <typename P>
 using ParamSymbolType = typename P::symbol_type;
 
 }  // namespace samples_detail
 
 template <typename SymsTuple, typename SpecsTuple>
-class DynamicSamples {
+class Samples {
  public:
-  using SymbolsTuple = SymsTuple;  // Expose for type introspection
+  using SymbolsTuple = SymsTuple;
   static constexpr std::size_t NumSlots = std::tuple_size_v<SymbolsTuple>;
 
-  DynamicSamples(SymbolsTuple symbols, SpecsTuple specs, std::size_t state_dim)
+  Samples(SymbolsTuple symbols, SpecsTuple specs, std::size_t state_dim)
       : symbols_{symbols}, specs_{specs}, state_dim_{state_dim}, data_{0, state_dim} {
     computeOffsets();
   }
@@ -210,7 +85,7 @@ class DynamicSamples {
   auto operator[](const P& /*p*/) const -> std::vector<double> {
     using SymType = typename P::symbol_type;
     constexpr std::size_t idx = symbolic_state_detail::SymbolIndex<SymType, SymbolsTuple>::value;
-    static_assert(idx < NumSlots, "Parameter not found in DynamicSamples");
+    static_assert(idx < NumSlots, "Parameter not found in Samples");
 
     std::size_t offset = offsets_[idx];
     std::vector<double> result;
@@ -225,10 +100,9 @@ class DynamicSamples {
   template <typename P>
     requires IsIndexedRandomVar<P>
   auto operator[](const P& /*p*/) const -> matrix3::DynamicDense<double> {
-    // IndexedRandomVar's symbol_type is IndexedSymbol<Id, Dims...>
     using SymType = typename P::symbol_type;
     constexpr std::size_t idx = symbolic_state_detail::SymbolIndex<SymType, SymbolsTuple>::value;
-    static_assert(idx < NumSlots, "Parameter not found in DynamicSamples");
+    static_assert(idx < NumSlots, "Parameter not found in Samples");
 
     std::size_t offset = offsets_[idx];
     std::size_t param_size = std::get<idx>(specs_).size();
@@ -243,6 +117,32 @@ class DynamicSamples {
     return result;
   }
 
+  // Evaluate a symbolic expression across all draws.
+  // Binds all params to each draw's values, then evaluates with evaluateIndexed
+  // to support expressions containing ReduceOver.
+  template <Symbolic E>
+  auto operator[](E expr) const -> std::vector<double> {
+    std::vector<double> result;
+    result.reserve(data_.rows());
+    for (std::size_t i = 0; i < data_.rows(); ++i) {
+      auto bindings = drawBindings(i, std::make_index_sequence<NumSlots>{});
+      result.push_back(evaluateIndexed(expr, bindings));
+    }
+    return result;
+  }
+
+  // Access a single draw as a SymbolicState (queryable by symbol)
+  using StateType = SymbolicState<SymbolsTuple, SpecsTuple>;
+
+  auto operator[](std::size_t i) const -> StateType {
+    assert(i < data_.rows());
+    std::vector<double> row(state_dim_);
+    for (std::size_t j = 0; j < state_dim_; ++j) {
+      row[j] = data_[i, j];
+    }
+    return StateType{symbols_, specs_, std::move(row)};
+  }
+
   // Raw access to underlying storage
   auto data() const -> const matrix3::DynamicDense<double>& { return data_; }
   auto data() -> matrix3::DynamicDense<double>& { return data_; }
@@ -255,7 +155,7 @@ class DynamicSamples {
   auto offset(const P& /*p*/) const -> std::size_t {
     using SymType = samples_detail::ParamSymbolType<P>;
     constexpr std::size_t idx = symbolic_state_detail::SymbolIndex<SymType, SymbolsTuple>::value;
-    static_assert(idx < NumSlots, "Parameter not found in DynamicSamples");
+    static_assert(idx < NumSlots, "Parameter not found in Samples");
     return offsets_[idx];
   }
 
@@ -264,9 +164,41 @@ class DynamicSamples {
   auto paramSize(const P& /*p*/) const -> std::size_t {
     using SymType = samples_detail::ParamSymbolType<P>;
     constexpr std::size_t idx = symbolic_state_detail::SymbolIndex<SymType, SymbolsTuple>::value;
-    static_assert(idx < NumSlots, "Parameter not found in DynamicSamples");
+    static_assert(idx < NumSlots, "Parameter not found in Samples");
     return std::get<idx>(specs_).size();
   }
+
+  // -----------------------------------------------------------------------
+  // Iterator support — yields SymbolicState per draw
+  // -----------------------------------------------------------------------
+
+  class Iterator {
+   public:
+    using iterator_category = std::forward_iterator_tag;
+    using difference_type = std::ptrdiff_t;
+    using value_type = StateType;
+    using pointer = void;
+    using reference = StateType;  // Returns by value (proxy)
+
+    Iterator() = default;
+    Iterator(const Samples* samples, std::size_t row)
+        : samples_{samples}, row_{row} {}
+
+    auto operator*() const -> StateType { return (*samples_)[row_]; }
+
+    auto operator++() -> Iterator& { ++row_; return *this; }
+    auto operator++(int) -> Iterator { auto tmp = *this; ++row_; return tmp; }
+
+    auto operator==(const Iterator& other) const -> bool { return row_ == other.row_; }
+    auto operator!=(const Iterator& other) const -> bool { return row_ != other.row_; }
+
+   private:
+    const Samples* samples_ = nullptr;
+    std::size_t row_ = 0;
+  };
+
+  auto begin() const -> Iterator { return Iterator{this, 0}; }
+  auto end() const -> Iterator { return Iterator{this, data_.rows()}; }
 
  private:
   SymbolsTuple symbols_;
@@ -284,12 +216,55 @@ class DynamicSamples {
     std::size_t running = 0;
     ((offsets_[Is] = running, running += std::get<Is>(specs_).size()), ...);
   }
+
+  // Build bindings for draw i: scalar params get sym = val,
+  // indexed params get IndexedBinding<Sym, 1>{span into row buffer}.
+  template <std::size_t... Is>
+  auto drawBindings(std::size_t i, std::index_sequence<Is...>) const {
+    row_buf_.resize(state_dim_);
+    for (std::size_t j = 0; j < state_dim_; ++j) {
+      row_buf_[j] = data_[i, j];
+    }
+    auto binding_tuple = std::tuple_cat(bindSlot<Is>()...);
+    return tupleToBinderPack(binding_tuple);
+  }
+
+  template <std::size_t I>
+  auto bindSlot() const {
+    using SpecType = std::decay_t<std::tuple_element_t<I, SpecsTuple>>;
+    using SymType = std::decay_t<std::tuple_element_t<I, SymbolsTuple>>;
+    if constexpr (!SpecType::is_indexed) {
+      return std::make_tuple(SymType{} = row_buf_[offsets_[I]]);
+    } else {
+      std::size_t n = std::get<I>(specs_).size();
+      return std::make_tuple(
+          IndexedBinding<SymType, 1>{std::span<const double>(row_buf_.data() + offsets_[I], n)});
+    }
+  }
+
+  template <typename... Ts>
+  static auto tupleToBinderPack(const std::tuple<Ts...>& t) {
+    return std::apply([](const auto&... bs) { return BinderPack{bs...}; }, t);
+  }
+
+  static auto tupleToBinderPack(const std::tuple<>&) { return BinderPack<>{}; }
+
+  mutable std::vector<double> row_buf_;
 };
+
+// Backward compatibility alias
+template <typename SymsTuple, typename SpecsTuple>
+using DynamicSamples = Samples<SymsTuple, SpecsTuple>;
 
 // Factory function
 template <typename SymbolsTuple, typename SpecsTuple>
+auto makeSamples(SymbolsTuple symbols, SpecsTuple specs, std::size_t state_dim) {
+  return Samples<SymbolsTuple, SpecsTuple>{symbols, specs, state_dim};
+}
+
+template <typename SymbolsTuple, typename SpecsTuple>
 auto makeDynamicSamples(SymbolsTuple symbols, SpecsTuple specs, std::size_t state_dim) {
-  return DynamicSamples<SymbolsTuple, SpecsTuple>{symbols, specs, state_dim};
+  return makeSamples(symbols, specs, state_dim);
 }
 
 // ============================================================================

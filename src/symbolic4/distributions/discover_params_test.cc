@@ -28,7 +28,7 @@ auto main() -> int {
 
     auto alpha = normal(0.0, 10.0);
     auto sigma = halfNormal(2.0);
-    auto y = plate<Obs>(normal(alpha, sigma));
+    auto y = plate(normal(alpha, sigma), Obs{});
 
     auto discovered = discoverParams(y);
 

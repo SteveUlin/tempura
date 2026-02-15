@@ -44,7 +44,8 @@ constexpr auto buildNestedSumOver(Expr e) {
 // Recursive case: wrap in SumOver for first dim, recurse for rest
 template <typename First, typename... Rest, Symbolic Expr>
 constexpr auto buildNestedSumOver(Expr e) {
-  return sumOver<First>(buildNestedSumOver<Rest...>(e));
+  auto inner = buildNestedSumOver<Rest...>(e);
+  return ReduceOver<SumReduce, First, decltype(inner)>{inner};
 }
 
 }  // namespace detail
@@ -148,41 +149,6 @@ concept IsIndexedRandomVar = requires(const T& node) {
 };
 
 // ============================================================================
-// plate<DimTag>() - Wrap a RandomVar into an IndexedRandomVar
-// ============================================================================
-//
-// Single-plate usage:
-//   auto theta = plate<Countries>(beta(2_c, 3_c));
-//
-// Creates IndexedRandomVar with dims_list = TypeList<Countries>
-
-template <typename DimTag, typename Id = decltype([] {}), IsRandomVar RV>
-  requires (!IsIndexedRandomVar<RV>)
-constexpr auto plate(const RV& rv) {
-  using Dist = typename RV::dist_type;
-  return IndexedRandomVar<Dist, Id, DimTag>{rv.dist()};
-}
-
-// ============================================================================
-// plate<DimTag>() - Wrap an IndexedRandomVar (nested plates)
-// ============================================================================
-//
-// Nested-plate usage:
-//   auto y = plate<Years>(plate<Countries>(normal(mu, sigma)));
-//
-// Appends new dimension to the dims_list:
-//   plate<Countries>(...) has dims = [Countries]
-//   plate<Years>(plate<Countries>(...)) has dims = [Countries, Years]
-
-// Nested plate: append DimTag to existing dims pack.
-// We extract the existing Dims... from the inner IndexedRandomVar and expand with DimTag.
-template <typename DimTag, typename Id = decltype([] {}),
-          typename Dist, typename OldId, typename... OldDims>
-constexpr auto plate(const IndexedRandomVar<Dist, OldId, OldDims...>& rv) {
-  return IndexedRandomVar<Dist, Id, OldDims..., DimTag>{rv.dist()};
-}
-
-// ============================================================================
 // Reconstruct IndexedRandomVar<Dist, Id, Dims...> from an IndexedSample effect.
 // Must be after IndexedRandomVar definition since it references ^^IndexedRandomVar.
 template <typename EffectType, typename IdType>
@@ -203,6 +169,45 @@ struct MakeIndexedRVFromEffect {
 
 template <typename EffectType, typename IdType>
 using make_indexed_rv_from_effect_t = typename MakeIndexedRVFromEffect<EffectType, IdType>::type;
+
+// ============================================================================
+// plate(rv, dims...) - Value-based plate factories
+// ============================================================================
+//
+// Usage:
+//   auto obs = dim();
+//   auto theta = plate(beta(2_c, 3_c), obs);         // 1D plate
+//   auto y = plate(normal(mu, sigma), obs, years);    // 2D plate (flat, no nesting)
+//
+// Bare struct tags still work: plate(dist, Countries{})
+
+// Single dim, from RandomVar
+template <typename Id = decltype([] {}), IsRandomVar RV, typename D>
+  requires (!IsIndexedRandomVar<RV>)
+constexpr auto plate(const RV& rv, D) {
+  return IndexedRandomVar<typename RV::dist_type, Id, D>{rv.dist()};
+}
+
+// Two dims, from RandomVar (replaces nested plates)
+template <typename Id = decltype([] {}), IsRandomVar RV, typename D1, typename D2>
+  requires (!IsIndexedRandomVar<RV>)
+constexpr auto plate(const RV& rv, D1, D2) {
+  return IndexedRandomVar<typename RV::dist_type, Id, D1, D2>{rv.dist()};
+}
+
+// Three dims, from RandomVar
+template <typename Id = decltype([] {}), IsRandomVar RV, typename D1, typename D2, typename D3>
+  requires (!IsIndexedRandomVar<RV>)
+constexpr auto plate(const RV& rv, D1, D2, D3) {
+  return IndexedRandomVar<typename RV::dist_type, Id, D1, D2, D3>{rv.dist()};
+}
+
+// Append dim to existing IndexedRandomVar
+template <typename Id = decltype([] {}), typename Dist, typename OldId,
+          typename... OldDims, typename D>
+constexpr auto plate(const IndexedRandomVar<Dist, OldId, OldDims...>& rv, D) {
+  return IndexedRandomVar<Dist, Id, OldDims..., D>{rv.dist()};
+}
 
 // toSymbolic overload for IndexedRandomVar
 // ============================================================================

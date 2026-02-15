@@ -17,7 +17,6 @@
 #include "symbolic4/strategy/diff.h"
 #include "symbolic4/mcmc/samples.h"
 #include "symbolic4/mcmc/sampler.h"
-#include "symbolic4/mcmc/state.h"
 #include "symbolic4/mcmc/support.h"
 #include "symbolic4/mcmc/transform_pack.h"
 #include "symbolic4/mcmc/transforms.h"
@@ -170,33 +169,6 @@ constexpr bool is_scalar_param_spec_v = core_traits_detail::isSpecOf<T, ScalarPa
 template <typename T>
 constexpr bool is_indexed_param_spec_v = core_traits_detail::isSpecOf<T, IndexedParamSpec>();
 
-// Extract the Param type (RandomVar) from a spec
-template <typename Spec>
-struct ExtractParamFromSpec;
-
-template <typename Param, typename Transform>
-struct ExtractParamFromSpec<ScalarParamSpec<Param, Transform>> {
-  using type = Param;
-};
-
-template <typename Param, typename Transform, typename... Dims>
-struct ExtractParamFromSpec<IndexedParamSpec<Param, Transform, Dims...>> {
-  using type = Param;
-};
-
-template <typename Spec>
-using extract_param_t = typename ExtractParamFromSpec<std::decay_t<Spec>>::type;
-
-// Helper to extract Params... from ParamSpecsTuple
-template <typename SpecsTuple, typename = std::make_index_sequence<std::tuple_size_v<SpecsTuple>>>
-struct ExtractParamsFromSpecs;
-
-template <typename SpecsTuple, std::size_t... Is>
-struct ExtractParamsFromSpecs<SpecsTuple, std::index_sequence<Is...>> {
-  template <template <typename...> class Container>
-  using apply = Container<extract_param_t<std::tuple_element_t<Is, SpecsTuple>>...>;
-};
-
 // ============================================================================
 // makeParamSpec - Create appropriate spec from param and transform
 // ============================================================================
@@ -333,10 +305,8 @@ class PlateTransformedPosterior {
   //
   template <typename... Binders>
   auto logProbAt(BinderPack<Binders...> bindings) const -> double {
-    static constexpr std::size_t NumSampledParams = std::tuple_size_v<NonObservedSpecsTuple>;
-    std::array<double, NumSampledParams> z_arr{};
-    initStateFromBindingsToArray<Binders...>(bindings, z_arr);
-    return logProb(std::span<const double>(z_arr));
+    auto z = initStateFromBindingsDynamic(bindings);
+    return logProb(std::span<const double>(z));
   }
 
   // Evaluate gradient at parameter values specified via bindings:
@@ -345,10 +315,8 @@ class PlateTransformedPosterior {
   //
   template <typename... Binders>
   auto gradientAt(BinderPack<Binders...> bindings) const {
-    static constexpr std::size_t NumSampledParams = std::tuple_size_v<NonObservedSpecsTuple>;
-    std::array<double, NumSampledParams> z_arr{};
-    initStateFromBindingsToArray<Binders...>(bindings, z_arr);
-    return gradientResult(std::span<const double>(z_arr));
+    auto z = initStateFromBindingsDynamic(bindings);
+    return gradientResult(std::span<const double>(z));
   }
 
   // Transform from unconstrained to constrained space
@@ -362,9 +330,9 @@ class PlateTransformedPosterior {
   }
 
   // Set dimension size for a plate
-  template <typename DimTag>
-  auto withDimension(std::size_t size) const {
-    auto new_specs = setDimensionImpl<DimTag>(size, std::make_index_sequence<NumParamSlots>{});
+  template <typename D>
+  auto withDimension(D, std::size_t size) const {
+    auto new_specs = setDimensionImpl<D>(size, std::make_index_sequence<NumParamSlots>{});
     return PlateTransformedPosterior<LogProbExpr, ObsBindings, DataBindings,
                                       decltype(new_specs), ParamSymbolsTuple, GradExprsTuple>{
         log_prob_expr_, observations_, data_bindings_, new_specs, symbols_, grad_exprs_};
@@ -453,94 +421,22 @@ class PlateTransformedPosterior {
   // TransformPack for non-observed params — delegates transform/inverse/logJacobian
   using TransformPackType = TransformPack<NonObservedSymbolsTuple, NonObservedSpecsTuple>;
 
-  // Check if all non-observed specs are scalar (for compile-time validation)
-  static constexpr auto allParamsAreScalar() -> bool {
-    return allParamsAreScalarImpl(std::make_index_sequence<std::tuple_size_v<NonObservedSpecsTuple>>{});
-  }
-
-  template <std::size_t... Is>
-  static constexpr auto allParamsAreScalarImpl(std::index_sequence<Is...>) -> bool {
-    return (is_scalar_param_spec_v<std::tuple_element_t<Is, NonObservedSpecsTuple>> && ...);
-  }
-
  public:
-  // Samples type only includes non-observed parameters
-  using SamplesType =
-      typename ExtractParamsFromSpecs<NonObservedSpecsTuple>::template apply<Samples>;
+  using SamplesType = Samples<NonObservedSymbolsTuple, NonObservedSpecsTuple>;
 
-  // Dynamic samples type for models with indexed latent params
-  using DynamicSamplesType = DynamicSamples<NonObservedSymbolsTuple, NonObservedSpecsTuple>;
-
-  // Main sample() method - dispatches to scalar or dynamic implementation
+  // Run HMC and collect samples. Uses dynamic (vector-backed) state
+  // — TransformPack treats scalar (size=1) and indexed (size=N) uniformly.
   template <typename... Binders, std::uniform_random_bit_generator RNG>
-  auto sample(HmcConfig config, BinderPack<Binders...> init, RNG& rng) const {
-    if constexpr (allParamsAreScalar()) {
-      return sampleScalar(config, init, rng);
-    } else {
-      return sampleDynamic(config, init, rng);
-    }
+  auto sample(HmcConfig config, BinderPack<Binders...> init, RNG& rng) const
+      -> SamplesType {
+    return sampleDynamic(config, init, rng);
   }
 
  private:
-  // Scalar-only sampling (compile-time sized state)
-  template <typename... Binders, std::uniform_random_bit_generator RNG>
-  auto sampleScalar(HmcConfig config, BinderPack<Binders...> init, RNG& rng) const -> SamplesType {
-    static constexpr std::size_t NumSampledParams = std::tuple_size_v<NonObservedSpecsTuple>;
-    static_assert(NumSampledParams <= 64, "Too many parameters for sample()");
-
-    // Convert init bindings to array
-    std::array<double, NumSampledParams> z_arr{};
-    initStateFromBindingsToArray<Binders...>(init, z_arr);
-
-    // Create HMC kernel operating on non-observed params only
-    auto hmc = bayes::makeHMC<double, NumSampledParams>(
-        [this](const std::array<double, NumSampledParams>& state) {
-          return this->logProb(std::span<const double>(state));
-        },
-        [this](const std::array<double, NumSampledParams>& state) {
-          auto g = this->gradient(std::span<const double>(state));
-          std::array<double, NumSampledParams> result{};
-          for (std::size_t i = 0; i < NumSampledParams; ++i) {
-            result[i] = g[i];
-          }
-          return result;
-        },
-        config.epsilon, config.steps);
-
-    double lp = hmc.logProb(z_arr);
-
-    // Warmup
-    for (std::size_t i = 0; i < config.warmup; ++i) {
-      auto [next_z, next_lp, accepted] = hmc.step(z_arr, lp, rng);
-      z_arr = next_z;
-      lp = next_lp;
-    }
-
-    // Collect samples (transformed to constrained space)
-    SamplesType samples;
-    samples.reserve(config.draws);
-
-    for (std::size_t i = 0; i < config.draws; ++i) {
-      auto [next_z, next_lp, accepted] = hmc.step(z_arr, lp, rng);
-      z_arr = next_z;
-      lp = next_lp;
-
-      // Transform to constrained space
-      auto constrained = transform(std::span<const double>(z_arr));
-      std::array<double, NumSampledParams> x_arr{};
-      for (std::size_t j = 0; j < NumSampledParams; ++j) {
-        x_arr[j] = constrained[j];
-      }
-      samples.push_back(x_arr);
-    }
-
-    return samples;
-  }
-
-  // Dynamic sampling (runtime-sized state for indexed params)
+  // Dynamic sampling (runtime-sized state, handles both scalar and indexed params)
   template <typename... Binders, std::uniform_random_bit_generator RNG>
   auto sampleDynamic(HmcConfig config, BinderPack<Binders...> init, RNG& rng) const
-      -> DynamicSamplesType {
+      -> SamplesType {
     // Get runtime state dimension
     std::size_t dim = stateDim();
 
@@ -567,7 +463,7 @@ class PlateTransformedPosterior {
     // Build filtered symbols and specs tuples (excluding observed params)
     auto non_observed_symbols = buildNonObservedSymbols(std::make_index_sequence<NumParamSlots>{});
     auto non_observed_specs = buildNonObservedSpecs(std::make_index_sequence<NumParamSlots>{});
-    DynamicSamplesType samples(non_observed_symbols, non_observed_specs, dim);
+    SamplesType samples(non_observed_symbols, non_observed_specs, dim);
     samples.reserve(config.draws);
 
     for (std::size_t i = 0; i < config.draws; ++i) {
@@ -660,42 +556,6 @@ class PlateTransformedPosterior {
       return std::make_tuple(std::get<I>(specs_));
     }
   }
-
- private:
-  // Helper to initialize state array from bindings
-  template <typename... Binders, std::size_t N>
-  void initStateFromBindingsToArray(BinderPack<Binders...> bindings,
-                                    std::array<double, N>& z) const {
-    std::size_t offset = 0;
-    initStateFromBindingsImpl(bindings, z, offset, std::make_index_sequence<NumParamSlots>{});
-  }
-
-  template <typename... Binders, std::size_t N, std::size_t... Is>
-  void initStateFromBindingsImpl(BinderPack<Binders...> bindings,
-                                 std::array<double, N>& z,
-                                 std::size_t& offset,
-                                 std::index_sequence<Is...>) const {
-    // For each parameter slot, extract the value from bindings (skipping observed)
-    (extractBindingValue<Is>(bindings, z, offset), ...);
-  }
-
-  template <std::size_t I, typename... Binders, std::size_t N>
-  void extractBindingValue(BinderPack<Binders...> bindings,
-                           std::array<double, N>& z,
-                           std::size_t& offset) const {
-    using SymType = std::decay_t<std::tuple_element_t<I, ParamSymbolsTuple>>;
-    if constexpr (isSymbolObserved<SymType>()) {
-      return;
-    } else {
-      // User binds constrained value (sigma = 2.0 → Symbol<Id> = 2.0).
-      // Convert to unconstrained z via inverse transform.
-      double constrained = static_cast<double>(bindings[SymType{}]);
-      const auto& spec = std::get<I>(specs_);
-      z[offset] = spec.transform.inverse(constrained);
-      offset += 1;  // Scalar params only for now
-    }
-  }
-
 
   LogProbExpr log_prob_expr_;
   ObsBindings observations_;
@@ -989,9 +849,9 @@ class PlateTransformedPosteriorBuilder {
         grad_exprs_{grads} {}
 
   // Set dimension size for plates
-  template <typename DimTag>
-  auto withDimension(std::size_t size) const {
-    auto new_specs = setDimension<DimTag>(size);
+  template <typename D>
+  auto withDimension(D, std::size_t size) const {
+    auto new_specs = setDimension<D>(size);
     return PlateTransformedPosteriorBuilder<LogProbExpr, DataBindings, decltype(new_specs),
                                             ParamSymbolsTuple, GradExprsTuple>{
         log_prob_expr_, data_bindings_, new_specs, symbols_, grad_exprs_};

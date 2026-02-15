@@ -135,15 +135,15 @@ Model: logit(p[L]) = a + sigma * z_b[L]
   // Non-centered parameterization: z_b[L] ~ N(0, 1), b[L] = sigma * z_b[L]
   // This decouples the geometry of sigma from the country effects,
   // eliminating the "funnel" that makes centered parameterization hard to sample.
-  auto z_b = plate<Countries>(normal(0_c, 1_c));
+  auto z_b = plate(normal(0_c, 1_c), Countries{});
 
   // Data symbols
-  auto n = data<Countries>();
+  auto n = data(Countries{});
 
   // Likelihood - plate over countries
   // p[i] = sigmoid(a + sigma * z_b[i])
   auto p = 1_c / (1_c + exp(-(a + sigma * z_b)));
-  auto k = plate<Countries>(binomial(n, p));
+  auto k = plate(binomial(n, p), Countries{});
 
   // Build posterior - explicitly list params since auto-discovery has issues
   // with mixed scalar + indexed params (see discoverParams in discover_params.h)

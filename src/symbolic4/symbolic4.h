@@ -50,10 +50,9 @@
 // Probabilistic programming: distributions, random variables, model
 #include "symbolic4/distributions/distributions.h"
 
-// MCMC inference: transforms, posterior, support inference
+// MCMC inference: transforms, support inference
 #include "symbolic4/mcmc/transforms.h"
 #include "symbolic4/mcmc/support.h"
-#include "symbolic4/mcmc/posterior.h"
 
 // Unified model API
 #include "symbolic4/model.h"
