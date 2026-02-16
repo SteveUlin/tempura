@@ -214,17 +214,21 @@ target_link_libraries(symbolic4_support_test PRIVATE symbolic4 tempura::prob uni
 add_test(NAME symbolic4_support_test COMMAND symbolic4_support_test)
 set_tests_properties(symbolic4_support_test PROPERTIES LABELS "symbolic4;mcmc;support")
 
+# mcmc/mutable_state.h tests
+add_executable(symbolic4_mutable_state_test mcmc/mutable_state_test.cc)
+target_link_libraries(symbolic4_mutable_state_test PRIVATE symbolic4 unit)
+add_test(NAME symbolic4_mutable_state_test COMMAND symbolic4_mutable_state_test)
+set_tests_properties(symbolic4_mutable_state_test PROPERTIES LABELS "symbolic4;mcmc;mutable_state")
+
 # mcmc/plate_transforms.h tests
+# HMC sampling tests produce deep expression trees (Normal+HalfNormal+Normal joint)
+# that exceed the default constexpr step limit during info-domain differentiation.
 add_executable(symbolic4_plate_transforms_test mcmc/plate_transforms_test.cc)
 target_link_libraries(symbolic4_plate_transforms_test PRIVATE symbolic4 tempura::prob unit)
+target_compile_options(symbolic4_plate_transforms_test PRIVATE -fconstexpr-steps=10000000)
 add_test(NAME symbolic4_plate_transforms_test COMMAND symbolic4_plate_transforms_test)
 set_tests_properties(symbolic4_plate_transforms_test PROPERTIES LABELS "symbolic4;mcmc;plate_transforms")
 
-# mcmc/hmc_adapter_test: HMC integration with PlateTransformedPosterior
-add_executable(symbolic4_hmc_adapter_test mcmc/hmc_adapter_test.cc)
-target_link_libraries(symbolic4_hmc_adapter_test PRIVATE symbolic4 tempura::bayes tempura::prob unit)
-add_test(NAME symbolic4_hmc_adapter_test COMMAND symbolic4_hmc_adapter_test)
-set_tests_properties(symbolic4_hmc_adapter_test PROPERTIES LABELS "symbolic4;mcmc;hmc_adapter")
 
 # mcmc/likelihoods.h tests
 add_executable(symbolic4_likelihoods_test mcmc/likelihoods_test.cc)
@@ -318,7 +322,7 @@ set_tests_properties(symbolic4_non_centered_test PROPERTIES LABELS "symbolic4;mc
 
 # mcmc/samples.h tests (Samples container + statistics helpers)
 add_executable(symbolic4_state_test mcmc/state_test.cc)
-target_link_libraries(symbolic4_state_test PRIVATE symbolic4 tempura::bayes tempura::prob unit)
+target_link_libraries(symbolic4_state_test PRIVATE symbolic4 tempura::prob unit)
 add_test(NAME symbolic4_state_test COMMAND symbolic4_state_test)
 set_tests_properties(symbolic4_state_test PROPERTIES LABELS "symbolic4;mcmc;state;samples")
 

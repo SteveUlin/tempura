@@ -1,6 +1,7 @@
 #include "symbolic4/mcmc/plate_transforms.h"
 
 #include <cmath>
+#include <random>
 #include <vector>
 
 #include "symbolic4/distributions/collect_log_prob.h"
@@ -42,8 +43,6 @@ auto main() -> int {
     auto theta = plate(beta(alpha, 3.0_c), Countries{});
     auto t = autoTransform(theta);
 
-    // IndexedParamSpec would be created by the factory
-    // Just test the transform values
     expectTrue(is_unit_interval_v<decltype(t)>);
   };
 
@@ -54,7 +53,6 @@ auto main() -> int {
   "DimSizes single dimension"_test = [] {
     struct Countries {};
     DimSizes<Countries> dims{{38}};
-
     expectEq(dims.get<Countries>(), 38UL);
   };
 
@@ -62,16 +60,15 @@ auto main() -> int {
     struct Countries {};
     struct Years {};
     DimSizes<Countries, Years> dims{{38, 10}};
-
     expectEq(dims.get<Countries>(), 38UL);
     expectEq(dims.get<Years>(), 10UL);
   };
 
   // =========================================================================
-  // makePlateTransformedPosterior
+  // Binding-based logProbAt
   // =========================================================================
 
-  "makePlateTransformedPosterior scalar only"_test = [] {
+  "scalar only: logProbAt finite"_test = [] {
     auto alpha = gamma(2_c, 0.1_c);
     auto beta_param = gamma(2_c, 0.1_c);
 
@@ -80,130 +77,80 @@ auto main() -> int {
 
     expectEq(posterior.stateDim(), 2UL);
 
-    // Test evaluation at z = [log(3), log(17)]
-    std::vector<double> z = {std::log(3.0), std::log(17.0)};
-    double lp = posterior.logProb(z);
+    // logProbAt with constrained-space init values
+    double lp = posterior.logProbAt(BinderPack{alpha = 3.0, beta_param = 17.0});
     expectTrue(std::isfinite(lp));
-
-    // Test transform
-    auto x = posterior.transform(z);
-    expectNear(x[0], 3.0, 1e-10);
-    expectNear(x[1], 17.0, 1e-10);
   };
 
-  "makePlateTransformedPosterior with plate"_test = [] {
+  "with plate: logProbAt and gradientAt finite"_test = [] {
     struct Countries {};
-
     auto alpha = gamma(2_c, 0.1_c);
     auto theta = plate(beta(alpha, 3.0_c), Countries{});
-
     auto joint = logProb(alpha, theta);
 
-    // Create posterior with dimension specified
     auto posterior = makePlateTransformedPosterior(joint, alpha, theta)
                          .withDimension(Countries{}, 5)
                          .build();
 
-    // State: [z_alpha, z_theta[0], ..., z_theta[4]]
     expectEq(posterior.stateDim(), 6UL);
 
-    // Create state: alpha = 3.0, theta = [0.3, 0.4, 0.5, 0.6, 0.7]
-    std::vector<double> z(6);
-    z[0] = std::log(3.0);  // z_alpha
-    for (int i = 0; i < 5; ++i) {
-      double theta_i = 0.3 + 0.1 * i;
-      z[1 + i] = std::log(theta_i / (1.0 - theta_i));  // logit(theta_i)
-    }
+    std::vector<double> theta_init(5);
+    for (int i = 0; i < 5; ++i) theta_init[i] = 0.3 + 0.1 * i;
 
-    double lp = posterior.logProb(z);
+    double lp = posterior.logProbAt(
+        BinderPack{alpha = 3.0, theta = std::vector<double>(theta_init)});
     expectTrue(std::isfinite(lp));
 
-    // Gradient should also work
-    auto grad = posterior.gradient(z);
-    expectEq(grad.size(), 6UL);
-    for (double g : grad) {
-      expectTrue(std::isfinite(g));
-    }
+    auto grad = posterior.gradientAt(
+        BinderPack{alpha = 3.0, theta = std::vector<double>(theta_init)});
+    // Gradient is a MutableState — check scalar and indexed access
+    expectTrue(std::isfinite(grad[alpha]));
+    auto g_theta = grad[theta];
+    for (std::size_t i = 0; i < 5; ++i)
+      expectTrue(std::isfinite(g_theta[i]));
   };
 
-  "makePlateTransformedPosterior hierarchical"_test = [] {
+  "hierarchical: logProbAt finite"_test = [] {
     struct Countries {};
-
-    // Full hierarchical model:
-    // alpha ~ Gamma(2, 0.1)
-    // beta ~ Gamma(2, 0.1)
-    // theta[i] ~ Beta(alpha, beta) for i in Countries
-
     auto alpha = gamma(2.0_c, 0.1_c);
     auto beta_param = gamma(2.0_c, 0.1_c);
     auto theta = plate(beta(alpha, beta_param), Countries{});
 
     auto joint = logProb(alpha, beta_param, theta);
-
     auto posterior = makePlateTransformedPosterior(joint, alpha, beta_param, theta)
                          .withDimension(Countries{}, 3)
                          .build();
 
-    // State: [z_alpha, z_beta, z_theta[0], z_theta[1], z_theta[2]]
     expectEq(posterior.stateDim(), 5UL);
 
-    std::vector<double> z = {
-        std::log(3.0),   // alpha
-        std::log(17.0),  // beta
-        0.0,             // logit(0.5)
-        -0.5,            // logit(~0.38)
-        0.5              // logit(~0.62)
-    };
-
-    double lp = posterior.logProb(z);
+    double lp = posterior.logProbAt(BinderPack{
+        alpha = 3.0, beta_param = 17.0,
+        theta = std::vector<double>{0.5, 0.38, 0.62}});
     expectTrue(std::isfinite(lp));
   };
 
   // =========================================================================
-  // Jacobian correctness: gradient matches finite-difference of logProb
+  // Gradient correctness: analytic matches finite-diff
   // =========================================================================
 
-  "scalar constrained: gradient matches finite-diff logProb"_test = [] {
-    // halfNormal has Positive support → exp transform → non-trivial Jacobian
+  "scalar: gradient matches finite-diff"_test = [] {
     auto sigma = halfNormal(2.0_c);
     auto posterior = makePlateTransformedPosterior(logProb(sigma), sigma).build();
 
-    std::vector<double> z = {0.7};
-    auto grad = posterior.gradient(z);
-
-    // Finite difference: d(logProb)/dz ≈ (logProb(z+ε) - logProb(z-ε)) / (2ε)
-    constexpr double eps = 1e-5;
-    std::vector<double> z_plus = {0.7 + eps};
-    std::vector<double> z_minus = {0.7 - eps};
-    double fd_grad = (posterior.logProb(z_plus) - posterior.logProb(z_minus)) / (2 * eps);
-
-    // Tolerance: O(ε²) ≈ 1e-10, use 1e-4 for safety
-    expectNear(fd_grad, grad[0], 1e-4);
+    expectTrue(posterior.debugGradientCheck(BinderPack{sigma = 2.0}));
   };
 
-  "indexed constrained: gradient matches finite-diff logProb"_test = [] {
-    // beta has Unit support → sigmoid transform → non-trivial Jacobian
+  "indexed: gradient matches finite-diff"_test = [] {
     auto theta = plate(beta(2.0_c, 3.0_c), TestGroups{});
     auto posterior = makePlateTransformedPosterior(collectLogProbs(theta), theta)
                          .withDimension(TestGroups{}, 3)
                          .build();
 
-    std::vector<double> z = {0.2, -0.5, 1.0};
-    auto grad = posterior.gradient(z);
-
-    constexpr double eps = 1e-5;
-    for (std::size_t i = 0; i < 3; ++i) {
-      auto z_plus = z;
-      auto z_minus = z;
-      z_plus[i] += eps;
-      z_minus[i] -= eps;
-      double fd_grad = (posterior.logProb(z_plus) - posterior.logProb(z_minus)) / (2 * eps);
-
-      expectNear(fd_grad, grad[i], 1e-4);
-    }
+    expectTrue(posterior.debugGradientCheck(
+        BinderPack{theta = std::vector<double>{0.55, 0.38, 0.72}}));
   };
 
-  "mixed scalar+indexed: gradient matches finite-diff logProb"_test = [] {
+  "mixed scalar+indexed: gradient matches finite-diff"_test = [] {
     auto sigma = halfNormal(2.0_c);
     auto theta = plate(beta(2.0_c, 3.0_c), TestCountries2{});
     auto joint = collectLogProbs(sigma, theta);
@@ -211,30 +158,15 @@ auto main() -> int {
                          .withDimension(TestCountries2{}, 2)
                          .build();
 
-    // State: [z_sigma, z_theta[0], z_theta[1]]
-    std::vector<double> z = {0.5, -0.3, 0.8};
-    auto grad = posterior.gradient(z);
-
-    constexpr double eps = 1e-5;
-    for (std::size_t i = 0; i < 3; ++i) {
-      auto z_plus = z;
-      auto z_minus = z;
-      z_plus[i] += eps;
-      z_minus[i] -= eps;
-      double fd_grad = (posterior.logProb(z_plus) - posterior.logProb(z_minus)) / (2 * eps);
-
-      expectNear(fd_grad, grad[i], 1e-4);
-    }
+    expectTrue(posterior.debugGradientCheck(
+        BinderPack{sigma = 1.5, theta = std::vector<double>{0.4, 0.7}}));
   };
 
   // =========================================================================
-  // Samples symbol-indexed access
+  // Samples symbol-indexed access (type structure verification)
   // =========================================================================
 
   "Samples symbol access for mixed scalar+indexed params"_test = [] {
-    // Create a simple model with mixed params:
-    // sigma ~ HalfNormal(2)   (scalar)
-    // theta[i] ~ Beta(2, 3)   (indexed)
     auto sigma = halfNormal(2.0_c);
     auto theta = plate(beta(2.0_c, 3.0_c), TestCountries2{});
     auto joint = collectLogProbs(sigma, theta);
@@ -243,32 +175,105 @@ auto main() -> int {
                          .build();
 
     using SamplesType = typename std::decay_t<decltype(posterior)>::SamplesType;
-
-    // Verify the symbols tuple type matches what we expect
-    // NonObservedSymbolsTuple should contain:
-    // - Symbol<sigma_id> (scalar)
-    // - IndexedSymbol<theta_id, TestCountries2> (indexed)
     using SymbolsTuple = typename SamplesType::SymbolsTuple;
     static_assert(std::tuple_size_v<SymbolsTuple> == 2,
                   "Should have 2 non-observed param symbols");
 
-    // First symbol should be scalar (sigma)
     using Sym0 = std::tuple_element_t<0, SymbolsTuple>;
     static_assert(std::is_same_v<Sym0, typename decltype(sigma)::symbol_type>,
                   "First symbol should match sigma's symbol_type");
 
-    // Second symbol should be indexed (theta)
     using Sym1 = std::tuple_element_t<1, SymbolsTuple>;
     static_assert(std::is_same_v<Sym1, typename decltype(theta)::symbol_type>,
                   "Second symbol should match theta's symbol_type");
 
-    // Verify the SamplesType can be instantiated and used
-    // The key test: can we access samples by symbol for both scalar and indexed params?
+    expectEq(posterior.stateDim(), 4UL);
+  };
 
-    // For now, just verify the type structure is correct.
-    // The actual sample() + operator[] test is deferred to an integration test.
-    // Key insight: if the static_asserts above pass, the types match correctly.
-    expectEq(posterior.stateDim(), 4UL);  // 1 scalar + 3 indexed
+  // =========================================================================
+  // HMC sampling integration test (migrated from hmc_adapter_test)
+  // =========================================================================
+
+  "HMC sampling produces valid samples"_test = [] {
+    // Simple model: mu ~ Normal(2, 0.5), observed y = 2.0
+    auto mu = normal(0.0_c, 5.0_c);
+    auto sigma = halfNormal(2.0_c);
+    auto y = normal(mu.sym(), sigma.sym());
+
+    auto posterior = makePlateTransformedPosterior(
+        logProb(mu, sigma, y), mu, sigma
+    ).observe(y = 3.5);
+
+    // Verify finite logProb/gradient via bindings
+    double lp = posterior.logProbAt(BinderPack{mu = 0.0, sigma = 1.0});
+    expectTrue(std::isfinite(lp));
+
+    auto grad = posterior.gradientAt(BinderPack{mu = 0.0, sigma = 1.0});
+    expectTrue(std::isfinite(grad[mu]));
+    expectTrue(std::isfinite(grad[sigma]));
+
+    // Run HMC sampling
+    std::mt19937_64 rng(42);
+    auto samples = posterior.sample(
+        HmcConfig{.epsilon = 0.1, .steps = 10, .warmup = 100, .draws = 200},
+        BinderPack{mu = 0.0, sigma = 1.0},
+        rng);
+
+    // Verify we got the right number of draws
+    expectEq(samples.size(), 200UL);
+
+    // Verify sigma is constrained to positive (HalfNormal prior)
+    auto sigma_draws = samples[sigma];
+    for (std::size_t i = 0; i < sigma_draws.size(); ++i)
+      expectTrue(sigma_draws[i] > 0.0);
+  };
+
+  "Mixed scalar+indexed HMC sampling"_test = [] {
+    auto a = normal(-2.0_c, 1.0_c);
+    auto sigma_rv = exponential(1.0_c);
+    auto z_b = plate(normal(0.0_c, 1.0_c), TestCountries2{});
+    auto joint = logProb(a, sigma_rv, z_b);
+
+    auto posterior = makePlateTransformedPosterior(joint, a, sigma_rv, z_b)
+                         .withDimension(TestCountries2{}, 3)
+                         .build();
+
+    std::mt19937_64 rng(123);
+    auto samples = posterior.sample(
+        HmcConfig{.epsilon = 0.05, .steps = 10, .warmup = 100, .draws = 20},
+        BinderPack{a = -2.0, sigma_rv = 1.0,
+                   z_b = std::vector<double>(3, 0.0)},
+        rng);
+
+    // Scalar access
+    auto a_draws = samples[a];
+    expectEq(a_draws.size(), 20UL);
+
+    // Positive constraint on sigma
+    auto sigma_draws = samples[sigma_rv];
+    for (std::size_t i = 0; i < sigma_draws.size(); ++i)
+      expectTrue(sigma_draws[i] > 0.0);
+
+    // Indexed access
+    auto z_b_draws = samples[z_b];
+    expectEq(z_b_draws.rows(), 20UL);
+    expectEq(z_b_draws.cols(), 3UL);
+  };
+
+  // =========================================================================
+  // Backward compat: span-based API still works
+  // =========================================================================
+
+  "span-based logProb still works"_test = [] {
+    auto alpha = gamma(2_c, 0.1_c);
+    auto posterior = makePlateTransformedPosterior(logProb(alpha), alpha).build();
+
+    std::vector<double> z = {std::log(3.0)};
+    double lp = posterior.logProb(z);
+    expectTrue(std::isfinite(lp));
+
+    auto x = posterior.transform(z);
+    expectNear(x[0], 3.0, 1e-10);
   };
 
   return TestRegistry::result();

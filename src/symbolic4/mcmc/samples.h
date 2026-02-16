@@ -242,13 +242,6 @@ class Samples {
     }
   }
 
-  template <typename... Ts>
-  static auto tupleToBinderPack(const std::tuple<Ts...>& t) {
-    return std::apply([](const auto&... bs) { return BinderPack{bs...}; }, t);
-  }
-
-  static auto tupleToBinderPack(const std::tuple<>&) { return BinderPack<>{}; }
-
   mutable std::vector<double> row_buf_;
 };
 

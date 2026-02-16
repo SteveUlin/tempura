@@ -134,6 +134,7 @@ composed via `recursive()`, `innermost()`, etc.
 | 7.5 | Remove lookupByAtomId | ✓ Done (ProbTerminals/BaseTerminals use direct Free symbol lookup, lookupByAtomId deleted) |
 | 7.6 | Diff cleanup | ✓ Done (removed SampleDerivative/same_symbolic_id_v, simplified to same_atom_id_v; wrappers.h include removed) |
 | 7.7 | Unify MCMC containers | ✓ Done (deleted ParameterState/state.h, old Samples<Params...>, posterior.h, mcmc.h, matrix_mcmc.h; unified on Samples + SymbolicState; eliminated scalar/dynamic sampling fork) |
+| 7.8 | Inline HMC into symbolic4 | ✓ Done (MutableState typed container, typed leapfrog via fold expressions, deleted bayes dependency from posterior, hmc_adapter_test migrated to plate_transforms_test) |
 
 **Standalone fix (no phase dependency):** ✓ Done. Relax `operators.h` `requires` clause so
 RandomVar/IndexedRandomVar work directly in expressions without `.constrainedExpr()`/`.sym()`.
@@ -261,7 +262,7 @@ if constexpr (is_reduce_over_v<E>) {
 ║    distributions/  RandomVar<Dist,Id>  collectLogProbs  model()   ║
 ║                                                                   ║
 ║  MCMC Layer                                                       ║
-║    PlateTransformedPosterior  Samples  HMC  support inference     ║
+║    PlateTransformedPosterior  MutableState  Samples  support       ║
 ║                                                                   ║
 ║  Domain Transforms (probabilistic-specific)                       ║
 ║    exp/logit for support types  Cholesky  Jacobian corrections    ║
@@ -317,11 +318,13 @@ container[expr]     // → evaluate expr at container's values
 3. **Heterogeneous return types** — each symbol can return a different type (double,
    span, matrix), because each slot defines its own `operator[]`
 
-The MCMC layer now follows this pattern: `Samples` stores draws in a flat matrix
-but exposes symbol-typed access (`samples[alpha]`, `samples[expr]`, `draw[z_b]`).
-Per-draw states are `SymbolicState` objects — compressed-tuple containers with the
-same `operator[]` dispatch. GradientResult still uses flat arrays with manual offsets
-(migrating it to spans is a future cleanup).
+The MCMC layer now follows this pattern throughout: `Samples` stores draws in a
+flat matrix but exposes symbol-typed access (`samples[alpha]`, `samples[expr]`,
+`draw[z_b]`). HMC state (position, momentum, gradient) uses `MutableState` —
+a per-slot typed container where `state[alpha]` → `double&` and `state[z_b]` →
+`span<double>`. Leapfrog integration, gradient chain rule, and momentum sampling
+all dispatch by symbol. The only flat vector is the serialization boundary into
+`Samples` storage.
 
 ### Runtime Dependency Rule
 
@@ -453,7 +456,7 @@ samples[logistic(a)]     // transformed quantities, no manual loops
 1. ~~**RandomVars in expressions**~~: ✓ Done (operators.h `requires` relaxed)
 2. ~~**`samples[expr]`**~~: ✓ Done (Phase 7.7 — evaluateIndexed across draws)
 3. **Constrained init**: `sample(config, {sigma = 0.5}, rng)` — not `sigma = log(0.5)`
-4. **Indexed gradient spans**: `grad[z_b]` → `span<const double>`, not manual offset/size
+4. ~~**Indexed gradient spans**~~: ✓ Done (Phase 7.8 — `gradientAt()` returns `MutableState`, `grad[z_b]` → `span<double>`)
 5. **Unified dim/plate API**: `dim()` objects replace empty struct tags; `plate(dist, dims...)` takes values not template params
 6. **Unified evaluator**: Merge `evaluate` and `evaluateIndexed` — scalar is nullary function, indexed is n-ary
 7. **Non-centered parameterization**: Built into plate notation
@@ -506,15 +509,15 @@ auto p_draws = samples[p];           // matrix: draws × countries
 Implementation: for each draw, bind each parameter to that draw's values,
 evaluate the expression. Return type depends on whether expr is scalar or indexed.
 
-### `grad[indexed_param]` → span
+### ~~`grad[indexed_param]` → span~~ ✓ Done (Phase 7.8)
 
-Currently `GradientResult::operator[]` returns a single `double`, even for
-indexed params. For `z_b` with 38 components, the user needs `offset()` +
-`paramSize()` and manual slicing. Fix: dispatch on spec type.
+`gradientAt()` returns `MutableState` — a per-slot typed container. Symbol dispatch
+gives the right return type automatically:
 
 ```cpp
-grad[alpha]     // double (scalar param)
-grad[z_b]       // std::span<const double> (indexed param, all 38 components)
+auto grad = posterior.gradientAt(BinderPack{alpha = 3.0, z_b = vec});
+grad[alpha]     // double& (scalar param)
+grad[z_b]       // std::span<double> (indexed param, all 38 components)
 ```
 
 ### Init values in constrained space

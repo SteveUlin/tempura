@@ -478,13 +478,6 @@ struct SeparateMatrixBindings {
 };
 
 template <typename... Ts>
-auto tupleToBinderPack(std::tuple<Ts...> t) {
-  return std::apply([](auto... bs) { return BinderPack{bs...}; }, t);
-}
-
-inline auto tupleToBinderPack(std::tuple<>) { return BinderPack<>{}; }
-
-template <typename... Ts>
 auto tupleToMatrixBinderPack(std::tuple<Ts...> t) {
   return std::apply([](auto... bs) { return MatrixBinderPack{bs...}; }, t);
 }
@@ -586,9 +579,9 @@ auto evaluateMatrixPlate(E expr, BinderPack<Binders...> bindings) -> double {
   auto [scalar_tuple, matrix_tuple, indexed_tuple] =
       plate_detail::SeparateMatrixBindings<Binders...>::separate(bindings);
 
-  auto scalars = plate_detail::tupleToBinderPack(scalar_tuple);
+  auto scalars = tupleToBinderPack(scalar_tuple);
   auto matrices = plate_detail::tupleToMatrixBinderPack(matrix_tuple);
-  auto indexed_vecs = plate_detail::tupleToBinderPack(indexed_tuple);
+  auto indexed_vecs = tupleToBinderPack(indexed_tuple);
 
   using ScalarBindings = decltype(scalars);
   using MatrixBindings = decltype(matrices);

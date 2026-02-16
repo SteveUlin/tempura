@@ -370,14 +370,6 @@ struct SeparateBinders {
   }
 };
 
-template <typename... Ts>
-auto tupleToBinderPack(std::tuple<Ts...> t) {
-  return std::apply([](auto... bs) { return BinderPack{bs...}; }, t);
-}
-
-// Handle empty tuple -> empty BinderPack
-inline auto tupleToBinderPack(std::tuple<>) { return BinderPack<>{}; }
-
 }  // namespace detail
 
 // ============================================================================
@@ -391,8 +383,8 @@ inline auto tupleToBinderPack(std::tuple<>) { return BinderPack<>{}; }
 template <typename Terminals = ProbTerminals, Symbolic E, typename... Binders>
 auto evaluateIndexed(E expr, BinderPack<Binders...> bindings) -> double {
   auto [scalar_tuple, indexed_tuple] = detail::SeparateBinders<Binders...>::separate(bindings);
-  auto scalars = detail::tupleToBinderPack(scalar_tuple);
-  auto indexed = detail::tupleToBinderPack(indexed_tuple);
+  auto scalars = tupleToBinderPack(scalar_tuple);
+  auto indexed = tupleToBinderPack(indexed_tuple);
 
   using ScalarBindings = decltype(scalars);
   using IndexedBindings = decltype(indexed);
@@ -421,8 +413,8 @@ auto evaluateIndexed(E expr, Args... binders) -> double {
 template <typename Terminals = ProbTerminals, Symbolic E, typename... Binders>
 auto evaluateAtIndex(E expr, BinderPack<Binders...> bindings, SizeT idx) -> double {
   auto [scalar_tuple, indexed_tuple] = detail::SeparateBinders<Binders...>::separate(bindings);
-  auto scalars = detail::tupleToBinderPack(scalar_tuple);
-  auto indexed = detail::tupleToBinderPack(indexed_tuple);
+  auto scalars = tupleToBinderPack(scalar_tuple);
+  auto indexed = tupleToBinderPack(indexed_tuple);
 
   using ScalarBindings = decltype(scalars);
   using IndexedBindings = decltype(indexed);

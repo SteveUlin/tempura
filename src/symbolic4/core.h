@@ -1,5 +1,6 @@
 #pragma once
 
+#include <tuple>
 #include <type_traits>
 
 #include "meta/tags.h"
@@ -447,6 +448,17 @@ struct BinderPack : Binders... {
 template <typename... Symbols, typename... Values>
 BinderPack(TypeValueBinder<Symbols, Values>...)
     -> BinderPack<TypeValueBinder<Symbols, Values>...>;
+
+// General deduction guide for mixed binder types (TypeValueBinder + IndexedBinding)
+template <typename... Binders>
+BinderPack(Binders...) -> BinderPack<Binders...>;
+
+// Convert std::tuple<Binders...> → BinderPack<Binders...>
+template <typename... Ts>
+auto tupleToBinderPack(const std::tuple<Ts...>& t) {
+  return std::apply([](const auto&... bs) { return BinderPack{bs...}; }, t);
+}
+inline auto tupleToBinderPack(const std::tuple<>&) { return BinderPack<>{}; }
 
 }  // namespace tempura::symbolic4
 

@@ -10,9 +10,10 @@ This directory implements the "boring MCMC" vision: automatic parameter transfor
 |------|---------|
 | `transforms.h` | Parameter transform types (log, logit, Cholesky, simplex) |
 | `support.h` | Distribution → support → transform inference (`autoTransform`) |
-| `plate_transforms.h` | `PlateTransformedPosterior` — sole production posterior for scalar + indexed params |
+| `plate_transforms.h` | `PlateTransformedPosterior` — sole production posterior with inline typed HMC |
+| `mutable_state.h` | `MutableState` — per-slot typed container for HMC position/momentum/gradient |
 | `samples.h` | `Samples` — unified MCMC draw container with symbol-indexed access |
-| `sampler.h` | `HmcConfig` and `posterior.sample()` integration |
+| `sampler.h` | `HmcConfig` struct |
 | `non_centered.h` | Hierarchical model reparameterization |
 | `likelihoods.h` | Numerically stable logistic functions |
 
@@ -72,12 +73,12 @@ auto posterior = makePlateTransformedPosterior(joint_lp, mu, sigma).observe(y = 
 ```
 
 Operations:
-- `logProb(z)` - Evaluates in unconstrained space, includes Jacobian correction
-- `gradient(z)` - Chain-ruled gradients w.r.t. unconstrained parameters
-- `transform(z)` - Convert unconstrained → constrained
-- `inverse(x)` - Convert constrained → unconstrained
-- `logProbAt(BinderPack{mu=1.0, sigma=2.0})` - Symbolic lookup evaluation
+- `logProbAt(BinderPack{mu=1.0, sigma=2.0})` - Log-prob at constrained values
+- `gradientAt(BinderPack{mu=1.0, sigma=2.0})` - Gradient (returns `MutableState`, queryable by symbol)
+- `sample(HmcConfig, BinderPack{...}, rng)` - Run HMC and return `Samples`
+- `debugGradientCheck(BinderPack{...})` - Verify analytic vs finite-diff gradient
 - `stateDim()` - Runtime state dimension (supports indexed params)
+- `logProb(span)` / `gradient(span)` - Legacy span-based API (backward compat)
 
 ### Jacobian Correction
 
@@ -103,17 +104,19 @@ grad_z = grad_x * x + 1.0;  // dx/dz = x, d(log|J|)/dz = 1
 
 ## HMC Integration
 
-### Current
+HMC is **inline** — the posterior performs leapfrog integration directly on typed
+state. No external library, no flat-vector wrapping. The computation pipeline
+operates on `MutableState` (symbol-dispatched per-slot container) end-to-end;
+the only flat vector is the serialization boundary into `Samples` storage.
 
-`PlateTransformedPosterior` integrates with `bayes::makeHMCDynamic` via lambdas:
+### MutableState — typed HMC container
 
-```cpp
-auto posterior = makePlateTransformedPosterior(joint_lp, mu, sigma).observe(y = 3.5);
-auto hmc = bayes::makeHMCDynamic(
-    [&](std::span<const double> z) { return posterior.logProb(z); },
-    [&](std::span<const double> z) { return posterior.gradient(z); },
-    epsilon, n_steps, posterior.stateDim());
-```
+`MutableState<ScalarSlot<α>, ScalarSlot<σ>, IndexedSlot<z>>` stores each parameter
+in its own typed slot. Overload resolution dispatches `state[alpha]` → `double&`,
+`state[z_b]` → `span<double>`. No flat arrays, no offset arithmetic.
+
+Leapfrog, gradient chain-rule, and momentum sampling all dispatch by symbol via
+fold expressions over the slot types.
 
 ### Sampling API (binding-aware, unified)
 
@@ -208,5 +211,6 @@ ncp.addZPriorGrad(grad, j, state);  // N(0,1) prior contribution
 ## Remaining Gaps
 
 - **Constrained init values** — users currently pass unconstrained init (`sigma = std::log(0.5)`). The posterior has `inverse()` — apply it to init values automatically.
-- **Indexed gradient spans** — `grad[z_b]` should return `span<const double>`, not require manual offset arithmetic.
+- ~~**Indexed gradient spans**~~ — ✓ Solved. `gradientAt()` returns `MutableState`: `grad[alpha]` → `double`, `grad[z_b]` → `span<double>`.
 - **MCMC diagnostics** — ESS, R-hat, divergences. Currently not tracked.
+- **Unify SymbolicState with MutableState** — Samples uses `SymbolicState` (flat-vector-backed) for per-draw access. MutableState is a better fit but requires a non-owning DrawView or per-draw copy.

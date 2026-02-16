@@ -10,11 +10,12 @@
 #include <utility>
 #include <vector>
 
-#include "bayes/estimation/hmc.h"
+#include "meta/type_list_ops.h"
 #include "symbolic4/core.h"
 #include "symbolic4/distributions/indexed_node.h"
 #include "symbolic4/indexed/indexed_eval.h"
 #include "symbolic4/strategy/diff.h"
+#include "symbolic4/mcmc/mutable_state.h"
 #include "symbolic4/mcmc/samples.h"
 #include "symbolic4/mcmc/sampler.h"
 #include "symbolic4/mcmc/support.h"
@@ -239,84 +240,55 @@ class PlateTransformedPosterior {
         specs_{specs},
         symbols_{symbols},
         grad_exprs_{grads},
-        transform_pack_{buildNonObservedSymbols(std::make_index_sequence<NumParamSlots>{}),
-                         buildNonObservedSpecs(std::make_index_sequence<NumParamSlots>{})} {}
+        non_observed_specs_{buildNonObservedSpecs(std::make_index_sequence<NumParamSlots>{})},
+        non_observed_symbols_{buildNonObservedSymbols(std::make_index_sequence<NumParamSlots>{})},
+        transform_pack_{non_observed_symbols_, non_observed_specs_} {}
 
   // Total state dimension (sum of all param sizes)
   auto stateDim() const -> std::size_t {
     return transform_pack_.stateDim();
   }
 
-  // Debug: evaluate log_prob_expr_ with externally provided bindings
-  // This bypasses internal binding construction to test if the expression itself works
-  template <typename... Binders>
-  auto debugEvalWithBindings(BinderPack<Binders...> bindings) const -> double {
-    return evaluateIndexed(log_prob_expr_, bindings);
-  }
-
-  // Debug: return the log_prob expression for external inspection
-  auto debugLogProbExpr() const { return log_prob_expr_; }
-
-  // Debug: return symbols tuple for type checking
-  auto debugSymbols() const { return symbols_; }
-
-  // Debug: build bindings and return them for inspection
-  auto debugBuildBindings(std::span<const double> z) const {
-    return buildBindingsUnconstrained(z, std::make_index_sequence<NumParamSlots>{});
-  }
-
-  // Debug: build and merge all bindings
-  auto debugMergedBindings(std::span<const double> z) const {
-    auto bindings = buildBindingsUnconstrained(z, std::make_index_sequence<NumParamSlots>{});
-    return mergeAllBindings(bindings, observations_, data_bindings_);
-  }
-
-  // Debug: evaluate with merged bindings and return value
-  auto debugLogProbWithMergedBindings(std::span<const double> z) const -> double {
-    auto merged = debugMergedBindings(z);
-    return evaluateIndexed(log_prob_expr_, merged);
-  }
-
-  // Evaluate log-probability at unconstrained state
+  // Evaluate log-probability at unconstrained state (flat vector API)
   auto logProb(std::span<const double> z) const -> double {
     return logProbImpl(z, std::make_index_sequence<NumParamSlots>{});
   }
 
-  // Evaluate gradient at unconstrained state
+  // Evaluate gradient at unconstrained state (flat vector API)
   auto gradient(std::span<const double> z) const -> std::vector<double> {
     return gradientImpl(z, std::make_index_sequence<NumParamSlots>{});
-  }
-
-  // Evaluate gradient and return a SymbolicState queryable by symbols
-  // Usage:
-  //   auto grad = posterior.gradientResult(z);
-  //   double d_alpha = grad[alpha];  // Query by RandomVar (via symbol_type unwrap)
-  auto gradientResult(std::span<const double> z) const {
-    auto grad = gradientImpl(z, std::make_index_sequence<NumParamSlots>{});
-    return makeSymbolicState(symbols_, specs_, std::move(grad));
   }
 
   // =========================================================================
   // Binding-based evaluation API
   // =========================================================================
-  //
-  // Evaluate log-probability at parameter values specified via bindings:
-  //   double lp = posterior.logProbAt(BinderPack{alpha = 0.5, beta = 1.0});
-  //
+
+  // Evaluate log-probability at parameter values specified via bindings
   template <typename... Binders>
   auto logProbAt(BinderPack<Binders...> bindings) const -> double {
-    auto z = initStateFromBindingsDynamic(bindings);
-    return logProb(std::span<const double>(z));
+    return logProbTyped(initStateFromBindings(bindings));
   }
 
-  // Evaluate gradient at parameter values specified via bindings:
-  //   auto grad = posterior.gradientAt(BinderPack{alpha = 0.5, beta = 1.0});
-  //   double d_alpha = grad[alpha];
-  //
+  // Evaluate gradient at parameter values specified via bindings.
+  // Returns MutableState (GradientType) — queryable by symbol:
+  //   grad[alpha] → double&, grad[z_b] → span<double>
   template <typename... Binders>
   auto gradientAt(BinderPack<Binders...> bindings) const {
-    auto z = initStateFromBindingsDynamic(bindings);
-    return gradientResult(std::span<const double>(z));
+    return computeGradient(initStateFromBindings(bindings));
+  }
+
+  // Verify analytic gradient matches finite-difference gradient
+  template <typename... Binders>
+  auto debugGradientCheck(BinderPack<Binders...> bindings, double tol = 1e-4) const -> bool {
+    auto state = initStateFromBindings(bindings);
+    auto analytic = computeGradient(state);
+    auto analytic_vec = stateToVector(analytic, std::make_index_sequence<NumNonObserved>{});
+    auto fd_vec = finiteDiffGradient(state);
+    if (analytic_vec.size() != fd_vec.size()) return false;
+    for (std::size_t i = 0; i < analytic_vec.size(); ++i) {
+      if (std::abs(analytic_vec[i] - fd_vec[i]) > tol) return false;
+    }
+    return true;
   }
 
   // Transform from unconstrained to constrained space
@@ -360,172 +332,140 @@ class PlateTransformedPosterior {
   //
 
  private:
-  // Forward declare helper to check if Sym is in ObsBindings
+  // Check if Sym is in ObsBindings — used by type-level filter and isSymbolObserved()
   template <typename Sym, typename OB>
-  struct IsSymbolInObsBindingsHelperFwd {
+  struct IsSymbolInObsBindings {
     static constexpr bool value = false;
   };
 
   template <typename Sym, typename... Binders>
-  struct IsSymbolInObsBindingsHelperFwd<Sym, BinderPack<Binders...>> {
+  struct IsSymbolInObsBindings<Sym, BinderPack<Binders...>> {
     static constexpr bool value = ((std::is_same_v<Sym, typename Binders::symbol_type>) || ...);
   };
 
-  // Type-level filter to get non-observed specs
+  // -----------------------------------------------------------------------
+  // Type-level filter: non-observed specs, symbols, and HMC slot types
+  //
+  // Uses conditional tuple_cat for specs/symbols (proven pattern), and
+  // derives HmcState (MutableState) from NonObservedSymbolsTuple +
+  // NonObservedSpecsTuple via a consteval reflection pass.
+  // -----------------------------------------------------------------------
+
   template <std::size_t I>
   struct MaybeSpecType {
     using SymType = std::decay_t<std::tuple_element_t<I, ParamSymbolsTuple>>;
     using SpecType = std::tuple_element_t<I, ParamSpecsTuple>;
-
-    // Use std::tuple<> for observed, std::tuple<SpecType> for non-observed
     using type = std::conditional_t<
-        IsSymbolInObsBindingsHelperFwd<SymType, ObsBindings>::value,
-        std::tuple<>,
-        std::tuple<SpecType>>;
+        IsSymbolInObsBindings<SymType, ObsBindings>::value,
+        std::tuple<>, std::tuple<SpecType>>;
   };
 
-  // Primary template (takes index_sequence)
-  template <typename IndexSeq>
-  struct ConcatNonObservedSpecs;
+  template <std::size_t I>
+  struct MaybeSymbolType {
+    using SymType = std::decay_t<std::tuple_element_t<I, ParamSymbolsTuple>>;
+    using type = std::conditional_t<
+        IsSymbolInObsBindings<SymType, ObsBindings>::value,
+        std::tuple<>, std::tuple<SymType>>;
+  };
 
+  template <typename IS> struct ConcatNonObservedSpecs;
   template <std::size_t... Is>
   struct ConcatNonObservedSpecs<std::index_sequence<Is...>> {
     using type = decltype(std::tuple_cat(std::declval<typename MaybeSpecType<Is>::type>()...));
   };
 
-  using NonObservedSpecsTuple =
-      typename ConcatNonObservedSpecs<std::make_index_sequence<NumParamSlots>>::type;
-
-  // Type-level filter to get non-observed symbols (matching specs filter)
-  template <std::size_t I>
-  struct MaybeSymbolType {
-    using SymType = std::decay_t<std::tuple_element_t<I, ParamSymbolsTuple>>;
-
-    using type = std::conditional_t<
-        IsSymbolInObsBindingsHelperFwd<SymType, ObsBindings>::value,
-        std::tuple<>,
-        std::tuple<SymType>>;
-  };
-
-  template <typename IndexSeq>
-  struct ConcatNonObservedSymbols;
-
+  template <typename IS> struct ConcatNonObservedSymbols;
   template <std::size_t... Is>
   struct ConcatNonObservedSymbols<std::index_sequence<Is...>> {
     using type = decltype(std::tuple_cat(std::declval<typename MaybeSymbolType<Is>::type>()...));
   };
 
+  using NonObservedSpecsTuple =
+      typename ConcatNonObservedSpecs<std::make_index_sequence<NumParamSlots>>::type;
   using NonObservedSymbolsTuple =
       typename ConcatNonObservedSymbols<std::make_index_sequence<NumParamSlots>>::type;
+
+  // Map (Sym, Spec) → appropriate slot type
+  template <typename Sym, typename Spec>
+  using SlotFor = std::conditional_t<Spec::is_indexed, IndexedSlot<Sym>, ScalarSlot<Sym>>;
+
+  // Derive MutableState from non-observed symbols/specs tuples
+  template <typename SymsTuple, typename SpecsTuple, typename IS>
+  struct DeriveHmcStateImpl;
+
+  template <typename SymsTuple, typename SpecsTuple, std::size_t... Is>
+  struct DeriveHmcStateImpl<SymsTuple, SpecsTuple, std::index_sequence<Is...>> {
+    using type = MutableState<
+        SlotFor<std::tuple_element_t<Is, SymsTuple>,
+                std::tuple_element_t<Is, SpecsTuple>>...>;
+  };
+
+  using HmcState = typename DeriveHmcStateImpl<
+      NonObservedSymbolsTuple, NonObservedSpecsTuple,
+      std::make_index_sequence<std::tuple_size_v<NonObservedSymbolsTuple>>>::type;
+
+  static constexpr std::size_t NumNonObserved = std::tuple_size_v<NonObservedSymbolsTuple>;
 
   // TransformPack for non-observed params — delegates transform/inverse/logJacobian
   using TransformPackType = TransformPack<NonObservedSymbolsTuple, NonObservedSpecsTuple>;
 
  public:
   using SamplesType = Samples<NonObservedSymbolsTuple, NonObservedSpecsTuple>;
+  using GradientType = HmcState;
 
-  // Run HMC and collect samples. Uses dynamic (vector-backed) state
-  // — TransformPack treats scalar (size=1) and indexed (size=N) uniformly.
+  // Run HMC and collect samples via typed leapfrog on HmcState.
   template <typename... Binders, std::uniform_random_bit_generator RNG>
   auto sample(HmcConfig config, BinderPack<Binders...> init, RNG& rng) const
       -> SamplesType {
-    return sampleDynamic(config, init, rng);
-  }
-
- private:
-  // Dynamic sampling (runtime-sized state, handles both scalar and indexed params)
-  template <typename... Binders, std::uniform_random_bit_generator RNG>
-  auto sampleDynamic(HmcConfig config, BinderPack<Binders...> init, RNG& rng) const
-      -> SamplesType {
-    // Get runtime state dimension
-    std::size_t dim = stateDim();
-
-    // Convert init bindings to vector
-    std::vector<double> z = initStateFromBindingsDynamic(init);
-    assert(z.size() == dim);
-
-    // Create dynamic HMC kernel
-    auto hmc = bayes::makeHMCDynamic(
-        [this](std::span<const double> state) { return this->logProb(state); },
-        [this](std::span<const double> state) { return this->gradient(state); },
-        config.epsilon, config.steps, dim);
-
-    double lp = hmc.logProb(z);
+    auto q = initStateFromBindings(init);
+    double lp = logProbTyped(q);
 
     // Warmup
     for (std::size_t i = 0; i < config.warmup; ++i) {
-      auto [next_z, next_lp, accepted] = hmc.step(z, lp, rng);
-      z = std::move(next_z);
+      auto [next_q, next_lp, accepted] = hmcStep(q, lp, config.epsilon, config.steps, rng);
+      q = std::move(next_q);
       lp = next_lp;
     }
 
-    // Collect samples (transformed to constrained space)
-    // Build filtered symbols and specs tuples (excluding observed params)
-    auto non_observed_symbols = buildNonObservedSymbols(std::make_index_sequence<NumParamSlots>{});
-    auto non_observed_specs = buildNonObservedSpecs(std::make_index_sequence<NumParamSlots>{});
-    SamplesType samples(non_observed_symbols, non_observed_specs, dim);
+    // Collect samples
+    SamplesType samples(non_observed_symbols_, non_observed_specs_, totalDim());
     samples.reserve(config.draws);
 
     for (std::size_t i = 0; i < config.draws; ++i) {
-      auto [next_z, next_lp, accepted] = hmc.step(z, lp, rng);
-      z = std::move(next_z);
+      auto [next_q, next_lp, accepted] = hmcStep(q, lp, config.epsilon, config.steps, rng);
+      q = std::move(next_q);
       lp = next_lp;
-
-      // Transform to constrained space and add to samples
-      auto constrained = transform(std::span<const double>(z));
+      auto constrained = transformFromState(q, std::make_index_sequence<NumNonObserved>{});
       samples.push_back(std::span<const double>(constrained));
     }
 
     return samples;
   }
 
-  // Initialize dynamic state from bindings (handles vector<double> for indexed params)
-  template <typename... Binders>
-  auto initStateFromBindingsDynamic(BinderPack<Binders...> bindings) const -> std::vector<double> {
-    std::size_t dim = stateDim();
-    std::vector<double> z(dim);
-    std::size_t offset = 0;
-    initStateFromBindingsDynamicImpl(bindings, z, offset,
-                                      std::make_index_sequence<NumParamSlots>{});
-    return z;
-  }
+ private:
+  // =========================================================================
+  // Data members
+  // =========================================================================
 
-  template <typename... Binders, std::size_t... Is>
-  void initStateFromBindingsDynamicImpl(BinderPack<Binders...> bindings,
-                                         std::vector<double>& z,
-                                         std::size_t& offset,
-                                         std::index_sequence<Is...>) const {
-    (extractBindingValueDynamic<Is>(bindings, z, offset), ...);
-  }
+  LogProbExpr log_prob_expr_;
+  ObsBindings observations_;
+  DataBindings data_bindings_;
+  ParamSpecsTuple specs_;
+  ParamSymbolsTuple symbols_;
+  GradExprsTuple grad_exprs_;
+  NonObservedSpecsTuple non_observed_specs_;
+  NonObservedSymbolsTuple non_observed_symbols_;
+  TransformPackType transform_pack_;
 
-  template <std::size_t I, typename... Binders>
-  void extractBindingValueDynamic(BinderPack<Binders...> bindings,
-                                   std::vector<double>& z,
-                                   std::size_t& offset) const {
-    using SymType = std::decay_t<std::tuple_element_t<I, ParamSymbolsTuple>>;
-    if constexpr (isSymbolObserved<SymType>()) {
-      return;  // Skip observed params
-    } else {
-      const auto& spec = std::get<I>(specs_);
-      std::size_t n = spec.size();
+  // Mutable cache for indexed constrained values during binding construction.
+  // One per non-observed param slot — indexed slots store pre-transformed
+  // values here so the binding's span has valid lifetime.
+  mutable std::array<std::vector<double>, NumNonObserved> constrained_cache_;
 
-      if constexpr (is_scalar_param_spec_v<std::decay_t<decltype(spec)>>) {
-        // Scalar param
-        z[offset] = static_cast<double>(bindings[SymType{}]);
-        offset += 1;
-      } else {
-        // Indexed param - expect IndexedBinding with vector<double> values
-        // Apply inverse transform so users can pass constrained-space init values
-        auto binding = bindings[SymType{}];
-        for (std::size_t i = 0; i < n; ++i) {
-          z[offset + i] = spec.transform.inverse(binding.at(i));
-        }
-        offset += n;
-      }
-    }
-  }
+  // =========================================================================
+  // Non-observed symbols/specs runtime construction
+  // =========================================================================
 
-  // Build filtered symbols tuple (excluding observed params)
   template <std::size_t... Is>
   auto buildNonObservedSymbols(std::index_sequence<Is...>) const -> NonObservedSymbolsTuple {
     return std::tuple_cat(maybeIncludeSymbol<Is>()...);
@@ -541,7 +481,6 @@ class PlateTransformedPosterior {
     }
   }
 
-  // Build filtered specs tuple (excluding observed params)
   template <std::size_t... Is>
   auto buildNonObservedSpecs(std::index_sequence<Is...>) const -> NonObservedSpecsTuple {
     return std::tuple_cat(maybeIncludeSpec<Is>()...);
@@ -557,17 +496,443 @@ class PlateTransformedPosterior {
     }
   }
 
-  LogProbExpr log_prob_expr_;
-  ObsBindings observations_;
-  DataBindings data_bindings_;
-  ParamSpecsTuple specs_;
-  ParamSymbolsTuple symbols_;
-  GradExprsTuple grad_exprs_;
-  TransformPackType transform_pack_;
+  // =========================================================================
+  // Observation check
+  // =========================================================================
 
-  // -------------------------------------------------------------------------
-  // Implementation helpers
-  // -------------------------------------------------------------------------
+  template <typename Sym>
+  static constexpr bool isSymbolObserved() {
+    return IsSymbolInObsBindings<Sym, ObsBindings>::value;
+  }
+
+  // =========================================================================
+  // Total dimension (sum of non-observed param sizes)
+  // =========================================================================
+
+  auto totalDim() const -> std::size_t {
+    return transform_pack_.stateDim();
+  }
+
+  // =========================================================================
+  // Typed evaluator bridge: HmcState → BinderPack → evaluateIndexed
+  // =========================================================================
+
+  // Build BinderPack from HmcState by reading each non-observed param by symbol.
+  // Pre-transforms unconstrained z → constrained x before binding.
+  template <std::size_t... Is>
+  auto buildBindingsFromState(const HmcState& state, std::index_sequence<Is...>) const {
+    auto binding_tuple = std::tuple_cat(bindOneParam<Is>(state)...);
+    return tupleToBinderPack(binding_tuple);
+  }
+
+  template <std::size_t I>
+  auto bindOneParam(const HmcState& state) const {
+    using Sym = std::tuple_element_t<I, NonObservedSymbolsTuple>;
+    using Spec = std::decay_t<std::tuple_element_t<I, NonObservedSpecsTuple>>;
+    const auto& spec = std::get<I>(non_observed_specs_);
+
+    if constexpr (!Spec::is_indexed) {
+      double x = spec.transformValue(state[Sym{}]);
+      return std::make_tuple(Sym{} = x);
+    } else {
+      auto z_span = state[Sym{}];
+      constrained_cache_[I].resize(z_span.size());
+      for (std::size_t i = 0; i < z_span.size(); ++i)
+        constrained_cache_[I][i] = spec.transformValue(z_span[i]);
+      return std::make_tuple(
+          IndexedBinding<Sym, 1>{std::span<const double>(constrained_cache_[I])});
+    }
+  }
+
+  // =========================================================================
+  // logProb on typed state
+  // =========================================================================
+
+  auto logProbTyped(const HmcState& state) const -> double {
+    auto bindings = buildBindingsFromState(state, std::make_index_sequence<NumNonObserved>{});
+    auto merged = mergeAllBindings(bindings, observations_, data_bindings_);
+    double lp = evaluateIndexed(log_prob_expr_, merged);
+    double log_jac = logJacobianFromState(state, std::make_index_sequence<NumNonObserved>{});
+    return lp + log_jac;
+  }
+
+  template <std::size_t... Is>
+  auto logJacobianFromState(const HmcState& state, std::index_sequence<Is...>) const -> double {
+    double total = 0.0;
+    (logJacobianOneParam<Is>(state, total), ...);
+    return total;
+  }
+
+  template <std::size_t I>
+  void logJacobianOneParam(const HmcState& state, double& total) const {
+    using Sym = std::tuple_element_t<I, NonObservedSymbolsTuple>;
+    using Spec = std::decay_t<std::tuple_element_t<I, NonObservedSpecsTuple>>;
+    const auto& spec = std::get<I>(non_observed_specs_);
+
+    if constexpr (!Spec::is_indexed) {
+      total += spec.logJacobian(state[Sym{}]);
+    } else {
+      auto z_span = state[Sym{}];
+      for (std::size_t i = 0; i < z_span.size(); ++i)
+        total += spec.logJacobian(z_span[i]);
+    }
+  }
+
+  // =========================================================================
+  // Gradient on typed state
+  // =========================================================================
+
+  auto computeGradient(const HmcState& q) const -> HmcState {
+    auto grad = makeZeroState(non_observed_symbols_, non_observed_specs_,
+                              std::make_index_sequence<NumNonObserved>{});
+
+    auto bindings = buildBindingsFromState(q, std::make_index_sequence<NumNonObserved>{});
+    auto merged = mergeAllBindings(bindings, observations_, data_bindings_);
+
+    if constexpr (std::tuple_size_v<GradExprsTuple> == NumParamSlots) {
+      analyticGradAll(q, merged, grad, std::make_index_sequence<NumParamSlots>{});
+    }
+
+    return grad;
+  }
+
+  // Dispatch analytic gradient over ALL param slots (including observed — skipped)
+  template <typename Bindings, std::size_t... Is>
+  void analyticGradAll(const HmcState& q, const Bindings& bindings,
+                       HmcState& grad, std::index_sequence<Is...>) const {
+    // NonObserved index counter — incremented only for non-observed params
+    std::size_t no_idx = 0;
+    (analyticGradOneSlot<Is>(q, bindings, grad, no_idx), ...);
+  }
+
+  template <std::size_t I, typename Bindings>
+  void analyticGradOneSlot(const HmcState& q, const Bindings& bindings,
+                           HmcState& grad, std::size_t& no_idx) const {
+    using SymType = std::decay_t<std::tuple_element_t<I, ParamSymbolsTuple>>;
+    if constexpr (isSymbolObserved<SymType>()) {
+      return;  // Skip observed params
+    } else {
+      const auto& spec = std::get<I>(specs_);
+      const auto& grad_expr = std::get<I>(grad_exprs_);
+
+      if constexpr (is_scalar_param_spec_v<std::decay_t<decltype(spec)>>) {
+        double grad_x = evaluateIndexed(grad_expr, bindings);
+        grad[SymType{}] = spec.chainRuleGrad(grad_x, q[SymType{}]);
+      } else {
+        auto z_span = q[SymType{}];
+        auto g_span = grad[SymType{}];
+        for (std::size_t i = 0; i < z_span.size(); ++i) {
+          double grad_x = evaluateAtIndex(grad_expr, bindings, i);
+          g_span[i] = spec.chainRuleGrad(grad_x, z_span[i]);
+        }
+      }
+      ++no_idx;
+    }
+  }
+
+  // =========================================================================
+  // Serialization boundary: HmcState → flat vector (for Samples storage)
+  // =========================================================================
+
+  template <std::size_t... Is>
+  auto transformFromState(const HmcState& state, std::index_sequence<Is...>) const
+      -> std::vector<double> {
+    std::vector<double> out;
+    out.reserve(totalDim());
+    (appendTransformed<Is>(state, out), ...);
+    return out;
+  }
+
+  template <std::size_t I>
+  void appendTransformed(const HmcState& state, std::vector<double>& out) const {
+    using Sym = std::tuple_element_t<I, NonObservedSymbolsTuple>;
+    using Spec = std::decay_t<std::tuple_element_t<I, NonObservedSpecsTuple>>;
+    const auto& spec = std::get<I>(non_observed_specs_);
+
+    if constexpr (!Spec::is_indexed) {
+      out.push_back(spec.transformValue(state[Sym{}]));
+    } else {
+      auto z_span = state[Sym{}];
+      for (std::size_t i = 0; i < z_span.size(); ++i)
+        out.push_back(spec.transformValue(z_span[i]));
+    }
+  }
+
+  // =========================================================================
+  // Leapfrog integration on typed state
+  // =========================================================================
+
+  auto leapfrog(HmcState q, HmcState p, double eps, std::size_t steps) const
+      -> std::pair<HmcState, HmcState> {
+    double half_eps = eps / 2.0;
+    auto grad = computeGradient(q);
+    // Negate gradient: HMC uses potential energy = -logProb, so grad_U = -grad_logProb
+    // p -= half_eps * grad_U = p += half_eps * grad_logProb
+    applyUpdate(p, grad, half_eps, std::make_index_sequence<NumNonObserved>{});
+
+    for (std::size_t step = 0; step < steps; ++step) {
+      applyUpdate(q, p, eps, std::make_index_sequence<NumNonObserved>{});
+      if (step < steps - 1) {
+        grad = computeGradient(q);
+        applyUpdate(p, grad, eps, std::make_index_sequence<NumNonObserved>{});
+      }
+    }
+
+    grad = computeGradient(q);
+    applyUpdate(p, grad, half_eps, std::make_index_sequence<NumNonObserved>{});
+    negate(p, std::make_index_sequence<NumNonObserved>{});
+    return {std::move(q), std::move(p)};
+  }
+
+  template <std::size_t... Is>
+  static void applyUpdate(HmcState& target, const HmcState& source, double scale,
+                           std::index_sequence<Is...>) {
+    (updateOneParam<Is>(target, source, scale), ...);
+  }
+
+  template <std::size_t I>
+  static void updateOneParam(HmcState& target, const HmcState& source, double scale) {
+    using Sym = std::tuple_element_t<I, NonObservedSymbolsTuple>;
+    using Spec = std::decay_t<std::tuple_element_t<I, NonObservedSpecsTuple>>;
+    if constexpr (!Spec::is_indexed) {
+      target[Sym{}] += scale * source[Sym{}];
+    } else {
+      auto t = target[Sym{}];
+      auto s = source[Sym{}];
+      for (std::size_t i = 0; i < t.size(); ++i)
+        t[i] += scale * s[i];
+    }
+  }
+
+  template <std::size_t... Is>
+  static void negate(HmcState& state, std::index_sequence<Is...>) {
+    (negateOneParam<Is>(state), ...);
+  }
+
+  template <std::size_t I>
+  static void negateOneParam(HmcState& state) {
+    using Sym = std::tuple_element_t<I, NonObservedSymbolsTuple>;
+    using Spec = std::decay_t<std::tuple_element_t<I, NonObservedSpecsTuple>>;
+    if constexpr (!Spec::is_indexed) {
+      state[Sym{}] = -state[Sym{}];
+    } else {
+      auto span = state[Sym{}];
+      for (std::size_t i = 0; i < span.size(); ++i)
+        span[i] = -span[i];
+    }
+  }
+
+  // =========================================================================
+  // HMC step: sample momentum, leapfrog, Metropolis accept/reject
+  // =========================================================================
+
+  template <std::uniform_random_bit_generator RNG>
+  auto hmcStep(const HmcState& current, double current_lp,
+               double eps, std::size_t steps, RNG& rng) const
+      -> std::tuple<HmcState, double, bool> {
+    auto p = sampleMomentum(rng, std::make_index_sequence<NumNonObserved>{});
+    double current_ke = kineticEnergy(p, std::make_index_sequence<NumNonObserved>{});
+    double current_H = -current_lp + current_ke;
+
+    auto [proposed_q, proposed_p] = leapfrog(current, p, eps, steps);
+
+    double proposed_lp = logProbTyped(proposed_q);
+    if (!std::isfinite(proposed_lp)) {
+      return {current, current_lp, false};
+    }
+
+    double proposed_ke = kineticEnergy(proposed_p, std::make_index_sequence<NumNonObserved>{});
+    double proposed_H = -proposed_lp + proposed_ke;
+    double log_accept = current_H - proposed_H;
+
+    bool accept = false;
+    if (log_accept >= 0.0) {
+      accept = true;
+    } else {
+      std::uniform_real_distribution<double> uniform(0.0, 1.0);
+      accept = std::log(uniform(rng)) < log_accept;
+    }
+
+    if (accept) {
+      return {std::move(proposed_q), proposed_lp, true};
+    }
+    return {current, current_lp, false};
+  }
+
+  template <std::uniform_random_bit_generator RNG, std::size_t... Is>
+  auto sampleMomentum(RNG& rng, std::index_sequence<Is...>) const -> HmcState {
+    auto p = makeZeroState(non_observed_symbols_, non_observed_specs_,
+                           std::make_index_sequence<NumNonObserved>{});
+    std::normal_distribution<double> normal(0.0, 1.0);
+    (fillMomentum<Is>(p, normal, rng), ...);
+    return p;
+  }
+
+  template <std::size_t I, typename Dist, std::uniform_random_bit_generator RNG>
+  static void fillMomentum(HmcState& p, Dist& dist, RNG& rng) {
+    using Sym = std::tuple_element_t<I, NonObservedSymbolsTuple>;
+    using Spec = std::decay_t<std::tuple_element_t<I, NonObservedSpecsTuple>>;
+    if constexpr (!Spec::is_indexed) {
+      p[Sym{}] = dist(rng);
+    } else {
+      auto span = p[Sym{}];
+      for (std::size_t i = 0; i < span.size(); ++i)
+        span[i] = dist(rng);
+    }
+  }
+
+  template <std::size_t... Is>
+  static auto kineticEnergy(const HmcState& p, std::index_sequence<Is...>) -> double {
+    double ke = 0.0;
+    (keOneParam<Is>(p, ke), ...);
+    return ke / 2.0;
+  }
+
+  template <std::size_t I>
+  static void keOneParam(const HmcState& p, double& ke) {
+    using Sym = std::tuple_element_t<I, NonObservedSymbolsTuple>;
+    using Spec = std::decay_t<std::tuple_element_t<I, NonObservedSpecsTuple>>;
+    if constexpr (!Spec::is_indexed) {
+      double v = p[Sym{}];
+      ke += v * v;
+    } else {
+      auto span = p[Sym{}];
+      for (std::size_t i = 0; i < span.size(); ++i)
+        ke += span[i] * span[i];
+    }
+  }
+
+  // =========================================================================
+  // Init state from bindings: BinderPack → HmcState
+  // =========================================================================
+
+  template <typename... Binders>
+  auto initStateFromBindings(BinderPack<Binders...> bindings) const -> HmcState {
+    auto state = makeZeroState(non_observed_symbols_, non_observed_specs_,
+                               std::make_index_sequence<NumNonObserved>{});
+    initFromBindingsImpl(state, bindings, std::make_index_sequence<NumParamSlots>{});
+    return state;
+  }
+
+  template <typename... Binders, std::size_t... Is>
+  void initFromBindingsImpl(HmcState& state, BinderPack<Binders...> bindings,
+                            std::index_sequence<Is...>) const {
+    (initOneParam<Is>(state, bindings), ...);
+  }
+
+  template <std::size_t I, typename... Binders>
+  void initOneParam(HmcState& state, BinderPack<Binders...> bindings) const {
+    using SymType = std::decay_t<std::tuple_element_t<I, ParamSymbolsTuple>>;
+    if constexpr (isSymbolObserved<SymType>()) {
+      return;
+    } else {
+      const auto& spec = std::get<I>(specs_);
+      if constexpr (is_scalar_param_spec_v<std::decay_t<decltype(spec)>>) {
+        state[SymType{}] = static_cast<double>(bindings[SymType{}]);
+      } else {
+        auto binding = bindings[SymType{}];
+        auto z_span = state[SymType{}];
+        std::size_t n = spec.size();
+        for (std::size_t i = 0; i < n; ++i)
+          z_span[i] = spec.transform.inverse(binding.at(i));
+      }
+    }
+  }
+
+  // =========================================================================
+  // Finite-difference gradient (for gradient validation)
+  // =========================================================================
+
+  auto finiteDiffGradient(const HmcState& state) const -> std::vector<double> {
+    auto z = stateToVector(state, std::make_index_sequence<NumNonObserved>{});
+    constexpr double eps = 1e-7;
+    std::vector<double> grad(z.size());
+    for (std::size_t i = 0; i < z.size(); ++i) {
+      auto z_plus = z;
+      auto z_minus = z;
+      z_plus[i] += eps;
+      z_minus[i] -= eps;
+      auto s_plus = stateFromSpan(z_plus);
+      auto s_minus = stateFromSpan(z_minus);
+      grad[i] = (logProbTyped(s_plus) - logProbTyped(s_minus)) / (2.0 * eps);
+    }
+    return grad;
+  }
+
+  // =========================================================================
+  // Span-based API — delegates through HmcState for backward compatibility
+  // =========================================================================
+
+  template <std::size_t... Is>
+  auto logProbImpl(std::span<const double> z, std::index_sequence<Is...>) const -> double {
+    auto state = stateFromSpan(z);
+    return logProbTyped(state);
+  }
+
+  template <std::size_t... Is>
+  auto gradientImpl(std::span<const double> z, std::index_sequence<Is...>) const
+      -> std::vector<double> {
+    auto state = stateFromSpan(z);
+    auto grad = computeGradient(state);
+    return stateToVector(grad, std::make_index_sequence<NumNonObserved>{});
+  }
+
+  // Build HmcState from a flat span (for backward-compat span-based API)
+  auto stateFromSpan(std::span<const double> z) const -> HmcState {
+    auto state = makeZeroState(non_observed_symbols_, non_observed_specs_,
+                               std::make_index_sequence<NumNonObserved>{});
+    fillStateFromSpan(state, z, std::make_index_sequence<NumNonObserved>{});
+    return state;
+  }
+
+  template <std::size_t... Is>
+  void fillStateFromSpan(HmcState& state, std::span<const double> z,
+                         std::index_sequence<Is...>) const {
+    std::size_t offset = 0;
+    (fillOneSlotFromSpan<Is>(state, z, offset), ...);
+  }
+
+  template <std::size_t I>
+  void fillOneSlotFromSpan(HmcState& state, std::span<const double> z,
+                           std::size_t& offset) const {
+    using Sym = std::tuple_element_t<I, NonObservedSymbolsTuple>;
+    using Spec = std::decay_t<std::tuple_element_t<I, NonObservedSpecsTuple>>;
+    const auto& spec = std::get<I>(non_observed_specs_);
+
+    if constexpr (!Spec::is_indexed) {
+      state[Sym{}] = z[offset];
+      offset += 1;
+    } else {
+      auto span = state[Sym{}];
+      std::size_t n = spec.size();
+      for (std::size_t i = 0; i < n; ++i)
+        span[i] = z[offset + i];
+      offset += n;
+    }
+  }
+
+  // Convert HmcState gradient back to flat vector (for backward-compat API)
+  template <std::size_t... Is>
+  auto stateToVector(const HmcState& state, std::index_sequence<Is...>) const
+      -> std::vector<double> {
+    std::vector<double> out;
+    out.reserve(totalDim());
+    (appendSlotToVector<Is>(state, out), ...);
+    return out;
+  }
+
+  template <std::size_t I>
+  void appendSlotToVector(const HmcState& state, std::vector<double>& out) const {
+    using Sym = std::tuple_element_t<I, NonObservedSymbolsTuple>;
+    using Spec = std::decay_t<std::tuple_element_t<I, NonObservedSpecsTuple>>;
+    if constexpr (!Spec::is_indexed) {
+      out.push_back(state[Sym{}]);
+    } else {
+      auto span = state[Sym{}];
+      for (std::size_t i = 0; i < span.size(); ++i)
+        out.push_back(span[i]);
+    }
+  }
 
   // Helper to get size of param I, returning 0 if observed
   template <std::size_t I>
@@ -580,216 +945,23 @@ class PlateTransformedPosterior {
     }
   }
 
-  template <std::size_t... Is>
-  auto logProbImpl(std::span<const double> z, std::index_sequence<Is...>) const -> double {
-    // Evaluate model log-probability: log p(x) where x = transform(z)
-    // All params: pre-transform z → x, bind constrained x to Free symbols
-    auto bindings = buildBindingsUnconstrained(z, std::make_index_sequence<NumParamSlots>{});
-    auto merged = mergeAllBindings(bindings, observations_, data_bindings_);
-    double lp = evaluateIndexed(log_prob_expr_, merged);
+  // =========================================================================
+  // Merge bindings, setDimension
+  // =========================================================================
 
-    // Jacobian correction: log p(z) = log p(x) + log |dx/dz|
-    // Required for correct density in unconstrained space (HMC target)
-    // Use subspan matching non-observed param count (z may be oversized if caller
-    // includes slots for observed params that buildBindingsUnconstrained skips)
-    auto state_dim = transform_pack_.stateDim();
-    double log_jacobian = transform_pack_.logJacobian(z.subspan(0, state_dim));
-
-    return lp + log_jacobian;
-  }
-
-  // Check if a symbol type is in ObsBindings (to avoid duplicate bindings)
-  template <typename Sym>
-  static constexpr bool isSymbolObserved() {
-    return IsSymbolInObsBindingsHelper<Sym, ObsBindings>::value;
-  }
-
-  // Helper to check if Sym is in a BinderPack
-  template <typename Sym, typename OB>
-  struct IsSymbolInObsBindingsHelper {
-    static constexpr bool value = false;
-  };
-
-  template <typename Sym, typename... Binders>
-  struct IsSymbolInObsBindingsHelper<Sym, BinderPack<Binders...>> {
-    static constexpr bool value = ((std::is_same_v<Sym, typename Binders::symbol_type>) || ...);
-  };
-
-  // Build bindings with constrained values (used in gradient chain rule)
-  template <std::size_t... Is>
-  auto buildBindings(const std::vector<double>& x, std::index_sequence<Is...>) const {
-    // Pre-compute offsets to avoid undefined evaluation order in tuple_cat
-    auto offsets = computeParamOffsets(std::make_index_sequence<NumParamSlots>{});
-    auto binding_tuple = std::tuple_cat(maybeBindParamAtOffset<Is>(x, offsets[Is])...);
-    return tupleToBinderPackStatic(binding_tuple);
-  }
-
-  // Bind constrained value at a specific offset (doesn't modify offset)
-  template <std::size_t I>
-  auto maybeBindParamAtOffset(const std::vector<double>& x, std::size_t offset) const {
-    using SymType = std::decay_t<decltype(std::get<I>(symbols_))>;
-
-    if constexpr (isSymbolObserved<SymType>()) {
-      return std::tuple<>();
+  template <typename... PB, typename... Obs, typename... Data>
+  static auto mergeAllBindings(BinderPack<PB...> pb,
+                                [[maybe_unused]] BinderPack<Obs...> obs,
+                                [[maybe_unused]] BinderPack<Data...> data) {
+    if constexpr (sizeof...(Obs) == 0 && sizeof...(Data) == 0) {
+      return pb;
+    } else if constexpr (sizeof...(Obs) == 0) {
+      return BinderPack{static_cast<PB&>(pb)..., static_cast<Data&>(data)...};
+    } else if constexpr (sizeof...(Data) == 0) {
+      return BinderPack{static_cast<PB&>(pb)..., static_cast<Obs&>(obs)...};
     } else {
-      const auto& spec = std::get<I>(specs_);
-      const auto& sym = std::get<I>(symbols_);
-
-      if constexpr (is_scalar_param_spec_v<std::decay_t<decltype(spec)>>) {
-        double val = x[offset];
-        return std::make_tuple(sym = val);
-      } else {
-        std::size_t n = spec.size();
-        indexed_values_[I].assign(x.begin() + static_cast<std::ptrdiff_t>(offset),
-                                   x.begin() + static_cast<std::ptrdiff_t>(offset + n));
-        using SymType2 = std::decay_t<decltype(sym)>;
-        return std::make_tuple(IndexedBinding<SymType2, 1>{std::span<const double>(indexed_values_[I])});
-      }
-    }
-  }
-
-  // Build bindings with UNCONSTRAINED values (used in log-prob evaluation)
-  // The expression contains constrainedExpr() like exp(z), so we bind z, not exp(z)
-  template <std::size_t... Is>
-  auto buildBindingsUnconstrained(std::span<const double> z, std::index_sequence<Is...>) const {
-    // Pre-compute offsets to avoid undefined evaluation order in tuple_cat
-    // Each offset[I] is the sum of sizes of non-observed params with index < I
-    auto offsets = computeParamOffsets(std::make_index_sequence<NumParamSlots>{});
-    auto binding_tuple = std::tuple_cat(maybeBindParamUnconstrainedAtOffset<Is>(z, offsets[Is])...);
-    return tupleToBinderPackStatic(binding_tuple);
-  }
-
-  // Compute the starting offset for each parameter slot
-  template <std::size_t... Is>
-  auto computeParamOffsets(std::index_sequence<Is...>) const -> std::array<std::size_t, NumParamSlots> {
-    std::array<std::size_t, NumParamSlots> offsets{};
-    std::size_t running_offset = 0;
-    // Use comma fold expression to ensure left-to-right evaluation
-    ((offsets[Is] = running_offset, running_offset += paramSizeIfNotObserved<Is>()), ...);
-    return offsets;
-  }
-
-  // Bind constrained value at a specific offset.
-  // Both scalar and indexed params: pre-transform z → x, bind x to the Free symbol.
-  // Expression trees use plain Free atoms — no eval-time constraint transforms.
-  template <std::size_t I>
-  auto maybeBindParamUnconstrainedAtOffset(std::span<const double> z, std::size_t offset) const {
-    using SymType = std::decay_t<decltype(std::get<I>(symbols_))>;
-
-    if constexpr (isSymbolObserved<SymType>()) {
-      return std::tuple<>();
-    } else {
-      const auto& spec = std::get<I>(specs_);
-      const auto& sym = std::get<I>(symbols_);
-
-      if constexpr (is_scalar_param_spec_v<std::decay_t<decltype(spec)>>) {
-        // Scalar: pre-transform z → x, bind constrained value
-        double x = spec.transformValue(z[offset]);
-        return std::make_tuple(sym = x);
-      } else {
-        // Indexed: pre-transform z → x, bind constrained values
-        std::size_t n = spec.size();
-        constrained_values_[I].resize(n);
-        for (std::size_t i = 0; i < n; ++i) {
-          constrained_values_[I][i] = spec.transformValue(z[offset + i]);
-        }
-        using SymType2 = std::decay_t<decltype(sym)>;
-        return std::make_tuple(IndexedBinding<SymType2, 1>{std::span<const double>(constrained_values_[I])});
-      }
-    }
-  }
-
-  template <typename... Ts>
-  static auto tupleToBinderPackStatic(const std::tuple<Ts...>& t) {
-    return std::apply([](const auto&... bs) { return BinderPack{bs...}; }, t);
-  }
-
-  static auto tupleToBinderPackStatic(const std::tuple<>&) { return BinderPack<>{}; }
-
-  template <std::size_t... Is>
-  auto gradientImpl(std::span<const double> z, std::index_sequence<Is...>) const
-      -> std::vector<double> {
-    // Build bindings: pre-transform z → x, bind constrained x to Free symbols
-    auto bindings = buildBindingsUnconstrained(z, std::make_index_sequence<NumParamSlots>{});
-    auto merged = mergeAllBindings(bindings, observations_, data_bindings_);
-
-    // Compute gradients for each non-observed parameter slot
-    std::vector<double> grad(z.size());
-    std::size_t offset = 0;
-
-    // Use analytic gradients if gradient expressions are available,
-    // otherwise fall back to finite differences
-    if constexpr (std::tuple_size_v<GradExprsTuple> == NumParamSlots) {
-      (maybeComputeAnalyticGrad<Is>(z, merged, grad, offset), ...);
-    } else {
-      // Fallback: finite differences
-      computeFiniteDiffGradient(z, grad);
-    }
-
-    return grad;
-  }
-
-  // Analytic gradient for a single parameter slot (skipping observed).
-  // All params bind constrained values x = transform(z), so grad_expr
-  // evaluates to d(logp)/dx. Chain rule converts to unconstrained space:
-  //   grad_z = grad_x * dx/dz + d(logJacobian)/dz
-  template <std::size_t I, typename Bindings>
-  void maybeComputeAnalyticGrad(std::span<const double> z, const Bindings& bindings,
-                                std::vector<double>& grad, std::size_t& offset) const {
-    using SymType = std::decay_t<std::tuple_element_t<I, ParamSymbolsTuple>>;
-    if constexpr (isSymbolObserved<SymType>()) {
-      return;
-    } else {
-      const auto& spec = std::get<I>(specs_);
-      std::size_t n = spec.size();
-      const auto& grad_expr = std::get<I>(grad_exprs_);
-
-      if constexpr (is_scalar_param_spec_v<std::decay_t<decltype(spec)>>) {
-        // Scalar: grad_expr gives d(logp)/dx, apply chain rule for z → x
-        double grad_x = evaluateIndexed(grad_expr, bindings);
-        double grad_z = spec.chainRuleGrad(grad_x, z[offset]);
-        grad[offset] = grad_z;
-        offset += 1;
-      } else {
-        // Indexed: same logic per-element, diff distributes through SumOver
-        for (std::size_t i = 0; i < n; ++i) {
-          double z_i = z[offset + i];
-          double grad_x = evaluateGradAtIndex<I>(grad_expr, bindings, i);
-          double grad_z = spec.chainRuleGrad(grad_x, z_i);
-          grad[offset + i] = grad_z;
-        }
-        offset += n;
-      }
-    }
-  }
-
-  // Evaluate gradient for indexed parameter at specific index
-  template <std::size_t I, typename GradExpr, typename Bindings>
-  double evaluateGradAtIndex(const GradExpr& grad_expr, const Bindings& bindings,
-                             std::size_t idx) const {
-    // For indexed parameters, the gradient expression is SumOver<DimTag, inner>
-    // We need d(logp)/d(b[idx]), which is just the inner expr evaluated at idx
-    // (not summed over all indices)
-    return evaluateAtIndex(grad_expr, bindings, idx);
-  }
-
-  // Finite differences fallback
-  void computeFiniteDiffGradient(std::span<const double> z, std::vector<double>& grad) const {
-    constexpr double eps = 1e-7;
-    std::vector<double> z_plus(z.begin(), z.end());
-    std::vector<double> z_minus(z.begin(), z.end());
-
-    for (std::size_t i = 0; i < z.size(); ++i) {
-      z_plus[i] = z[i] + eps;
-      z_minus[i] = z[i] - eps;
-
-      double lp_plus = logProb(z_plus);
-      double lp_minus = logProb(z_minus);
-
-      grad[i] = (lp_plus - lp_minus) / (2.0 * eps);
-
-      z_plus[i] = z[i];
-      z_minus[i] = z[i];
+      return BinderPack{static_cast<PB&>(pb)..., static_cast<Obs&>(obs)...,
+                        static_cast<Data&>(data)...};
     }
   }
 
@@ -809,28 +981,6 @@ class PlateTransformedPosterior {
     }
     return spec;
   }
-
-  // Merge all binding sources: params, observations, and data
-  template <typename... PB, typename... Obs, typename... Data>
-  static auto mergeAllBindings(BinderPack<PB...> pb,
-                                [[maybe_unused]] BinderPack<Obs...> obs,
-                                [[maybe_unused]] BinderPack<Data...> data) {
-    if constexpr (sizeof...(Obs) == 0 && sizeof...(Data) == 0) {
-      return pb;
-    } else if constexpr (sizeof...(Obs) == 0) {
-      return BinderPack{static_cast<PB&>(pb)..., static_cast<Data&>(data)...};
-    } else if constexpr (sizeof...(Data) == 0) {
-      return BinderPack{static_cast<PB&>(pb)..., static_cast<Obs&>(obs)...};
-    } else {
-      return BinderPack{static_cast<PB&>(pb)..., static_cast<Obs&>(obs)...,
-                        static_cast<Data&>(data)...};
-    }
-  }
-
-  // Mutable storage for indexed values (needed for lifetime management)
-  mutable std::array<std::vector<double>, NumParamSlots> indexed_values_;
-  mutable std::array<std::vector<double>, NumParamSlots> unconstrained_values_;
-  mutable std::array<std::vector<double>, NumParamSlots> constrained_values_;
 };
 
 // ============================================================================
@@ -1013,16 +1163,6 @@ class PlateTransformedPosteriorBuilder {
       return std::tuple<>();
     }
   }
-
-  // -------------------------------------------------------------------------
-  // bind() helper: convert tuple to BinderPack
-  // -------------------------------------------------------------------------
-  template <typename... Ts>
-  static auto tupleToBinderPack(const std::tuple<Ts...>& t) {
-    return std::apply([](const auto&... bs) { return BinderPack{bs...}; }, t);
-  }
-
-  static auto tupleToBinderPack(const std::tuple<>&) { return BinderPack<>{}; }
 
   // -------------------------------------------------------------------------
   // bind() helper: infer dimension sizes from indexed bindings
