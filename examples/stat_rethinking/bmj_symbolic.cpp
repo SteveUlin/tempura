@@ -145,12 +145,11 @@ Model: logit(p[L]) = a + sigma * z_b[L]
   auto p = 1_c / (1_c + exp(-(a + sigma * z_b)));
   auto k = plate(binomial(n, p), Countries{});
 
-  // Build posterior - explicitly list params since auto-discovery has issues
-  // with mixed scalar + indexed params (see discoverParams in discover_params.h)
-  auto posterior = inferExplicit(a, sigma, z_b, k)
+  // infer(k) auto-discovers latent params: a, sigma, z_b
+  auto posterior = infer(k)
       .bind(n = indexed(n_obs), k = indexed(k_obs));
 
-  std::println("Model built with inferExplicit() + bind()");
+  std::println("Model built with infer(k) + bind()");
   std::println("  State dimension: {} (2 scalar + {} indexed)",
                posterior.stateDim(), kNumCountries);
 

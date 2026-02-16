@@ -317,60 +317,6 @@ auto main() -> int {
     std::cout << "Re-created collectLogProbs expr: logProb = " << lp_infer_expr << "\n";
     expectNear(lp1, lp_infer_expr, 1e-10);
 
-    // Debug: Use posterior's debug methods to test components
-    std::cout << "\n=== Debug Tests ===\n";
-
-    // Test 1: Does posterior's expression work with test's bindings?
-    auto posterior_expr = posterior.debugLogProbExpr();
-    using PosteriorExprType = decltype(posterior_expr);
-    std::cout << "Posterior expr type matches test expr? "
-              << (std::is_same_v<PosteriorExprType, TestExprType> ? "YES" : "NO") << "\n";
-
-    double lp_posterior_expr = evaluateIndexed(posterior_expr,
-        alpha.freeSym() = z[0],
-        sigma.freeSym() = z[1],
-        y_bind);
-    std::cout << "Posterior expr with test bindings: logProb = " << lp_posterior_expr << "\n";
-
-    // Test 2: Use posterior's debugEvalWithBindings to bypass internal binding construction
-    auto direct_bindings = BinderPack{alpha.freeSym() = z[0], sigma.freeSym() = z[1], y_bind};
-    double lp_debug_eval = posterior.debugEvalWithBindings(direct_bindings);
-    std::cout << "debugEvalWithBindings: logProb = " << lp_debug_eval << "\n";
-
-    // Test 3: Check if symbols in posterior match test's symbols
-    auto posterior_symbols = posterior.debugSymbols();
-    using Sym0 = std::decay_t<std::tuple_element_t<0, decltype(posterior_symbols)>>;
-    using Sym1 = std::decay_t<std::tuple_element_t<1, decltype(posterior_symbols)>>;
-    using Sym2 = std::decay_t<std::tuple_element_t<2, decltype(posterior_symbols)>>;
-    using TestAlpha = decltype(alpha.freeSym());
-    using TestSigma = decltype(sigma.freeSym());
-    using TestY = decltype(y.freeSym());
-
-    std::cout << "Sym0 matches TestAlpha? " << (std::is_same_v<Sym0, TestAlpha> ? "YES" : "NO") << "\n";
-    std::cout << "Sym1 matches TestSigma? " << (std::is_same_v<Sym1, TestSigma> ? "YES" : "NO") << "\n";
-    std::cout << "Sym2 matches TestY? " << (std::is_same_v<Sym2, TestY> ? "YES" : "NO") << "\n";
-
-    std::cout << "Sym0 type: " << typeid(Sym0).name() << "\n";
-    std::cout << "TestAlpha type: " << typeid(TestAlpha).name() << "\n";
-
-    // Test 4: Use debugLogProbWithMergedBindings - this calls the same code path as logProb
-    // but we can see if it matches
-    double lp_debug_merged = posterior.debugLogProbWithMergedBindings(z);
-    std::cout << "debugLogProbWithMergedBindings: logProb = " << lp_debug_merged << "\n";
-
-    // Test 5: Get the built bindings and merged bindings types
-    auto built_bindings = posterior.debugBuildBindings(z);
-    auto merged_bindings = posterior.debugMergedBindings(z);
-
-    // Print the binding types
-    std::cout << "\nBinding types:\n";
-    std::cout << "Built bindings type: " << typeid(built_bindings).name() << "\n";
-    std::cout << "Merged bindings type: " << typeid(merged_bindings).name() << "\n";
-    std::cout << "Expected (direct_bindings) type: " << typeid(direct_bindings).name() << "\n";
-
-    // Test 6: Evaluate with the built bindings + observation
-    double lp_built_eval = evaluateIndexed(posterior_expr, merged_bindings);
-    std::cout << "Eval with merged_bindings: logProb = " << lp_built_eval << "\n";
   };
 
   "gradients via finite difference match analytic"_test = [] {
@@ -533,6 +479,51 @@ auto main() -> int {
     }
 
     std::cout << "BMJ non-centered: all gradients match ✓\n";
+  };
+
+  // ===========================================================================
+  // Auto-discovery via infer(k) with mixed scalar + indexed params
+  // ===========================================================================
+
+  "bmj-style model with auto-discovery via infer(k)"_test = [] {
+    struct Countries {};
+
+    // Same model as above, but infer(k) auto-discovers a, sigma, z_b
+    auto a = normal(-2_c, 1_c);
+    auto sigma = exponential(1_c);
+    auto z_b = plate(normal(0.0_c, 1.0_c), Countries{});
+
+    auto n = data(Countries{});
+
+    auto p = 1_c / (1_c + exp(-(a + sigma * z_b)));
+    auto k = plate(binomial(n, p), Countries{});
+
+    constexpr std::size_t kN = 4;
+    std::vector<double> n_obs = {10.0, 20.0, 15.0, 8.0};
+    std::vector<double> k_obs = {2.0, 3.0, 1.0, 2.0};
+
+    // THE KEY: infer(k) alone, auto-discovers a, sigma, z_b
+    auto posterior = infer(k)
+        .bind(n = indexed(n_obs), k = indexed(k_obs));
+
+    expectEq(posterior.stateDim(), 2 + kN);  // a + sigma + z_b[4]
+
+    std::vector<double> state(2 + kN, 0.0);
+    double lp = posterior.logProb(state);
+    expectTrue(std::isfinite(lp));
+
+    // Gradient finite-diff check
+    auto grad = posterior.gradient(state);
+    constexpr double eps = 1e-5;
+    for (std::size_t i = 0; i < state.size(); ++i) {
+      auto z_plus = state, z_minus = state;
+      z_plus[i] += eps;
+      z_minus[i] -= eps;
+      double fd = (posterior.logProb(z_plus) - posterior.logProb(z_minus)) / (2 * eps);
+      expectNear(fd, grad[i], std::max(1e-4, std::abs(fd) * 0.01));
+    }
+
+    std::cout << "BMJ auto-discovery via infer(k): all gradients match ✓\n";
   };
 
   return TestRegistry::result();

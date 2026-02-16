@@ -49,11 +49,11 @@
             libxml2
           ];
 
-          # Build from llvm subdirectory, enable clang only
+          # Build from llvm subdirectory, enable clang + clang-tools-extra (clangd)
           # libc++ headers are provided separately by p2996LibcxxHeaders
           cmakeDir = "../llvm";
           cmakeFlags = [
-            "-DLLVM_ENABLE_PROJECTS=clang"
+            "-DLLVM_ENABLE_PROJECTS=clang;clang-tools-extra"
             "-DLLVM_TARGETS_TO_BUILD=X86"
             "-DCMAKE_BUILD_TYPE=Release"
             "-DLLVM_ENABLE_ASSERTIONS=OFF"

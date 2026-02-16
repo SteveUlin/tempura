@@ -1,19 +1,20 @@
 // Test for discoverParams functionality
 
+#include "symbolic4/constants.h"
 #include "symbolic4/distributions/discover_params.h"
+#include "symbolic4/distributions/indexed_node.h"
 #include "symbolic4/distributions/wrappers.h"
+#include "symbolic4/indexed/data.h"
 #include "symbolic4/indexed/indexed.h"
-#include "symbolic4/indexed/plate.h"
-#include "unit/unit.h"
+#include "unit.h"
 
 using namespace tempura;
 using namespace tempura::symbolic4;
-using namespace unit;
 
 auto main() -> int {
   "discoverParams finds scalar params"_test = [] {
-    auto alpha = normal(0.0, 10.0);
-    auto sigma = halfNormal(2.0);
+    auto alpha = normal(0_c, 10_c);
+    auto sigma = halfNormal(2_c);
     auto y = normal(alpha, sigma);
 
     auto discovered = discoverParams(y);
@@ -26,8 +27,8 @@ auto main() -> int {
   "discoverParams with indexed observation"_test = [] {
     struct Obs {};
 
-    auto alpha = normal(0.0, 10.0);
-    auto sigma = halfNormal(2.0);
+    auto alpha = normal(0_c, 10_c);
+    auto sigma = halfNormal(2_c);
     auto y = plate(normal(alpha, sigma), Obs{});
 
     auto discovered = discoverParams(y);
@@ -37,24 +38,23 @@ auto main() -> int {
     expectEq(2u, num_params);
   };
 
-  "discovered params have correct IDs"_test = [] {
-    auto alpha = normal(0.0, 10.0);
-    auto sigma = halfNormal(2.0);
-    auto y = normal(alpha, sigma);
+  "discoverParams finds mixed scalar + indexed params"_test = [] {
+    struct Countries {};
 
-    auto discovered = discoverParams(y);
+    auto a = normal(-2_c, 1_c);
+    auto sigma = exponential(1_c);
+    auto z_b = plate(normal(0_c, 1_c), Countries{});
+    auto n = data(Countries{});
 
-    // Get the first discovered param
-    auto& first = std::get<0>(discovered);
+    // p = sigmoid(a + sigma * z_b)
+    auto p = 1_c / (1_c + exp(-(a + sigma * z_b)));
+    auto k = plate(binomial(n, p), Countries{});
 
-    // Its symbol should match alpha's symbol type
-    using FirstSymbol = typename std::decay_t<decltype(first)>::symbol_type;
-    using AlphaSymbol = typename decltype(alpha)::symbol_type;
+    auto discovered = discoverParams(k);
 
-    // They should be the same type
-    static_assert(std::is_same_v<FirstSymbol, AlphaSymbol> ||
-                  std::tuple_size_v<decltype(discovered)> == 2,
-                  "Discovered params should have matching IDs");
+    // Should find 3 params: a (scalar), sigma (scalar), z_b (indexed)
+    constexpr auto num = std::tuple_size_v<decltype(discovered)>;
+    expectEq(3u, num);
   };
 
   return TestRegistry::result();

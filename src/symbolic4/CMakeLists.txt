@@ -338,6 +338,13 @@ target_link_libraries(symbolic4_symbolic_state_test PRIVATE symbolic4 unit)
 add_test(NAME symbolic4_symbolic_state_test COMMAND symbolic4_symbolic_state_test)
 set_tests_properties(symbolic4_symbolic_state_test PROPERTIES LABELS "symbolic4;symbolic_state")
 
+# discover_params_test.cc - parameter auto-discovery tests
+add_executable(discover_params_test distributions/discover_params_test.cc)
+target_link_libraries(discover_params_test PRIVATE symbolic4 unit)
+target_compile_options(discover_params_test PRIVATE -fconstexpr-steps=10000000)
+add_test(NAME discover_params_test COMMAND discover_params_test)
+set_tests_properties(discover_params_test PROPERTIES LABELS "symbolic4;discover_params")
+
 # plate_infer_test.cc - plate inference API tests
 # Info-domain diff+simplify on large plate expressions exceeds Clang's default
 # constexpr step limit (1M). The joint log-prob for a 3-param plate model produces

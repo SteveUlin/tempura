@@ -13,6 +13,16 @@ CompileFlags:
     - -Xcompiler*
 
 ---
+# P2996 reflection files — use the reflection build's compile database
+# Requires P2996-aware clangd (nix develop .#reflection puts it in PATH)
+If:
+  PathMatch: [src/symbolic4/.*, src/symbolic5/.*]
+CompileFlags:
+  CompilationDatabase: build-reflection/
+Diagnostics:
+  UnusedIncludes: None
+  MissingIncludes: None
+---
 # Lighter restrictions for heavy template files - keep functionality
 If:
   PathMatch: [src/symbolic3/.*, src/meta/.*]

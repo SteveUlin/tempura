@@ -45,6 +45,7 @@ add_subdirectory(hash)
 add_subdirectory(modular)
 add_subdirectory(symbolic3)  # Combinator-based symbolic system (canonical)
 add_subdirectory(symbolic4)  # AST-as-types with pluggable interpreters
+add_subdirectory(symbolic5)  # Info-native symbolic expressions (C++26 reflection)
 add_subdirectory(bayes)
 add_subdirectory(matrix2)
 add_subdirectory(matrix3)
