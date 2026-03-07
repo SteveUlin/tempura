@@ -87,8 +87,6 @@ constexpr auto beta(const double x, const double y) -> double {
 //   P(a, 0) = 0, P(a, ∞) = 1
 //   Integral form: P(a, x) = (1/Γ(a)) ∫₀ˣ t^(a-1) e^(-t) dt
 
-namespace detail {
-
 // Series expansion: γ(a, x) = e^(-x) x^a ∑_{n=0}^∞ x^n / Γ(a + n + 1)
 //
 // Converges rapidly for x < a + 1 (below the transition point)
@@ -213,8 +211,6 @@ constexpr auto incompleteGammaContinuedFraction(T a, T x) -> T {
   return T{1} - exp(-x + a * log(x) - lgamma(a)) * h;
 }
 
-}  // namespace detail
-
 // Generic incomplete gamma for arbitrary floating-point types
 template <typename T>
 constexpr auto incompleteGamma(T a, T x) -> T {
@@ -227,11 +223,11 @@ constexpr auto incompleteGamma(T a, T x) -> T {
   // Choose algorithm based on position relative to transition point
   if (x < a + T{1}) {
     // Series converges rapidly below transition
-    return detail::incompleteGammaSeries(a, x);
+    return incompleteGammaSeries(a, x);
   }
 
   // Continued fraction converges rapidly above transition
-  return detail::incompleteGammaContinuedFraction(a, x);
+  return incompleteGammaContinuedFraction(a, x);
 }
 
 // Specialized overload for double supporting large a via quadrature
@@ -244,14 +240,14 @@ constexpr auto incompleteGamma(double a, double x) -> double {
 
   // For very large a, quadrature is more stable than series/fraction
   if (a >= 100.0) {
-    return detail::incompleteGammaGaussianQuadature(a, x);
+    return incompleteGammaGaussianQuadature(a, x);
   }
 
   if (x < a + 1.0) {
-    return detail::incompleteGammaSeries(a, x);
+    return incompleteGammaSeries(a, x);
   }
 
-  return detail::incompleteGammaContinuedFraction(a, x);
+  return incompleteGammaContinuedFraction(a, x);
 }
 
 // Regularized incomplete beta function: I_x(a, b) = B_x(a, b) / B(a, b)
@@ -265,8 +261,6 @@ constexpr auto incompleteGamma(double a, double x) -> double {
 //   I_0(a, b) = 0, I_1(a, b) = 1
 //   I_x(a, b) = 1 - I_{1-x}(b, a)  (symmetry)
 //   Integral form: I_x(a, b) = (1/B(a,b)) ∫₀ˣ t^(a-1) (1-t)^(b-1) dt
-
-namespace detail {
 
 // Continued fraction for incomplete beta: I_x(a, b)
 //
@@ -331,8 +325,6 @@ constexpr auto incompleteBetaContinuedFraction(T a, T b, T x) -> T {
   return exp(log_prefactor) * h;
 }
 
-}  // namespace detail
-
 // Regularized incomplete beta function
 //
 // Uses continued fraction with symmetry for optimal convergence:
@@ -352,10 +344,10 @@ constexpr auto incompleteBeta(T a, T b, T x) -> T {
   // Use symmetry for better convergence
   // Continued fraction converges faster when x < (a+1)/(a+b+2)
   if (x > (a + T{1}) / (a + b + T{2})) {
-    return T{1} - detail::incompleteBetaContinuedFraction(b, a, T{1} - x);
+    return T{1} - incompleteBetaContinuedFraction(b, a, T{1} - x);
   }
 
-  return detail::incompleteBetaContinuedFraction(a, b, x);
+  return incompleteBetaContinuedFraction(a, b, x);
 }
 
 }  // namespace tempura::special

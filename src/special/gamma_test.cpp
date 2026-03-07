@@ -1,6 +1,6 @@
 #include "special/gamma.h"
 
-#include <print>
+#include <cmath>
 
 #include "unit.h"
 
@@ -44,15 +44,32 @@ auto main() -> int {
     expectNear(beta(2.0, 3.0), 0.08333333333333333);
   };
 
-  "incompleteGamma Continued Fraction"_test = [] {
-    std::println("{}", detail::incompleteGammaContinuedFraction(100.0, 95.0));
-    std::println("{}", detail::incompleteGammaSeries(100.0, 95.0));
-    std::println("{}", detail::incompleteGammaGaussianQuadature(100.0, 95.0));
+  // Regularized lower incomplete gamma P(a,x) ∈ [0,1]. Closed-form references:
+  //   P(1,x) = 1 − e^(−x),   P(2,x) = 1 − e^(−x)(1 + x)
+  "incompleteGamma"_test = [] {
+    expectNear(incompleteGamma(1.0, 1.0), 1.0 - std::exp(-1.0));
+    expectNear(incompleteGamma(1.0, 2.0), 1.0 - std::exp(-2.0));
+    expectNear(incompleteGamma(2.0, 1.0), 1.0 - 2.0 * std::exp(-1.0));
+    expectNear(incompleteGamma(2.0, 2.0), 1.0 - 3.0 * std::exp(-2.0));
 
-    std::println("{}", detail::incompleteGammaContinuedFraction(100.0, 105.0));
-    std::println("{}", detail::incompleteGammaSeries(100.0, 105.0));
-    std::println("{}", detail::incompleteGammaGaussianQuadature(100.0, 105.0));
+    // The double overload switches to Gauss-Legendre quadrature for a ≥ 100;
+    // cross-check it against the in-regime series / continued-fraction methods
+    // on each side of the x = a transition.
+    expectNear(incompleteGamma(100.0, 95.0),
+               incompleteGammaSeries(100.0, 95.0), 1e-6);
+    expectNear(incompleteGamma(100.0, 105.0),
+               incompleteGammaContinuedFraction(100.0, 105.0), 1e-6);
   };
 
-  return 0;
+  // Regularized incomplete beta I_x(a,b) ∈ [0,1]. Closed-form references:
+  //   I_x(1,1) = x,   I_x(2,1) = x²,   I_x(1,2) = 1 − (1−x)²,   I_0.5(2,2) = 0.5
+  "incompleteBeta"_test = [] {
+    expectNear(incompleteBeta(1.0, 1.0, 0.5), 0.5);
+    expectNear(incompleteBeta(1.0, 1.0, 0.3), 0.3);
+    expectNear(incompleteBeta(2.0, 1.0, 0.5), 0.25);
+    expectNear(incompleteBeta(1.0, 2.0, 0.5), 0.75);
+    expectNear(incompleteBeta(2.0, 2.0, 0.5), 0.5);
+  };
+
+  return TestRegistry::result();
 };
