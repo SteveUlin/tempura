@@ -17,13 +17,14 @@ target_link_libraries(scalar INTERFACE tempura_flags)
 add_library(tempura::scalar ALIAS scalar)
 
 # Owning N-d array (std::mdarray reimplementation) over the std mdspan/extents
-# primitives — the storage foundation the matrix layer is built on.
+# primitives — the storage foundation the matrix layer is built on. Element-
+# agnostic like std::mdarray, so it depends only on flags, not on scalar.
 add_library(mdarray INTERFACE mdarray.h)
 target_include_directories(mdarray INTERFACE
   $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
   $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(mdarray INTERFACE scalar)
+target_link_libraries(mdarray INTERFACE tempura_flags)
 add_library(tempura::mdarray ALIAS mdarray)
 
 # ============================================================================
