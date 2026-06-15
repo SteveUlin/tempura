@@ -9,4 +9,4 @@ set(CMAKE_CXX_COMPILER g++)
 set(CMAKE_C_COMPILER gcc)
 
 # GCC trunk ships <meta> in libstdc++ — no -nostdinc++ or custom include paths needed
-set(CMAKE_CXX_FLAGS_INIT "-std=c++2c -freflection -ftemplate-depth=2048 -fconstexpr-depth=2048")
+set(CMAKE_CXX_FLAGS_INIT "-freflection -ftemplate-depth=2048 -fconstexpr-depth=2048")

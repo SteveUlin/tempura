@@ -73,16 +73,16 @@
           gcc-trunk = gccTrunk;
         };
 
-        # Default shell uses GCC 15 (stable)
+        # Default shell uses GCC trunk (C++26 + P2996 reflection) — the canonical build
         devShells.default =
           pkgs.mkShell.override {
-            stdenv = pkgs.gcc15Stdenv;
+            stdenv = gccTrunkStdenv;
           } rec {
             name = "Tempura";
 
             packages = with pkgs; [
               pkgs.llvmPackages_20.clang
-              gcc15
+              gccTrunk
               gdb
               bazel
               cmake

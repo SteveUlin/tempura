@@ -53,6 +53,7 @@ if(NOT DEFINED CMAKE_INTERPROCEDURAL_OPTIMIZATION)
   set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
 endif()
 
+set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 
 # ============================================================================
@@ -65,7 +66,6 @@ target_compile_options(tempura_compiler_flags INTERFACE
   -Wall
   -Wextra
   -g
-  -std=c++2c
   -Wno-unknown-pragmas
   -Wno-unused-variable
   -Wno-unused-parameter
@@ -154,8 +154,10 @@ endif()
 
 add_subdirectory(src)
 
-if(TEMPURA_BUILD_EXAMPLES)
-  add_subdirectory(examples)
-  add_subdirectory(tools)
-  add_subdirectory(experiments)
-endif()
+# gcc-trunk C++26 migration (2026-06-15): examples/tools/experiments reference modules
+# dropped from the stripped build. Re-enable as their dependencies return.
+# if(TEMPURA_BUILD_EXAMPLES)
+#   add_subdirectory(examples)
+#   add_subdirectory(tools)
+#   add_subdirectory(experiments)
+# endif()
