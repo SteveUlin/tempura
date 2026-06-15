@@ -2,12 +2,12 @@
   "version": 6,
   "configurePresets": [
     {
-      "name": "clang-p2996",
-      "displayName": "Clang P2996 (C++26 Reflection)",
-      "description": "Build with Bloomberg's clang-p2996 and -freflection-latest",
+      "name": "gcc-trunk",
+      "displayName": "GCC Trunk (C++26 Reflection)",
+      "description": "Build with GCC trunk and -freflection (P2996)",
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build-reflection",
-      "toolchainFile": "${sourceDir}/cmake/toolchains/clang-p2996.cmake",
+      "binaryDir": "${sourceDir}/build-gcc-trunk",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/gcc-trunk.cmake",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "TEMPURA_PROFILE_COMPILE": "ON",
@@ -18,14 +18,14 @@
   ],
   "buildPresets": [
     {
-      "name": "clang-p2996",
-      "configurePreset": "clang-p2996"
+      "name": "gcc-trunk",
+      "configurePreset": "gcc-trunk"
     }
   ],
   "testPresets": [
     {
-      "name": "clang-p2996",
-      "configurePreset": "clang-p2996",
+      "name": "gcc-trunk",
+      "configurePreset": "gcc-trunk",
       "output": {
         "outputOnFailure": true
       }

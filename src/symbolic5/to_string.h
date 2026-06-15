@@ -59,13 +59,18 @@ template <auto V>
 struct Repr<Constant<V>> {
   static Fragment call() {
     std::string s = std::to_string(V);
-    // Clean trailing zeros from floating-point representation
+    // Normalize floating-point: strip excess trailing zeros but keep ".0"
+    // so doubles remain visually distinct from integers.
+    // P2587 (GCC trunk) makes std::to_string use shortest representation,
+    // which may omit the decimal point entirely for whole numbers.
     if constexpr (std::is_floating_point_v<decltype(V)>) {
       auto dot = s.find('.');
       if (dot != std::string::npos) {
         auto last = s.find_last_not_of('0');
         if (last == dot) ++last;  // keep at least "5.0" not "5."
         s.erase(last + 1);
+      } else {
+        s += ".0";
       }
     }
     if constexpr (std::is_signed_v<decltype(V)> && V < 0) {

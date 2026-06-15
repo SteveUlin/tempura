@@ -5,9 +5,9 @@
 - Don't sacrifice correctness for micro-optimizations
 - constexpr-by-default (maximum compile-time evaluation)
 - Prefer `std::` by default unless there's a reason to use a custom implementation
-- Using **Clang P2996** (Bloomberg's C++26 reflection fork) as primary compiler
-- C++26 reflection (`^^T`, `[:r:]`, `template for`) used throughout `meta/` and `symbolic4/`
-- `nix develop .#reflection` for dev shell; `cmake --preset clang-p2996` to configure
+- Using **GCC trunk** with `-freflection` for C++26 reflection
+- C++26 reflection (`^^T`, `[:r:]`, `template for`) used throughout symbolic5
+- `nix develop .#trunk` for dev shell; `cmake --preset gcc-trunk` to configure
 
 ## Code Style
 

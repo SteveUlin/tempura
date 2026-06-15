@@ -5,9 +5,8 @@
 // ============================================================================
 //
 // Provides the std::meta interface for compile-time type introspection.
-// Bloomberg's clang-p2996 ships <experimental/meta> — we include that directly.
-//
-// For GCC (once P2996 lands), replace the fallback with #include <meta>.
+// GCC trunk ships <meta>; Bloomberg's clang-p2996 ships <experimental/meta>.
+// The __has_include guard below handles both.
 //
 // Key primitives used by this codebase:
 //   ^^T                                    - reflect on type T → std::meta::info
@@ -17,10 +16,12 @@
 //   std::meta::template_arguments_of(^^T)  - get template args as info range
 //   std::meta::substitute(^^T, args)       - instantiate template with new args
 
-#if __has_include(<experimental/meta>)
+#if __has_include(<meta>)
+#include <meta>
+#elif __has_include(<experimental/meta>)
 #include <experimental/meta>
 #else
-#error "reflection.h requires <experimental/meta> — use nix develop .#reflection"
+#error "Requires C++26 reflection — use nix develop .#reflection or .#trunk"
 #endif
 
 #include <vector>
