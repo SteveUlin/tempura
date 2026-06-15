@@ -84,7 +84,6 @@
               pkgs.llvmPackages_20.clang
               gccTrunk
               gdb
-              bazel
               cmake
               ninja
               cudaPackages_12_6.cudatoolkit

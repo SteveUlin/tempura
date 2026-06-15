@@ -47,12 +47,6 @@ endif()
 # Global Build Settings
 # ============================================================================
 
-# Enable link time optimization (unless preset/cache overrides it to OFF)
-# LTO helps template-heavy code by deferring codegen to link-time (10% faster overall)
-if(NOT DEFINED CMAKE_INTERPROCEDURAL_OPTIMIZATION)
-  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
-endif()
-
 set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 

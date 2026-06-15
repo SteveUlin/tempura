@@ -1,44 +1,36 @@
 # ============================================================================
-# Components — gcc-trunk C++26 migration (2026-06-15)
+# tempura — one INTERFACE target, one-line test bricks
 # ============================================================================
-# The build is stripped to a single verified core target (scalar) compiled with
-# GCC trunk under -std=c++26 -freflection. Every other module is dropped from
-# the default build and re-added incrementally, each confirmed to compile under
-# the new toolchain before it returns. The full prior contents live in jj
-# history (recover a module with `jj diff` against the pre-migration commit).
-# ============================================================================
-
-add_library(scalar INTERFACE scalar.h)
-target_include_directories(scalar INTERFACE
-  $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
-  $<INSTALL_INTERFACE:include>
-)
-target_link_libraries(scalar INTERFACE tempura_flags)
-add_library(tempura::scalar ALIAS scalar)
-
-# Owning N-d array (std::mdarray reimplementation) over the std mdspan/extents
-# primitives — the storage foundation the matrix layer is built on. Element-
-# agnostic like std::mdarray, so it depends only on flags, not on scalar.
-add_library(mdarray INTERFACE mdarray.h)
-target_include_directories(mdarray INTERFACE
-  $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
-  $<INSTALL_INTERFACE:include>
-)
-target_link_libraries(mdarray INTERFACE tempura_flags)
-add_library(tempura::mdarray ALIAS mdarray)
-
-# ============================================================================
-# Tests
+# The whole library is a single INTERFACE target: `tempura` owns the src/
+# include root and the shared compiler flags, and every test links it. There
+# are no per-header libraries — for header-only code their link edges enforce
+# nothing (all share this include root), so the real dependency graph lives in
+# each header's #include lines, not in CMake. Add a brick by dropping foo.h +
+# foo_test.cpp beside their peers and adding one tempura_test(foo) line.
 # ============================================================================
 
-if(TEMPURA_BUILD_TESTS)
-  add_executable(scalar_test scalar_test.cpp)
-  target_link_libraries(scalar_test scalar)
-  add_test(NAME scalar_test COMMAND scalar_test)
-  set_property(TEST scalar_test PROPERTY LABELS base)
+add_library(tempura INTERFACE)
+add_library(tempura::tempura ALIAS tempura)
+target_include_directories(tempura INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
+target_link_libraries(tempura INTERFACE tempura_flags)
+target_compile_features(tempura INTERFACE cxx_std_26)
 
-  add_executable(mdarray_test mdarray_test.cpp)
-  target_link_libraries(mdarray_test mdarray)
-  add_test(NAME mdarray_test COMMAND mdarray_test)
-  set_property(TEST mdarray_test PROPERTY LABELS base)
-endif()
+# tempura_test(name [LABEL <label>] [DEPS <targets...>])
+#   Builds name_test from name_test.cpp, links the library, registers a ctest.
+#   No-op when tests are disabled, so calls stay unconditional one-liners.
+function(tempura_test name)
+  if(NOT TEMPURA_BUILD_TESTS)
+    return()
+  endif()
+  cmake_parse_arguments(ARG "" "LABEL" "DEPS" ${ARGN})
+  add_executable(${name}_test ${name}_test.cpp)
+  target_link_libraries(${name}_test PRIVATE tempura::tempura ${ARG_DEPS})
+  add_test(NAME ${name}_test COMMAND ${name}_test)
+  if(ARG_LABEL)
+    set_property(TEST ${name}_test PROPERTY LABELS ${ARG_LABEL})
+  endif()
+endfunction()
+
+# ── bricks ──────────────────────────────────────────────────────────────────
+tempura_test(scalar  LABEL base)
+tempura_test(mdarray LABEL base)

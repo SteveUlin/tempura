@@ -1,3 +1,0 @@
-add_library(matrix2_algorithms_gauss_jordan INTERFACE gauss_jordan.h)
-add_executable(matrix2_algorithms_gauss_jordan_test gauss_jordan_test.cpp)
-target_link_libraries(matrix2_algorithms_gauss_jordan_test matrix2_dense matrix2_algorithms_gauss_jordan unit)
