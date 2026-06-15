@@ -16,6 +16,16 @@ target_include_directories(scalar INTERFACE
 target_link_libraries(scalar INTERFACE tempura_flags)
 add_library(tempura::scalar ALIAS scalar)
 
+# Owning N-d array (std::mdarray reimplementation) over the std mdspan/extents
+# primitives — the storage foundation the matrix layer is built on.
+add_library(mdarray INTERFACE mdarray.h)
+target_include_directories(mdarray INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
+  $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(mdarray INTERFACE scalar)
+add_library(tempura::mdarray ALIAS mdarray)
+
 # ============================================================================
 # Tests
 # ============================================================================
@@ -25,4 +35,9 @@ if(TEMPURA_BUILD_TESTS)
   target_link_libraries(scalar_test scalar)
   add_test(NAME scalar_test COMMAND scalar_test)
   set_property(TEST scalar_test PROPERTY LABELS base)
+
+  add_executable(mdarray_test mdarray_test.cpp)
+  target_link_libraries(mdarray_test mdarray)
+  add_test(NAME mdarray_test COMMAND mdarray_test)
+  set_property(TEST mdarray_test PROPERTY LABELS base)
 endif()
