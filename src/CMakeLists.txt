@@ -32,5 +32,6 @@ function(tempura_test name)
 endfunction()
 
 # ── bricks ──────────────────────────────────────────────────────────────────
-tempura_test(scalar  LABEL base)
-tempura_test(mdarray LABEL base)
+tempura_test(scalar     LABEL base)
+tempura_test(comparison LABEL base)
+tempura_test(mdarray    LABEL base)
