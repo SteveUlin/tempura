@@ -116,6 +116,14 @@ target_include_directories(sequence INTERFACE
 target_link_libraries(sequence INTERFACE tempura_flags)
 add_library(tempura::sequence ALIAS sequence)
 
+add_library(scalar INTERFACE scalar.h)
+target_include_directories(scalar INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
+  $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(scalar INTERFACE tempura_flags)
+add_library(tempura::scalar ALIAS scalar)
+
 add_library(unit INTERFACE unit.h)
 target_include_directories(unit INTERFACE
   $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
@@ -216,6 +224,11 @@ if(TEMPURA_BUILD_TESTS)
   target_link_libraries(sequence_test unit sequence)
   add_test(NAME sequence_test COMMAND sequence_test)
   set_property(TEST sequence_test PROPERTY LABELS base)
+
+  add_executable(scalar_test scalar_test.cpp)
+  target_link_libraries(scalar_test scalar)
+  add_test(NAME scalar_test COMMAND scalar_test)
+  set_property(TEST scalar_test PROPERTY LABELS base)
 
   add_executable(root_finding_test root_finding_test.cpp)
   target_link_libraries(root_finding_test unit root_finding)
