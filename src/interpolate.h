@@ -2,19 +2,24 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
 #include <iterator>
 #include <ranges>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
 namespace tempura {
 
-namespace detail {
-// Not in stdlib yet
+// std::projected_value_t is specified for C++26 but not yet in this libstdc++.
 template <std::indirectly_readable I, std::indirectly_regular_unary_invocable<I> Proj>
 using projected_value_t = std::remove_cvref_t<std::invoke_result_t<Proj&, std::iter_value_t<I>&>>;
 
+// Projects the nth tuple element: GetFunctor<0> → xs, GetFunctor<1> → ys.
 template <size_t n>
 struct GetFunctor {
   template <typename T>
@@ -24,13 +29,11 @@ struct GetFunctor {
   }
 };
 
-}  // namespace detail
-
 // Like binary search, but remembers the last queried point and uses it as a
 // starting point for the next query.
 template <
     std::ranges::forward_range R, typename Proj = std::identity,
-    typename T = detail::projected_value_t<std::ranges::iterator_t<R>, Proj>,
+    typename T = projected_value_t<std::ranges::iterator_t<R>, Proj>,
     std::indirect_strict_weak_order<const T*, std::projected<std::ranges::iterator_t<R>, Proj>>
         Comp = std::ranges::less>
   requires(std::ranges::borrowed_range<R>)
@@ -39,6 +42,8 @@ class ExponentialSearcher {
   constexpr ExponentialSearcher(R data, Comp comp = {}, Proj proj = {})
       : data_{std::move(data)}, comp_{comp}, proj_{proj}, prev_{std::ranges::begin(data_)} {}
 
+  // Yields the first position whose key is ≥ value (lower_bound semantics), so it
+  // returns end() when value exceeds every element — deref only after a range check.
   constexpr auto find(const T& value) const {
     if consteval {
       return std::ranges::lower_bound(data_, value, comp_, proj_);
@@ -93,7 +98,12 @@ class PiecewiseInterpolator {
     assert(n > 0);
   }
 
-  constexpr auto operator()(const auto& arg) {
+  constexpr auto operator()(const auto& arg) const {
+    // Extrapolation is unreliable, so require arg inside the data range rather
+    // than silently clamping the window and returning a plausible-looking lie.
+    const auto& data = searcher_.data();
+    assert(std::get<0>(*std::ranges::begin(data)) <= arg &&
+           arg <= std::get<0>(*std::ranges::prev(std::ranges::end(data))));
     auto iter = searcher_.find(arg);
     iter = std::clamp(iter, start_, end_);
     std::advance(iter, -n_ / 2);
@@ -102,7 +112,7 @@ class PiecewiseInterpolator {
 
  private:
   int64_t n_;
-  ExponentialSearcher<Range, detail::GetFunctor<0>> searcher_;
+  ExponentialSearcher<Range, GetFunctor<0>> searcher_;
   std::ranges::iterator_t<Range> start_;
   std::ranges::iterator_t<Range> end_;
 };
@@ -114,9 +124,10 @@ class LinearInterpolator {
     assert(std::ranges::size(data_) == 2);
   }
 
-  constexpr auto operator()(const auto& arg) {
+  constexpr auto operator()(const auto& arg) const {
     const auto& [x0, y0] = data_[0];
     const auto& [x1, y1] = data_[1];
+    assert(x0 <= arg && arg <= x1);
     return y0 + ((y1 - y0) * (arg - x0) / (x1 - x0));
   }
 
@@ -168,18 +179,27 @@ template <std::ranges::borrowed_range Range>
 class PolynomialInterpolator {
  public:
   using ValueType =
-      detail::projected_value_t<std::ranges::iterator_t<Range>, detail::GetFunctor<1>>;
+      projected_value_t<std::ranges::iterator_t<Range>, GetFunctor<1>>;
 
   constexpr PolynomialInterpolator(Range data)
       : xs_{data | std::views::elements<0>}, ys_{data | std::views::elements<1>} {}
 
-  constexpr auto operator()(auto arg) {
-    size_t n = std::ranges::size(ys_);
+  // The last correction Neville adds estimates the truncation error — the reason
+  // the c/d formulation is worth more than a plain Lagrange evaluation.
+  struct Estimate {
+    ValueType value;
+    ValueType error;
+  };
+
+  constexpr auto evaluate(auto arg) const -> Estimate {
+    const size_t n = std::ranges::size(ys_);
+    using std::abs;
+    assert(xs_[0] <= arg && arg <= xs_[n - 1]);
+
     std::vector<ValueType> c(n, 0.0);
     std::vector<ValueType> d(n, 0.0);
 
     size_t idx = 0;
-    using std::abs;
     auto diff = abs(xs_[idx] - arg);
     c[0] = ys_[0];
     d[0] = ys_[0];
@@ -194,6 +214,7 @@ class PolynomialInterpolator {
     }
 
     ValueType y = ys_[idx];
+    ValueType dy{};
     --idx;
 
     for (size_t m = 1; m < n; ++m) {
@@ -206,15 +227,18 @@ class PolynomialInterpolator {
       }
 
       if (2 * (idx + 1) < (n - m)) {
-        y += c[idx + 1];
+        dy = c[idx + 1];
       } else {
-        y += d[idx];
+        dy = d[idx];
         --idx;
       }
+      y += dy;
     }
 
-    return y;
+    return {y, abs(dy)};
   }
+
+  constexpr auto operator()(auto arg) const -> ValueType { return evaluate(arg).value; }
 
  private:
   std::ranges::elements_view<Range, 0> xs_;
@@ -268,47 +292,45 @@ template <std::ranges::borrowed_range Range>
 class CubicSplineInterpolator {
  public:
   using ValueType =
-      detail::projected_value_t<std::ranges::iterator_t<Range>, detail::GetFunctor<1>>;
+      projected_value_t<std::ranges::iterator_t<Range>, GetFunctor<1>>;
 
   constexpr CubicSplineInterpolator(Range data)
       : data_{std::move(data)},
         y2_(std::ranges::size(data_)),
-        searcher_{data_, {}, detail::GetFunctor<0>{}} {
-    // The Eq: A y2 = b
-    std::vector<ValueType> b(std::ranges::size(data_) - 1);
-    y2_[0] = 0;
-    b[0] = 0;
-    {
-      const auto& [x0, y0] = data_[0];
-      const auto& [x1, y1] = data_[1];
-      const auto& [x2, y2] = data_[2];
-      const auto h0 = x1 - x0;
-      const auto h1 = x2 - x1;
-      y2_[1] = 2 * (x2 - x0);
-      b[1] = 6 * ((y2 - y1) / h1 - (y1 - y0) / h0);
-    }
-    for (size_t i = 2; i < std::ranges::size(data_) - 1; ++i) {
-      const auto& [x0, y0] = data_[i - 1];
-      const auto& [x1, y1] = data_[i];
-      const auto& [x2, y2] = data_[i + 1];
-      const auto h0 = x1 - x0;
-      const auto h1 = x2 - x1;
+        searcher_{data_, {}, GetFunctor<0>{}} {
+    const size_t n = std::ranges::size(data_);
+    assert(n >= 3);
+    const auto x = [&](size_t i) { return std::get<0>(data_[i]); };
+    const auto y = [&](size_t i) { return std::get<1>(data_[i]); };
 
-      // Here we use y2_ to represent the middle diagonal of the matrix. We first eliminate
-      // the lower diagonal. The upper diagonal should remain unchanged.
-      auto scale = h0 / y2_[i - 1];
-      y2_[i] = 2 * (x2 - x0);
-      y2_[i] -= scale * y2_[i - 1];
-      b[i] = 6 * ((y2 - y1) / h1 - (y1 - y0) / h0);
-      b[i] -= scale * b[i - 1];
+    // Tridiagonal solve (Thomas) for the interior y''; natural BC pins y''₀ =
+    // y''ₙ₋₁ = 0 (already set by value-init). The system is symmetric, so the
+    // upper diagonal of row i−1, the lower diagonal of row i, and the knot
+    // spacing hᵢ₋₁ are all the same value — the cancellation the old code missed.
+    std::vector<ValueType> diag(n);
+    std::vector<ValueType> rhs(n);
+    for (size_t i = 1; i + 1 < n; ++i) {
+      const auto h_lo = x(i) - x(i - 1);
+      const auto h_hi = x(i + 1) - x(i);
+      diag[i] = 2 * (h_lo + h_hi);
+      rhs[i] = 6 * ((y(i + 1) - y(i)) / h_hi - (y(i) - y(i - 1)) / h_lo);
     }
-
-    for (size_t i = std::ranges::size(data_) - 2; i > 0; --i) {
-      y2_[i] = (b[i] - y2_[i + 1]) / y2_[i];
+    // Forward-eliminate the lower diagonal against upper[i−1] == hᵢ₋₁.
+    for (size_t i = 2; i + 1 < n; ++i) {
+      const auto h_lo = x(i) - x(i - 1);
+      const auto factor = h_lo / diag[i - 1];
+      diag[i] -= factor * h_lo;
+      rhs[i] -= factor * rhs[i - 1];
+    }
+    // Back-substitute; upper[i] is the spacing hᵢ.
+    for (size_t i = n - 2; i > 0; --i) {
+      y2_[i] = (rhs[i] - (x(i + 1) - x(i)) * y2_[i + 1]) / diag[i];
     }
   }
 
-  constexpr auto operator()(const auto& arg) {
+  constexpr auto operator()(const auto& arg) const {
+    assert(std::get<0>(data_[0]) <= arg &&
+           arg <= std::get<0>(data_[std::ranges::size(data_) - 1]));
     auto iter = searcher_.find(arg);
     iter = std::ranges::clamp(iter, ++std::ranges::begin(searcher_.data()),
                               --std::ranges::end(searcher_.data()));
@@ -329,7 +351,7 @@ class CubicSplineInterpolator {
  private:
   Range data_;
   std::vector<ValueType> y2_;
-  ExponentialSearcher<Range, detail::GetFunctor<0>> searcher_;
+  ExponentialSearcher<Range, GetFunctor<0>> searcher_;
 };
 
 template <std::ranges::borrowed_range Range>
