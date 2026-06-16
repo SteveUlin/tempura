@@ -43,7 +43,7 @@ using ProductExtents = std::extents<std::size_t, ExtA::static_extent(0), ExtB::s
 // (an outer product of two small stack matrices can be megabytes), so stack is
 // opt-in via the destination form.
 template <typename T, typename Ext>
-using ResultMatrix = MdArray<T, Ext, std::layout_right, std::vector<T>>;
+using HeapResult = MdArray<T, Ext, std::layout_right, std::vector<T>>;
 
 // Kernels compute over views, not owners, so one definition serves owners,
 // sub-blocks, foreign buffers, and transposed/strided views. view() adapts an
@@ -162,7 +162,7 @@ constexpr auto add(const A& a, const B& b) {
   using Ea = typename decltype(va)::extents_type;
   using Eb = typename decltype(vb)::extents_type;
   using Value = std::common_type_t<typename decltype(va)::value_type, typename decltype(vb)::value_type>;
-  ResultMatrix<Value, SumExtents<Ea, Eb>> c(va.extent(0), va.extent(1));
+  HeapResult<Value, SumExtents<Ea, Eb>> c(va.extent(0), va.extent(1));
   add(va, vb, c);
   return c;
 }
@@ -173,7 +173,7 @@ constexpr auto multiply(const A& a, const B& b) {
   using Ea = typename decltype(va)::extents_type;
   using Eb = typename decltype(vb)::extents_type;
   using Value = std::common_type_t<typename decltype(va)::value_type, typename decltype(vb)::value_type>;
-  ResultMatrix<Value, ProductExtents<Ea, Eb>> c(va.extent(0), vb.extent(1));
+  HeapResult<Value, ProductExtents<Ea, Eb>> c(va.extent(0), vb.extent(1));
   multiply(va, vb, c);
   return c;
 }
