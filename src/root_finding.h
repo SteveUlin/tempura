@@ -4,22 +4,32 @@
 #include <cmath>
 #include <concepts>
 #include <cstdint>
-#include <functional>
+#include <limits>
+#include <tuple>
 #include <type_traits>
+#include <utility>
+#include <vector>
 
-namespace tempura::root_finding {
+namespace tempura {
+
+// A real function of one real variable. Templating on it instead of taking a
+// std::function is what makes every solver here usable in a constant expression:
+// std::function can neither be constructed nor invoked at compile time.
+template <typename F>
+concept RealFunction =
+    std::invocable<F, double> && std::convertible_to<std::invoke_result_t<F, double>, double>;
 
 struct Interval {
   double a;
   double b;
 };
 
-constexpr auto subIntervalSignChange(std::function<double(double)>& func,
+constexpr auto subIntervalSignChange(RealFunction auto func,
                                      Interval interval, int64_t N)
     -> std::vector<Interval> {
   std::vector<Interval> intervals;
   auto& [a, b] = interval;
-  double delta = (b - a) / N;
+  double delta = (b - a) / static_cast<double>(N);
   double x = a;
   for (int64_t i = 0; i < N; i++) {
     double x_next = x + delta;
@@ -41,7 +51,7 @@ constexpr auto subIntervalSignChange(std::function<double(double)>& func,
 // Bisection Method
 //
 // This is just binary search for the root of a function.
-constexpr auto bisectRoot(std::function<double(double)>& func,
+constexpr auto bisectRoot(RealFunction auto func,
                           Interval interval, int64_t max_iter = 1'000,
                           int64_t* N = nullptr) -> Interval {
   auto& [a, b] = interval;
@@ -80,7 +90,7 @@ constexpr auto bisectRoot(std::function<double(double)>& func,
 // intersection of that line with the x-axis is our next point.
 //
 // The scant method is not guaranteed to remain bounded within the original
-constexpr auto secantMethod(std::function<double(double)>& func,
+constexpr auto secantMethod(RealFunction auto func,
                             Interval interval, int64_t max_iter = 1'000,
                             int64_t* N = nullptr) -> Interval {
   auto& [a, b] = interval;
@@ -127,7 +137,7 @@ constexpr auto secantMethod(std::function<double(double)>& func,
 // of a method as you cannot go outside the bounds of the interval.
 //
 // Can be slow if there is a large curvature in the function.
-constexpr auto falsePosition(std::function<double(double)>& func,
+constexpr auto falsePosition(RealFunction auto func,
                              Interval interval, int64_t max_iter = 1'000,
                              int64_t* N = nullptr) -> Interval {
   auto& [a, b] = interval;
@@ -178,7 +188,7 @@ constexpr auto falsePosition(std::function<double(double)>& func,
 // through h(l), h(mid), and h(r)
 //
 // Numerical Recipes Third Edition 9.3.1
-constexpr auto riddersMethod(std::function<double(double)>& func,
+constexpr auto riddersMethod(RealFunction auto func,
                              Interval interval, int64_t max_iter = 1'000,
                              int64_t* N = nullptr) -> Interval {
   int64_t i = 0;
@@ -197,6 +207,8 @@ constexpr auto riddersMethod(std::function<double(double)>& func,
     if (N != nullptr) *N = i;
     return interval;
   }
+  // The s = √(f_m² − f_a·f_b) step is real only when the endpoints bracket a root.
+  assert(std::signbit(f_a) != std::signbit(f_b));
   for (; i < max_iter; i++) {
     double m = (a + b) * 0.5;
     double f_m = func(m);
@@ -237,4 +249,4 @@ constexpr auto riddersMethod(std::function<double(double)>& func,
   return interval;
 }
 
-}  // namespace tempura::root_finding
+}  // namespace tempura
