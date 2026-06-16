@@ -12,9 +12,6 @@ using namespace tempura;
 using Dext2 = std::dextents<std::size_t, 2>;
 using Dext3 = std::dextents<std::size_t, 3>;
 
-// Compile-time round-trip: constexpr construction, multidim write (pack and
-// array subscript), read-back. std::vector is constexpr in C++26, so the whole
-// owner lives and dies inside one constant evaluation.
 constexpr auto constexprRoundTrip() -> bool {
   MdArray<double, Dext2> a(2, 3);
   a[1, 2] = 7.0;
@@ -33,7 +30,7 @@ auto main() -> int {
     expectEq(a.extent(1), 4u);
     expectEq(a.size(), 12u);
     expectFalse(a.empty());
-    expectEq(a[0, 0], 0.0);  // fresh storage value-initializes to zero
+    expectEq(a[0, 0], 0.0);
     expectEq(a[2, 3], 0.0);
   };
 
@@ -68,13 +65,13 @@ auto main() -> int {
     expectEq(a[idx], 9.0);
     std::span<std::size_t, 2> sp{idx};
     expectEq(a[sp], 9.0);
-    a[idx] = 11.0;  // writes through too
+    a[idx] = 11.0;
     expectEq(a[1, 2], 11.0);
   };
 
   "mixed static and dynamic extents"_test = [] {
     using Ext = std::extents<std::size_t, 3, std::dynamic_extent>;
-    MdArray<double, Ext> a(4);  // only the one dynamic extent is supplied
+    MdArray<double, Ext> a(4);
     expectEq(a.rankDynamic(), 1u);
     expectEq(MdArray<double, Ext>::staticExtent(0), 3u);
     expectEq(a.extent(0), 3u);
@@ -111,13 +108,13 @@ auto main() -> int {
   "explicit toMdspan shares storage"_test = [] {
     MdArray<double, Dext2> a(2, 2);
     a[0, 0] = 1.0;
-    auto s = a.toMdspan();      // explicit — no silent conversion
+    auto s = a.toMdspan();
     expectEq((s[0, 0]), 1.0);
-    s[1, 1] = 5.0;             // write through the view...
-    expectEq(a[1, 1], 5.0);    // ...and see it in the owner.
+    s[1, 1] = 5.0;
+    expectEq(a[1, 1], 5.0);
 
     const auto& ca = a;
-    auto cs = ca.toMdspan();   // const owner → mdspan<const double>
+    auto cs = ca.toMdspan();
     expectEq((cs[1, 1]), 5.0);
   };
 
@@ -127,7 +124,7 @@ auto main() -> int {
     MdArray<double, Dext2> a(src);
     expectEq(a.size(), 6u);
     expectEq(a[1, 2], 6.0);
-    buf[5] = 99.0;             // the MdArray copied, so it is unaffected
+    buf[5] = 99.0;
     expectEq(a[1, 2], 6.0);
   };
 
@@ -138,10 +135,9 @@ auto main() -> int {
     row[1, 0] = 3.0;
     row[1, 1] = 4.0;
     MdArray<double, Dext2, std::layout_left> col(row);
-    // Logical elements match...
     expectEq((col[0, 1]), 2.0);
     expectEq((col[1, 0]), 3.0);
-    // ...but column-major flat storage differs: (1,0) sits at offset 1.
+    // column-major: element (1,0) is at flat offset 1
     expectEq(col.container()[1], 3.0);
   };
 

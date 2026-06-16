@@ -15,29 +15,11 @@ namespace tempura {
 
 // Owning N-dimensional array — the storage-owning twin of std::mdspan, and a
 // stand-in for std::mdarray (P1684, adopted into C++26 but not yet in
-// libstdc++). The interface mirrors std::mdarray member-for-member; only the
-// spelling differs — methods are camelCase preserving std's word order
-// (to_mdspan → toMdspan, rank_dynamic → rankDynamic), while member type aliases
-// keep the universal snake_case. When libstdc++ ships std::mdarray this renames
-// mechanically to the exact std names.
-//
-// Built on the std primitives we DO have: std::extents holds the shape,
-// Layout::mapping turns a multi-index into a linear offset, Container owns the
-// elements. Container is the heap/stack seam: std::vector<T> is the heap
-// happy-path, a fixed std::array<T, N> the stack variant.
-//
-// Element-agnostic, exactly like std::mdarray — no Scalar constraint here. The
-// field/ordering requirements belong on the algorithms that divide and compare,
-// not on the storage that merely holds.
-//
-// Conversion to a view is the explicit toMdspan(); like std::mdarray there is
-// deliberately NO implicit mdspan conversion, because a view outliving its
-// owner dangles.
+// libstdc++).
 template <typename T, typename Extents, typename Layout = std::layout_right,
           typename Container = std::vector<T>>
 class MdArray {
  public:
-  // ─── member types (snake_case: universal C++ idiom) ─────────────────────
   using extents_type = Extents;
   using layout_type = Layout;
   using container_type = Container;
@@ -52,15 +34,11 @@ class MdArray {
   using const_pointer = typename container_type::const_pointer;
   using const_reference = typename container_type::const_reference;
 
-  // ─── constructors ───────────────────────────────────────────────────────
-  // Default: a fully-static shape allocates its static size; an all-dynamic
-  // shape starts empty (its dynamic extents default to 0).
   constexpr MdArray() : MdArray(extents_type{}) {}
   constexpr MdArray(const MdArray&) = default;
   constexpr MdArray(MdArray&&) = default;
 
-  // Ergonomic shape constructor: MdArray(3, 4). Accepts either every extent or
-  // only the dynamic ones — std::extents' constructor sorts out which is which.
+  // Ergonomic shape constructor: MdArray(3, 4).
   template <typename... IndexTypes>
     requires(sizeof...(IndexTypes) > 0) &&
             (sizeof...(IndexTypes) == extents_type::rank() ||
@@ -76,8 +54,6 @@ class MdArray {
   constexpr explicit MdArray(const mapping_type& m)
       : mapping_{m}, container_{makeContainer(mapping_.required_span_size())} {}
 
-  // Shape + ready-made storage. Precondition: the container holds exactly the
-  // span the layout needs — crash loudly rather than read past the end later.
   constexpr MdArray(const extents_type& exts, const container_type& c)
       : mapping_{exts}, container_{c} {
     assert(container_.size() == static_cast<size_type>(mapping_.required_span_size()));
@@ -95,8 +71,6 @@ class MdArray {
     assert(container_.size() == static_cast<size_type>(mapping_.required_span_size()));
   }
 
-  // Copy every element out of any mdspan (any layout/accessor) into fresh
-  // storage. Implicit only when the source extents convert without narrowing.
   template <typename OtherT, typename OtherExtents, typename OtherLayout, typename OtherAccessor>
     requires std::is_constructible_v<extents_type, OtherExtents> &&
              (OtherExtents::rank() == extents_type::rank())
@@ -107,7 +81,6 @@ class MdArray {
     assignFrom(other);
   }
 
-  // Copy every element out of a differently-parameterized MdArray.
   template <typename OtherT, typename OtherExtents, typename OtherLayout, typename OtherContainer>
     requires std::is_constructible_v<extents_type, OtherExtents> &&
              (OtherExtents::rank() == extents_type::rank())
@@ -118,9 +91,6 @@ class MdArray {
     assignFrom(other);
   }
 
-  // ─── allocator-extended constructors ────────────────────────────────────
-  // Present only when the container participates in uses-allocator construction
-  // (std::vector does; std::array does not, so these vanish for stack storage).
   template <typename Alloc>
     requires std::uses_allocator_v<container_type, Alloc>
   constexpr MdArray(const extents_type& exts, const Alloc& a)
@@ -187,8 +157,6 @@ class MdArray {
   constexpr auto operator=(const MdArray&) -> MdArray& = default;
   constexpr auto operator=(MdArray&&) -> MdArray& = default;
 
-  // ─── element access ─────────────────────────────────────────────────────
-  // Multidimensional subscript (C++23). The mapping owns the stride arithmetic.
   template <typename... IndexTypes>
     requires(sizeof...(IndexTypes) == extents_type::rank()) &&
             (std::convertible_to<IndexTypes, index_type> && ...)
@@ -202,8 +170,6 @@ class MdArray {
     return container_[mapping_(static_cast<index_type>(idxs)...)];
   }
 
-  // Subscript by a packed index set — needed when the rank is only known at
-  // runtime (e.g. generic dimension-agnostic loops).
   template <typename OtherIndexType>
     requires std::convertible_to<const OtherIndexType&, index_type>
   constexpr auto operator[](std::span<OtherIndexType, extents_type::rank()> idxs) -> reference {
@@ -228,9 +194,6 @@ class MdArray {
     return container_[offsetOf(idxs, std::make_index_sequence<extents_type::rank()>{})];
   }
 
-  // ─── size / shape observers ─────────────────────────────────────────────
-  // Logical element count = product of extents (mdspan semantics), which can be
-  // less than the container's span for a padded/strided layout.
   constexpr auto size() const -> size_type {
     size_type n = 1;
     for (rank_type r = 0; r < extents_type::rank(); ++r) n *= static_cast<size_type>(extent(r));
@@ -249,7 +212,6 @@ class MdArray {
   constexpr auto extent(rank_type r) const -> index_type { return extents().extent(r); }
   constexpr auto stride(rank_type r) const -> index_type { return mapping_.stride(r); }
 
-  // ─── mapping property observers (delegated to the layout mapping) ─────────
   static constexpr auto isAlwaysUnique() -> bool { return mapping_type::is_always_unique(); }
   static constexpr auto isAlwaysExhaustive() -> bool { return mapping_type::is_always_exhaustive(); }
   static constexpr auto isAlwaysStrided() -> bool { return mapping_type::is_always_strided(); }
@@ -257,14 +219,9 @@ class MdArray {
   constexpr auto isExhaustive() const -> bool { return mapping_.is_exhaustive(); }
   constexpr auto isStrided() const -> bool { return mapping_.is_strided(); }
 
-  // ─── container access ───────────────────────────────────────────────────
   constexpr auto container() const -> const container_type& { return container_; }
-  // Move the storage out, leaving this MdArray valid-but-unspecified.
   constexpr auto extractContainer() && -> container_type { return std::move(container_); }
 
-  // ─── conversion to a view ───────────────────────────────────────────────
-  // Explicit, per std::mdarray. Templated on accessor so a checked/strided/GPU
-  // access policy can ride along when one exists; defaults to plain pointer access.
   template <typename OtherAccessor = std::default_accessor<element_type>>
   constexpr auto toMdspan(const OtherAccessor& a = OtherAccessor())
       -> std::mdspan<element_type, extents_type, layout_type, OtherAccessor> {
@@ -277,8 +234,6 @@ class MdArray {
   }
 
  private:
-  // A resizable container (vector) takes the span size; a fixed container
-  // (array) is already sized by its type, so default-construct it.
   static constexpr auto makeContainer(index_type span_size) -> container_type {
     if constexpr (requires { container_type(static_cast<size_type>(span_size)); }) {
       return container_type(static_cast<size_type>(span_size));
@@ -287,14 +242,11 @@ class MdArray {
     }
   }
 
-  // Unpack a runtime index set into the mapping's variadic call.
   template <typename Indexable, std::size_t... Is>
   constexpr auto offsetOf(const Indexable& idxs, std::index_sequence<Is...>) const -> size_type {
     return static_cast<size_type>(mapping_(static_cast<index_type>(idxs[Is])...));
   }
 
-  // Copy every element of `src` into our storage by multi-index, so source and
-  // destination layouts may differ. An odometer walks the whole index space.
   template <typename Src>
   constexpr void assignFrom(const Src& src) {
     std::array<index_type, extents_type::rank()> idx{};
