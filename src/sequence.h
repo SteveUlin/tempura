@@ -1,26 +1,26 @@
 #pragma once
 
+#include <cassert>
 #include <concepts>
 #include <cstddef>
 #include <functional>
 #include <ranges>
 #include <type_traits>
 
+#include "comparison.h"
+
 namespace tempura {
 
-// FnGenerator repeatedly calls a function and returning the results as a view.
-//
-// This class differs from std::generator as it uses regular functions instead
-// of coroutines.
-//
-// All FnGenerators are infinite in length, users must implement their own
-// stopping logic.
+// Infinite lazy view that re-invokes a nullary function for each element — a
+// constexpr, coroutine-free std::generator. For a closed-form term k prefer
+// std::views::iota | std::views::transform; Generate earns its keep when each
+// term is a cheap update of state (a recurrence). Stopping is the consumer's job.
 template <std::invocable Fn>
-class FnGenerator : std::ranges::view_interface<FnGenerator<Fn>> {
+class Generate : public std::ranges::view_interface<Generate<Fn>> {
  public:
-  struct Sentinel;
+  struct Sentinel {};
 
-  // Iterators are move only objects that take ownership of the generator.
+  // Move-only: the iterator takes ownership of the generating function.
   class Iterator {
    public:
     using difference_type = std::ptrdiff_t;
@@ -28,62 +28,38 @@ class FnGenerator : std::ranges::view_interface<FnGenerator<Fn>> {
 
     Iterator() = delete;
     Iterator(const Iterator&) = delete;
-
     constexpr Iterator(Iterator&& other) noexcept
         : fn_{std::move(other.fn_)}, value_{std::move(other.value_)} {}
-
     constexpr auto operator=(Iterator&& other) noexcept -> Iterator& {
       fn_ = std::move(other.fn_);
       value_ = std::move(other.value_);
       return *this;
     }
 
-    constexpr Iterator(Fn fn) : fn_{std::move(fn)}, value_{std::invoke(fn_)} {}
+    constexpr explicit Iterator(Fn fn) : fn_{std::move(fn)}, value_{std::invoke(fn_)} {}
 
     constexpr auto operator*() const -> decltype(auto) { return value_; }
-
     constexpr auto operator++() -> Iterator& {
       value_ = std::invoke(fn_);
       return *this;
     }
-
     constexpr void operator++(int) { ++*this; }
-
-    constexpr auto operator==(Sentinel /*unused*/) const -> bool {
-      return false;
-    }
-
-    constexpr auto operator!=(Sentinel /*unused*/) const -> bool {
-      return true;
-    }
+    constexpr auto operator==(Sentinel) const -> bool { return false; }
 
    private:
     Fn fn_;
     std::invoke_result_t<Fn> value_;
   };
 
-  struct Sentinel {
-    constexpr auto operator==(const Iterator& /*unused*/) const {
-      return false;
-    }
-
-    template <typename IteratorT, typename SentinelT>
-    constexpr auto operator!=(const Iterator& /*unused*/) const {
-      return true;
-    }
-  };
-
-  constexpr FnGenerator(FnGenerator&& other) noexcept : fn_{std::move(other.fn_)} {}
-  constexpr auto operator=(FnGenerator&& other) noexcept -> FnGenerator& {
+  constexpr Generate(Generate&& other) noexcept : fn_{std::move(other.fn_)} {}
+  constexpr auto operator=(Generate&& other) noexcept -> Generate& {
     fn_ = std::move(other.fn_);
     return *this;
   }
+  constexpr explicit Generate(Fn fn) : fn_{std::move(fn)} {}
 
-  constexpr FnGenerator(Fn fn) : fn_{std::move(fn)} {}
-
-  // Calling .begin() multiple times is undefined behavior;
+  // Calling begin() moves the function out, so it is single-pass.
   constexpr auto begin() -> Iterator { return Iterator{std::move(fn_)}; }
-
   constexpr auto end() const -> Sentinel { return {}; }
 
  private:
@@ -91,59 +67,82 @@ class FnGenerator : std::ranges::view_interface<FnGenerator<Fn>> {
 };
 
 template <std::invocable Fn>
-FnGenerator(Fn) -> FnGenerator<std::remove_cvref_t<Fn>>;
+Generate(Fn) -> Generate<std::remove_cvref_t<Fn>>;
 
 struct TakeFirst {};
-
 constexpr auto operator|(std::ranges::range auto&& rng, TakeFirst /*unused*/) {
   return *std::ranges::begin(rng);
 }
 
-template <typename FloatT>
+// Pulls successive iterates until two consecutive ones are isClose, returning the
+// converged value. An infinite generator that never settles must fail loudly, not
+// hang — so iterations are capped and exhausting the cap is a hard error.
 struct Converges {
-  FloatT epsilon;
+  Tolerance tol;
+  std::size_t max_iters = 1000;
 };
-
-template <typename FloatT>
-constexpr auto operator|(std::ranges::range auto&& rng,
-                         Converges<FloatT> converges) {
-  auto itr = std::ranges::begin(rng);
-  auto prev = *itr;
-  while (true) {
-    ++itr;
-    auto next = *itr;
-    if (std::abs(next - prev) < converges.epsilon * std::abs(next)) {
+constexpr auto operator|(std::ranges::range auto&& rng, Converges c) {
+  auto it = std::ranges::begin(rng);
+  const auto last = std::ranges::end(rng);
+  assert(it != last);
+  auto prev = *it;
+  for (std::size_t k = 1; k < c.max_iters; ++k) {
+    ++it;
+    if (it == last) {
+      return prev;  // finite range exhausted — its last value is the estimate
+    }
+    auto next = *it;
+    if (isClose(next, prev, c.tol)) {
       return next;
     }
     prev = next;
   }
+  assert(false && "Converges: did not converge within max_iters");
+  return prev;
 }
 
-// Evaluates a continued fraction at each partial denominator.
-// x = a1 / (b1 + a2 / (b2 + a3 / (b3 + ...)))
-//
-// Implements the Modified Lentz Algorithm for evaluating continued fractions.
-// See Numerical Recipes Third Edition, Section 5.2.
+// Accumulates a range of series terms, stopping once two consecutive partial
+// sums are isClose. Capped and loud on non-convergence.
+struct SumUntilConverged {
+  Tolerance tol;
+  std::size_t max_iters = 1000;
+};
+template <std::ranges::range R>
+constexpr auto operator|(R&& terms, SumUntilConverged s) {
+  using V = std::remove_cvref_t<std::ranges::range_value_t<R>>;
+  V sum{};
+  V prev{};
+  auto it = std::ranges::begin(terms);
+  const auto last = std::ranges::end(terms);
+  for (std::size_t k = 0; k < s.max_iters && it != last; ++it, ++k) {
+    sum += static_cast<V>(*it);
+    if (k > 0 && isClose(sum, prev, s.tol)) {
+      return sum;
+    }
+    prev = sum;
+  }
+  if (it == last) {
+    return sum;  // ran out of terms — best available partial sum
+  }
+  assert(false && "SumUntilConverged: did not converge within max_iters");
+  return sum;
+}
+
+// Evaluates a continued fraction b₀ + a₁/(b₁ + a₂/(b₂ + …)) via the Modified
+// Lentz algorithm (Numerical Recipes 3rd ed., §5.2), yielding successive
+// convergents as a lazy view over a range of (aₖ, bₖ) pairs.
 template <std::ranges::range Range, typename FloatT = double>
-class Continuantes : public std::ranges::view_interface<Continuantes<Range>> {
+class ContinuedFraction
+    : public std::ranges::view_interface<ContinuedFraction<Range, FloatT>> {
  public:
-  class Iterator;
-  struct Sentinel {
-    constexpr auto operator==(const Iterator& iter) const -> bool {
-      return iter == *this;
-    }
-    constexpr auto operator!=(const Iterator& iter) const -> bool {
-      return iter != *this;
-    }
-  };
+  struct Sentinel;
 
   class Iterator {
    public:
     using difference_type = std::ptrdiff_t;
     using value_type = FloatT;
 
-    constexpr Iterator(std::ranges::iterator_t<Range> iter,
-                       Continuantes* parent)
+    constexpr Iterator(std::ranges::iterator_t<Range> iter, ContinuedFraction* parent)
         : iter_{std::move(iter)}, parent_{parent} {
       if (iter_ != std::ranges::end(parent_->range_)) {
         update();
@@ -151,24 +150,16 @@ class Continuantes : public std::ranges::view_interface<Continuantes<Range>> {
     }
 
     constexpr auto operator*() const -> const value_type& { return f; }
-
     constexpr auto operator++() -> Iterator& {
       ++iter_;
-      if (iter_ == std::ranges::end(parent_->range_)) {
-        return *this;
+      if (iter_ != std::ranges::end(parent_->range_)) {
+        update();
       }
-      update();
       return *this;
     }
-
     constexpr void operator++(int) { ++(*this); }
-
     constexpr auto operator==(Sentinel /*unused*/) const -> bool {
       return iter_ == std::ranges::end(parent_->range_);
-    }
-
-    constexpr auto operator!=(Sentinel /*unused*/) const -> bool {
-      return iter_ != std::ranges::end(parent_->range_);
     }
 
    private:
@@ -185,24 +176,21 @@ class Continuantes : public std::ranges::view_interface<Continuantes<Range>> {
       }
       f = c * d * f;
     }
-    static constexpr value_type kTiny = 10e-30;
+    static constexpr value_type kTiny = 1e-30;
 
     std::ranges::iterator_t<Range> iter_;
     value_type f = kTiny;
     value_type c = kTiny;
     value_type d = 0.0;
-
-    Continuantes* parent_;
+    ContinuedFraction* parent_;
   };
 
+  struct Sentinel {};
 
   template <std::ranges::range R>
-  Continuantes(R&& range) : range_{std::forward<R&&>(range)} {}
+  constexpr explicit ContinuedFraction(R&& range) : range_{std::forward<R>(range)} {}
 
-  constexpr auto begin() -> Iterator {
-    return Iterator{std::ranges::begin(range_), this};
-  }
-
+  constexpr auto begin() -> Iterator { return Iterator{std::ranges::begin(range_), this}; }
   constexpr auto end() const -> Sentinel { return {}; }
 
  private:
@@ -210,20 +198,18 @@ class Continuantes : public std::ranges::view_interface<Continuantes<Range>> {
 };
 
 template <std::ranges::range Range>
-Continuantes(Range&&) -> Continuantes<std::ranges::views::all_t<Range>>;
+ContinuedFraction(Range&&) -> ContinuedFraction<std::ranges::views::all_t<Range>>;
 
-struct ContinuantesFn : std::ranges::range_adaptor_closure<ContinuantesFn> {
+struct ContinuedFractionFn : std::ranges::range_adaptor_closure<ContinuedFractionFn> {
   template <std::ranges::input_range Range>
   constexpr auto operator()(Range&& range) const {
-    return Continuantes(std::forward<Range>(range));
+    return ContinuedFraction(std::forward<Range>(range));
   }
 };
 
-constexpr auto continuants() { return ContinuantesFn{}; }
+constexpr auto continuedFraction() { return ContinuedFractionFn{}; }
 
-// Returns the rolling sum of the input range.
-// 1, 2, 3, 4, 5 ->
-// 1, 3, 6, 10, 15
+// Lazy prefix scan: 1, 2, 3, 4, 5 → 1, 3, 6, 10, 15 (default op std::plus).
 template <typename Range, typename BinaryOp>
 class InclusiveScanView
     : public std::ranges::view_interface<InclusiveScanView<Range, BinaryOp>> {
@@ -233,12 +219,10 @@ class InclusiveScanView
   template <typename IteratorT, typename SentinelT>
   class Iterator {
    public:
-    // Required for std::ranges::iterator_traits
     using difference_type = std::ptrdiff_t;
     using value_type = std::remove_cvref_t<std::ranges::range_value_t<Range>>;
 
-    constexpr Iterator(IteratorT begin, SentinelT end,
-                       const InclusiveScanView* parent)
+    constexpr Iterator(IteratorT begin, SentinelT end, const InclusiveScanView* parent)
         : current_{begin}, end_{end}, parent_{parent} {
       if (current_ != end) {
         acc_ = *current_;
@@ -246,7 +230,6 @@ class InclusiveScanView
     }
 
     constexpr auto operator*() const -> decltype(auto) { return acc_; }
-
     constexpr auto operator++() -> Iterator& {
       ++current_;
       if (current_ != end_) {
@@ -254,43 +237,25 @@ class InclusiveScanView
       }
       return *this;
     }
-
     constexpr auto operator++(int) -> Iterator {
       auto copy = *this;
       ++(*this);
       return copy;
     }
-
     constexpr auto operator==(const Sentinel /*unused*/) const -> bool {
       return current_ == end_;
     }
 
-    constexpr auto operator!=(const Sentinel /*unused*/) const -> bool {
-      return current_ != end_;
-    }
-
    private:
-    std::remove_cvref_t<std::ranges::range_value_t<Range>> acc_ = {};
+    value_type acc_ = {};
     IteratorT current_;
     [[no_unique_address]] SentinelT end_;
     const InclusiveScanView* parent_;
   };
 
-  struct Sentinel {
-    template <typename IteratorT, typename SentinelT>
-    constexpr auto operator==(const Iterator<IteratorT, SentinelT>& itr) const {
-      return itr == *this;
-    }
+  struct Sentinel {};
 
-    template <typename IteratorT, typename SentinelT>
-    constexpr auto operator!=(const Iterator<IteratorT, SentinelT>& itr) const {
-      return itr != *this;
-    }
-  };
-
-  // You can still move the view instead of using the constructor below
   constexpr InclusiveScanView(InclusiveScanView&&) = default;
-
   template <std::ranges::viewable_range Arg>
   constexpr explicit InclusiveScanView(Arg&& range, BinaryOp op = {})
       : range_(std::forward<Arg>(range)), op_(std::move(op)) {}
@@ -298,36 +263,30 @@ class InclusiveScanView
   constexpr auto begin() const {
     return Iterator(std::ranges::begin(range_), std::ranges::end(range_), this);
   }
-
   constexpr auto cbegin() const {
-    return Iterator(std::ranges::cbegin(range_), std::ranges::cend(range_),
-                    this);
+    return Iterator(std::ranges::cbegin(range_), std::ranges::cend(range_), this);
   }
-
   constexpr auto end() const -> Sentinel { return {}; }
   constexpr auto cend() const -> Sentinel { return {}; }
 
  private:
-  Range range_ = std::ranges::empty;
+  Range range_;
   BinaryOp op_ = {};
 };
 
 template <std::ranges::viewable_range Rng, typename BinaryOp = std::plus<>>
-InclusiveScanView(InclusiveScanView<Rng, BinaryOp>&&)
-    -> InclusiveScanView<Rng, BinaryOp>;
+InclusiveScanView(InclusiveScanView<Rng, BinaryOp>&&) -> InclusiveScanView<Rng, BinaryOp>;
 
 template <std::ranges::viewable_range Rng, typename BinaryOp = std::plus<>>
 InclusiveScanView(Rng&&, BinaryOp = {})
     -> InclusiveScanView<std::ranges::views::all_t<Rng>, BinaryOp>;
 
 template <typename BinaryOp>
-struct InclusiveScanFn
-    : std::ranges::range_adaptor_closure<InclusiveScanFn<BinaryOp>> {
+struct InclusiveScanFn : std::ranges::range_adaptor_closure<InclusiveScanFn<BinaryOp>> {
   template <std::ranges::input_range Range>
   constexpr auto operator()(Range&& range) const {
     return InclusiveScanView{std::forward<Range>(range), op};
   }
-
   BinaryOp op;
 };
 
@@ -339,10 +298,8 @@ constexpr auto inclusiveScan(BinaryOp op = {}) {
 }  // namespace tempura
 
 template <std::invocable Fn>
-constexpr bool std::ranges::enable_borrowed_range<tempura::FnGenerator<Fn>> =
-    true;
+constexpr bool std::ranges::enable_borrowed_range<tempura::Generate<Fn>> = true;
 
 template <std::ranges::range Range, typename FloatT>
-constexpr bool
-    std::ranges::enable_borrowed_range<tempura::Continuantes<Range, FloatT>> =
-        std::ranges::enable_borrowed_range<Range>;
+constexpr bool std::ranges::enable_borrowed_range<tempura::ContinuedFraction<Range, FloatT>> =
+    std::ranges::enable_borrowed_range<Range>;
