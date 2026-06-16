@@ -34,9 +34,9 @@ endfunction()
 tempura_test(scalar       LABEL base)
 tempura_test(comparison   LABEL base)
 tempura_test(unit         LABEL base)
-tempura_test(mdarray      LABEL base)
-tempura_test(matrix       LABEL base)
-tempura_test(vec          LABEL base)
 tempura_test(sequence     LABEL base)
 tempura_test(interpolate  LABEL base)
 tempura_test(root_finding LABEL base)
+
+# Module subdirectories — each owns its own CMakeLists with tempura_test() bricks.
+add_subdirectory(matrix4)
