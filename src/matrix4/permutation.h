@@ -96,6 +96,10 @@ class Permutation {
   }
 
   constexpr auto data() const -> const auto& { return order_; }
+  // Non-owning view of the index map, for building a permuted mdspan layout.
+  constexpr auto span() const -> std::span<const std::size_t> {
+    return {order_.data(), order_.size()};
+  }
   constexpr auto parity() const -> bool { return parity_; }
   constexpr auto determinantSign() const -> int { return parity_ ? -1 : 1; }
   constexpr auto size() const -> std::size_t { return order_.size(); }
