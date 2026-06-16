@@ -12,35 +12,25 @@
 
 namespace tempura {
 
-// Heap-backed matrix, storage is std::vector. Dimensions default to dynamic
-// (resolved at runtime); pass static Rows/Cols to bake the shape into the type
-// for compile-time shape checks while keeping the data on the heap — the right
-// choice for a large matrix whose size is nonetheless known.
+// Heap (std::vector) with optionally-static dims: storage and dim-staticness are
+// independent axes, so a large matrix can still carry a compile-time-checked shape.
 template <typename T, std::size_t Rows = std::dynamic_extent, std::size_t Cols = std::dynamic_extent>
 using Matrix = MdArray<T, std::extents<std::size_t, Rows, Cols>, std::layout_right, std::vector<T>>;
 
-// Stack-backed matrix: static extents held inline in a std::array. For small,
-// fixed sizes where avoiding heap allocation matters — a large size overflows
-// the stack, so reach for a static-shape Matrix instead.
 template <typename T, std::size_t Rows, std::size_t Cols>
 using InlineMatrix = MdArray<T, std::extents<std::size_t, Rows, Cols>, std::layout_right,
                              std::array<T, Rows * Cols>>;
 
-// ── result-type plumbing ─────────────────────────────────────────────────────
-// dynamic_extent is the "size unknown until runtime" sentinel; keep whichever
-// operand pins a dimension so a static shape survives mixing with a dynamic one.
 constexpr auto mergeExtent(std::size_t a, std::size_t b) -> std::size_t {
   return a != std::dynamic_extent ? a : b;
 }
 
-// Two static extents conform; an unknown (dynamic) one defers the check to a
-// runtime assert. A single static_assert(dimsCompatible(..)) thus fails only when
-// both dims are known and unequal — replacing a verbose `if constexpr` guard.
+// A dynamic (unknown) dim defers the check to runtime, so a static_assert on this
+// fails only when both dims are known and unequal.
 constexpr auto dimsCompatible(std::size_t a, std::size_t b) -> bool {
   return a == std::dynamic_extent || b == std::dynamic_extent || a == b;
 }
 
-// A+B keeps static extents from either side; A*B takes A's rows and B's cols.
 template <typename ExtA, typename ExtB>
 using SumExtents =
     std::extents<std::size_t, mergeExtent(ExtA::static_extent(0), ExtB::static_extent(0)),
@@ -48,27 +38,22 @@ using SumExtents =
 template <typename ExtA, typename ExtB>
 using ProductExtents = std::extents<std::size_t, ExtA::static_extent(0), ExtB::static_extent(1)>;
 
-// Value forms always own heap storage. Result size is not bounded by operand
-// size — an outer product of two small stack matrices can be megabytes — so
-// stack storage cannot be safely inferred from the operands. Static extents are
-// kept (for compile-time shape checks); storage is std::vector. Stack output is
-// opt-in via the destination form: multiply(A, B, dst) into an InlineMatrix.
+// Value forms always own heap storage: result size isn't bounded by operand size
+// (an outer product of two small stack matrices can be megabytes), so stack is
+// opt-in via the destination form. See docs/2026-06-15-matrix-design.md.
 template <typename T, typename Ext>
 using ResultMatrix = MdArray<T, Ext, std::layout_right, std::vector<T>>;
 
-// Owning matrices share storage only by being the same object, so address
-// identity is a sound, constexpr-evaluable aliasing test.
+// Owning matrices alias only by being the same object, so address identity is a
+// sound (and constexpr) aliasing test.
 constexpr auto sameStorage(const auto& a, const auto& b) -> bool {
   return static_cast<const void*>(&a) == static_cast<const void*>(&b);
 }
 
-// ── destination kernels (the primitives) ─────────────────────────────────────
-// Everything else is a thin wrapper over these. They write into a caller-owned
-// destination and allocate nothing — the only place the stack-vs-heap choice is
-// made, by the caller's choice of dst type.
+// The destination forms (write into dst) are the primitives; value forms and
+// operators wrap them. dst is where the caller picks stack vs heap.
 
-// dst ← A + B, element-wise. Alias-safe: cell (i,j) reads only (i,j), so dst may
-// be A or B (that is exactly what operator+= relies on).
+// Alias-safe: dst may be a or b — operator+= relies on this.
 template <typename Ta, typename Ea, typename La, typename Ca, typename Tb, typename Eb,
           typename Lb, typename Cb, typename Td, typename Ed, typename Ld, typename Cd>
   requires(Ea::rank() == 2 && Eb::rank() == 2 && Ed::rank() == 2)
@@ -88,11 +73,8 @@ constexpr auto add(const MdArray<Ta, Ea, La, Ca>& a, const MdArray<Tb, Eb, Lb, C
   return dst;
 }
 
-// dst ← A · B, the linear-algebra product (not the element-wise Hadamard one):
-// (m×k)·(k×n) = (m×n) via the textbook triple loop, no blocking or SIMD.
-// PRECONDITION: dst aliases neither operand — each dst cell accumulates over a
-// whole row of A and column of B, so overwriting an input mid-product corrupts
-// it. Forbidden and asserted, never silently worked around.
+// Matrix product, not element-wise. PRECONDITION: dst must not alias a or b —
+// each cell sums over a full row of a and column of b, so aliasing corrupts it.
 template <typename Ta, typename Ea, typename La, typename Ca, typename Tb, typename Eb,
           typename Lb, typename Cb, typename Td, typename Ed, typename Ld, typename Cd>
   requires(Ea::rank() == 2 && Eb::rank() == 2 && Ed::rank() == 2)
@@ -119,8 +101,7 @@ constexpr auto multiply(const MdArray<Ta, Ea, La, Ca>& a, const MdArray<Tb, Eb, 
   return dst;
 }
 
-// dst ← A · B + dst, the "updating" (gemm β=1) form. Same aliasing contract.
-// Split from multiply by name, not a runtime flag, so intent is explicit.
+// dst += a·b. Same no-alias precondition as multiply.
 template <typename Ta, typename Ea, typename La, typename Ca, typename Tb, typename Eb,
           typename Lb, typename Cb, typename Td, typename Ed, typename Ld, typename Cd>
   requires(Ea::rank() == 2 && Eb::rank() == 2 && Ed::rank() == 2)
@@ -147,9 +128,6 @@ constexpr auto multiplyAdd(const MdArray<Ta, Ea, La, Ca>& a, const MdArray<Tb, E
   return dst;
 }
 
-// ── value forms ──────────────────────────────────────────────────────────────
-// Allocate the heap result (merged static extents kept for checks) and delegate
-// to the kernel. One implementation of the math; this just owns the buffer.
 template <typename Ta, typename Ea, typename La, typename Ca, typename Tb, typename Eb,
           typename Lb, typename Cb>
   requires(Ea::rank() == 2 && Eb::rank() == 2)
@@ -167,9 +145,6 @@ constexpr auto multiply(const MdArray<Ta, Ea, La, Ca>& a, const MdArray<Tb, Eb, 
   return c;
 }
 
-// ── operator spellings ───────────────────────────────────────────────────────
-// `*` is the matrix product; `+` is element-wise. Value operators alias the
-// value functions; compound operators mutate the LHS.
 template <typename Ta, typename Ea, typename La, typename Ca, typename Tb, typename Eb,
           typename Lb, typename Cb>
   requires(Ea::rank() == 2 && Eb::rank() == 2)
@@ -183,7 +158,7 @@ constexpr auto operator*(const MdArray<Ta, Ea, La, Ca>& a, const MdArray<Tb, Eb,
   return multiply(a, b);
 }
 
-// a += b mutates a in place — alias-safe element-wise, so dst is a itself.
+// add is alias-safe, so a is its own destination.
 template <typename Ta, typename Ea, typename La, typename Ca, typename Tb, typename Eb,
           typename Lb, typename Cb>
   requires(Ea::rank() == 2 && Eb::rank() == 2)
@@ -192,10 +167,8 @@ constexpr auto operator+=(MdArray<Ta, Ea, La, Ca>& a, const MdArray<Tb, Eb, Lb, 
   return add(a, b, a);
 }
 
-// a *= b is a·b assigned back to a. Matrix product cannot alias its output, so
-// route through the allocating value form and copy back — the temporary is
-// explicit, never hidden. Requires b square with side == a columns (so the
-// product keeps a's shape); a's type and storage are preserved.
+// a ← a·b. Matmul can't write into its own input and a·b's type may differ from
+// a, so compute then copy back — a's type and storage are preserved.
 template <typename Ta, typename Ea, typename La, typename Ca, typename Tb, typename Eb,
           typename Lb, typename Cb>
   requires(Ea::rank() == 2 && Eb::rank() == 2)
