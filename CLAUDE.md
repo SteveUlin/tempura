@@ -40,7 +40,8 @@
 - The bar to add a comment at all is HIGH. Write one only if it clears at least one of: (1) a *why* — non-obvious code whose rationale isn't visible from the code; (2) a pre/postcondition worth stating (e.g. "dst must not alias inputs"); (3) the code's function is non-obvious from its name. If none apply, write nothing.
 - Assume the reader is a competent C++ developer - be instructive, not condescending
 - Explain *why this specific approach* - what constraint or insight drove the decision
-- Keep comments concise - one line when possible; the full design rationale lives in commits/docs, link to it rather than inlining
+- Keep comments concise - one line when possible
+- A comment must stand on its own - never reference a doc or another file from it (no paths/links); they rot and couple. The full design rationale lives in commits/docs, discovered there, not linked from source
 - Good: `// API requires positive input, so take abs() and negate output if needed`
 - Good: `// Robin Hood reduces probe length variance at cost of more swaps`
 - Good: `// Variance = p(1-p), maximized at p=0.5`
