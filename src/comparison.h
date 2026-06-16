@@ -10,12 +10,6 @@
 
 namespace tempura {
 
-// Absolute tolerance: |a - b| < delta
-template <std::floating_point T, std::floating_point U, std::floating_point Delta>
-constexpr auto isNear(const T& lhs, const U& rhs, const Delta& delta) -> bool {
-  return std::abs(lhs - rhs) < delta;
-}
-
 template <std::ranges::input_range R1, std::ranges::input_range R2>
   requires std::equality_comparable_with<std::ranges::range_value_t<R1>,
                                          std::ranges::range_value_t<R2>>
@@ -26,33 +20,6 @@ constexpr auto rangesEqual(R1&& lhs, R2&& rhs) -> bool {
     }
   }
   return std::ranges::equal(lhs, rhs);
-}
-
-template <std::ranges::input_range R1, std::ranges::input_range R2,
-          std::floating_point Delta>
-  requires std::floating_point<std::ranges::range_value_t<R1>> &&
-           std::floating_point<std::ranges::range_value_t<R2>>
-constexpr auto rangesNear(R1&& lhs, R2&& rhs, const Delta& delta) -> bool {
-  if constexpr (std::ranges::sized_range<R1> && std::ranges::sized_range<R2>) {
-    if (std::ranges::size(lhs) != std::ranges::size(rhs)) {
-      return false;
-    }
-  }
-
-  auto it1 = std::ranges::begin(lhs);
-  auto it2 = std::ranges::begin(rhs);
-  auto end1 = std::ranges::end(lhs);
-  auto end2 = std::ranges::end(rhs);
-
-  while (it1 != end1 && it2 != end2) {
-    if (!isNear(*it1, *it2, delta)) {
-      return false;
-    }
-    ++it1;
-    ++it2;
-  }
-
-  return it1 == end1 && it2 == end2;
 }
 
 constexpr auto isNan(double x) -> bool { return x != x; }

@@ -2,10 +2,12 @@
 
 #include <concepts>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <exception>
 #include <format>
 #include <print>
+#include <ranges>
 #include <source_location>
 #include <string_view>
 #include <type_traits>
@@ -127,43 +129,106 @@ constexpr auto expectFalse(const auto& value,
   return ok;
 }
 
-namespace detail {
-constexpr double kDefaultDelta = 1e-4;
-}  // namespace detail
-
-constexpr auto expectNear(const auto& lhs, const auto& rhs, const auto& delta,
-                          std::source_location loc = std::source_location::current()) -> bool {
-  return reportBinary(isNear(lhs, rhs, delta), loc, "expectNear", lhs, rhs);
+constexpr auto expectClose(const auto& lhs, const auto& rhs, Tolerance tol,
+                           std::source_location loc = std::source_location::current()) -> bool {
+  return reportBinary(isClose(lhs, rhs, tol), loc, "expectClose", lhs, rhs);
 }
-constexpr auto expectNear(const auto& lhs, const auto& rhs,
-                          std::source_location loc = std::source_location::current()) -> bool {
-  return expectNear(lhs, rhs, detail::kDefaultDelta, loc);
+
+constexpr auto expectWithinUlps(double lhs, double rhs, std::uint64_t max_ulps = 4,
+                                std::source_location loc = std::source_location::current()) -> bool {
+  const auto dist = ulpDistance(lhs, rhs);
+  const bool ok = dist <= max_ulps;
+  if (!ok) {
+    if !consteval {
+      reportFailure(loc, std::format("expectWithinUlps: {} ulps apart (> {})", dist, max_ulps));
+    }
+  }
+  return ok;
+}
+
+constexpr auto expectFinite(double x,
+                            std::source_location loc = std::source_location::current()) -> bool {
+  const bool ok = isFinite(x);
+  if (!ok) {
+    if !consteval {
+      reportFailure(loc, std::format("expectFinite: {}", x));
+    }
+  }
+  return ok;
+}
+constexpr auto expectNan(double x,
+                         std::source_location loc = std::source_location::current()) -> bool {
+  const bool ok = isNan(x);
+  if (!ok) {
+    if !consteval {
+      reportFailure(loc, std::format("expectNan: {}", x));
+    }
+  }
+  return ok;
+}
+constexpr auto expectInf(double x,
+                         std::source_location loc = std::source_location::current()) -> bool {
+  const bool ok = isInf(x);
+  if (!ok) {
+    if !consteval {
+      reportFailure(loc, std::format("expectInf: {}", x));
+    }
+  }
+  return ok;
+}
+
+template <typename R1, typename R2, typename Pred>
+constexpr auto checkRange(std::source_location loc, std::string_view op, R1&& lhs, R2&& rhs,
+                          Pred pred) -> bool {
+  if constexpr (std::ranges::sized_range<R1> && std::ranges::sized_range<R2>) {
+    if (std::ranges::size(lhs) != std::ranges::size(rhs)) {
+      if !consteval {
+        reportFailure(loc, std::format("{}: size mismatch ({} vs {})", op,
+                                       std::ranges::size(lhs), std::ranges::size(rhs)));
+      }
+      return false;
+    }
+  }
+  auto it1 = std::ranges::begin(lhs);
+  auto it2 = std::ranges::begin(rhs);
+  const auto end1 = std::ranges::end(lhs);
+  const auto end2 = std::ranges::end(rhs);
+  std::size_t i = 0;
+  while (it1 != end1 && it2 != end2) {
+    if (!pred(*it1, *it2)) {
+      if !consteval {
+        using L = std::remove_cvref_t<decltype(*it1)>;
+        using R = std::remove_cvref_t<decltype(*it2)>;
+        if constexpr (Formattable<L> && Formattable<R>) {
+          reportFailure(loc, std::format("{}: index {}: {} vs {}", op, i, *it1, *it2));
+        } else {
+          reportFailure(loc, std::format("{}: mismatch at index {}", op, i));
+        }
+      }
+      return false;
+    }
+    ++it1;
+    ++it2;
+    ++i;
+  }
+  if (it1 != end1 || it2 != end2) {
+    if !consteval {
+      reportFailure(loc, std::format("{}: length mismatch", op));
+    }
+    return false;
+  }
+  return true;
 }
 
 constexpr auto expectRangeEq(auto&& lhs, auto&& rhs,
                              std::source_location loc = std::source_location::current()) -> bool {
-  const bool ok = rangesEqual(lhs, rhs);
-  if (!ok) {
-    if !consteval {
-      reportFailure(loc, "expectRangeEq failed");
-    }
-  }
-  return ok;
+  return checkRange(loc, "expectRangeEq", lhs, rhs,
+                    [](const auto& l, const auto& r) { return l == r; });
 }
-constexpr auto expectRangeNear(auto&& lhs, auto&& rhs, const auto& delta,
-                               std::source_location loc = std::source_location::current()) -> bool {
-  const bool ok = rangesNear(lhs, rhs, delta);
-  if (!ok) {
-    if !consteval {
-      reportFailure(loc, "expectRangeNear failed");
-    }
-  }
-  return ok;
-}
-constexpr auto expectRangeNear(auto&& lhs, auto&& rhs,
-                               std::source_location loc = std::source_location::current()) -> bool {
-  return expectRangeNear(std::forward<decltype(lhs)>(lhs),
-                         std::forward<decltype(rhs)>(rhs), detail::kDefaultDelta, loc);
+constexpr auto expectRangeClose(auto&& lhs, auto&& rhs, Tolerance tol,
+                                std::source_location loc = std::source_location::current()) -> bool {
+  return checkRange(loc, "expectRangeClose", lhs, rhs,
+                    [tol](const auto& l, const auto& r) { return isClose(l, r, tol); });
 }
 
 }  // namespace tempura

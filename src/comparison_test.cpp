@@ -42,8 +42,6 @@ static_assert(!rangesClose(std::array{1.0, 2.0, 3.0},
 static_assert(!rangesClose(std::array{1.0, 2.0, 3.0}, std::array{1.0, 2.0},
                            {.rtol = 1e-9}));
 
-// ─── existing predicates still hold (isClose now owns relative tolerance) ────
-static_assert(isNear(1.0, 1.0001, 1e-3));
 static_assert(rangesEqual(std::array{1, 2, 3}, std::array{1, 2, 3}));
 
 auto main() -> int { return 0; }

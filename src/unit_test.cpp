@@ -1,8 +1,14 @@
 #include "unit.h"
 
 #include <array>
+#include <limits>
 
 using namespace tempura;
+
+namespace {
+constexpr double kInf = std::numeric_limits<double>::infinity();
+constexpr double kNan = std::numeric_limits<double>::quiet_NaN();
+}  // namespace
 
 // The same expect* vocabulary runs in constant evaluation.
 constexpr auto compileTimeChecks() -> bool {
@@ -15,9 +21,14 @@ constexpr auto compileTimeChecks() -> bool {
   ok &= expectLE(2, 2);
   ok &= expectGT(3, 2);
   ok &= expectGE(3, 3);
-  ok &= expectNear(1.0, 1.0 + 1e-6, 1e-3);
+  ok &= expectClose(1.0, 1.0 + 1e-10, {.rtol = 1e-9});
+  ok &= expectClose(0.0, 1e-12, {.atol = 1e-9});
+  ok &= expectWithinUlps(1.0, 1.0 + 0x1p-52, 1);
+  ok &= expectFinite(1.0);
+  ok &= expectNan(kNan);
+  ok &= expectInf(kInf);
   ok &= expectRangeEq(std::array{1, 2, 3}, std::array{1, 2, 3});
-  ok &= expectRangeNear(std::array{1.0, 2.0}, std::array{1.0 + 1e-6, 2.0}, 1e-3);
+  ok &= expectRangeClose(std::array{1.0, 2.0}, std::array{1.0, 2.0 + 1e-10}, {.rtol = 1e-9});
   return ok;
 }
 static_assert(compileTimeChecks());
@@ -32,10 +43,17 @@ auto main() -> int {
     expectLE(2, 2);
     expectGT(3, 2);
     expectGE(3, 3);
-    expectNear(1.0, 1.0 + 1e-6, 1e-3);
-    expectNear(1.0, 1.0 + 1e-6);  // default delta
     expectRangeEq(std::array{1, 2, 3}, std::array{1, 2, 3});
-    expectRangeNear(std::array{1.0, 2.0}, std::array{1.0 + 1e-6, 2.0}, 1e-3);
+  };
+
+  "numeric vocabulary runs at runtime"_test = [] {
+    expectClose(1.0, 1.0 + 1e-10, {.rtol = 1e-9});
+    expectClose(0.0, 1e-12, {.atol = 1e-9});
+    expectWithinUlps(1.0, 1.0 + 0x1p-52, 1);
+    expectFinite(1.0);
+    expectNan(kNan);
+    expectInf(kInf);
+    expectRangeClose(std::array{1.0, 2.0, 3.0}, std::array{1.0, 2.0 + 1e-10, 3.0}, {.rtol = 1e-9});
   };
 
   "the same checks pass in constant evaluation"_test = [] { expectTrue(compileTimeChecks()); };
