@@ -33,13 +33,6 @@ constexpr auto mergeExtent(std::size_t a, std::size_t b) -> std::size_t {
   return a != std::dynamic_extent ? a : b;
 }
 
-template <typename Ext>
-constexpr auto staticSize() -> std::size_t {
-  std::size_t n = 1;
-  for (std::size_t r = 0; r < Ext::rank(); ++r) n *= Ext::static_extent(r);
-  return n;
-}
-
 // A+B keeps static extents from either side; A*B takes A's rows and B's cols.
 template <typename ExtA, typename ExtB>
 using SumExtents =
@@ -48,27 +41,13 @@ using SumExtents =
 template <typename ExtA, typename ExtB>
 using ProductExtents = std::extents<std::size_t, ExtA::static_extent(0), ExtB::static_extent(1)>;
 
-template <typename>
-inline constexpr bool kIsStdArray = false;
-template <typename T, std::size_t N>
-inline constexpr bool kIsStdArray<std::array<T, N>> = true;
-
-// The result lives where the operands live: stack std::array only when BOTH
-// operands are stack-backed (and the shape is therefore fully static), else heap
-// std::vector. Storage tracks the inputs, not just the result's staticness — so
-// multiplying two static-shape heap Matrices stays on the heap.
-template <typename T, typename Ext, typename CA, typename CB>
-struct ResultStorage {
-  using type = std::vector<T>;
-};
-template <typename T, typename Ext, typename CA, typename CB>
-  requires(kIsStdArray<CA> && kIsStdArray<CB> && Ext::rank_dynamic() == 0)
-struct ResultStorage<T, Ext, CA, CB> {
-  using type = std::array<T, staticSize<Ext>()>;
-};
-
-template <typename T, typename Ext, typename CA, typename CB>
-using ResultMatrix = MdArray<T, Ext, std::layout_right, typename ResultStorage<T, Ext, CA, CB>::type>;
+// Value forms always own heap storage. Result size is not bounded by operand
+// size — an outer product of two small stack matrices can be megabytes — so
+// stack storage cannot be safely inferred from the operands. Static extents are
+// kept (for compile-time shape checks); storage is std::vector. Stack output is
+// opt-in via the destination form: multiply(A, B, dst) into an InlineMatrix.
+template <typename T, typename Ext>
+using ResultMatrix = MdArray<T, Ext, std::layout_right, std::vector<T>>;
 
 // ── operations ───────────────────────────────────────────────────────────────
 // Element-wise sum. The result is static in any dimension either operand pins,
@@ -90,7 +69,7 @@ constexpr auto add(const MdArray<T, ExtA, LA, CA>& a, const MdArray<U, ExtB, LB,
 
   const std::size_t rows = a.extent(0);
   const std::size_t cols = a.extent(1);
-  ResultMatrix<Value, SumExtents<ExtA, ExtB>, CA, CB> c(rows, cols);
+  ResultMatrix<Value, SumExtents<ExtA, ExtB>> c(rows, cols);
   for (std::size_t i = 0; i < rows; ++i)
     for (std::size_t j = 0; j < cols; ++j)
       c[i, j] = static_cast<Value>(a[i, j]) + static_cast<Value>(b[i, j]);
@@ -114,7 +93,7 @@ constexpr auto multiply(const MdArray<T, ExtA, LA, CA>& a, const MdArray<U, ExtB
   const std::size_t m = a.extent(0);
   const std::size_t k = a.extent(1);
   const std::size_t n = b.extent(1);
-  ResultMatrix<Value, ProductExtents<ExtA, ExtB>, CA, CB> c(m, n);
+  ResultMatrix<Value, ProductExtents<ExtA, ExtB>> c(m, n);
   for (std::size_t i = 0; i < m; ++i)
     for (std::size_t j = 0; j < n; ++j) {
       Value sum{};

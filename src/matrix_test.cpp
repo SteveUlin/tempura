@@ -7,25 +7,22 @@
 
 using namespace tempura;
 
-// Output type composes the two operands along independent axes: extents merge
-// (static dim wins, checked), storage follows the operands (stack only if BOTH
-// are stack-backed), element type is the common type.
-static_assert(std::same_as<decltype(InlineMatrix<double, 2, 2>{} + InlineMatrix<double, 2, 2>{}),
-                           InlineMatrix<double, 2, 2>>);
-static_assert(std::same_as<decltype(Matrix<double>{} + Matrix<double>{}), Matrix<double>>);
+// Value forms always return a heap Matrix; the merged static extents survive for
+// compile-time shape checks, but storage is never inferred onto the stack (result
+// size isn't bounded by operand size). Element type is the common type.
 static_assert(std::same_as<decltype(InlineMatrix<double, 2, 3>{} * InlineMatrix<double, 3, 4>{}),
-                           InlineMatrix<double, 2, 4>>);
-static_assert(std::same_as<decltype(Matrix<double>{} * Matrix<double>{}), Matrix<double>>);
-// A static shape on the heap stays on the heap — shape is checked, storage isn't
-// silently moved to the stack. This is the large-matrix case.
+                           Matrix<double, 2, 4>>);
 static_assert(std::same_as<decltype(Matrix<double, 2, 3>{} * Matrix<double, 3, 4>{}),
                            Matrix<double, 2, 4>>);
-// Mixing a stack operand with a heap one recovers the static shape but stays on
-// the heap (any heap operand → heap result).
+static_assert(std::same_as<decltype(Matrix<double>{} * Matrix<double>{}), Matrix<double>>);
+static_assert(std::same_as<decltype(InlineMatrix<double, 2, 2>{} + InlineMatrix<double, 2, 2>{}),
+                           Matrix<double, 2, 2>>);
 static_assert(std::same_as<decltype(InlineMatrix<double, 2, 2>{} + Matrix<double>{}),
                            Matrix<double, 2, 2>>);
+static_assert(std::same_as<decltype(Matrix<double>{} + Matrix<double>{}), Matrix<double>>);
 
-// Matrix multiply runs in a constant expression on stack storage — no heap.
+// Matrix multiply in a constant expression. The heap result is a transient
+// allocation, valid in constexpr since C++20 made std::vector constexpr.
 constexpr auto constexprProduct() -> bool {
   InlineMatrix<double, 2, 2> a;
   a[0, 0] = 1.0; a[0, 1] = 2.0; a[1, 0] = 3.0; a[1, 1] = 4.0;
@@ -49,12 +46,13 @@ auto main() -> int {
     expectEq(c[1, 1], 44.0);
   };
 
-  "inline addition stays on the stack"_test = [] {
+  "inline operands, heap result with preserved static shape"_test = [] {
     InlineMatrix<double, 2, 2> a;
     a[0, 0] = 1.0; a[0, 1] = 2.0; a[1, 0] = 3.0; a[1, 1] = 4.0;
     InlineMatrix<double, 2, 2> b;
     b[0, 0] = 5.0; b[0, 1] = 6.0; b[1, 0] = 7.0; b[1, 1] = 8.0;
     auto c = a + b;
+    static_assert(std::same_as<decltype(c), Matrix<double, 2, 2>>);
     expectEq(c[0, 0], 6.0);
     expectEq(c[1, 1], 12.0);
   };
@@ -94,7 +92,7 @@ auto main() -> int {
     expectEq(c[1, 1], 154.0);
   };
 
-  "inline product is statically sized"_test = [] {
+  "inline product keeps a static shape but lands on the heap"_test = [] {
     InlineMatrix<double, 2, 3> a;
     double v = 1.0;
     for (std::size_t i = 0; i < 2; ++i)
@@ -104,7 +102,7 @@ auto main() -> int {
     for (std::size_t i = 0; i < 3; ++i)
       for (std::size_t j = 0; j < 2; ++j) b[i, j] = v++;
     auto c = a * b;
-    static_assert(std::same_as<decltype(c), InlineMatrix<double, 2, 2>>);
+    static_assert(std::same_as<decltype(c), Matrix<double, 2, 2>>);
     expectEq(c[0, 0], 58.0);
     expectEq(c[1, 1], 154.0);
   };
