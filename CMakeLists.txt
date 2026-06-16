@@ -50,6 +50,12 @@ endif()
 set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 
+# The library is header-only (#include / #pragma once, never `import`), so CMake's
+# C++ module dependency scan does no useful work — it only slows the build and
+# injects GCC module flags (-fmodules-ts / -fmodule-mapper / -fdeps-format) into
+# compile_commands.json that clangd's clang frontend then rejects.
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
+
 # ============================================================================
 # Compiler Flags Interface Targets
 # ============================================================================
