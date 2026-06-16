@@ -10,6 +10,9 @@
 
 using namespace tempura;
 
+// Compensation is constexpr-evaluable: the recovered 1.0 is a compile-time value.
+static_assert(compensatedSum(std::array{1e16, 1.0, -1e16}) == 1.0);
+
 auto main() -> int {
   "Generate yields successive function calls"_test = [] {
     constexpr int first = Generate{[i = 0]() mutable { return ++i; }} | TakeFirst{};
@@ -37,6 +40,14 @@ auto main() -> int {
   "sum until converged: a finite range exhausts to its total"_test = [] {
     const std::array terms{1.0, 2.0, 3.0};  // never "converges" → runs to the end
     expectEq(terms | SumUntilConverged{.tol = {.atol = 0.0}}, 6.0);
+  };
+
+  "compensated sum recovers what a naive sum drops"_test = [] {
+    const std::array terms{1e16, 1.0, -1e16};  // true sum is 1.0
+    double naive = 0.0;                         // 1e16 + 1 == 1e16, then − 1e16 == 0
+    for (double t : terms) naive += t;
+    expectEq(naive, 0.0);
+    expectEq(compensatedSum(terms), 1.0);
   };
 
   "inclusive scan over reference data (constexpr)"_test = [] {

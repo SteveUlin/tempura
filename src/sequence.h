@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cassert>
+#include <cmath>
 #include <concepts>
 #include <cstddef>
 #include <functional>
@@ -101,8 +102,33 @@ constexpr auto operator|(std::ranges::range auto&& rng, Converges c) {
   return prev;
 }
 
-// Accumulates a range of series terms, stopping once two consecutive partial
-// sums are isClose. Capped and loud on non-convergence.
+// Neumaier-compensated accumulator: keeps the low-order bits a naive running sum
+// drops, so summing N terms loses O(ε) accuracy rather than O(Nε).
+template <std::floating_point V>
+struct CompensatedSum {
+  V sum{};
+  V correction{};
+  constexpr void add(V term) {
+    const V t = sum + term;
+    // The smaller operand is the one whose low bits are lost in `t`.
+    correction += std::abs(sum) >= std::abs(term) ? (sum - t) + term : (term - t) + sum;
+    sum = t;
+  }
+  constexpr auto value() const -> V { return sum + correction; }
+};
+
+// Compensated reduction over a finite range.
+template <std::ranges::range R>
+constexpr auto compensatedSum(R&& terms) {
+  CompensatedSum<std::remove_cvref_t<std::ranges::range_value_t<R>>> acc;
+  for (auto&& term : terms) {
+    acc.add(term);
+  }
+  return acc.value();
+}
+
+// Accumulates series terms with compensation, stopping once two consecutive
+// partial sums are isClose. Capped and loud on non-convergence.
 struct SumUntilConverged {
   Tolerance tol;
   std::size_t max_iters = 1000;
@@ -110,22 +136,23 @@ struct SumUntilConverged {
 template <std::ranges::range R>
 constexpr auto operator|(R&& terms, SumUntilConverged s) {
   using V = std::remove_cvref_t<std::ranges::range_value_t<R>>;
-  V sum{};
+  CompensatedSum<V> acc;
   V prev{};
   auto it = std::ranges::begin(terms);
   const auto last = std::ranges::end(terms);
   for (std::size_t k = 0; k < s.max_iters && it != last; ++it, ++k) {
-    sum += static_cast<V>(*it);
-    if (k > 0 && isClose(sum, prev, s.tol)) {
-      return sum;
+    acc.add(static_cast<V>(*it));
+    const V current = acc.value();
+    if (k > 0 && isClose(current, prev, s.tol)) {
+      return current;
     }
-    prev = sum;
+    prev = current;
   }
   if (it == last) {
-    return sum;  // ran out of terms — best available partial sum
+    return acc.value();  // ran out of terms — best available partial sum
   }
   assert(false && "SumUntilConverged: did not converge within max_iters");
-  return sum;
+  return acc.value();
 }
 
 // Evaluates a continued fraction b₀ + a₁/(b₁ + a₂/(b₂ + …)) via the Modified
