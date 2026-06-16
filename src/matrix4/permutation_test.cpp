@@ -28,17 +28,17 @@ auto main() -> int {
     expectEq(m[2, 0], 30.0);
   };
 
-  "permuteRows scatters whole rows: out[order[col]] = in[col]"_test = [] {
-    Permutation<3> p{1, 2, 0};  // col0->1, col1->2, col2->0
+  "permuteRows gathers whole rows: new row i <- old row order[i]"_test = [] {
+    Permutation<3> p{1, 2, 0};  // row0<-1, row1<-2, row2<-0
     Matrix<double> m(3, 2);
     for (std::size_t i = 0; i < 3; ++i) {
       m[i, 0] = static_cast<double>(i);
       m[i, 1] = static_cast<double>(10 + i);
     }
     p.permuteRows(m);
-    expectEq(m[0, 0], 2.0); expectEq(m[0, 1], 12.0);  // from old row 2
-    expectEq(m[1, 0], 0.0); expectEq(m[1, 1], 10.0);  // from old row 0
-    expectEq(m[2, 0], 1.0); expectEq(m[2, 1], 11.0);  // from old row 1
+    expectEq(m[0, 0], 1.0); expectEq(m[0, 1], 11.0);  // old row 1
+    expectEq(m[1, 0], 2.0); expectEq(m[1, 1], 12.0);  // old row 2
+    expectEq(m[2, 0], 0.0); expectEq(m[2, 1], 10.0);  // old row 0
   };
 
   "parity tracks transpositions"_test = [] {

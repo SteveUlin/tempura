@@ -54,5 +54,19 @@ auto main() -> int {
       for (std::size_t j = 0; j < 2; ++j) expectEq(got[i, j], ref[i, j]);
   };
 
+  "eager permuteRows agrees with the lazy permutedRows view"_test = [] {
+    Matrix<double> m(4, 2);
+    for (std::size_t i = 0; i < 4; ++i) {
+      m[i, 0] = static_cast<double>(i);
+      m[i, 1] = static_cast<double>(100 + i);
+    }
+    const Permutation<4> p{2, 0, 3, 1};
+    Matrix<double> eager = m;        // copy, then gather in place
+    p.permuteRows(eager);
+    const auto lazy = permutedRows(m, p);  // same gather, as a view
+    for (std::size_t i = 0; i < 4; ++i)
+      for (std::size_t j = 0; j < 2; ++j) expectEq(eager[i, j], lazy[i, j]);
+  };
+
   return TestRegistry::result();
 }
