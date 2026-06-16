@@ -22,8 +22,20 @@ class TestRegistry {
   TestRegistry(const TestRegistry&) = delete;
   auto operator=(const TestRegistry&) -> TestRegistry& = delete;
 
-  static void setFailure() { ++instance().failures_; }
-  static auto result() -> int { return static_cast<int>(instance().failures_); }
+  static void beginTest() { instance().current_failed_ = false; }
+  static void setFailure() { instance().current_failed_ = true; }
+  static void endTest() {
+    if (instance().current_failed_) {
+      ++instance().failed_tests_;
+    }
+  }
+  static auto result() -> int {
+    const auto failed = instance().failed_tests_;
+    if (failed > 0) {
+      std::println(stderr, "{} test(s) failed", failed);
+    }
+    return failed > 0 ? 1 : 0;
+  }
 
  private:
   TestRegistry() = default;
@@ -31,13 +43,15 @@ class TestRegistry {
     static TestRegistry registry;
     return registry;
   }
-  std::size_t failures_ = 0;
+  bool current_failed_ = false;
+  std::size_t failed_tests_ = 0;
 };
 
 class Test {
  public:
   template <std::invocable Body>
   void operator=(Body&& body) {
+    TestRegistry::beginTest();
     try {
       std::forward<Body>(body)();
     } catch (const std::exception& e) {
@@ -47,6 +61,7 @@ class Test {
       std::println(stderr, "{}: unexpected unknown exception", name_);
       TestRegistry::setFailure();
     }
+    TestRegistry::endTest();
   }
 
  private:
