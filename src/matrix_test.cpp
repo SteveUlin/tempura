@@ -33,6 +33,19 @@ constexpr auto constexprProduct() -> bool {
 }
 static_assert(constexprProduct());
 
+// The destination form is how you opt into stack storage: declare an InlineMatrix
+// and fill it. No allocation, fully constexpr.
+constexpr auto constexprDestination() -> bool {
+  InlineMatrix<double, 2, 2> a;
+  a[0, 0] = 1.0; a[0, 1] = 2.0; a[1, 0] = 3.0; a[1, 1] = 4.0;
+  InlineMatrix<double, 2, 2> b;
+  b[0, 0] = 5.0; b[0, 1] = 6.0; b[1, 0] = 7.0; b[1, 1] = 8.0;
+  InlineMatrix<double, 2, 2> c;
+  multiply(a, b, c);
+  return c[0, 0] == 19.0 && c[0, 1] == 22.0 && c[1, 0] == 43.0 && c[1, 1] == 50.0;
+}
+static_assert(constexprDestination());
+
 auto main() -> int {
   "dynamic addition"_test = [] {
     Matrix<double> a(2, 2);
@@ -114,6 +127,79 @@ auto main() -> int {
     b[0, 0] = 5.0; b[0, 1] = 6.0; b[1, 0] = 7.0; b[1, 1] = 8.0;
     expectRangeEq((a + b).container(), add(a, b).container());
     expectRangeEq((a * b).container(), multiply(a, b).container());
+  };
+
+  "destination add fills a preallocated result and returns it"_test = [] {
+    Matrix<double> a(2, 2);
+    a[0, 0] = 1.0; a[0, 1] = 2.0; a[1, 0] = 3.0; a[1, 1] = 4.0;
+    Matrix<double> b(2, 2);
+    b[0, 0] = 10.0; b[0, 1] = 20.0; b[1, 0] = 30.0; b[1, 1] = 40.0;
+    Matrix<double> dst(2, 2);
+    auto& r = add(a, b, dst);
+    expectTrue(&r == &dst);
+    expectEq(dst[0, 0], 11.0);
+    expectEq(dst[1, 1], 44.0);
+  };
+
+  "destination multiply into a stack InlineMatrix is the stack opt-in"_test = [] {
+    InlineMatrix<double, 2, 3> a;
+    double v = 1.0;
+    for (std::size_t i = 0; i < 2; ++i)
+      for (std::size_t j = 0; j < 3; ++j) a[i, j] = v++;
+    InlineMatrix<double, 3, 2> b;
+    v = 7.0;
+    for (std::size_t i = 0; i < 3; ++i)
+      for (std::size_t j = 0; j < 2; ++j) b[i, j] = v++;
+    InlineMatrix<double, 2, 2> c;  // caller owns stack storage; no heap result
+    multiply(a, b, c);
+    expectEq(c[0, 0], 58.0);
+    expectEq(c[1, 1], 154.0);
+  };
+
+  "multiplyAdd accumulates A·B into the destination"_test = [] {
+    Matrix<double> a(2, 2);
+    a[0, 0] = 1.0; a[0, 1] = 2.0; a[1, 0] = 3.0; a[1, 1] = 4.0;
+    Matrix<double> b(2, 2);
+    b[0, 0] = 5.0; b[0, 1] = 6.0; b[1, 0] = 7.0; b[1, 1] = 8.0;
+    Matrix<double> dst(2, 2);
+    dst[0, 0] = 1.0; dst[0, 1] = 1.0; dst[1, 0] = 1.0; dst[1, 1] = 1.0;
+    multiplyAdd(a, b, dst);  // A·B = [19 22; 43 50], plus the ones already in dst
+    expectEq(dst[0, 0], 20.0);
+    expectEq(dst[1, 1], 51.0);
+  };
+
+  "operator+= mutates the left operand in place"_test = [] {
+    Matrix<double> a(2, 2);
+    a[0, 0] = 1.0; a[0, 1] = 2.0; a[1, 0] = 3.0; a[1, 1] = 4.0;
+    Matrix<double> b(2, 2);
+    b[0, 0] = 10.0; b[0, 1] = 20.0; b[1, 0] = 30.0; b[1, 1] = 40.0;
+    auto& r = (a += b);
+    expectTrue(&r == &a);
+    expectEq(a[0, 0], 11.0);
+    expectEq(a[1, 1], 44.0);
+  };
+
+  "operator*= with a square right operand"_test = [] {
+    Matrix<double> a(2, 2);
+    a[0, 0] = 1.0; a[0, 1] = 2.0; a[1, 0] = 3.0; a[1, 1] = 4.0;
+    Matrix<double> b(2, 2);
+    b[0, 0] = 5.0; b[0, 1] = 6.0; b[1, 0] = 7.0; b[1, 1] = 8.0;
+    a *= b;  // [1 2;3 4]·[5 6;7 8] = [19 22; 43 50]
+    expectEq(a[0, 0], 19.0);
+    expectEq(a[0, 1], 22.0);
+    expectEq(a[1, 0], 43.0);
+    expectEq(a[1, 1], 50.0);
+  };
+
+  "operator*= on an InlineMatrix keeps stack storage"_test = [] {
+    InlineMatrix<double, 2, 2> a;
+    a[0, 0] = 1.0; a[0, 1] = 2.0; a[1, 0] = 3.0; a[1, 1] = 4.0;
+    InlineMatrix<double, 2, 2> id;  // identity
+    id[0, 0] = 1.0; id[1, 1] = 1.0;
+    a *= id;  // copy-back path preserves a's type; product is unchanged a
+    static_assert(std::same_as<decltype(a), InlineMatrix<double, 2, 2>>);
+    expectEq(a[0, 0], 1.0);
+    expectEq(a[1, 1], 4.0);
   };
 
   "identity leaves the operand unchanged"_test = [] {
