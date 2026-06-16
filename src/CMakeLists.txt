@@ -1,19 +1,20 @@
 # ============================================================================
-# tempura — one INTERFACE target, one-line test bricks
+# tempura — one static library, one-line test bricks
 # ============================================================================
-# The whole library is a single INTERFACE target: `tempura` owns the src/
-# include root and the shared compiler flags, and every test links it. There
-# are no per-header libraries — for header-only code their link edges enforce
-# nothing (all share this include root), so the real dependency graph lives in
-# each header's #include lines, not in CMake. Add a brick by dropping foo.h +
-# foo_test.cpp beside their peers and adding one tempura_test(foo) line.
+# `tempura` is a STATIC library: it owns the src/ include root + shared flags,
+# carries the few non-templated .cpp files (most code is templated, so it lives
+# in headers — but not by principle), and every test links it. The real
+# dependency graph lives in each header's #include lines, not in CMake. Add a
+# brick by dropping foo.h (+ foo.cpp if it has non-templated code, beside the
+# header) + foo_test.cpp, and one tempura_test(foo) line.
 # ============================================================================
 
-add_library(tempura INTERFACE)
+add_library(tempura STATIC)
 add_library(tempura::tempura ALIAS tempura)
-target_include_directories(tempura INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
-target_link_libraries(tempura INTERFACE tempura_flags)
-target_compile_features(tempura INTERFACE cxx_std_26)
+target_sources(tempura PRIVATE json.cpp)
+target_include_directories(tempura PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
+target_link_libraries(tempura PUBLIC tempura_flags)
+target_compile_features(tempura PUBLIC cxx_std_26)
 
 # tempura_test(name [LABEL <label>] [DEPS <targets...>])
 #   Builds name_test from name_test.cpp, links the library, registers a ctest.
@@ -34,6 +35,7 @@ endfunction()
 tempura_test(scalar       LABEL base)
 tempura_test(comparison   LABEL base)
 tempura_test(unit         LABEL base)
+tempura_test(json         LABEL base)
 tempura_test(sequence     LABEL base)
 tempura_test(interpolate  LABEL base)
 tempura_test(root_finding LABEL base)
