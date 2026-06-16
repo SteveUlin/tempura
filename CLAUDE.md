@@ -25,6 +25,7 @@
 **Other:**
 
 - Single namespace `tempura` (no `::internal` or `::detail`)
+- Concepts: in-place syntax for simple per-parameter bounds (`template <std::floating_point T>`); reserve `requires`-clauses for constraints relating types or a derived type (e.g. a range's `value_type`)
 - Classes: `public` before `private`
 - Prefer `{}` over `()` for initialization (including ctor init lists)
 - `static_assert` tests belong in test files, not headers
@@ -44,13 +45,17 @@
 - Good: `// Variance = p(1-p), maximized at p=0.5`
 - Bad: `// Now print the output` (obvious from code)
 - Bad: `// This function returns the probability` (obvious from signature)
+- No multi-line comment blocks or section banners — they read as noise and get skipped; one terse line, with design rationale in commits/docs, not source
 
 ## Testing
 
 - Use `unit.h` framework: `"test name"_test = [] { ... };`
-- Use `expect*` helpers (expectEq, expectTrue, etc.) not manual checks
-- Return `TestRegistry::result()` from main
-- Prefer `static_assert` for compile-time validation
+- Return `TestRegistry::result()` from main; exit code is 0/1, the failure count prints to stderr
+- Use `expect*` helpers, not manual checks. They are constexpr — for a compile-time check,
+  put assertions in a `constexpr` function and `static_assert` it; the same expect* run in both contexts
+- Closeness has ONE form: `expectClose(a, b, {.rtol = .., .atol = ..})` with an explicit, derived
+  `Tolerance` (no default delta, no `expectNear`). Also `expectWithinUlps` (bit-exact),
+  `expectFinite`/`expectNan`/`expectInf` (classification), and `expectEq` only for exact equality
 
 **Test simplification:**
 
@@ -62,7 +67,7 @@
   ```cpp
   // Standard error = √(p(1-p)/N) ≈ 0.0046 for p=0.7, N=10k
   // Tolerance of 0.1 is ~20 standard errors (effectively never fails)
-  expectNear(0.7, empirical_p, 0.1);
+  expectClose(0.7, empirical_p, {.atol = 0.1});
   ```
 
 ## Development Guidelines
@@ -82,6 +87,8 @@
   ctest --test-dir build -R foo          # Run tests matching "foo"
   ctest --test-dir build -L containers   # Run tests with label "containers"
   ```
+- `nix develop` (the default shell) provides gcc-trunk; `cmake --preset gcc-trunk` configures `build-gcc-trunk`
+- The library is one `tempura` INTERFACE target; add a brick by dropping `foo.h` + `foo_test.cpp` at the flat `src/` root and adding one `tempura_test(foo LABEL ..)` line in `src/CMakeLists.txt`
 
 ## Command Execution
 
