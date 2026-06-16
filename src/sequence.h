@@ -76,29 +76,25 @@ constexpr auto operator|(std::ranges::range auto&& rng, TakeFirst /*unused*/) {
 }
 
 // Pulls successive iterates until two consecutive ones are isClose, returning the
-// converged value. An infinite generator that never settles must fail loudly, not
-// hang — so iterations are capped and exhausting the cap is a hard error.
+// limit. Bounding is a separate concern — cap an infinite generator upstream with
+// std::views::take / take_while. A range that ends before converging is a hard
+// error, not a silently-returned wrong value.
 struct Converges {
   Tolerance tol;
-  std::size_t max_iters = 1000;
 };
 constexpr auto operator|(std::ranges::range auto&& rng, Converges c) {
   auto it = std::ranges::begin(rng);
   const auto last = std::ranges::end(rng);
   assert(it != last);
   auto prev = *it;
-  for (std::size_t k = 1; k < c.max_iters; ++k) {
-    ++it;
-    if (it == last) {
-      return prev;  // finite range exhausted — its last value is the estimate
-    }
+  for (++it; it != last; ++it) {
     auto next = *it;
     if (isClose(next, prev, c.tol)) {
       return next;
     }
     prev = next;
   }
-  assert(false && "Converges: did not converge within max_iters");
+  assert(false && "Converges: range ended before converging");
   return prev;
 }
 
@@ -128,30 +124,28 @@ constexpr auto compensatedSum(R&& terms) {
 }
 
 // Accumulates series terms with compensation, stopping once two consecutive
-// partial sums are isClose. Capped and loud on non-convergence.
+// partial sums are isClose. Like Converges, bound the term range upstream with
+// take; a range that ends before converging is a hard error. For an
+// unconditional total of a finite range use compensatedSum instead.
 struct SumUntilConverged {
   Tolerance tol;
-  std::size_t max_iters = 1000;
 };
 template <std::ranges::range R>
 constexpr auto operator|(R&& terms, SumUntilConverged s) {
   using V = std::remove_cvref_t<std::ranges::range_value_t<R>>;
   CompensatedSum<V> acc;
   V prev{};
-  auto it = std::ranges::begin(terms);
-  const auto last = std::ranges::end(terms);
-  for (std::size_t k = 0; k < s.max_iters && it != last; ++it, ++k) {
-    acc.add(static_cast<V>(*it));
+  bool has_prev = false;
+  for (auto&& term : terms) {
+    acc.add(static_cast<V>(term));
     const V current = acc.value();
-    if (k > 0 && isClose(current, prev, s.tol)) {
+    if (has_prev && isClose(current, prev, s.tol)) {
       return current;
     }
     prev = current;
+    has_prev = true;
   }
-  if (it == last) {
-    return acc.value();  // ran out of terms — best available partial sum
-  }
-  assert(false && "SumUntilConverged: did not converge within max_iters");
+  assert(false && "SumUntilConverged: range ended before converging");
   return acc.value();
 }
 

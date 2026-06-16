@@ -28,18 +28,14 @@ auto main() -> int {
 
   "sum until converged: geometric series → 2"_test = [] {
     // 1 + 1/2 + 1/4 + … = 2, generated as a recurrence (each term is the last × ½).
+    // take() bounds the infinite generator — the budget lives at the call site.
     const double total = Generate{[t = 1.0]() mutable {
                            const double cur = t;
                            t *= 0.5;
                            return cur;
                          }} |
-                         SumUntilConverged{.tol = {.rtol = 1e-12}};
+                         std::views::take(64) | SumUntilConverged{.tol = {.rtol = 1e-12}};
     expectClose(total, 2.0, {.rtol = 1e-10});
-  };
-
-  "sum until converged: a finite range exhausts to its total"_test = [] {
-    const std::array terms{1.0, 2.0, 3.0};  // never "converges" → runs to the end
-    expectEq(terms | SumUntilConverged{.tol = {.atol = 0.0}}, 6.0);
   };
 
   "compensated sum recovers what a naive sum drops"_test = [] {
