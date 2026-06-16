@@ -1,7 +1,10 @@
 #include "matrix.h"
 
+#include <array>
 #include <concepts>
 #include <cstddef>
+#include <mdspan>
+#include <utility>
 
 #include "unit.h"
 
@@ -200,6 +203,35 @@ auto main() -> int {
     static_assert(std::same_as<decltype(a), InlineMatrix<double, 2, 2>>);
     expectEq(a[0, 0], 1.0);
     expectEq(a[1, 1], 4.0);
+  };
+
+  "kernels operate on plain mdspans over foreign storage"_test = [] {
+    std::array<double, 6> abuf{1, 2, 3, 4, 5, 6};       // 2x3, not an MdArray
+    std::array<double, 6> bbuf{7, 8, 9, 10, 11, 12};    // 3x2
+    std::array<double, 4> cbuf{};                        // 2x2 destination
+    std::mdspan a{abuf.data(), 2, 3};
+    std::mdspan b{bbuf.data(), 3, 2};
+    std::mdspan c{cbuf.data(), 2, 2};
+    multiply(a, b, c);  // no owner allocated; writes through to cbuf
+    expectEq(cbuf[0], 58.0);
+    expectEq(cbuf[3], 154.0);
+
+    add(a, a, a);  // in-place element-wise on a foreign buffer
+    expectEq(abuf[0], 2.0);
+    expectEq(abuf[5], 12.0);
+  };
+
+  "destination multiply into a sub-block of a larger matrix"_test = [] {
+    Matrix<double> big(3, 3);  // fill the top-left 2x2 only
+    Matrix<double> a(2, 2);
+    a[0, 0] = 1.0; a[0, 1] = 2.0; a[1, 0] = 3.0; a[1, 1] = 4.0;
+    Matrix<double> id(2, 2);
+    id[0, 0] = 1.0; id[1, 1] = 1.0;
+    auto block = std::submdspan(big.toMdspan(), std::pair{0, 2}, std::pair{0, 2});
+    multiply(a, id, block);  // writes the product into big's corner, no copy
+    expectEq(big[0, 0], 1.0);
+    expectEq(big[1, 1], 4.0);
+    expectEq(big[2, 2], 0.0);  // untouched
   };
 
   "identity leaves the operand unchanged"_test = [] {
