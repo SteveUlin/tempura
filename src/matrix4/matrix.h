@@ -67,6 +67,18 @@ class Dense {
     copyFrom(src);
   }
 
+  // Row-literal init: Dense{{1, 2}, {3, 4}}. Enabled only for a rank-2, fully
+  // static, array-backed Dense (i.e. an InlineMatrix) — each braced row is a
+  // C-array whose length must equal the column count. CTAD (guide below) infers
+  // the shape, so `Dense{{1., 2.}, {3., 4.}}` is an InlineMatrix<double, 2, 2>.
+  template <typename U, std::size_t... Cols>
+    requires(extents_type::rank() == 2 && std::convertible_to<U, T> &&
+             sizeof...(Cols) == extents_type::static_extent(0) &&
+             ((Cols == extents_type::static_extent(1)) && ...))
+  constexpr explicit Dense(const U (&... rows)[Cols]) : Dense() {  // NOLINT(*-avoid-c-arrays)
+    fillRows(std::index_sequence_for<decltype(rows)...>{}, rows...);
+  }
+
   template <std::integral... Indices>
     requires(sizeof...(Indices) == extents_type::rank())
   constexpr auto operator[](Indices... idxs) -> reference {
@@ -136,9 +148,25 @@ class Dense {
     }
   }
 
+  template <std::size_t... Is, typename... Rows>
+  constexpr void fillRows(std::index_sequence<Is...> /*unused*/, const Rows&... rows) {
+    (fillRow(Is, rows), ...);
+  }
+  template <typename U, std::size_t Cols>
+  constexpr void fillRow(std::size_t i, const U (&row)[Cols]) {  // NOLINT(*-avoid-c-arrays)
+    for (std::size_t j = 0; j < Cols; ++j) (*this)[i, j] = static_cast<T>(row[j]);
+  }
+
   mapping_type mapping_;
   container_type container_;
 };
+
+// CTAD for row-literal init: Dense{{1, 2}, {3, 4}} → a static array-backed Dense
+// (an InlineMatrix). Rows give the row count; the first row gives the column count.
+template <typename U, std::size_t First, std::size_t... Rest>
+Dense(const U (&first)[First], const U (&... rest)[Rest])  // NOLINT(*-avoid-c-arrays)
+    -> Dense<U, std::extents<std::size_t, sizeof...(Rest) + 1, First>,
+             std::array<U, (sizeof...(Rest) + 1) * First>>;
 
 // Heap (std::vector) with optionally-static dims: storage and dim-staticness are
 // independent axes, so a large matrix can still carry a compile-time-checked shape.

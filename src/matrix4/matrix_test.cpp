@@ -359,5 +359,19 @@ auto main() -> int {
     expectEq(a.container()[3], 3.0);
   };
 
+  "Dense: row-literal construction (CTAD infers an InlineMatrix)"_test = [] {
+    Dense m{{1.0, 2.0, 3.0}, {4.0, 5.0, 6.0}};  // 2x3 deduced
+    static_assert(std::same_as<decltype(m), InlineMatrix<double, 2, 3>>);
+    expectEq(m[0, 0], 1.0);
+    expectEq(m[0, 2], 3.0);
+    expectEq(m[1, 0], 4.0);
+    expectEq(m[1, 2], 6.0);
+
+    // Explicit type, int literals widen to the matrix's element type.
+    InlineMatrix<double, 2, 2> n{{1, 2}, {3, 4}};
+    expectEq(n[0, 1], 2.0);
+    expectEq(n[1, 0], 3.0);
+  };
+
   return TestRegistry::result();
 }
