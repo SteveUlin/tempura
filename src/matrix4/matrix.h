@@ -115,13 +115,9 @@ class Dense {
   }
   constexpr auto empty() const -> bool { return size() == 0; }
   constexpr auto container() const -> const container_type& { return container_; }
-
-  constexpr auto toMdspan() -> std::mdspan<element_type, extents_type, layout_type> {
-    return {container_.data(), mapping_};
-  }
-  constexpr auto toMdspan() const -> std::mdspan<const element_type, extents_type, layout_type> {
-    return {container_.data(), mapping_};
-  }
+  // Raw storage pointer; with extents() it's all the free toMdspan() (below) needs.
+  constexpr auto dataHandle() -> element_type* { return container_.data(); }
+  constexpr auto dataHandle() const -> const element_type* { return container_.data(); }
 
  private:
   static constexpr auto makeContainer(index_type span_size) -> container_type {
@@ -168,6 +164,18 @@ Dense(const U (&first)[First], const U (&... rest)[Rest])  // NOLINT(*-avoid-c-a
     -> Dense<U, std::extents<std::size_t, sizeof...(Rest) + 1, First>,
              std::array<U, (sizeof...(Rest) + 1) * First>>;
 
+// Conversion to a std::mdspan over the owner's storage — non-member by design, so
+// Dense stays pure storage+access and every operation (view() included) is free.
+// std::mdspan{ptr, extents} builds the layout_right mapping itself.
+template <typename T, typename E, typename C>
+constexpr auto toMdspan(Dense<T, E, C>& m) {
+  return std::mdspan<T, E>{m.dataHandle(), m.extents()};
+}
+template <typename T, typename E, typename C>
+constexpr auto toMdspan(const Dense<T, E, C>& m) {
+  return std::mdspan<const T, E>{m.dataHandle(), m.extents()};
+}
+
 // Heap (std::vector) with optionally-static dims: storage and dim-staticness are
 // independent axes, so a large matrix can still carry a compile-time-checked shape.
 template <typename T, std::size_t Rows = std::dynamic_extent, std::size_t Cols = std::dynamic_extent>
@@ -201,7 +209,7 @@ using HeapResult = Dense<T, Ext, std::vector<T>>;
 
 // Kernels compute over views, not owners, so one definition serves owners,
 // sub-blocks, foreign buffers, and transposed/strided/permuted views. view()
-// passes an mdspan through unchanged; any owner exposing toMdspan() (Dense, hence
+// passes an mdspan through unchanged; any type with a free toMdspan() (Dense, hence
 // Matrix/Vec/…, and future types) becomes viewable structurally — no per-type
 // overload. M deduces constness, so one overload serves mutable and const owners.
 template <typename T, typename E, typename L, typename A>
@@ -209,9 +217,9 @@ constexpr auto view(std::mdspan<T, E, L, A> m) {
   return m;
 }
 template <typename M>
-  requires requires(M& m) { m.toMdspan(); }
+  requires requires(M& m) { toMdspan(m); }
 constexpr auto view(M& m) {
-  return m.toMdspan();
+  return toMdspan(m);
 }
 
 template <typename M>

@@ -241,7 +241,7 @@ auto main() -> int {
     a[0, 0] = 1.0; a[0, 1] = 2.0; a[1, 0] = 3.0; a[1, 1] = 4.0;
     Matrix<double> id(2, 2);
     id[0, 0] = 1.0; id[1, 1] = 1.0;
-    auto block = std::submdspan(big.toMdspan(), std::pair{0, 2}, std::pair{0, 2});
+    auto block = std::submdspan(toMdspan(big), std::pair{0, 2}, std::pair{0, 2});
     multiply(a, id, block);  // writes the product into big's corner, no copy
     expectEq(big[0, 0], 1.0);
     expectEq(big[1, 1], 4.0);
@@ -329,15 +329,15 @@ auto main() -> int {
     expectEq(a[1, 1], 5.0);
   };
 
-  "Dense: toMdspan shares storage"_test = [] {
+  "Dense: free toMdspan shares storage"_test = [] {
     Dense<double, Dext2> a(2, 2);
     a[0, 0] = 1.0;
-    auto s = a.toMdspan();
+    auto s = toMdspan(a);
     expectEq((s[0, 0]), 1.0);
     s[1, 1] = 5.0;
     expectEq(a[1, 1], 5.0);  // write through the view shows in the owner
     const auto& ca = a;
-    auto cs = ca.toMdspan();
+    auto cs = toMdspan(ca);
     expectEq((cs[1, 1]), 5.0);
   };
 
