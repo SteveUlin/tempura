@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cassert>
+#include <concepts>
 #include <cstddef>
 #include <mdspan>
 #include <span>
@@ -9,18 +10,143 @@
 #include <utility>
 #include <vector>
 
-#include "mdarray.h"
-
 namespace tempura {
+
+// Dense — the owning matrix/tensor: a Container of elements + a layout_right
+// mapping, exposing a std::mdspan via toMdspan() (the seam the view-based kernels
+// compute over). Storage is always row-major; transposed/permuted/strided are VIEW
+// concerns (mdspan layouts), never owner concerns, so there is no Layout parameter.
+template <typename T, typename Extents, typename Container = std::vector<T>>
+class Dense {
+ public:
+  using extents_type = Extents;
+  using layout_type = std::layout_right;
+  using container_type = Container;
+  using mapping_type = typename layout_type::template mapping<extents_type>;
+  using element_type = T;
+  using value_type = std::remove_cv_t<T>;
+  using index_type = typename extents_type::index_type;
+  using size_type = typename extents_type::size_type;
+  using rank_type = typename extents_type::rank_type;
+  using reference = typename container_type::reference;
+  using const_reference = typename container_type::const_reference;
+
+  constexpr Dense() : Dense(extents_type{}) {}
+  constexpr Dense(const Dense&) = default;
+  constexpr Dense(Dense&&) = default;
+  constexpr auto operator=(const Dense&) -> Dense& = default;
+  constexpr auto operator=(Dense&&) -> Dense& = default;
+
+  // Shape ctor: Dense(3, 4). Constrained to integers — a floating-point extent is
+  // a bug, not something to silently truncate — and to either the full rank or the
+  // dynamic dims only.
+  template <std::integral... IndexTypes>
+    requires(sizeof...(IndexTypes) == extents_type::rank() ||
+             sizeof...(IndexTypes) == extents_type::rank_dynamic())
+  constexpr explicit Dense(IndexTypes... exts)
+      : Dense(extents_type{static_cast<index_type>(exts)...}) {}
+
+  // Shape only — elements value-initialize (zeros).
+  constexpr explicit Dense(const extents_type& exts)
+      : mapping_{exts}, container_{makeContainer(mapping_.required_span_size())} {}
+
+  // Adopt a ready-made container.
+  constexpr Dense(const extents_type& exts, container_type c)
+      : mapping_{exts}, container_{std::move(c)} {
+    assert(container_.size() == static_cast<size_type>(mapping_.required_span_size()));
+  }
+
+  // Materialize from any mdspan (e.g. a permuted/transposed view): copies through
+  // the source's layout into owned, contiguous, row-major storage.
+  template <typename OT, typename OE, typename OL, typename OA>
+    requires std::is_constructible_v<extents_type, OE> && (OE::rank() == extents_type::rank())
+  explicit(!std::is_convertible_v<OE, extents_type>) constexpr Dense(
+      const std::mdspan<OT, OE, OL, OA>& src)
+      : mapping_{extents_type(src.extents())},
+        container_{makeContainer(mapping_.required_span_size())} {
+    copyFrom(src);
+  }
+
+  template <std::integral... Indices>
+    requires(sizeof...(Indices) == extents_type::rank())
+  constexpr auto operator[](Indices... idxs) -> reference {
+    return container_[mapping_(static_cast<index_type>(idxs)...)];
+  }
+  template <std::integral... Indices>
+    requires(sizeof...(Indices) == extents_type::rank())
+  constexpr auto operator[](Indices... idxs) const -> const_reference {
+    return container_[mapping_(static_cast<index_type>(idxs)...)];
+  }
+  template <typename OtherIndex>
+    requires std::convertible_to<const OtherIndex&, index_type>
+  constexpr auto operator[](const std::array<OtherIndex, extents_type::rank()>& idxs) -> reference {
+    return container_[offsetOf(idxs, std::make_index_sequence<extents_type::rank()>{})];
+  }
+  template <typename OtherIndex>
+    requires std::convertible_to<const OtherIndex&, index_type>
+  constexpr auto operator[](const std::array<OtherIndex, extents_type::rank()>& idxs) const
+      -> const_reference {
+    return container_[offsetOf(idxs, std::make_index_sequence<extents_type::rank()>{})];
+  }
+
+  constexpr auto extents() const -> const extents_type& { return mapping_.extents(); }
+  constexpr auto extent(rank_type r) const -> index_type { return extents().extent(r); }
+  static constexpr auto rank() -> rank_type { return extents_type::rank(); }
+  static constexpr auto rankDynamic() -> rank_type { return extents_type::rank_dynamic(); }
+  static constexpr auto staticExtent(rank_type r) -> std::size_t {
+    return extents_type::static_extent(r);
+  }
+  constexpr auto size() const -> size_type {
+    size_type n = 1;
+    for (rank_type r = 0; r < extents_type::rank(); ++r) n *= static_cast<size_type>(extent(r));
+    return n;
+  }
+  constexpr auto empty() const -> bool { return size() == 0; }
+  constexpr auto container() const -> const container_type& { return container_; }
+
+  constexpr auto toMdspan() -> std::mdspan<element_type, extents_type, layout_type> {
+    return {container_.data(), mapping_};
+  }
+  constexpr auto toMdspan() const -> std::mdspan<const element_type, extents_type, layout_type> {
+    return {container_.data(), mapping_};
+  }
+
+ private:
+  static constexpr auto makeContainer(index_type span_size) -> container_type {
+    if constexpr (requires { container_type(static_cast<size_type>(span_size)); }) {
+      return container_type(static_cast<size_type>(span_size));
+    } else {
+      return container_type{};
+    }
+  }
+  template <typename Indexable, std::size_t... Is>
+  constexpr auto offsetOf(const Indexable& idxs, std::index_sequence<Is...>) const -> size_type {
+    return static_cast<size_type>(mapping_(static_cast<index_type>(idxs[Is])...));
+  }
+  template <typename Src>
+  constexpr void copyFrom(const Src& src) {
+    std::array<index_type, extents_type::rank()> idx{};
+    const size_type total = size();
+    for (size_type linear = 0; linear < total; ++linear) {
+      (*this)[idx] = src[idx];
+      for (rank_type d = extents_type::rank(); d-- > 0;) {
+        if (static_cast<size_type>(++idx[d]) < static_cast<size_type>(extent(d))) break;
+        idx[d] = 0;
+      }
+    }
+  }
+
+  mapping_type mapping_;
+  container_type container_;
+};
 
 // Heap (std::vector) with optionally-static dims: storage and dim-staticness are
 // independent axes, so a large matrix can still carry a compile-time-checked shape.
 template <typename T, std::size_t Rows = std::dynamic_extent, std::size_t Cols = std::dynamic_extent>
-using Matrix = MdArray<T, std::extents<std::size_t, Rows, Cols>, std::layout_right, std::vector<T>>;
+using Matrix = Dense<T, std::extents<std::size_t, Rows, Cols>, std::vector<T>>;
 
 template <typename T, std::size_t Rows, std::size_t Cols>
-using InlineMatrix = MdArray<T, std::extents<std::size_t, Rows, Cols>, std::layout_right,
-                             std::array<T, Rows * Cols>>;
+using InlineMatrix = Dense<T, std::extents<std::size_t, Rows, Cols>, std::array<T, Rows * Cols>>;
 
 constexpr auto mergeExtent(std::size_t a, std::size_t b) -> std::size_t {
   return a != std::dynamic_extent ? a : b;
@@ -43,21 +169,20 @@ using ProductExtents = std::extents<std::size_t, ExtA::static_extent(0), ExtB::s
 // (an outer product of two small stack matrices can be megabytes), so stack is
 // opt-in via the destination form.
 template <typename T, typename Ext>
-using HeapResult = MdArray<T, Ext, std::layout_right, std::vector<T>>;
+using HeapResult = Dense<T, Ext, std::vector<T>>;
 
 // Kernels compute over views, not owners, so one definition serves owners,
-// sub-blocks, foreign buffers, and transposed/strided views. view() adapts an
-// owner to a (writable) mdspan and passes an mdspan through unchanged.
+// sub-blocks, foreign buffers, and transposed/strided/permuted views. view()
+// passes an mdspan through unchanged; any owner exposing toMdspan() (Dense, hence
+// Matrix/Vec/…, and future types) becomes viewable structurally — no per-type
+// overload. M deduces constness, so one overload serves mutable and const owners.
 template <typename T, typename E, typename L, typename A>
 constexpr auto view(std::mdspan<T, E, L, A> m) {
   return m;
 }
-template <typename T, typename E, typename L, typename C>
-constexpr auto view(MdArray<T, E, L, C>& m) {
-  return m.toMdspan();
-}
-template <typename T, typename E, typename L, typename C>
-constexpr auto view(const MdArray<T, E, L, C>& m) {
+template <typename M>
+  requires requires(M& m) { m.toMdspan(); }
+constexpr auto view(M& m) {
   return m.toMdspan();
 }
 

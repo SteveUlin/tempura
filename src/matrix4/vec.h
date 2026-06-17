@@ -13,12 +13,13 @@
 
 namespace tempura {
 
-// Rank-1 analogues of Matrix/InlineMatrix: heap (std::vector) vs stack (std::array).
+// Rank-1 analogues of Matrix/InlineMatrix: heap (std::vector) vs stack (std::array),
+// both rank-1 Dense owners (see matrix.h).
 template <typename T, std::size_t N = std::dynamic_extent>
-using Vec = MdArray<T, std::extents<std::size_t, N>, std::layout_right, std::vector<T>>;
+using Vec = Dense<T, std::extents<std::size_t, N>, std::vector<T>>;
 
 template <typename T, std::size_t N>
-using InlineVec = MdArray<T, std::extents<std::size_t, N>, std::layout_right, std::array<T, N>>;
+using InlineVec = Dense<T, std::extents<std::size_t, N>, std::array<T, N>>;
 
 template <typename M>
 concept Vector1D = Viewable<M> && (ViewExtentsOf<M>::rank() == 1);

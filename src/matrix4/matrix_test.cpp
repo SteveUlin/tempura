@@ -5,10 +5,24 @@
 #include <cstddef>
 #include <mdspan>
 #include <utility>
+#include <vector>
 
 #include "unit.h"
 
 using namespace tempura;
+
+using Dext2 = std::dextents<std::size_t, 2>;
+using Dext3 = std::dextents<std::size_t, 3>;
+
+// The Dense owner is constexpr-usable: build, index two ways, query shape.
+constexpr auto denseRoundTrip() -> bool {
+  Dense<double, Dext2> a(2, 3);
+  a[1, 2] = 7.0;
+  a[std::array<std::size_t, 2>{0, 1}] = 4.0;
+  return a[1, 2] == 7.0 && (a[std::array<std::size_t, 2>{0, 1}]) == 4.0 && a.size() == 6 &&
+         a.rank() == 2;
+}
+static_assert(denseRoundTrip());
 
 // Value forms always return a heap Matrix; the merged static extents survive for
 // compile-time shape checks, but storage is never inferred onto the stack (result
@@ -244,6 +258,105 @@ auto main() -> int {
     expectEq(c[0, 1], 5.0);
     expectEq(c[1, 0], 7.0);
     expectEq(c[1, 1], 9.0);
+  };
+
+  // ─── the Dense owner directly (folded from the former mdarray_test) ───
+
+  "Dense: construction, shape, zeros"_test = [] {
+    Dense<double, Dext2> a(3, 4);
+    expectEq(a.rank(), 2u);
+    expectEq(a.rankDynamic(), 2u);
+    expectEq(a.extent(0), 3u);
+    expectEq(a.extent(1), 4u);
+    expectEq(a.size(), 12u);
+    expectFalse(a.empty());
+    expectEq(a[0, 0], 0.0);
+    expectEq(a[2, 3], 0.0);
+  };
+
+  "Dense: row-major (layout_right) flat layout"_test = [] {
+    Dense<double, Dext2> a(2, 3);
+    double v = 1.0;
+    for (std::size_t i = 0; i < 2; ++i)
+      for (std::size_t j = 0; j < 3; ++j) a[i, j] = v++;
+    expectEq(a[1, 2], 6.0);
+    expectEq(a.container()[0], 1.0);
+    expectEq(a.container()[3], 4.0);  // (1,0) -> row 1 starts at offset 3
+    expectEq(a.container()[5], 6.0);
+  };
+
+  "Dense: genuinely N-dimensional (rank 3)"_test = [] {
+    Dense<double, Dext3> a(2, 2, 2);
+    double v = 1.0;
+    for (std::size_t i = 0; i < 2; ++i)
+      for (std::size_t j = 0; j < 2; ++j)
+        for (std::size_t k = 0; k < 2; ++k) a[i, j, k] = v++;
+    expectEq(a.rank(), 3u);
+    expectEq(a[1, 1, 1], 8.0);
+    expectEq(a.container()[5], 6.0);  // (1,0,1) -> 1*4 + 0*2 + 1 = 5
+  };
+
+  "Dense: subscript by index array"_test = [] {
+    Dense<double, Dext2> a(2, 3);
+    a[1, 2] = 9.0;
+    std::array<std::size_t, 2> idx{1, 2};
+    expectEq(a[idx], 9.0);
+    a[idx] = 11.0;
+    expectEq(a[1, 2], 11.0);
+  };
+
+  "Dense: mixed static and dynamic extents (supply only the dynamic dim)"_test = [] {
+    using Ext = std::extents<std::size_t, 3, std::dynamic_extent>;
+    Dense<double, Ext> a(4);
+    expectEq(a.rankDynamic(), 1u);
+    expectEq(Dense<double, Ext>::staticExtent(0), 3u);
+    expectEq(a.extent(0), 3u);
+    expectEq(a.extent(1), 4u);
+    expectEq(a.size(), 12u);
+  };
+
+  "Dense: fully static extents allocate on default construction"_test = [] {
+    Dense<double, std::extents<std::size_t, 2, 2>> a;
+    expectEq(a.size(), 4u);
+    a[0, 1] = 9.0;
+    expectEq(a[0, 1], 9.0);
+  };
+
+  "Dense: construct from a ready-made container"_test = [] {
+    std::vector<double> v{1, 2, 3, 4, 5, 6};
+    Dense<double, Dext2> a(Dext2{2, 3}, v);
+    expectEq(a[0, 0], 1.0);
+    expectEq(a[1, 1], 5.0);
+  };
+
+  "Dense: toMdspan shares storage"_test = [] {
+    Dense<double, Dext2> a(2, 2);
+    a[0, 0] = 1.0;
+    auto s = a.toMdspan();
+    expectEq((s[0, 0]), 1.0);
+    s[1, 1] = 5.0;
+    expectEq(a[1, 1], 5.0);  // write through the view shows in the owner
+    const auto& ca = a;
+    auto cs = ca.toMdspan();
+    expectEq((cs[1, 1]), 5.0);
+  };
+
+  "Dense: materialize by copying out of an mdspan"_test = [] {
+    std::array<double, 6> buf{1, 2, 3, 4, 5, 6};
+    std::mdspan<double, Dext2> src(buf.data(), 2, 3);
+    Dense<double, Dext2> a(src);
+    expectEq(a.size(), 6u);
+    expectEq(a[1, 2], 6.0);
+    buf[5] = 99.0;  // a copied, not aliased
+    expectEq(a[1, 2], 6.0);
+  };
+
+  "Dense: array container gives stack storage"_test = [] {
+    InlineMatrix<double, 2, 2> a;  // Dense over std::array
+    expectEq(a.size(), 4u);
+    a[1, 1] = 3.0;
+    expectEq(a[1, 1], 3.0);
+    expectEq(a.container()[3], 3.0);
   };
 
   return TestRegistry::result();
