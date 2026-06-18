@@ -8,6 +8,7 @@
 
 #include "matrix.h"
 #include "mdarray.h"
+#include "slices.h"
 #include "transpose.h"
 #include "vec.h"
 
@@ -56,6 +57,37 @@ auto main() -> int {
       doNotOptimize(*dst.containerData());
     };
     std::println("  {:>6}  {:>10.2f}", n, r.gflops);
+  }
+  std::println("");
+
+  // Abstraction cost of slices: matmul as C[i,j] = dot(rows(A)[i], cols(B)[j]) has the
+  // SAME memory access pattern as the direct ijk kernel (A row contiguous, B column
+  // strided), so the gap is pure overhead — per-(i,j) submdspan construction + dot's
+  // setup — amortized over the k-length dot, so worst at small n.
+  std::println("matmul via slices vs direct kernel: GFLOP/s (work = 2n³)");
+  std::println("  {:>6}  {:>10}  {:>10}  {:>14}", "n", "direct", "slices", "direct/slices");
+  for (std::size_t n : {16u, 32u, 64u, 128u, 256u, 512u}) {
+    auto a = randomMat<double>(n, 1);
+    auto b = randomMat<double>(n, 2);
+    Dense<double, dyn, dyn> dst(n, n);
+    const double work = 2.0 * static_cast<double>(n) * n * n;
+    auto direct = "mm direct"_bench.warmup(2).minEpoch(2ms).maxRuntime(200ms).minSamples(3)
+                      .flops(work).quiet() = [&] {
+      multiply(a, b, dst);
+      doNotOptimize(*dst.containerData());
+    };
+    auto sliced = "mm slices"_bench.warmup(2).minEpoch(2ms).maxRuntime(200ms).minSamples(3)
+                      .flops(work).quiet() = [&] {
+      auto vd = dst.toMdspan();
+      auto ra = rows(a);
+      auto cb = cols(b);
+      for (std::size_t i = 0; i < n; ++i)
+        for (std::size_t j = 0; j < n; ++j) vd[i, j] = dot(ra[i], cb[j]);
+      doNotOptimize(*dst.containerData());
+    };
+    const double slowdown = sliced.gflops > 0.0 ? direct.gflops / sliced.gflops : 0.0;
+    std::println("  {:>6}  {:>10.2f}  {:>10.2f}  {:>12.2f}x", n, direct.gflops, sliced.gflops,
+                 slowdown);
   }
   std::println("");
 
