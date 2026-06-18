@@ -5,7 +5,7 @@
 #include <mdspan>
 #include <span>
 
-#include "matrix.h"       // view(), Viewable, Matrix2D
+#include "matrix.h"       // view(), Viewable, MatrixView
 #include "permutation.h"  // Permutation
 
 namespace tempura {
@@ -63,7 +63,7 @@ struct layout_row_permuted {
 
 // Lazy view: row i of the result is row order[i] of m (NumPy `m[order]` gather),
 // moving no data. Pass it straight to a kernel for reorder-without-copy, or
-// `Matrix r = permutedRows(...)` to MATERIALIZE into contiguous storage when you
+// `Dense r = permutedRows(...)` to MATERIALIZE into contiguous storage when you
 // will iterate it in a hot loop (the order[i] indirection is cache-hostile there).
 // PRECONDITION: `order` (and m's storage) must outlive the returned view.
 template <Viewable M, std::size_t S>

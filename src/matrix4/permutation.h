@@ -53,7 +53,7 @@ class Permutation {
     validate();
   }
 
-  // Dense element: P[row, col] = 1 iff col == order_[row].
+  // As a dense matrix: P[row, col] = 1 iff col == order_[row].
   constexpr auto operator[](std::size_t row, std::size_t col) const -> bool {
     assert(row < size() && col < size());
     return col == order_[row];
@@ -70,7 +70,7 @@ class Permutation {
   // Apply to a matrix's rows in place: m ← P·m, i.e. new row i ← old row order_[i]
   // (gather). Rotating each cycle needs one row of scratch — in-place gather
   // can't avoid it the way scatter-by-swap can. m must have size() rows; m[i,j]
-  // and m.extent(r) are the only requirements (Matrix, InlineMatrix, mdspan views).
+  // and m.extent(r) are the only requirements (Dense, InlineDense, mdspan views).
   template <typename M>
     requires requires(M& m) {
       m.extent(0);
