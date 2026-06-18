@@ -21,11 +21,15 @@ namespace tempura {
 // — multipliers below the diagonal (L, implicit unit diagonal), U on and above.
 //
 // matrix4 design: free functions over a MatrixView, returning the Lu factor object
-// below. Pivoting does EAGER physical row swaps in the owned workspace (no lazy
-// permuted-view indirection — that is cache-hostile), tracking the row map + parity in
-// a Permutation reused for the RHS. Singularity is FLAGGED and asserted in solve(),
-// never masked by a magic 1/ε perturbation (matrix3's bug). Floating-point only —
-// Gaussian elimination needs field division (integer LU is a category error).
+// below. Pivoting does EAGER physical row swaps in the owned workspace; the row map +
+// parity ride along in a Permutation reused for the RHS. Eager beats deferring the swap
+// to a gather-on-access — never slower (measured ~2–3% at large n, up to ~40% at tiny
+// n) and the factors stay contiguous so solve/extract stream without indirection. Not a
+// cache effect: in row-major, permuting which row you touch keeps each row's sweep
+// contiguous; the gather only adds a per-row index load. Singularity is FLAGGED and
+// asserted in solve(), never masked by a magic 1/ε perturbation (matrix3's bug).
+// Floating-point only — Gaussian elimination needs field division (integer LU is a
+// category error).
 
 // The combined L\U factorization plus its pivot permutation. `factors` owns the
 // workspace; `perm` carries the row pivots and parity for det and for permuting a RHS.
