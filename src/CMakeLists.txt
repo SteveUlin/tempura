@@ -16,19 +16,24 @@ target_include_directories(tempura PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOUR
 target_link_libraries(tempura PUBLIC tempura_flags)
 target_compile_features(tempura PUBLIC cxx_std_26)
 
-# tempura_test(name [LABEL <label>] [DEPS <targets...>])
+# tempura_test(name [LABEL <label>] [DEPS <targets...>] [SERIAL])
 #   Builds name_test from name_test.cpp, links the library, registers a ctest.
 #   No-op when tests are disabled, so calls stay unconditional one-liners.
+#   SERIAL: never run concurrently with other tests (for timing-sensitive tests whose
+#   noise tolerances trip under parallel-ctest core contention, e.g. the benchmark oracle).
 function(tempura_test name)
   if(NOT TEMPURA_BUILD_TESTS)
     return()
   endif()
-  cmake_parse_arguments(ARG "" "LABEL" "DEPS" ${ARGN})
+  cmake_parse_arguments(ARG "SERIAL" "LABEL" "DEPS" ${ARGN})
   add_executable(${name}_test ${name}_test.cpp)
   target_link_libraries(${name}_test PRIVATE tempura::tempura ${ARG_DEPS})
   add_test(NAME ${name}_test COMMAND ${name}_test)
   if(ARG_LABEL)
     set_property(TEST ${name}_test PROPERTY LABELS ${ARG_LABEL})
+  endif()
+  if(ARG_SERIAL)
+    set_property(TEST ${name}_test PROPERTY RUN_SERIAL TRUE)
   endif()
 endfunction()
 
@@ -58,7 +63,7 @@ tempura_test(json         LABEL base)
 tempura_test(sequence     LABEL base)
 tempura_test(interpolate  LABEL base)
 tempura_test(root_finding LABEL base)
-tempura_test(benchmark    LABEL base)  # measurement-correctness oracle for benchmark.h
+tempura_test(benchmark    LABEL base SERIAL)  # measurement-correctness oracle; SERIAL: timing-sensitive
 
 # Module subdirectories — each owns its own CMakeLists with tempura_test() bricks.
 add_subdirectory(matrix)
