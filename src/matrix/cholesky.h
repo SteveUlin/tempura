@@ -15,7 +15,7 @@ namespace tempura {
 // inherently stable. The workhorse for Bayesian inference: multivariate-normal log-density,
 // covariance parameterization, and HMC mass matrices all factor a covariance this way.
 //
-// matrix4 design: a free function over a MatrixView returning the factor below. Square,
+// Design: a free function over a MatrixView returning the factor below. Square,
 // ASSUMED symmetric (only the lower triangle is read), floating-point only. A non-PD input
 // is FLAGGED (positive_definite=false), never masked by a 1/ε diagonal clamp (matrix3's
 // bug, which let solve() return silent garbage); solve()/inverse()/logDeterminant assert PD.

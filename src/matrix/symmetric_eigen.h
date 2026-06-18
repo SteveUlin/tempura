@@ -21,7 +21,7 @@ namespace tempura {
 //   3. accumulate the Givens rotations into Q to get V, then sort
 // QL (vs QR) sweeps from the bottom-right, converging the smallest eigenvalues first.
 //
-// matrix4 design: a free function over a MatrixView returning {values, vectors}. Square,
+// Design: a free function over a MatrixView returning {values, vectors}. Square,
 // and ASSUMED symmetric (only the lower triangle drives the reduction). Floating-point
 // only. The iteration is inherently sequential; the workspace is row-major like LU.
 

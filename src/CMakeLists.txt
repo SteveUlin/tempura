@@ -61,4 +61,4 @@ tempura_test(root_finding LABEL base)
 tempura_test(benchmark    LABEL base)  # measurement-correctness oracle for benchmark.h
 
 # Module subdirectories — each owns its own CMakeLists with tempura_test() bricks.
-add_subdirectory(matrix4)
+add_subdirectory(matrix)

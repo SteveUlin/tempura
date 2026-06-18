@@ -15,7 +15,7 @@ namespace tempura {
 // orthogonal (QᵀQ = I), R upper-triangular. The factor for least-squares and the
 // building block for the symmetric-eigen / SVD iterations.
 //
-// matrix4 design: a free function over a MatrixView returning the Qr object below, which
+// Design: a free function over a MatrixView returning the Qr object below, which
 // packs both factors into one workspace — R in the upper triangle, the Householder
 // vectors vⱼ (with implicit v₀ = 1) in the strict lower triangle, τ stored separately —
 // exactly as LAPACK does. formQ/formR materialize the explicit factors; solve applies

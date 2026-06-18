@@ -22,7 +22,7 @@ namespace tempura {
 // Iterating B directly (not the eigendecomposition of AᵀA) avoids squaring the condition
 // number — the reason SVD is the stable tool for rank and least-squares.
 //
-// matrix4 design: a free function over a MatrixView returning {u, v, singular_values}.
+// Design: a free function over a MatrixView returning {u, v, singular_values}.
 // Square only (asserted), floating-point only. Reflectors are columns/rows of the packed
 // workspace — strided in the row-major owner; correct as-is (layout decision).
 

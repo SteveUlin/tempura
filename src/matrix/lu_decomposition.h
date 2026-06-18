@@ -20,7 +20,7 @@ namespace tempura {
 // P·A = L·U, L unit-lower-triangular, U upper-triangular. L and U share one workspace
 // — multipliers below the diagonal (L, implicit unit diagonal), U on and above.
 //
-// matrix4 design: free functions over a MatrixView, returning the Lu factor object
+// Design: free functions over a MatrixView, returning the Lu factor object
 // below. Pivoting does EAGER physical row swaps in the owned workspace; the row map +
 // parity ride along in a Permutation reused for the RHS. Eager beats deferring the swap
 // to a gather-on-access — never slower (measured ~2–3% at large n, up to ~40% at tiny
