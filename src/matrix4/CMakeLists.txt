@@ -12,6 +12,7 @@ tempura_test(to_string   LABEL base)
 tempura_test(slices      LABEL base)
 tempura_test(gauss_jordan LABEL base)
 tempura_test(qr          LABEL base)
+tempura_test(symmetric_eigen LABEL base)
 
 # Benchmarks — measure the efficiency claims (notably LU eager-swap vs lazy-gather).
 # Opt-in via -DTEMPURA_BUILD_BENCHMARKS=ON; not part of the ctest run.
