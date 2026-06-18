@@ -32,6 +32,25 @@ function(tempura_test name)
   endif()
 endfunction()
 
+# tempura_benchmark(name [DEPS <targets...>])
+#   Builds name_bench from name_bench.cpp, links the library, attaches it to the
+#   `benchmarks` aggregate target. NOT a ctest test — benchmarks are slow and
+#   environment-sensitive, so they are opt-in (TEMPURA_BUILD_BENCHMARKS) and run by
+#   hand. The measurement-correctness oracle lives in a normal _test instead.
+option(TEMPURA_BUILD_BENCHMARKS "Build benchmark executables" OFF)
+if(TEMPURA_BUILD_BENCHMARKS AND NOT TARGET benchmarks)
+  add_custom_target(benchmarks)
+endif()
+function(tempura_benchmark name)
+  if(NOT TEMPURA_BUILD_BENCHMARKS)
+    return()
+  endif()
+  cmake_parse_arguments(ARG "" "" "DEPS" ${ARGN})
+  add_executable(${name}_bench ${name}_bench.cpp)
+  target_link_libraries(${name}_bench PRIVATE tempura::tempura ${ARG_DEPS})
+  add_dependencies(benchmarks ${name}_bench)
+endfunction()
+
 tempura_test(scalar       LABEL base)
 tempura_test(comparison   LABEL base)
 tempura_test(unit         LABEL base)
@@ -39,6 +58,7 @@ tempura_test(json         LABEL base)
 tempura_test(sequence     LABEL base)
 tempura_test(interpolate  LABEL base)
 tempura_test(root_finding LABEL base)
+tempura_test(benchmark    LABEL base)  # measurement-correctness oracle for benchmark.h
 
 # Module subdirectories — each owns its own CMakeLists with tempura_test() bricks.
 add_subdirectory(matrix4)
