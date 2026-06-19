@@ -1,193 +1,82 @@
 #include "dual.h"
 
-#include "sstream"
+#include <cmath>
+#include <concepts>
+
 #include "unit.h"
 
 using namespace tempura;
 using namespace tempura::autodiff;
 
-auto expectDualNear(const Dual<double>& lhs, const Dual<double>& rhs,
-                    const auto& delta,
-                    const std::source_location location =
-                        std::source_location::current()) -> bool {
-  // Print all errors by avoiding the early stopping behavior of "and".
-  bool v = expectNear(lhs.value, rhs.value, delta, location);
-  bool g = expectNear(lhs.gradient, rhs.gradient, delta, location);
-  return v and g;
+// constexpr: derivative of x² at x=3 is 2x=6 (exact polynomial — proves the constexpr path).
+constexpr auto derivXSquared() -> double {
+  Dual<double> x{3.0, 1.0};
+  return (x * x).gradient;
 }
+static_assert(derivXSquared() == 6.0);
 
-auto expectDualNear(const Dual<double>& lhs, const Dual<double>& rhs,
-                    const std::source_location location =
-                        std::source_location::current()) -> bool {
-  return expectDualNear(lhs, rhs, 0.0001, location);
+// constexpr transcendental — also proves std::sin/cos are constexpr under GCC trunk.
+constexpr auto sinDerivConstexpr() -> bool {
+  Dual<double> x{0.5, 1.0};
+  return isClose(sin(x).gradient, std::cos(0.5), {.rtol = 1e-12, .atol = 1e-12});
 }
-
-constexpr auto dualEq(Dual<double> lhs, Dual<double> rhs) -> bool {
-  return lhs.value == rhs.value and lhs.gradient == rhs.gradient;
-}
-
-auto f(const Dual<double>& x, const Dual<double>& y) {
-  return x * x * y;
-}
+static_assert(sinDerivConstexpr());
 
 auto main() -> int {
-  "constructor test"_test = [] {
-    constexpr Dual<double> dual{1.0, 2.0};
-    expectEq(1.0, dual.value);
-    expectEq(2.0, dual.gradient);
+  "value-only comparison ignores the tangent"_test = [] {
+    Dual<double> a{2.0, 1.0};
+    Dual<double> b{2.0, 99.0};  // same value, different derivative
+    expectTrue(a == b);
+    expectFalse(a < b);
+    expectTrue(Dual<double>{1.0, 5.0} < Dual<double>{2.0, 0.0});
   };
 
-  "string test"_test = [] {
-    constexpr Dual<double> dual{1.0, 2.0};
-    std::stringstream ss;
-    ss << dual;
-    expectEq("1 + 2ε", ss.str());
+  "product and quotient rules"_test = [] {
+    Dual<double> x{3.0, 1.0};
+    auto p = x * x;  // x² → 9, 2x = 6
+    expectClose((p.value), 9.0, {.rtol = 1e-12, .atol = 1e-12});
+    expectClose((p.gradient), 6.0, {.rtol = 1e-12, .atol = 1e-12});
+    auto q = Dual<double>{1.0, 0.0} / x;  // 1/x → d = −1/x² = −1/9
+    expectClose((q.value), 1.0 / 3.0, {.rtol = 1e-12, .atol = 1e-12});
+    expectClose((q.gradient), -1.0 / 9.0, {.rtol = 1e-12, .atol = 1e-12});
   };
 
-  "constexpr comparisions"_test = [] {
-    constexpr Dual<double> lhs{1.0, 2.0};
-    constexpr Dual<double> rhs{3.0, 4.0};
-    static_assert(lhs != rhs);
-    static_assert(lhs == lhs);
-    static_assert(lhs < rhs);
-    static_assert(lhs <= rhs);
-    static_assert(rhs > lhs);
-    static_assert(rhs >= lhs);
+  "scalar * Dual keeps the dual's value type and does not truncate"_test = [] {
+    auto y = 2 * Dual<double>{2.5, 1.0};  // int scalar — old bug deduced Dual<int> → 4.0
+    static_assert(std::same_as<decltype(y), Dual<double>>);
+    expectClose((y.value), 5.0, {.rtol = 1e-12, .atol = 1e-12});
+    expectClose((y.gradient), 2.0, {.rtol = 1e-12, .atol = 1e-12});
+    // all four scalar-mixed ops carry the constant (zero-tangent) correctly
+    Dual<double> x{4.0, 1.0};
+    expectClose(((x + 10).value), 14.0, {.rtol = 1e-12, .atol = 1e-12});
+    expectClose(((10 - x).gradient), -1.0, {.rtol = 1e-12, .atol = 1e-12});
+    expectClose(((x / 2).gradient), 0.5, {.rtol = 1e-12, .atol = 1e-12});
+    expectClose(((8 / x).gradient), -0.5, {.rtol = 1e-12, .atol = 1e-12});  // −8/x² = −0.5
   };
 
-  "constexpr addtion"_test = [] {
-    constexpr Dual<double> lhs{1.0, 2.0};
-    constexpr Dual<double> rhs{3.0, 4.0};
-    static_assert(dualEq(Dual{4.0, 6.0}, lhs + rhs));
+  "elementary function derivatives (chain rule)"_test = [] {
+    Dual<double> x{0.7, 1.0};
+    expectClose((sin(x).gradient), std::cos(0.7), {.rtol = 1e-12, .atol = 1e-12});
+    expectClose((cos(x).gradient), -std::sin(0.7), {.rtol = 1e-12, .atol = 1e-12});
+    expectClose((exp(x).gradient), std::exp(0.7), {.rtol = 1e-12, .atol = 1e-12});
+    expectClose((log(x).gradient), 1.0 / 0.7, {.rtol = 1e-12, .atol = 1e-12});
+    expectClose((sqrt(x).gradient), 1.0 / (2 * std::sqrt(0.7)), {.rtol = 1e-12, .atol = 1e-12});
+    // composition sin(x²): dy/dx = cos(x²)·2x
+    auto y = sin(x * x);
+    expectClose((y.gradient), std::cos(0.49) * 1.4, {.rtol = 1e-12, .atol = 1e-12});
+    // pow with constant exponent: d/dx x³ = 3x²
+    expectClose((pow(x, 3.0).gradient), 3 * 0.49, {.rtol = 1e-12, .atol = 1e-12});
   };
 
-  "inplace addition"_test = [] {
-    Dual<double> lhs{1.0, 2.0};
-    Dual<double> rhs{3.0, 4.0};
-    lhs += rhs;
-    expectTrue(dualEq(Dual{4.0, 6.0}, lhs));
+  "nested Dual<Dual> gives exact second derivatives"_test = [] {
+    // x = a + ε₁ + ε₂ (ε₁ε₂ coeff 0); after f, the ε₁ε₂ coefficient is f''(a).
+    using DD = Dual<Dual<double>>;
+    DD x{Dual<double>{1.0, 1.0}, Dual<double>{1.0, 0.0}};
+    auto r = x * x * x;  // f = x³ at a=1 → f=1, f'=3, f''=6
+    expectClose((r.value.value), 1.0, {.rtol = 1e-12, .atol = 1e-12});
+    expectClose((r.value.gradient), 3.0, {.rtol = 1e-12, .atol = 1e-12});  // f'
+    expectClose((r.gradient.gradient), 6.0, {.rtol = 1e-12, .atol = 1e-12});  // f''
   };
 
-  "plus"_test = [] {
-    constexpr Dual<double> dual{1.0, 2.0};
-    static_assert(Dual{1.0, 2.0} == +dual);
-  };
-
-  "constexpr subtraction"_test = [] {
-    constexpr Dual<double> lhs{1.0, 2.0};
-    constexpr Dual<double> rhs{3.0, 4.0};
-    static_assert(Dual{-2.0, -2.0} == lhs - rhs);
-  };
-
-  "inplace subtraction"_test = [] {
-    Dual<double> lhs{1.0, 2.0};
-    Dual<double> rhs{3.0, 4.0};
-    lhs -= rhs;
-    expectTrue(dualEq(Dual{-2.0, -2.0}, lhs));
-  };
-
-  "minus"_test = [] {
-    constexpr Dual<double> dual{1.0, 2.0};
-    static_assert(Dual{-1.0, -2.0} == -dual);
-  };
-
-  "constexpr multiplication"_test = [] {
-    constexpr Dual<double> lhs{1.0, 2.0};
-    constexpr Dual<double> rhs{3.0, 4.0};
-    static_assert(Dual{3.0, 10.0} == lhs * rhs);
-  };
-
-  "inplace multiplication"_test = [] {
-    Dual<double> lhs{1.0, 2.0};
-    Dual<double> rhs{3.0, 4.0};
-    lhs *= rhs;
-    expectTrue(dualEq(Dual{3.0, 10.0}, lhs));
-  };
-
-  "constexpr division"_test = [] {
-    constexpr Dual<double> lhs{4.0, 3.0};
-    constexpr Dual<double> rhs{1.0, 2.0};
-    static_assert(Dual{4.0, -5.0} == lhs / rhs);
-  };
-
-  "inplace division"_test = [] {
-    Dual<double> lhs{4.0, 3.0};
-    Dual<double> rhs{1.0, 2.0};
-    lhs /= rhs;
-    expectTrue(dualEq(Dual{4.0, -5.0}, lhs));
-  };
-
-  "sqrt"_test = [] {
-    Dual<double> dual{4.0, 3.0};
-    expectDualNear(Dual{2.0, 0.75}, sqrt(dual));
-  };
-
-  "exp"_test = [] {
-    Dual<double> dual{0.0, 3.0};
-    expectTrue(dualEq(Dual{1.0, 3.0}, exp(dual)));
-  };
-
-  "log"_test = [] {
-    Dual<double> dual{1.0, 2.0};
-    expectDualNear(Dual{0.0, 2.0}, log(dual));
-  };
-
-  "pow"_test = [] {
-    Dual<double> dual{2.0, 3.0};
-    expectDualNear(Dual{8.0, 36.0}, pow(dual, 3.));
-  };
-
-  "pow2"_test = [] {
-    Dual<double> base{2.0, 3.0};
-    Dual<double> exponent{3.0, 0.0};
-    expectDualNear(Dual{8.0, 36.0}, pow(base, exponent));
-  };
-
-  "sin"_test = [] {
-    Dual<double> dual{0.0, 3.0};
-    expectDualNear(Dual{0.0, 3.0}, sin(dual));
-  };
-
-  "cos"_test = [] {
-    Dual<double> dual{0.0, 3.0};
-    expectDualNear(Dual{1.0, 0.0}, cos(dual));
-  };
-
-  "tan"_test = [] {
-    Dual<double> dual{0.0, 3.0};
-    expectDualNear(Dual{0.0, 3.0}, tan(dual));
-  };
-
-  "asin"_test = [] {
-    Dual<double> dual{0.0, 3.0};
-    expectDualNear(Dual{0.0, 3.0}, asin(dual));
-  };
-
-  "acos"_test = [] {
-    Dual<double> dual{0.0, 3.0};
-    expectDualNear(Dual{1.570796, -3.0}, acos(dual));
-  };
-
-  "atan"_test = [] {
-    Dual<double> dual{0.0, 3.0};
-    expectDualNear(Dual{0.0, 3.0}, atan(dual));
-  };
-
-  "evalWrt"_test = [] {
-    expectDualNear(Dual{12.0, 12.0}, evalWrt<0>(f, 2.0, 3.0));
-    expectDualNear(Dual{12.0, 4.0}, evalWrt<1>(f, 2.0, 3.0));
-    std::function g = f;
-    expectDualNear(Dual{12.0, 4.0}, evalWrt<1>(g, 2.0, 3.0));
-    expectDualNear(
-        Dual{12.0, 4.0},
-        evalWrt<1>([](Dual<double> x, Dual<double> y) { return x * x * y; },
-                   2.0, 3.0));
-  };
-
-  "jacobian"_test = [] {
-    for (const auto& val : jacobian(f, 2.0, 3.0)) {
-      std::cout << val << std::endl;
-    }
-  };
-  return 0;
+  return TestRegistry::result();
 }

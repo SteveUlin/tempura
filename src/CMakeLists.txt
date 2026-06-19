@@ -67,3 +67,4 @@ tempura_test(benchmark    LABEL base SERIAL)  # measurement-correctness oracle; 
 
 # Module subdirectories — each owns its own CMakeLists with tempura_test() bricks.
 add_subdirectory(matrix)
+add_subdirectory(autodiff)
