@@ -327,6 +327,7 @@ struct PlotOptions {
   std::string y_label;
   bool show_border = true;
   bool show_axes = true;
+  bool show_labels = true;  // numeric y-gutter + x-axis tick row
 };
 
 // A point for scatter plots
@@ -342,14 +343,29 @@ struct Series {
   std::string label;
 };
 
-// Linear interpolation between two colors; t is clamped to [0, 1].
+// sRGB ↔ linear light (IEC 61966-2-1). Color math — averaging, interpolation —
+// must happen in LINEAR space: sRGB is gamma-encoded (it spends more code values
+// on shadows to match human vision), so blending the encoded bytes directly is
+// ~2× too dark. Linearize → blend → re-encode.
+inline auto srgbToLinear(uint8_t c) -> double {
+  const double s = c / 255.0;
+  return s <= 0.04045 ? s / 12.92 : std::pow((s + 0.055) / 1.055, 2.4);
+}
+
+inline auto linearToSrgb(double v) -> uint8_t {
+  v = std::clamp(v, 0.0, 1.0);
+  const double s = v <= 0.0031308 ? v * 12.92 : 1.055 * std::pow(v, 1.0 / 2.4) - 0.055;
+  return static_cast<uint8_t>(s * 255.0 + 0.5);  // +0.5 rounds rather than truncates
+}
+
+// Interpolate between two colors at fraction t∈[0,1], mixed in linear light.
 inline auto lerpColor(const RGB& a, const RGB& b, double t) -> RGB {
   t = std::clamp(t, 0.0, 1.0);
-  return RGB{
-      static_cast<uint8_t>(a.r + t * (b.r - a.r)),
-      static_cast<uint8_t>(a.g + t * (b.g - a.g)),
-      static_cast<uint8_t>(a.b + t * (b.b - a.b)),
+  const auto mix = [t](uint8_t x, uint8_t y) {
+    const double lx = srgbToLinear(x);
+    return linearToSrgb(lx + t * (srgbToLinear(y) - lx));
   };
+  return RGB{mix(a.r, b.r), mix(a.g, b.g), mix(a.b, b.b)};
 }
 
 // Widen a degenerate range (hi ≤ lo) to a unit interval so constant data still
@@ -362,24 +378,95 @@ inline void ensureRange(double& lo, double& hi) {
   }
 }
 
+// Display columns of UTF-8 text. Layout math must count columns, not bytes:
+// a code point that isn't a continuation byte (0b10xxxxxx) is one column — true
+// for the Latin/Greek/math/box/Braille glyphs used here (not CJK double-width).
+inline auto displayWidth(std::string_view s) -> int64_t {
+  int64_t w = 0;
+  for (const unsigned char c : s) w += static_cast<int64_t>((c & 0xC0) != 0x80);
+  return w;
+}
+
 // Top/bottom frame around a width-column plot; the title is centered on top.
 inline void frameTop(std::string& out, int64_t width, std::string_view title) {
   out += "┌";
-  if (!title.empty() && static_cast<int64_t>(title.size()) < width) {
-    const auto pad = (width - static_cast<int64_t>(title.size())) / 2;
-    for (int64_t i = 0; i < pad; ++i) out += "―";
+  const int64_t tw = displayWidth(title);
+  if (!title.empty() && tw < width) {
+    const auto pad = (width - tw) / 2;
+    for (int64_t i = 0; i < pad; ++i) out += "─";
     out += title;
-    for (int64_t i = 0; i < width - pad - static_cast<int64_t>(title.size()); ++i) out += "―";
+    for (int64_t i = 0; i < width - pad - tw; ++i) out += "─";
   } else {
-    for (int64_t i = 0; i < width; ++i) out += "―";
+    for (int64_t i = 0; i < width; ++i) out += "─";
   }
   out += "┐\n";
 }
 
 inline void frameBottom(std::string& out, int64_t width) {
   out += "└";
-  for (int64_t i = 0; i < width; ++i) out += "―";
+  for (int64_t i = 0; i < width; ++i) out += "─";
   out += "┘\n";
+}
+
+// Decimals to render a tick value at, derived from the axis range so all ticks
+// share a width: a span of ~2 wants 1 decimal (1.0/0.5/0.0), ~200 wants 0.
+inline auto decimalsFor(double range) -> int {
+  if (!(range > 0)) return 1;
+  return std::clamp(1 - static_cast<int>(std::floor(std::log10(range))), 0, 6);
+}
+
+inline auto formatTick(double v, int decimals) -> std::string {
+  if (v == 0.0) v = 0.0;  // -0.0 == 0.0 is true, so this normalizes the sign away
+  return std::format("{:.{}f}", v, decimals);
+}
+
+// "Nice" axis ticks: round the spacing to 1/2/5×10ⁿ so labels read 0, 0.5, 1.0
+// rather than landing on arbitrary fractions of the range. Returns the in-range
+// tick values plus the decimal count they should print with (from the step, so
+// every label shares a width). 0 is always a multiple of the step ⇒ always a tick.
+inline auto axisTicks(double lo, double hi, int target)
+    -> std::pair<std::vector<double>, int> {
+  if (!(hi > lo) || target < 2) return {{lo}, decimalsFor(std::abs(hi - lo))};
+  const double raw = (hi - lo) / (target - 1);
+  const double mag = std::pow(10.0, std::floor(std::log10(raw)));
+  const double norm = raw / mag;  // in [1, 10)
+  const double step = (norm <= 1 ? 1.0 : norm <= 2 ? 2.0 : norm <= 5 ? 5.0 : 10.0) * mag;
+  const int dec = std::clamp(-static_cast<int>(std::floor(std::log10(step))), 0, 6);
+  std::vector<double> ticks;
+  for (double t = std::ceil(lo / step) * step; t <= hi + step * 1e-6; t += step) {
+    ticks.push_back(std::abs(t) < step * 1e-6 ? 0.0 : t);
+  }
+  return {ticks, dec};
+}
+
+// Data-space bounds a plot is drawn against; carried into render() so the frame
+// can label its axes.
+struct AxisSpec {
+  double min_x, max_x, min_y, max_y;
+};
+
+// The x-axis tick row drawn below a plot body: nice-valued labels, each centered
+// on the column it maps to, shifted right by the y-gutter (left_offset). Labels
+// that would collide are pushed right to keep a ≥1-space gap.
+inline auto xTickRow(double min_x, double max_x, int64_t cols, int64_t left_offset)
+    -> std::string {
+  const auto [ticks, dec] = axisTicks(min_x, max_x, std::clamp<int>(cols / 12 + 1, 2, 6));
+  const int64_t den = std::max<int64_t>(cols - 1, 1);
+  std::string line(static_cast<size_t>(left_offset), ' ');
+  for (const double v : ticks) {
+    const int64_t col = std::lround((v - min_x) / (max_x - min_x) * static_cast<double>(den));
+    if (col < 0 || col >= cols) continue;
+    const std::string lbl = formatTick(v, dec);
+    const int64_t centered = left_offset + col - static_cast<int64_t>(lbl.size()) / 2;
+    const int64_t floor_start = (static_cast<int64_t>(line.size()) <= left_offset)
+                                    ? left_offset
+                                    : static_cast<int64_t>(line.size()) + 1;  // ≥1 space gap
+    const int64_t start = std::max(centered, floor_start);
+    line.append(static_cast<size_t>(start - static_cast<int64_t>(line.size())), ' ');
+    line += lbl;
+  }
+  line += "\n";
+  return line;
 }
 
 // Maps data coordinates onto an integer pixel grid; row 0 is the TOP (y flips).
@@ -442,21 +529,61 @@ class BrailleCanvas {
     std::string title;
     std::optional<int64_t> axis_row;  // char row to underline with the x-axis
     RGB axis_color = colors::kAxis;
-    std::string legend;  // appended verbatim after the frame
+    std::string legend;               // appended verbatim after the frame
+    std::optional<AxisSpec> labels;   // when set, draw numeric tick labels
   };
 
   auto render(const Style& s) const -> std::string {
+    // y-gutter: a right-justified value label on a few rows (plus the zero row),
+    // shared-width so every label and the spine line up.
+    std::vector<std::string> row_label(static_cast<size_t>(rows_));
+    int64_t gutter = 0;
+    if (s.labels) {
+      const auto [ticks, dec] =
+          axisTicks(s.labels->min_y, s.labels->max_y, std::clamp<int>(rows_ / 3 + 1, 3, 6));
+      const int64_t den = std::max<int64_t>(rows_ - 1, 1);
+      const double span = s.labels->max_y - s.labels->min_y;
+      for (const double v : ticks) {
+        // snap the zero label onto the drawn axis line so ┼ and "0" share a row
+        const int64_t r = (v == 0.0 && s.axis_row)
+                              ? *s.axis_row
+                              : std::lround((s.labels->max_y - v) / span * static_cast<double>(den));
+        if (r < 0 || r >= rows_) continue;
+        row_label[static_cast<size_t>(r)] = formatTick(v, dec);
+      }
+      for (const auto& l : row_label) gutter = std::max<int64_t>(gutter, static_cast<int64_t>(l.size()));
+    }
+    const bool lab = s.labels.has_value();
+
+    // Left spine glyph: ┼ at the zero row, ┤ where a tick label sits, else │.
+    auto spine = [&](int64_t r) -> const char* {
+      if (s.axis_row && *s.axis_row == r) return "┼";
+      return row_label[static_cast<size_t>(r)].empty() ? "│" : "┤";
+    };
+
     std::string out;
-    out.reserve(static_cast<size_t>((cols_ + 4) * (rows_ + 3)) * 3);
-    if (s.border) frameTop(out, cols_, s.title);
+    out.reserve(static_cast<size_t>((cols_ + gutter + 6) * (rows_ + 4)) * 3);
+
+    if (lab) {
+      out += std::string(static_cast<size_t>(gutter + 1), ' ');
+      if (s.border) frameTop(out, cols_, s.title);
+    } else if (s.border) {
+      frameTop(out, cols_, s.title);
+    }
+
     for (int64_t r = 0; r < rows_; ++r) {
-      if (s.border) out += "│";
+      if (lab) {
+        out += std::format("{:>{}} ", row_label[static_cast<size_t>(r)], gutter);
+        out += s.axis_color.wrap(spine(r));
+      } else if (s.border) {
+        out += "│";
+      }
       for (int64_t c = 0; c < cols_; ++c) {
         const auto [octant, color] = pack(c, r);
         if (octant != 0) {
           out += color.wrap(kOctant[static_cast<size_t>(octant)].bytes);
         } else if (s.axis_row && *s.axis_row == r) {
-          out += s.axis_color.wrap("―");
+          out += s.axis_color.wrap("─");
         } else {
           out += " ";
         }
@@ -464,20 +591,44 @@ class BrailleCanvas {
       if (s.border) out += "│";
       out += "\n";
     }
-    if (s.border) frameBottom(out, cols_);
+
+    if (lab) {
+      out += std::string(static_cast<size_t>(gutter + 1), ' ');
+      if (s.border) {
+        frameBottom(out, cols_);
+      } else {
+        out += s.axis_color.ansiPrefix();
+        out += "└";
+        for (int64_t i = 0; i < cols_; ++i) out += "─";
+        out += RGB::ansiSuffix();
+        out += "\n";
+      }
+      out += xTickRow(s.labels->min_x, s.labels->max_x, cols_, gutter + 2);
+    } else if (s.border) {
+      frameBottom(out, cols_);
+    }
+
     out += s.legend;
     return out;
   }
 
  private:
+  // Sums live in LINEAR light, not sRGB bytes, so the average is photometric
+  // (a red×blue crossing reads as bright magenta, not a muddy dark purple).
   struct Accum {
-    uint32_t r = 0, g = 0, b = 0, n = 0;
-    void add(const RGB& c) { r += c.r; g += c.g; b += c.b; ++n; }
+    double r = 0, g = 0, b = 0;
+    uint32_t n = 0;
+    void add(const RGB& c) {
+      r += srgbToLinear(c.r);
+      g += srgbToLinear(c.g);
+      b += srgbToLinear(c.b);
+      ++n;
+    }
     void merge(const Accum& o) { r += o.r; g += o.g; b += o.b; n += o.n; }
     auto blend(const RGB& fallback) const -> RGB {
       if (n == 0) return fallback;
-      return RGB{static_cast<uint8_t>(r / n), static_cast<uint8_t>(g / n),
-                 static_cast<uint8_t>(b / n)};
+      const double d = n;
+      return RGB{linearToSrgb(r / d), linearToSrgb(g / d), linearToSrgb(b / d)};
     }
   };
 
@@ -562,10 +713,11 @@ inline auto plotFn(F&& fn, double min_x, double max_x, const PlotOptions& opts)
   style.border = opts.show_border;
   style.title = opts.title;
   style.axis_row = axisRow(vp, min_y, max_y, opts.show_axes);
+  if (opts.show_labels) style.labels = AxisSpec{min_x, max_x, min_y, max_y};
   std::string out = canvas.render(style);
 
   if (!opts.x_label.empty()) {
-    const auto pad = std::max(int64_t{0}, (opts.width - static_cast<int64_t>(opts.x_label.size())) / 2 + 1);
+    const auto pad = std::max(int64_t{0}, (opts.width - displayWidth(opts.x_label)) / 2 + 1);
     out += std::string(static_cast<size_t>(pad), ' ');
     out += opts.x_label;
     out += "\n";
@@ -627,6 +779,7 @@ inline auto linesPlot(std::span<const Series> series, double min_x, double max_x
   style.border = opts.show_border;
   style.title = opts.title;
   style.axis_row = axisRow(vp, min_y, max_y, opts.show_axes);
+  if (opts.show_labels) style.labels = AxisSpec{min_x, max_x, min_y, max_y};
   style.legend = seriesLegend(series);
   return canvas.render(style);
 }
@@ -659,6 +812,7 @@ inline auto scatterPlot(std::span<const Point> points,
   style.border = opts.show_border;
   style.title = opts.title;
   style.axis_row = axisRow(vp, min_y, max_y, opts.show_axes);
+  if (opts.show_labels) style.labels = AxisSpec{min_x, max_x, min_y, max_y};
   return canvas.render(style);
 }
 

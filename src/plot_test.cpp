@@ -72,10 +72,22 @@ auto main() -> int {
 
   "PlotOptions no border"_test = [] {
     auto fn = [](double x) { return x; };
-    PlotOptions opts{.width = 20, .height = 5, .show_border = false};
+    // labels draw a left spine (│/┤), so the truly-bare path disables both
+    PlotOptions opts{.width = 20, .height = 5, .show_border = false, .show_labels = false};
     auto result = plotFn(fn, 0, 10, opts);
     expectTrue(result.find("┌") == std::string::npos);
     expectTrue(result.find("│") == std::string::npos);
+  };
+
+  "axis labels appear in the gutter and x-tick row"_test = [] {
+    // Plot over x∈[-2,2] so ticks read -2…2. Asserting on labels that contain
+    // '.' or '-' is robust: ANSI color codes are only digits and ';', so a bare
+    // "2" could be a color channel, but "-2" and "0.5" can only be a label.
+    auto result = plotFn([](double x) { return std::sin(x); }, -2, 2, 60, 12);
+    expectTrue(result.find("0.5") != std::string::npos);  // a nice y-tick
+    expectTrue(result.find("┤") != std::string::npos);    // a y-tick mark
+    expectTrue(result.find("┼") != std::string::npos);    // the zero crossing
+    expectTrue(result.find("-2") != std::string::npos);   // an x-tick label
   };
 
   "constant function"_test = [] {
@@ -197,6 +209,22 @@ auto main() -> int {
     expectEq(colors::kRed.r, 255);
     expectEq(colors::kGreen.g, 255);
     expectEq(colors::kBlue.b, 255);
+  };
+
+  "color blending is gamma-correct (linear light)"_test = [] {
+    // The midpoint of black→white is the LINEAR half ≈ 188 in sRGB, not the
+    // naive byte-average 127 — that 60-LSB gap is the whole point of the fix.
+    const RGB mid = lerpColor(RGB{0, 0, 0}, RGB{255, 255, 255}, 0.5);
+    expectTrue(mid.r >= 186 && mid.r <= 190);
+    expectEq(mid.r, mid.g);
+    expectEq(mid.g, mid.b);
+    // endpoints are exact, and sRGB↔linear round-trips for every byte value
+    expectEq(lerpColor(RGB{0, 0, 0}, RGB{255, 255, 255}, 0.0).r, uint8_t{0});
+    expectEq(lerpColor(RGB{0, 0, 0}, RGB{255, 255, 255}, 1.0).r, uint8_t{255});
+    for (int c = 0; c <= 255; ++c) {
+      const auto byte = static_cast<uint8_t>(c);
+      expectEq(linearToSrgb(srgbToLinear(byte)), byte);
+    }
   };
 
   return TestRegistry::result();

@@ -231,3 +231,4 @@ auto operator|(S&& sender, const LetValueAdaptor<F>& adaptor) {
 }
 
 }  // namespace tempura
+// INJECTED BY SKILL - no diff gate
