@@ -56,4 +56,37 @@ constexpr auto derivative(const std::array<T, N>& c) -> std::array<T, (N > 0 ? N
   return d;
 }
 
+// ── parity forms: sin/cos/atan/erf have only even or only odd powers, so the coefficient
+// array holds just that parity and is evaluated in x² (half the degree, half the work). ──
+
+// Σ c[k]·x^(2k) — an even function.
+template <std::floating_point T, std::size_t M>
+constexpr auto evalEven(const std::array<T, M>& c, T x) -> T {
+  return horner(c, x * x);
+}
+// x·Σ c[k]·x^(2k) — an odd function. Factoring x OUT (not folding it into the coefficients)
+// makes evalOdd(c, −x) == −evalOdd(c, x) hold bit-exactly: horner sees x² either way, and
+// the single outer multiply by x carries the sign. That exact antisymmetry is the point.
+template <std::floating_point T, std::size_t M>
+constexpr auto evalOdd(const std::array<T, M>& c, T x) -> T {
+  return x * horner(c, x * x);
+}
+
+// Second-order (Dorn) Horner: split the full coefficient array by index parity into two
+// independent Horner chains in x², recombine E(x²) + x·O(x²). Same op count as horner but
+// ~half the critical-path length — pick it when a longer polynomial is latency-bound.
+template <std::floating_point T, std::size_t N>
+constexpr auto hornerSecondOrder(const std::array<T, N>& c, T x) -> T {
+  if constexpr (N == 0) {
+    return T{0};
+  } else {
+    const T x2 = x * x;
+    std::array<T, (N + 1) / 2> even{};
+    std::array<T, N / 2> odd{};
+    for (std::size_t k = 0; k < even.size(); ++k) even[k] = c[2 * k];
+    for (std::size_t k = 0; k < odd.size(); ++k) odd[k] = c[2 * k + 1];
+    return std::fma(x, horner(odd, x2), horner(even, x2));
+  }
+}
+
 }  // namespace tempura

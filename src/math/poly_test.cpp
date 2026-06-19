@@ -50,5 +50,31 @@ auto main() -> int {
     }
   };
 
+  "evalEven / evalOdd values and exact parity"_test = [] {
+    // evalEven({1,2,3}, x) = 1 + 2x² + 3x⁴; at x=2 → 1+8+48 = 57
+    expectClose((evalEven(std::array{1.0, 2.0, 3.0}, 2.0)), 57.0, {.rtol = 1e-14, .atol = 0});
+    // evalOdd({1,2}, x) = x(1 + 2x²) = x + 2x³; at x=2 → 18
+    expectClose((evalOdd(std::array{1.0, 2.0}, 2.0)), 18.0, {.rtol = 1e-14, .atol = 0});
+    // bit-exact parity: even is symmetric, odd is antisymmetric
+    const std::array ce{0.7, -1.1, 0.3, 0.02};
+    const std::array co{1.0, -0.5, 0.08};
+    for (double x : {0.3, 1.4, 2.9}) {
+      expectWithinUlps(evalEven(ce, -x), evalEven(ce, x), 0);
+      expectWithinUlps(evalOdd(co, -x), -evalOdd(co, x), 0);
+    }
+  };
+
+  "hornerSecondOrder is tight on small arguments (its real regime)"_test = [] {
+    // Evaluating in x² halves the argument's precision, so second-order Horner is for the
+    // SMALL intervals libm uses it on (|r| ≲ 0.35); there it costs only a few ULP for a
+    // ~halved critical path. (At larger |x| the x²-amplification grows — by design.)
+    const std::array c{0.9, -1.3, 0.7, -0.21, 0.05, -0.011, 0.004};
+    for (double x : {-0.34, -0.1, 0.05, 0.2, 0.34}) {
+      long double ref = 0.0L;
+      for (std::size_t i = c.size(); i-- > 0;) ref = ref * static_cast<long double>(x) + c[i];
+      expectWithinUlps(hornerSecondOrder(c, x), static_cast<double>(ref), 4);
+    }
+  };
+
   return TestRegistry::result();
 }
