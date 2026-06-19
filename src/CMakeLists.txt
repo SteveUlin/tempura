@@ -64,6 +64,7 @@ tempura_test(sequence     LABEL base)
 tempura_test(interpolate  LABEL base)
 tempura_test(root_finding LABEL base)
 tempura_test(benchmark    LABEL base SERIAL)  # measurement-correctness oracle; SERIAL: timing-sensitive
+tempura_test(plot         LABEL plot)  # terminal plotting
 
 # Module subdirectories — each owns its own CMakeLists with tempura_test() bricks.
 add_subdirectory(matrix)

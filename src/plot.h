@@ -7,7 +7,6 @@
 #include <functional>
 #include <limits>
 #include <optional>
-#include <print>
 #include <ranges>
 #include <string>
 #include <vector>
@@ -17,8 +16,6 @@
 #include <unistd.h>
 #include <poll.h>
 #endif
-
-#include "root_finding.h"
 
 namespace tempura {
 
@@ -158,22 +155,7 @@ constexpr RGB kMagenta{255, 100, 255};
 constexpr RGB kOrange{255, 165, 0};
 }  // namespace colors
 
-// Unicode characters for 2x2 cell rendering (quadrants)
-constexpr auto kQuadrents = u8" ▘▝▀▖▌▞▛▗▚▐▜▄▙▟█";
-
-// Unicode characters for 3x2 cell rendering (sextants)
-constexpr const char* kSextant[] = {" ", "🬀", "🬁", "🬂", "🬃", "🬄", "🬅", "🬆",
-                                    "🬇", "🬈", "🬉", "🬊", "🬋", "🬌", "🬍", "🬎",
-
-                                    "🬏", "🬐", "🬑", "🬒", "🬓", "▌", "🬔", "🬕",
-                                    "🬖", "🬗", "🬘", "🬙", "🬚", "🬛", "🬜", "🬝",
-
-                                    "🬞", "🬟", "🬠", "🬡", "🬢", "🬣", "🬤", "🬥",
-                                    "🬦", "🬧", "▐", "🬨", "🬩", "🬪", "🬫", "🬬",
-                                    "🬭", "🬮", "🬯", "🬰", "🬱", "🬲", "🬳", "🬴",
-                                    "🬵", "🬶", "🬷", "🬸", "🬹", "🬺", "🬻", "█"};
-
-// Braille characters for 2x4 cell rendering (octants) - highest resolution
+// Braille characters for 2x4 cell rendering (octants) — highest resolution
 static constexpr const char* kOctant[] = {
     "⠀", "⠁", "⠂", "⠃", "⠄", "⠅", "⠆", "⠇", "⡀", "⡁", "⡂", "⡃", "⡄", "⡅", "⡆",
     "⡇", "⠈", "⠉", "⠊", "⠋", "⠌", "⠍", "⠎", "⠏", "⡈", "⡉", "⡊", "⡋", "⡌", "⡍",
@@ -240,11 +222,6 @@ constexpr auto buildBarChartText(auto&& bars) -> std::string {
   }
 
   return result;
-}
-
-// Backward compatibility alias
-constexpr auto buildBartChartText(auto&& bars) -> std::string {
-  return buildBarChartText(std::forward<decltype(bars)>(bars));
 }
 
 struct TextHistogramOptions {
@@ -337,8 +314,6 @@ struct PlotOptions {
   std::string y_label;
   bool show_border = true;
   bool show_axes = true;
-  bool show_roots = true;
-  bool verbose_roots = false;
 };
 
 // A point for scatter plots
@@ -415,33 +390,6 @@ inline void drawXAxis(std::vector<std::string>& plot, double min_y,
   for (int64_t i = 0; i < width; ++i) {
     if (auto idx = safeIndex(i, row, width, height)) {
       plot[*idx] = colors::kAxis.wrap("―");
-    }
-  }
-}
-
-// Mark roots on the plot
-inline void markRoots(std::vector<std::string>& plot,
-                      std::function<double(double)>& fn, double min_x,
-                      double max_x, double min_y, double max_y, int64_t width,
-                      int64_t height, const RGB& color, bool verbose) {
-  if (min_y > 0 || max_y < 0 || max_y <= min_y || max_x <= min_x) return;
-
-  const auto row = yToRow(0.0, min_y, max_y, height);
-  if (row < 0 || row >= height) return;
-
-  const auto intervals =
-      root_finding::subIntervalSignChange(fn, {.a = min_x, .b = max_x}, width);
-
-  for (const auto& interval : intervals) {
-    const auto [a, b] = root_finding::bisectRoot(fn, interval);
-    const double x = (a + b) / 2;
-    if (verbose) {
-      std::println("root: x = {}", x);
-    }
-    auto col = xToCol(x, min_x, max_x, width);
-    col = std::clamp(col, int64_t{0}, width - 1);
-    if (auto idx = safeIndex(col, row, width, height)) {
-      plot[*idx] = color.wrap("×");
     }
   }
 }
@@ -574,12 +522,6 @@ constexpr auto plotFn(std::function<double(double)>& fn, double min_x,
     }
   }
 
-  // Mark roots
-  if (opts.show_roots) {
-    detail::markRoots(plot, fn, min_x, max_x, min_y, max_y, width, height,
-                      opts.color, opts.verbose_roots);
-  }
-
   // Build result string
   std::string result;
   result.reserve(static_cast<size_t>((width + 10) * (height + 3)));
@@ -673,10 +615,6 @@ constexpr auto linePlot(std::function<double(double)>& fn, double min_x,
       }
     }
   }
-
-  // Mark roots
-  detail::markRoots(plot, fn, min_x, max_x, min_y, max_y, width, height,
-                    plot_color, false);
 
   // Build result
   std::string result;
@@ -1720,156 +1658,6 @@ inline auto heatmap(const std::vector<Point>& points,
   }
 
   return result;
-}
-
-// =============================================================================
-// Distribution Visualization Utilities
-// =============================================================================
-
-namespace detail {
-
-// Vertical eighth blocks for sparkline histograms: index 0-8 maps to empty through full
-constexpr const char* kVerticalEighths[] = {" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"};
-
-}  // namespace detail
-
-// Compact 2-row sparkline histogram using vertical eighth blocks (▁▂▃▄▅▆▇█)
-// Returns two strings: top row and bottom row
-// With 2 rows x 8 levels = 16 height levels total
-//
-// Usage:
-//   auto [top, bottom] = sparklineHistogram(pdf, 0.0, 1.0, 60);
-//   std::println("{}", top);
-//   std::println("{}", bottom);
-inline auto sparklineHistogram(const std::function<double(double)>& pdf,
-                               double x_min, double x_max, int num_bins)
-    -> std::pair<std::string, std::string> {
-  if (num_bins <= 0 || x_max <= x_min) {
-    return {"", ""};
-  }
-
-  // Sample the PDF at bin centers
-  std::vector<double> values(static_cast<size_t>(num_bins));
-  double max_val = 0;
-  for (int i = 0; i < num_bins; ++i) {
-    double x = x_min + (x_max - x_min) * (static_cast<double>(i) + 0.5) /
-                           static_cast<double>(num_bins);
-    values[static_cast<size_t>(i)] = pdf(x);
-    max_val = std::max(max_val, values[static_cast<size_t>(i)]);
-  }
-
-  if (max_val <= 0) {
-    return {std::string(static_cast<size_t>(num_bins), ' '),
-            std::string(static_cast<size_t>(num_bins), ' ')};
-  }
-
-  // Normalize to 0-16 range (2 rows x 8 levels)
-  std::string top_row, bottom_row;
-  top_row.reserve(static_cast<size_t>(num_bins) * 4);  // UTF-8 chars up to 4 bytes
-  bottom_row.reserve(static_cast<size_t>(num_bins) * 4);
-
-  for (int i = 0; i < num_bins; ++i) {
-    int h = static_cast<int>(values[static_cast<size_t>(i)] / max_val * 15.99);
-    if (h >= 8) {
-      bottom_row += detail::kVerticalEighths[8];      // Full block on bottom
-      top_row += detail::kVerticalEighths[h - 8 + 1]; // Remainder on top (1-8)
-    } else if (h > 0) {
-      bottom_row += detail::kVerticalEighths[h];      // Partial block on bottom
-      top_row += " ";                                 // Empty on top
-    } else {
-      bottom_row += " ";
-      top_row += " ";
-    }
-  }
-
-  return {top_row, bottom_row};
-}
-
-// Credible interval bar visualization
-// Shows a horizontal bar representing a confidence/credible interval
-// with the mean/estimate marked with a vertical bar character
-//
-// Parameters:
-//   ci_low, ci_high: The bounds of the credible interval
-//   mean: The point estimate (marked with '|')
-//   x_min, x_max: The display range for the bar
-//   width: Character width of the bar
-//   color: Optional color for the bar
-//   fill_char: Character used to fill the interval (default '=')
-//
-// Returns: A string containing the colored bar
-inline auto credibleIntervalBar(double ci_low, double ci_high, double mean,
-                                double x_min, double x_max, int width,
-                                const RGB& color = colors::kDefault,
-                                char fill_char = '=') -> std::string {
-  if (width <= 0 || x_max <= x_min) {
-    return "";
-  }
-
-  // Map interval bounds to character positions
-  auto to_pos = [&](double x) -> int {
-    return static_cast<int>((x - x_min) / (x_max - x_min) *
-                            static_cast<double>(width));
-  };
-
-  int pos_low = std::clamp(to_pos(ci_low), 0, width - 1);
-  int pos_high = std::clamp(to_pos(ci_high), 0, width - 1);
-  int pos_mean = std::clamp(to_pos(mean), 0, width - 1);
-
-  // Build the bar
-  std::string bar(static_cast<size_t>(width), ' ');
-  for (int i = pos_low; i <= pos_high; ++i) {
-    bar[static_cast<size_t>(i)] = fill_char;
-  }
-  bar[static_cast<size_t>(pos_mean)] = '|';  // Mark the mean
-
-  return color.wrap(bar);
-}
-
-// Credible interval bar with custom mean marker
-inline auto credibleIntervalBar(double ci_low, double ci_high, double mean,
-                                double x_min, double x_max, int width,
-                                const RGB& color, char fill_char,
-                                char mean_char) -> std::string {
-  if (width <= 0 || x_max <= x_min) {
-    return "";
-  }
-
-  auto to_pos = [&](double x) -> int {
-    return static_cast<int>((x - x_min) / (x_max - x_min) *
-                            static_cast<double>(width));
-  };
-
-  int pos_low = std::clamp(to_pos(ci_low), 0, width - 1);
-  int pos_high = std::clamp(to_pos(ci_high), 0, width - 1);
-  int pos_mean = std::clamp(to_pos(mean), 0, width - 1);
-
-  std::string bar(static_cast<size_t>(width), ' ');
-  for (int i = pos_low; i <= pos_high; ++i) {
-    bar[static_cast<size_t>(i)] = fill_char;
-  }
-  bar[static_cast<size_t>(pos_mean)] = mean_char;
-
-  return color.wrap(bar);
-}
-
-// Options for credible interval visualization
-struct CredibleIntervalOptions {
-  double x_min = 0.0;
-  double x_max = 1.0;
-  int width = 60;
-  RGB color = colors::kDefault;
-  char fill_char = '=';
-  char mean_char = '|';
-};
-
-// Credible interval bar with options struct
-inline auto credibleIntervalBar(double ci_low, double ci_high, double mean,
-                                const CredibleIntervalOptions& opts)
-    -> std::string {
-  return credibleIntervalBar(ci_low, ci_high, mean, opts.x_min, opts.x_max,
-                             opts.width, opts.color, opts.fill_char,
-                             opts.mean_char);
 }
 
 }  // namespace tempura
