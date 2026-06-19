@@ -56,6 +56,20 @@ function(tempura_benchmark name)
   add_dependencies(benchmarks ${name}_bench)
 endfunction()
 
+# tempura_demo(name [DEPS <targets...>])
+#   Builds name_demo from name_demo.cpp. A demo is neither a test (no pass/fail)
+#   nor a benchmark (no timing) — it renders to a real terminal for eyeballing,
+#   so it is opt-in (TEMPURA_BUILD_DEMOS) and run by hand.
+option(TEMPURA_BUILD_DEMOS "Build demo executables" OFF)
+function(tempura_demo name)
+  if(NOT TEMPURA_BUILD_DEMOS)
+    return()
+  endif()
+  cmake_parse_arguments(ARG "" "" "DEPS" ${ARGN})
+  add_executable(${name}_demo ${name}_demo.cpp)
+  target_link_libraries(${name}_demo PRIVATE tempura::tempura ${ARG_DEPS})
+endfunction()
+
 tempura_test(scalar       LABEL base)
 tempura_test(comparison   LABEL base)
 tempura_test(unit         LABEL base)
@@ -65,6 +79,7 @@ tempura_test(interpolate  LABEL base)
 tempura_test(root_finding LABEL base)
 tempura_test(benchmark    LABEL base SERIAL)  # measurement-correctness oracle; SERIAL: timing-sensitive
 tempura_test(plot         LABEL plot)  # terminal plotting
+tempura_demo(plot)                     # visual spotcheck: cmake --build … --target plot_demo
 
 # Module subdirectories — each owns its own CMakeLists with tempura_test() bricks.
 add_subdirectory(matrix)
