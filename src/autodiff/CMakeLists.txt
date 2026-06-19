@@ -4,3 +4,4 @@
 tempura_test(dual LABEL autodiff)
 tempura_test(tape LABEL autodiff)
 tempura_test(transform LABEL autodiff)
+tempura_test(jacobian LABEL autodiff)
