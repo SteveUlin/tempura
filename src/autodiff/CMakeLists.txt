@@ -3,3 +3,4 @@
 # tempura_test() is defined in the parent src/CMakeLists.txt.
 tempura_test(dual LABEL autodiff)
 tempura_test(tape LABEL autodiff)
+tempura_test(transform LABEL autodiff)
