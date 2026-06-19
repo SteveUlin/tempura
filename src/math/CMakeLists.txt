@@ -7,3 +7,6 @@ tempura_test(poly LABEL math)
 tempura_test(ulp_sweep LABEL math)
 tempura_test(exp LABEL math)
 tempura_test(sqrt_approx LABEL math)
+
+# Benchmarks (opt-in: -DTEMPURA_BUILD_BENCHMARKS=ON).
+tempura_benchmark(sqrt)
