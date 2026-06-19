@@ -21,4 +21,11 @@ concept Scalar = enable_scalar<std::remove_cvref_t<T>> && std::totally_ordered<T
       { a / b } -> std::convertible_to<T>;
     };
 
+// A real function of one real variable. Templating on it instead of taking a
+// std::function is what keeps callers constexpr-capable: std::function can
+// neither be constructed nor invoked at compile time.
+template <typename F>
+concept RealFunction =
+    std::invocable<F, double> && std::convertible_to<std::invoke_result_t<F, double>, double>;
+
 }  // namespace tempura

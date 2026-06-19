@@ -10,14 +10,9 @@
 #include <utility>
 #include <vector>
 
-namespace tempura {
+#include "scalar.h"
 
-// A real function of one real variable. Templating on it instead of taking a
-// std::function is what makes every solver here usable in a constant expression:
-// std::function can neither be constructed nor invoked at compile time.
-template <typename F>
-concept RealFunction =
-    std::invocable<F, double> && std::convertible_to<std::invoke_result_t<F, double>, double>;
+namespace tempura {
 
 struct Interval {
   double a;
