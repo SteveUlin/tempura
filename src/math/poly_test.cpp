@@ -1,7 +1,9 @@
 #include "poly.h"
 
 #include <array>
+#include <cmath>
 #include <cstddef>
+#include <utility>
 
 #include "unit.h"
 
@@ -74,6 +76,38 @@ auto main() -> int {
       for (std::size_t i = c.size(); i-- > 0;) ref = ref * static_cast<long double>(x) + c[i];
       expectWithinUlps(hornerSecondOrder(c, x), static_cast<double>(ref), 4);
     }
+  };
+
+  "clenshaw evaluates a Chebyshev series"_test = [] {
+    // Σ c_k T_k:  {2,3} → 2T₀+3T₁ = 2+3x;  {1,0,1} → T₀+T₂ = 1+(2x²−1) = 2x²
+    for (double x : {-0.7, 0.0, 0.4, 0.9}) {
+      expectClose((clenshaw(std::array{2.0, 3.0}, x)), 2.0 + 3.0 * x, {.rtol = 1e-14, .atol = 1e-15});
+      expectClose((clenshaw(std::array{1.0, 0.0, 1.0}, x)), 2.0 * x * x, {.rtol = 1e-13, .atol = 1e-14});
+    }
+  };
+
+  "error-free transforms are exact"_test = [] {
+    // a+b = s+e and a·b = p+e to the bit (verified in long double)
+    for (auto [a, b] : {std::pair{1.0, 1e-20}, std::pair{1.0 + 0x1p-52, 1.0 - 0x1p-52}, std::pair{3.7, -2.9}}) {
+      auto [s, e] = twoSum(a, b);
+      expectEq(static_cast<long double>(s) + e,
+               static_cast<long double>(a) + static_cast<long double>(b));
+      auto [p, pe] = twoProductFMA(a, b);
+      expectEq(static_cast<long double>(p) + pe,
+               static_cast<long double>(a) * static_cast<long double>(b));
+    }
+  };
+
+  "compHorner recovers accuracy where plain Horner cancels"_test = [] {
+    // (x−1)⁵ expanded — integer coeffs, exact. Evaluated at x=1.001 the terms (~O(1))
+    // cancel down to (1e-3)⁵=1e-15: condition ~1e15, so plain Horner loses ~all digits.
+    const std::array c{-1.0, 5.0, -10.0, 10.0, -5.0, 1.0};
+    const double x = 1.0 + 1e-3;
+    const double truth = static_cast<double>(std::pow(static_cast<long double>(x) - 1.0L, 5));
+    const double err_horner = std::abs(horner(c, x) - truth);
+    const double err_comp = std::abs(compHorner(c, x) - truth);
+    expectLT(err_comp, err_horner);                               // compensation helps…
+    expectClose(compHorner(c, x), truth, {.rtol = 1e-9, .atol = 1e-22});  // …and is actually accurate
   };
 
   return TestRegistry::result();

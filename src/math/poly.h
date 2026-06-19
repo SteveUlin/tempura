@@ -89,4 +89,71 @@ constexpr auto hornerSecondOrder(const std::array<T, N>& c, T x) -> T {
   }
 }
 
+// Clenshaw recurrence for a CHEBYSHEV-basis polynomial: evaluates Σ c[k]·Tₖ(x) (Tₖ the
+// Chebyshev polynomials of the first kind) without converting to monomial form. More stable
+// than monomial Horner when coefficients stay in Chebyshev form.
+// CONVENTION: full c[0] (NOT the c₀/2 convention some references use) — a caller holding
+// half-c₀ coefficients must double c[0] first. And note the basis footgun: these coeffs are
+// CHEBYSHEV coefficients; passing monomial coeffs here (or Chebyshev coeffs to horner) is
+// silent garbage.
+template <std::floating_point T, std::size_t N>
+constexpr auto clenshaw(const std::array<T, N>& c, T x) -> T {
+  if constexpr (N == 0) {
+    return T{0};
+  } else if constexpr (N == 1) {
+    return c[0];
+  } else {
+    T b1{0};  // bₖ₊₁
+    T b2{0};  // bₖ₊₂
+    const T two_x = T{2} * x;
+    for (std::size_t k = N - 1; k >= 1; --k) {
+      const T bk = std::fma(two_x, b1, c[k] - b2);  // bₖ = 2x·bₖ₊₁ − bₖ₊₂ + cₖ
+      b2 = b1;
+      b1 = bk;
+    }
+    return std::fma(x, b1, c[0] - b2);  // c₀ + x·b₁ − b₂
+  }
+}
+
+// ── Error-free transforms (EFTs): exact residuals for the compensated escape-hatch. ──
+// They feed compHorner; carrying a two-word value further would need a DoubleWord type
+// (deferred until a kernel — e.g. exp's extended-precision fold — needs it).
+
+// a + b = sum + err, EXACTLY (Knuth, branch-free). err is the part lost to rounding.
+template <std::floating_point T>
+constexpr auto twoSum(T a, T b) -> std::pair<T, T> {
+  const T s = a + b;
+  const T bv = s - a;
+  const T err = (a - (s - bv)) + (b - bv);
+  return {s, err};
+}
+// a · b = prod + err, EXACTLY (one FMA — the reason compensation is cheap).
+template <std::floating_point T>
+constexpr auto twoProductFMA(T a, T b) -> std::pair<T, T> {
+  const T p = a * b;
+  return {p, std::fma(a, b, -p)};
+}
+
+// Compensated Horner (Graillat–Langlois–Louvet): run Horner while accumulating each step's
+// rounding residual into an error polynomial, then add the correction — giving ~twice the
+// working precision. Accurate until the condition number approaches 1/u². ~3× the flops of
+// horner; reach for it only where the ULP oracle shows plain Horner losing digits (heavy
+// cancellation, e.g. evaluating near a polynomial's root).
+template <std::floating_point T, std::size_t N>
+constexpr auto compHorner(const std::array<T, N>& c, T x) -> T {
+  if constexpr (N == 0) {
+    return T{0};
+  } else {
+    T s = c[N - 1];
+    T r{0};  // the running error polynomial
+    for (std::size_t i = N - 1; i-- > 0;) {
+      const auto [p, pe] = twoProductFMA(s, x);    // s·x = p + pe
+      const auto [snew, se] = twoSum(p, c[i]);     // p + c[i] = snew + se
+      s = snew;
+      r = std::fma(r, x, pe + se);                 // accumulate both residuals
+    }
+    return s + r;
+  }
+}
+
 }  // namespace tempura
