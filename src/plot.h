@@ -1,15 +1,21 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <format>
 #include <functional>
 #include <limits>
 #include <optional>
 #include <ranges>
+#include <span>
 #include <string>
+#include <utility>
 #include <vector>
+
+#include "scalar.h"  // RealFunction
 
 #ifdef __unix__
 #include <termios.h>
@@ -155,26 +161,33 @@ constexpr RGB kMagenta{255, 100, 255};
 constexpr RGB kOrange{255, 165, 0};
 }  // namespace colors
 
-// Braille characters for 2x4 cell rendering (octants) — highest resolution
-static constexpr const char* kOctant[] = {
-    "⠀", "⠁", "⠂", "⠃", "⠄", "⠅", "⠆", "⠇", "⡀", "⡁", "⡂", "⡃", "⡄", "⡅", "⡆",
-    "⡇", "⠈", "⠉", "⠊", "⠋", "⠌", "⠍", "⠎", "⠏", "⡈", "⡉", "⡊", "⡋", "⡌", "⡍",
-    "⡎", "⡏", "⠐", "⠑", "⠒", "⠓", "⠔", "⠕", "⠖", "⠗", "⡐", "⡑", "⡒", "⡓", "⡔",
-    "⡕", "⡖", "⡗", "⠘", "⠙", "⠚", "⠛", "⠜", "⠝", "⠞", "⠟", "⡘", "⡙", "⡚", "⡛",
-    "⡜", "⡝", "⡞", "⡟", "⠠", "⠡", "⠢", "⠣", "⠤", "⠥", "⠦", "⠧", "⡠", "⡡", "⡢",
-    "⡣", "⡤", "⡥", "⡦", "⡧", "⠨", "⠩", "⠪", "⠫", "⠬", "⠭", "⠮", "⠯", "⡨", "⡩",
-    "⡪", "⡫", "⡬", "⡭", "⡮", "⡯", "⠰", "⠱", "⠲", "⠳", "⠴", "⠵", "⠶", "⠷", "⡰",
-    "⡱", "⡲", "⡳", "⡴", "⡵", "⡶", "⡷", "⠸", "⠹", "⠺", "⠻", "⠼", "⠽", "⠾", "⠿",
-    "⡸", "⡹", "⡺", "⡻", "⡼", "⡽", "⡾", "⡿", "⢀", "⢁", "⢂", "⢃", "⢄", "⢅", "⢆",
-    "⢇", "⣀", "⣁", "⣂", "⣃", "⣄", "⣅", "⣆", "⣇", "⢈", "⢉", "⢊", "⢋", "⢌", "⢍",
-    "⢎", "⢏", "⣈", "⣉", "⣊", "⣋", "⣌", "⣍", "⣎", "⣏", "⢐", "⢑", "⢒", "⢓", "⢔",
-    "⢕", "⢖", "⢗", "⣐", "⣑", "⣒", "⣓", "⣔", "⣕", "⣖", "⣗", "⢘", "⢙", "⢚", "⢛",
-    "⢜", "⢝", "⢞", "⢟", "⣘", "⣙", "⣚", "⣛", "⣜", "⣝", "⣞", "⣟", "⢠", "⢡", "⢢",
-    "⢣", "⢤", "⢥", "⢦", "⢧", "⣠", "⣡", "⣢", "⣣", "⣤", "⣥", "⣦", "⣧", "⢨", "⢩",
-    "⢪", "⢫", "⢬", "⢭", "⢮", "⢯", "⣨", "⣩", "⣪", "⣫", "⣬", "⣭", "⣮", "⣯", "⢰",
-    "⢱", "⢲", "⢳", "⢴", "⢵", "⢶", "⢷", "⣠", "⣡", "⣢", "⣳", "⣴", "⣵", "⣶", "⣷",
-    "⢸", "⢹", "⢺", "⢻", "⢼", "⢽", "⢾", "⢿", "⣸", "⣹", "⣺", "⣻", "⣼", "⣽", "⣾",
-    "⣿"};
+// Braille 2×4 cell glyphs, generated rather than transcribed: a hand-typed
+// table of 256 lookalike characters had silent dupes (⣠ where ⣰ belonged).
+// Octant bit layout: bit dy∈[0,4) is the left column row dy (top→bottom),
+// bit dy+4 the right column. Unicode Braille (U+2800) numbers its dots
+// 1-2-3-7 down the left, 4-5-6-8 down the right — hence the permutation.
+struct Glyph {
+  char bytes[4];  // up to 3 UTF-8 bytes + NUL
+};
+
+consteval auto makeOctants() -> std::array<Glyph, 256> {
+  constexpr unsigned dot_bit[8] = {0x01, 0x02, 0x04, 0x40,   // left  rows 0-3
+                                   0x08, 0x10, 0x20, 0x80};  // right rows 0-3
+  std::array<Glyph, 256> table{};
+  for (unsigned o = 0; o < 256; ++o) {
+    unsigned cp = 0x2800;
+    for (unsigned b = 0; b < 8; ++b) {
+      if (o & (1u << b)) cp |= dot_bit[b];
+    }
+    table[o].bytes[0] = static_cast<char>(0xE0 | (cp >> 12));
+    table[o].bytes[1] = static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+    table[o].bytes[2] = static_cast<char>(0x80 | (cp & 0x3F));
+    table[o].bytes[3] = '\0';
+  }
+  return table;
+}
+
+inline constexpr std::array<Glyph, 256> kOctant = makeOctants();
 
 // A declarative representation of an element of a bar chart
 struct TextBar {
@@ -329,691 +342,8 @@ struct Series {
   std::string label;
 };
 
-namespace detail {
-
-// Safe index calculation with bounds checking
-constexpr auto safeIndex(int64_t col, int64_t row, int64_t width, int64_t height)
-    -> std::optional<size_t> {
-  if (col < 0 || col >= width || row < 0 || row >= height) {
-    return std::nullopt;
-  }
-  return static_cast<size_t>(col + row * width);
-}
-
-// Convert y-value to row index (y-axis is flipped)
-constexpr auto yToRow(double y, double min_y, double max_y, int64_t height)
-    -> int64_t {
-  if (max_y <= min_y) return height / 2;
-  const double normalized = (max_y - y) / (max_y - min_y);
-  return static_cast<int64_t>(std::round(normalized * (height - 1)));
-}
-
-// Convert x-value to column index
-constexpr auto xToCol(double x, double min_x, double max_x, int64_t width)
-    -> int64_t {
-  if (max_x <= min_x) return width / 2;
-  const double normalized = (x - min_x) / (max_x - min_x);
-  return static_cast<int64_t>(std::round(normalized * (width - 1)));
-}
-
-// Draw border around plot
-inline void drawBorder(std::string& result, int64_t width,
-                       const std::string& title) {
-  result += "┌";
-  if (!title.empty() && static_cast<int64_t>(title.size()) < width) {
-    const auto padding = (width - static_cast<int64_t>(title.size())) / 2;
-    for (int64_t i = 0; i < padding; ++i) result += "―";
-    result += title;
-    for (int64_t i = 0;
-         i < width - padding - static_cast<int64_t>(title.size()); ++i)
-      result += "―";
-  } else {
-    for (int64_t i = 0; i < width; ++i) result += "―";
-  }
-  result += "┐\n";
-}
-
-inline void drawBottomBorder(std::string& result, int64_t width) {
-  result += "└";
-  for (int64_t i = 0; i < width; ++i) result += "―";
-  result += "┘\n";
-}
-
-// Draw x-axis if zero is in range
-inline void drawXAxis(std::vector<std::string>& plot, double min_y,
-                      double max_y, int64_t width, int64_t height) {
-  if (min_y > 0 || max_y < 0 || max_y <= min_y) return;
-
-  const auto row = yToRow(0.0, min_y, max_y, height);
-  if (row < 0 || row >= height) return;
-
-  for (int64_t i = 0; i < width; ++i) {
-    if (auto idx = safeIndex(i, row, width, height)) {
-      plot[*idx] = colors::kAxis.wrap("―");
-    }
-  }
-}
-
-}  // namespace detail
-
-// Forward declaration for overload
-constexpr auto plotFn(std::function<double(double)>& fn, double min_x,
-                      double max_x, const PlotOptions& opts) -> std::string;
-
-// High-resolution function plot using Braille characters
-constexpr auto plotFn(std::function<double(double)>& fn, double min_x,
-                      double max_x, int64_t width, int64_t height,
-                      std::optional<RGB> color = std::nullopt) -> std::string {
-  PlotOptions opts;
-  opts.width = width;
-  opts.height = height;
-  if (color) opts.color = *color;
-  return plotFn(fn, min_x, max_x, opts);
-}
-
-// High-resolution function plot with full options
-constexpr auto plotFn(std::function<double(double)>& fn, double min_x,
-                      double max_x, const PlotOptions& opts) -> std::string {
-  if (opts.width <= 0 || opts.height <= 0) return "";
-  if (max_x <= min_x) return "";
-
-  const int64_t width = opts.width;
-  const int64_t height = opts.height;
-
-  // Sample at 2x4 resolution for Braille rendering
-  const int64_t sample_width = 2 * width;
-  const int64_t sample_height = 4 * height;
-
-  std::vector<double> y_values;
-  y_values.reserve(static_cast<size_t>(sample_width + 1));
-
-  for (int64_t i = 0; i <= sample_width; ++i) {
-    const double x =
-        min_x + (max_x - min_x) * static_cast<double>(i) / sample_width;
-    y_values.push_back(fn(x));
-  }
-
-  double max_y = *std::ranges::max_element(y_values);
-  double min_y = *std::ranges::min_element(y_values);
-
-  // Ensure non-zero range
-  if (max_y <= min_y) {
-    const double center = (max_y + min_y) / 2;
-    max_y = center + 1.0;
-    min_y = center - 1.0;
-  }
-
-  // Adjust bounds to align zero with cell boundary for clean axis drawing
-  if (opts.show_axes && min_y <= 0 && max_y >= 0) {
-    const double range = max_y - min_y;
-    const double cell_height = range / sample_height;
-    if (cell_height > 0) {
-      const double delta = std::fmod(max_y, cell_height);
-      const double sign = (delta >= 0) ? 1.0 : -1.0;
-      const double offset = delta + sign * cell_height;
-      if (offset < 0 && range > std::abs(offset)) {
-        max_y += -offset / (1.0 - (max_y - offset) / range);
-      } else if (offset > 0 && range > std::abs(offset)) {
-        min_y -= offset / (1.0 - (min_y + offset) / range);
-      }
-    }
-  }
-
-  // Occupancy grid for Braille rendering
-  const auto grid_size = static_cast<size_t>(sample_width * sample_height);
-  std::vector<bool> occupancy(grid_size, false);
-
-  for (int64_t i = 0; i < sample_width; ++i) {
-    const double y0 = y_values[static_cast<size_t>(i)];
-    const double y1 = y_values[static_cast<size_t>(i + 1)];
-
-    int64_t row0 = detail::yToRow(y0, min_y, max_y, sample_height);
-    int64_t row1 = detail::yToRow(y1, min_y, max_y, sample_height);
-
-    row0 = std::clamp(row0, int64_t{0}, sample_height - 1);
-    row1 = std::clamp(row1, int64_t{0}, sample_height - 1);
-
-    const int64_t start_row = std::min(row0, row1);
-    const int64_t end_row = std::max(row0, row1);
-
-    for (int64_t j = start_row; j <= end_row; ++j) {
-      const auto idx = static_cast<size_t>(i + j * sample_width);
-      if (idx < occupancy.size()) {
-        occupancy[idx] = true;
-      }
-    }
-  }
-
-  // Convert occupancy to Braille characters
-  std::vector<std::string> plot(static_cast<size_t>(width * height), " ");
-
-  // Draw x-axis first
-  if (opts.show_axes) {
-    detail::drawXAxis(plot, min_y, max_y, width, height);
-  }
-
-  // Render Braille octants
-  for (int64_t col = 0; col < width; ++col) {
-    for (int64_t row = 0; row < height; ++row) {
-      const int64_t ox = col * 2;
-      const int64_t oy = row * 4;
-
-      int64_t octant = 0;
-      // Braille bit layout: rows 0-3 in left column (bits 0-3),
-      // rows 0-3 in right column (bits 4-7)
-      for (int64_t dy = 0; dy < 4; ++dy) {
-        const auto idx_l = static_cast<size_t>(ox + (oy + dy) * sample_width);
-        const auto idx_r =
-            static_cast<size_t>((ox + 1) + (oy + dy) * sample_width);
-
-        if (idx_l < occupancy.size() && occupancy[idx_l]) {
-          octant |= (1 << dy);
-        }
-        if (idx_r < occupancy.size() && occupancy[idx_r]) {
-          octant |= (1 << (dy + 4));
-        }
-      }
-
-      if (octant != 0) {
-        if (auto idx = detail::safeIndex(col, row, width, height)) {
-          plot[*idx] = opts.color.wrap(kOctant[octant]);
-        }
-      }
-    }
-  }
-
-  // Build result string
-  std::string result;
-  result.reserve(static_cast<size_t>((width + 10) * (height + 3)));
-
-  if (opts.show_border) {
-    detail::drawBorder(result, width, opts.title);
-  }
-
-  for (int64_t row = 0; row < height; ++row) {
-    if (opts.show_border) result += "│";
-    for (int64_t col = 0; col < width; ++col) {
-      if (auto idx = detail::safeIndex(col, row, width, height)) {
-        result += plot[*idx];
-      }
-    }
-    if (opts.show_border) result += "│";
-    result += "\n";
-  }
-
-  if (opts.show_border) {
-    detail::drawBottomBorder(result, width);
-  }
-
-  if (!opts.x_label.empty()) {
-    const auto padding =
-        (width - static_cast<int64_t>(opts.x_label.size())) / 2;
-    result += std::string(static_cast<size_t>(padding + 1), ' ');
-    result += opts.x_label;
-    result += "\n";
-  }
-
-  return result;
-}
-
-// Simple line plot (lower resolution, faster)
-constexpr auto linePlot(std::function<double(double)>& fn, double min_x,
-                        double max_x, int64_t width, int64_t height,
-                        std::optional<RGB> color = std::nullopt) -> std::string {
-  if (width <= 0 || height <= 0) return "";
-  if (max_x <= min_x) return "";
-
-  const RGB plot_color = color.value_or(colors::kDefault);
-
-  // Sample function at each column
-  std::vector<double> y_values;
-  y_values.reserve(static_cast<size_t>(width));
-
-  for (int64_t i = 0; i < width; ++i) {
-    const double x =
-        min_x + (max_x - min_x) * static_cast<double>(i) / (width - 1);
-    y_values.push_back(fn(x));
-  }
-
-  double max_y = *std::ranges::max_element(y_values);
-  double min_y = *std::ranges::min_element(y_values);
-
-  if (max_y <= min_y) {
-    const double center = (max_y + min_y) / 2;
-    max_y = center + 1.0;
-    min_y = center - 1.0;
-  }
-
-  std::vector<std::string> plot(static_cast<size_t>(width * height), " ");
-
-  // Draw x-axis
-  detail::drawXAxis(plot, min_y, max_y, width, height);
-
-  // Draw line segments - iterate only within bounds
-  for (int64_t i = 0; i < width; ++i) {
-    const int64_t row =
-        detail::yToRow(y_values[static_cast<size_t>(i)], min_y, max_y, height);
-    const int64_t clamped_row = std::clamp(row, int64_t{0}, height - 1);
-
-    if (auto idx = detail::safeIndex(i, clamped_row, width, height)) {
-      plot[*idx] = plot_color.wrap("●");
-    }
-
-    // Connect to previous point with vertical line if needed
-    if (i > 0) {
-      const int64_t prev_row = detail::yToRow(
-          y_values[static_cast<size_t>(i - 1)], min_y, max_y, height);
-      const int64_t clamped_prev = std::clamp(prev_row, int64_t{0}, height - 1);
-
-      const int64_t start = std::min(clamped_row, clamped_prev);
-      const int64_t end = std::max(clamped_row, clamped_prev);
-
-      for (int64_t j = start + 1; j < end; ++j) {
-        if (auto idx = detail::safeIndex(i, j, width, height)) {
-          plot[*idx] = plot_color.wrap("│");
-        }
-      }
-    }
-  }
-
-  // Build result
-  std::string result;
-  result.reserve(static_cast<size_t>((width + 2) * height));
-
-  for (int64_t row = 0; row < height; ++row) {
-    for (int64_t col = 0; col < width; ++col) {
-      if (auto idx = detail::safeIndex(col, row, width, height)) {
-        result += plot[*idx];
-      }
-    }
-    result += "\n";
-  }
-
-  return result;
-}
-
-// Scatter plot for discrete data points
-inline auto scatterPlot(const std::vector<Point>& points, int64_t width,
-                        int64_t height,
-                        std::optional<RGB> color = std::nullopt) -> std::string {
-  if (width <= 0 || height <= 0) return "";
-  if (points.empty()) return "";
-
-  const RGB plot_color = color.value_or(colors::kDefault);
-
-  double min_x = points[0].x, max_x = points[0].x;
-  double min_y = points[0].y, max_y = points[0].y;
-
-  for (const auto& p : points) {
-    min_x = std::min(min_x, p.x);
-    max_x = std::max(max_x, p.x);
-    min_y = std::min(min_y, p.y);
-    max_y = std::max(max_y, p.y);
-  }
-
-  // Add 5% padding
-  const double x_range = max_x - min_x;
-  const double y_range = max_y - min_y;
-  const double x_pad = (x_range > 0) ? x_range * 0.05 : 0.5;
-  const double y_pad = (y_range > 0) ? y_range * 0.05 : 0.5;
-  min_x -= x_pad;
-  max_x += x_pad;
-  min_y -= y_pad;
-  max_y += y_pad;
-
-  std::vector<std::string> plot(static_cast<size_t>(width * height), " ");
-
-  // Draw axes
-  detail::drawXAxis(plot, min_y, max_y, width, height);
-
-  // Plot points
-  for (const auto& p : points) {
-    const int64_t col = detail::xToCol(p.x, min_x, max_x, width);
-    const int64_t row = detail::yToRow(p.y, min_y, max_y, height);
-
-    if (auto idx = detail::safeIndex(col, row, width, height)) {
-      plot[*idx] = plot_color.wrap("●");
-    }
-  }
-
-  // Build result
-  std::string result;
-  result.reserve(static_cast<size_t>((width + 2) * height));
-
-  for (int64_t row = 0; row < height; ++row) {
-    for (int64_t col = 0; col < width; ++col) {
-      if (auto idx = detail::safeIndex(col, row, width, height)) {
-        result += plot[*idx];
-      }
-    }
-    result += "\n";
-  }
-
-  return result;
-}
-
-// Multi-series plot (simple, low resolution)
-inline auto multiPlot(std::vector<Series>& series_list, double min_x,
-                      double max_x, int64_t width, int64_t height)
-    -> std::string {
-  if (width <= 0 || height <= 0) return "";
-  if (max_x <= min_x) return "";
-  if (series_list.empty()) return "";
-
-  // Find global y range
-  double min_y = std::numeric_limits<double>::max();
-  double max_y = std::numeric_limits<double>::lowest();
-
-  std::vector<std::vector<double>> all_y_values;
-  all_y_values.reserve(series_list.size());
-
-  for (auto& s : series_list) {
-    std::vector<double> y_values;
-    y_values.reserve(static_cast<size_t>(width));
-
-    for (int64_t i = 0; i < width; ++i) {
-      const double x =
-          min_x + (max_x - min_x) * static_cast<double>(i) / (width - 1);
-      const double y = s.fn(x);
-      y_values.push_back(y);
-      min_y = std::min(min_y, y);
-      max_y = std::max(max_y, y);
-    }
-    all_y_values.push_back(std::move(y_values));
-  }
-
-  if (max_y <= min_y) {
-    const double center = (max_y + min_y) / 2;
-    max_y = center + 1.0;
-    min_y = center - 1.0;
-  }
-
-  std::vector<std::string> plot(static_cast<size_t>(width * height), " ");
-
-  // Draw x-axis
-  detail::drawXAxis(plot, min_y, max_y, width, height);
-
-  // Plot each series
-  for (size_t s = 0; s < series_list.size(); ++s) {
-    const auto& y_values = all_y_values[s];
-    const RGB& plot_color = series_list[s].color;
-
-    for (int64_t i = 0; i < width; ++i) {
-      const int64_t row = detail::yToRow(y_values[static_cast<size_t>(i)],
-                                         min_y, max_y, height);
-      const int64_t clamped_row = std::clamp(row, int64_t{0}, height - 1);
-
-      if (auto idx = detail::safeIndex(i, clamped_row, width, height)) {
-        plot[*idx] = plot_color.wrap("●");
-      }
-    }
-  }
-
-  // Build result with legend
-  std::string result;
-  result.reserve(
-      static_cast<size_t>((width + 20) * (height + series_list.size() + 2)));
-
-  for (int64_t row = 0; row < height; ++row) {
-    for (int64_t col = 0; col < width; ++col) {
-      if (auto idx = detail::safeIndex(col, row, width, height)) {
-        result += plot[*idx];
-      }
-    }
-    result += "\n";
-  }
-
-  // Add legend
-  result += "\n";
-  for (const auto& s : series_list) {
-    result += s.color.wrap("●");
-    result += " ";
-    result += s.label.empty() ? "series" : s.label;
-    result += "  ";
-  }
-  result += "\n";
-
-  return result;
-}
-
-// High-resolution multi-series Braille plot with color mixing
-// When multiple series occupy the same Braille dot, their colors are blended
-inline auto multiPlotBraille(std::vector<Series>& series_list, double min_x,
-                             double max_x, int64_t width, int64_t height,
-                             bool show_border = true, bool show_axes = true,
-                             const std::string& title = "") -> std::string {
-  if (width <= 0 || height <= 0) return "";
-  if (max_x <= min_x) return "";
-  if (series_list.empty()) return "";
-
-  // Sample at 2x4 resolution for Braille rendering
-  const int64_t sample_width = 2 * width;
-  const int64_t sample_height = 4 * height;
-  const auto grid_size = static_cast<size_t>(sample_width * sample_height);
-
-  // Find global y range by sampling all series
-  double min_y = std::numeric_limits<double>::max();
-  double max_y = std::numeric_limits<double>::lowest();
-
-  // Store y values for each series at each sample point
-  std::vector<std::vector<double>> all_y_values;
-  all_y_values.reserve(series_list.size());
-
-  for (auto& s : series_list) {
-    std::vector<double> y_values;
-    y_values.reserve(static_cast<size_t>(sample_width + 1));
-
-    for (int64_t i = 0; i <= sample_width; ++i) {
-      const double x =
-          min_x + (max_x - min_x) * static_cast<double>(i) / sample_width;
-      const double y = s.fn(x);
-      y_values.push_back(y);
-      min_y = std::min(min_y, y);
-      max_y = std::max(max_y, y);
-    }
-    all_y_values.push_back(std::move(y_values));
-  }
-
-  // Ensure non-zero range
-  if (max_y <= min_y) {
-    const double center = (max_y + min_y) / 2;
-    max_y = center + 1.0;
-    min_y = center - 1.0;
-  }
-
-  // For each Braille dot, track which series contribute (as bitmask per series)
-  // We store accumulated RGB values and count for averaging
-  struct CellColor {
-    uint32_t r_sum = 0;
-    uint32_t g_sum = 0;
-    uint32_t b_sum = 0;
-    uint8_t count = 0;
-
-    void add(const RGB& color) {
-      r_sum += color.r;
-      g_sum += color.g;
-      b_sum += color.b;
-      ++count;
-    }
-
-    [[nodiscard]] auto blend() const -> RGB {
-      if (count == 0) return colors::kDefault;
-      return RGB{static_cast<uint8_t>(r_sum / count),
-                 static_cast<uint8_t>(g_sum / count),
-                 static_cast<uint8_t>(b_sum / count)};
-    }
-  };
-
-  // For each sample cell, track accumulated color
-  std::vector<CellColor> cell_colors(grid_size);
-  // Occupancy grid - which cells are "on"
-  std::vector<bool> occupancy(grid_size, false);
-
-  // Fill occupancy and colors for each series
-  for (size_t s = 0; s < series_list.size(); ++s) {
-    const auto& y_values = all_y_values[s];
-    const RGB& color = series_list[s].color;
-
-    for (int64_t i = 0; i < sample_width; ++i) {
-      const double y0 = y_values[static_cast<size_t>(i)];
-      const double y1 = y_values[static_cast<size_t>(i + 1)];
-
-      int64_t row0 = detail::yToRow(y0, min_y, max_y, sample_height);
-      int64_t row1 = detail::yToRow(y1, min_y, max_y, sample_height);
-
-      row0 = std::clamp(row0, int64_t{0}, sample_height - 1);
-      row1 = std::clamp(row1, int64_t{0}, sample_height - 1);
-
-      const int64_t start_row = std::min(row0, row1);
-      const int64_t end_row = std::max(row0, row1);
-
-      for (int64_t j = start_row; j <= end_row; ++j) {
-        const auto idx = static_cast<size_t>(i + j * sample_width);
-        if (idx < grid_size) {
-          if (!occupancy[idx]) {
-            occupancy[idx] = true;
-          }
-          cell_colors[idx].add(color);
-        }
-      }
-    }
-  }
-
-  // For each character cell, compute the blended color from all contributing
-  // Braille dots
-  struct CharCell {
-    int64_t octant = 0;
-    CellColor blended_color;
-  };
-
-  std::vector<CharCell> char_cells(static_cast<size_t>(width * height));
-
-  for (int64_t col = 0; col < width; ++col) {
-    for (int64_t row = 0; row < height; ++row) {
-      const int64_t ox = col * 2;
-      const int64_t oy = row * 4;
-
-      auto& cell = char_cells[static_cast<size_t>(col + row * width)];
-
-      // Braille bit layout: rows 0-3 in left column (bits 0-3),
-      // rows 0-3 in right column (bits 4-7)
-      for (int64_t dy = 0; dy < 4; ++dy) {
-        const auto idx_l = static_cast<size_t>(ox + (oy + dy) * sample_width);
-        const auto idx_r =
-            static_cast<size_t>((ox + 1) + (oy + dy) * sample_width);
-
-        if (idx_l < occupancy.size() && occupancy[idx_l]) {
-          cell.octant |= (1 << dy);
-          // Add all colors that contributed to this dot
-          const auto& cc = cell_colors[idx_l];
-          cell.blended_color.r_sum += cc.r_sum;
-          cell.blended_color.g_sum += cc.g_sum;
-          cell.blended_color.b_sum += cc.b_sum;
-          cell.blended_color.count += cc.count;
-        }
-        if (idx_r < occupancy.size() && occupancy[idx_r]) {
-          cell.octant |= (1 << (dy + 4));
-          const auto& cc = cell_colors[idx_r];
-          cell.blended_color.r_sum += cc.r_sum;
-          cell.blended_color.g_sum += cc.g_sum;
-          cell.blended_color.b_sum += cc.b_sum;
-          cell.blended_color.count += cc.count;
-        }
-      }
-    }
-  }
-
-  // Build the plot
-  std::vector<std::string> plot(static_cast<size_t>(width * height), " ");
-
-  // Draw x-axis first
-  if (show_axes) {
-    detail::drawXAxis(plot, min_y, max_y, width, height);
-  }
-
-  // Render Braille characters with blended colors
-  for (int64_t col = 0; col < width; ++col) {
-    for (int64_t row = 0; row < height; ++row) {
-      const auto& cell = char_cells[static_cast<size_t>(col + row * width)];
-      if (cell.octant != 0) {
-        if (auto idx = detail::safeIndex(col, row, width, height)) {
-          const RGB blended = cell.blended_color.blend();
-          plot[*idx] = blended.wrap(kOctant[cell.octant]);
-        }
-      }
-    }
-  }
-
-  // Build result string
-  std::string result;
-  result.reserve(
-      static_cast<size_t>((width + 10) * (height + series_list.size() + 5)));
-
-  if (show_border) {
-    detail::drawBorder(result, width, title);
-  }
-
-  for (int64_t row = 0; row < height; ++row) {
-    if (show_border) result += "│";
-    for (int64_t col = 0; col < width; ++col) {
-      if (auto idx = detail::safeIndex(col, row, width, height)) {
-        result += plot[*idx];
-      }
-    }
-    if (show_border) result += "│";
-    result += "\n";
-  }
-
-  if (show_border) {
-    detail::drawBottomBorder(result, width);
-  }
-
-  // Add legend
-  result += "\n";
-  for (const auto& s : series_list) {
-    result += s.color.wrap("●");
-    result += " ";
-    result += s.label.empty() ? "series" : s.label;
-    result += "  ";
-  }
-  result += "\n";
-
-  return result;
-}
-
-// =============================================================================
-// 2D Density Plot - Heatmap visualization for point clouds
-// =============================================================================
-
-struct DensityPlotOptions {
-  int64_t width = 60;
-  int64_t height = 20;
-  bool show_border = true;
-  std::string title;
-
-  // Color gradient from low to high density
-  RGB low_color{20, 20, 80};      // Dark blue
-  RGB high_color{255, 255, 100};  // Bright yellow
-
-  // Terminal background color - used for empty cells and partial block backgrounds
-  // Set this to match your terminal's background for seamless blending
-  std::optional<RGB> bg_color;  // If not set, uses low_color
-
-  // Terminal character aspect ratio (height/width). Most terminals ~2.0
-  // Set to 1.0 to disable aspect correction
-  double char_aspect = 2.0;
-
-  // Optional fixed bounds (auto-computed if not set)
-  std::optional<double> min_x;
-  std::optional<double> max_x;
-  std::optional<double> min_y;
-  std::optional<double> max_y;
-};
-
-namespace detail {
-
-// Interpolate between two colors
-constexpr auto lerpColor(const RGB& a, const RGB& b, double t) -> RGB {
+// Linear interpolation between two colors; t is clamped to [0, 1].
+inline auto lerpColor(const RGB& a, const RGB& b, double t) -> RGB {
   t = std::clamp(t, 0.0, 1.0);
   return RGB{
       static_cast<uint8_t>(a.r + t * (b.r - a.r)),
@@ -1022,642 +352,517 @@ constexpr auto lerpColor(const RGB& a, const RGB& b, double t) -> RGB {
   };
 }
 
-// Shading characters from empty to full (8 levels)
-constexpr const char* kShadeChars[] = {" ", "░", "▒", "▓", "█"};
-constexpr size_t kNumShades = 5;
-
-}  // namespace detail
-
-// High-resolution density plot using Braille with color intensity
-inline auto densityPlot(const std::vector<Point>& points,
-                        const DensityPlotOptions& opts = {}) -> std::string {
-  if (opts.width <= 0 || opts.height <= 0) return "";
-  if (points.empty()) return "";
-
-  const int64_t width = opts.width;
-  const int64_t height = opts.height;
-
-  // Compute data bounds
-  double data_min_x = points[0].x, data_max_x = points[0].x;
-  double data_min_y = points[0].y, data_max_y = points[0].y;
-  for (const auto& p : points) {
-    data_min_x = std::min(data_min_x, p.x);
-    data_max_x = std::max(data_max_x, p.x);
-    data_min_y = std::min(data_min_y, p.y);
-    data_max_y = std::max(data_max_y, p.y);
+// Widen a degenerate range (hi ≤ lo) to a unit interval so constant data still
+// renders a sane axis instead of dividing by zero.
+inline void ensureRange(double& lo, double& hi) {
+  if (hi <= lo) {
+    const double c = (lo + hi) / 2;
+    lo = c - 1.0;
+    hi = c + 1.0;
   }
-
-  // Use provided bounds or data bounds with padding
-  double min_x = opts.min_x.value_or(data_min_x - (data_max_x - data_min_x) * 0.05 - 0.001);
-  double max_x = opts.max_x.value_or(data_max_x + (data_max_x - data_min_x) * 0.05 + 0.001);
-  double min_y = opts.min_y.value_or(data_min_y - (data_max_y - data_min_y) * 0.05 - 0.001);
-  double max_y = opts.max_y.value_or(data_max_y + (data_max_y - data_min_y) * 0.05 + 0.001);
-
-  double x_range = max_x - min_x;
-  double y_range = max_y - min_y;
-  if (x_range <= 0 || y_range <= 0) return "";
-
-  // Braille resolution: 2 dots wide × 4 dots tall per character
-  // Terminal chars are ~2:1 (H:W), so Braille dots are roughly square on screen
-  // Adjust for char aspect: screen_width = width/aspect, screen_height = height
-  // For equal visual scaling: x_range/screen_width = y_range/screen_height
-  // x_range/(width/aspect) = y_range/height → x_range*aspect/width = y_range/height
-
-  const double screen_width = static_cast<double>(width) / opts.char_aspect;
-  const double screen_height = static_cast<double>(height);
-  const double x_scale = x_range / screen_width;
-  const double y_scale = y_range / screen_height;
-
-  // Expand the smaller dimension to match aspect ratios
-  if (x_scale > y_scale && !opts.min_y && !opts.max_y) {
-    const double extra = (x_scale * screen_height - y_range) / 2;
-    min_y -= extra;
-    max_y += extra;
-    y_range = max_y - min_y;
-  } else if (y_scale > x_scale && !opts.min_x && !opts.max_x) {
-    const double extra = (y_scale * screen_width - x_range) / 2;
-    min_x -= extra;
-    max_x += extra;
-    x_range = max_x - min_x;
-  }
-
-  // Braille grid dimensions
-  const int64_t grid_w = 2 * width;
-  const int64_t grid_h = 4 * height;
-  const auto grid_size = static_cast<size_t>(grid_w * grid_h);
-
-  // Count samples in each sub-cell
-  std::vector<int64_t> counts(grid_size, 0);
-  int64_t max_count = 0;
-
-  for (const auto& p : points) {
-    auto col = static_cast<int64_t>((p.x - min_x) / x_range * static_cast<double>(grid_w - 1));
-    auto row = static_cast<int64_t>((max_y - p.y) / y_range * static_cast<double>(grid_h - 1));
-    col = std::clamp(col, int64_t{0}, grid_w - 1);
-    row = std::clamp(row, int64_t{0}, grid_h - 1);
-
-    const auto idx = static_cast<size_t>(col + row * grid_w);
-    if (idx < counts.size()) {
-      ++counts[idx];
-      max_count = std::max(max_count, counts[idx]);
-    }
-  }
-
-  if (max_count == 0) return "";
-
-  // Render each character cell
-  std::string result;
-  result.reserve(static_cast<size_t>((width + 10) * (height + 3)));
-
-  if (opts.show_border) {
-    detail::drawBorder(result, width, opts.title);
-  }
-
-  for (int64_t row = 0; row < height; ++row) {
-    if (opts.show_border) result += "│";
-
-    for (int64_t col = 0; col < width; ++col) {
-      const int64_t bx = col * 2;
-      const int64_t by = row * 4;
-
-      // Compute Braille pattern and total density for this cell
-      int64_t octant = 0;
-      int64_t cell_count = 0;
-
-      for (int64_t dy = 0; dy < 4; ++dy) {
-        const auto idx_l = static_cast<size_t>(bx + (by + dy) * grid_w);
-        const auto idx_r = static_cast<size_t>((bx + 1) + (by + dy) * grid_w);
-
-        if (idx_l < counts.size() && counts[idx_l] > 0) {
-          octant |= (1 << dy);
-          cell_count += counts[idx_l];
-        }
-        if (idx_r < counts.size() && counts[idx_r] > 0) {
-          octant |= (1 << (dy + 4));
-          cell_count += counts[idx_r];
-        }
-      }
-
-      if (octant == 0) {
-        result += " ";
-      } else {
-        // Color intensity based on density
-        // Use log scale for better visual distribution
-        const double density =
-            std::log1p(static_cast<double>(cell_count)) /
-            std::log1p(static_cast<double>(max_count * 8));
-        const RGB color = detail::lerpColor(opts.low_color, opts.high_color,
-                                            std::sqrt(density));
-        result += color.wrap(kOctant[octant]);
-      }
-    }
-
-    if (opts.show_border) result += "│";
-    result += "\n";
-  }
-
-  if (opts.show_border) {
-    detail::drawBottomBorder(result, width);
-  }
-
-  return result;
 }
 
-// Block-based density plot with shading characters
-inline auto densityPlotBlocks(const std::vector<Point>& points,
-                              const DensityPlotOptions& opts = {})
-    -> std::string {
-  if (opts.width <= 0 || opts.height <= 0) return "";
-  if (points.empty()) return "";
-
-  const int64_t width = opts.width;
-  const int64_t height = opts.height;
-
-  // Compute data bounds
-  double data_min_x = points[0].x, data_max_x = points[0].x;
-  double data_min_y = points[0].y, data_max_y = points[0].y;
-  for (const auto& p : points) {
-    data_min_x = std::min(data_min_x, p.x);
-    data_max_x = std::max(data_max_x, p.x);
-    data_min_y = std::min(data_min_y, p.y);
-    data_max_y = std::max(data_max_y, p.y);
+// Top/bottom frame around a width-column plot; the title is centered on top.
+inline void frameTop(std::string& out, int64_t width, std::string_view title) {
+  out += "┌";
+  if (!title.empty() && static_cast<int64_t>(title.size()) < width) {
+    const auto pad = (width - static_cast<int64_t>(title.size())) / 2;
+    for (int64_t i = 0; i < pad; ++i) out += "―";
+    out += title;
+    for (int64_t i = 0; i < width - pad - static_cast<int64_t>(title.size()); ++i) out += "―";
+  } else {
+    for (int64_t i = 0; i < width; ++i) out += "―";
   }
-
-  double min_x = opts.min_x.value_or(data_min_x - (data_max_x - data_min_x) * 0.05 - 0.001);
-  double max_x = opts.max_x.value_or(data_max_x + (data_max_x - data_min_x) * 0.05 + 0.001);
-  double min_y = opts.min_y.value_or(data_min_y - (data_max_y - data_min_y) * 0.05 - 0.001);
-  double max_y = opts.max_y.value_or(data_max_y + (data_max_y - data_min_y) * 0.05 + 0.001);
-
-  double x_range = max_x - min_x;
-  double y_range = max_y - min_y;
-  if (x_range <= 0 || y_range <= 0) return "";
-
-  // Aspect ratio correction
-  const double screen_width = static_cast<double>(width) / opts.char_aspect;
-  const double screen_height = static_cast<double>(height);
-  const double x_scale = x_range / screen_width;
-  const double y_scale = y_range / screen_height;
-
-  if (x_scale > y_scale && !opts.min_y && !opts.max_y) {
-    const double extra = (x_scale * screen_height - y_range) / 2;
-    min_y -= extra;
-    max_y += extra;
-    y_range = max_y - min_y;
-  } else if (y_scale > x_scale && !opts.min_x && !opts.max_x) {
-    const double extra = (y_scale * screen_width - x_range) / 2;
-    min_x -= extra;
-    max_x += extra;
-    x_range = max_x - min_x;
-  }
-
-  // Count samples per cell
-  const auto grid_size = static_cast<size_t>(width * height);
-  std::vector<int64_t> counts(grid_size, 0);
-  int64_t max_count = 0;
-
-  for (const auto& p : points) {
-    auto col = static_cast<int64_t>((p.x - min_x) / x_range * static_cast<double>(width));
-    auto row = static_cast<int64_t>((max_y - p.y) / y_range * static_cast<double>(height));
-    col = std::clamp(col, int64_t{0}, width - 1);
-    row = std::clamp(row, int64_t{0}, height - 1);
-
-    const auto idx = static_cast<size_t>(col + row * width);
-    ++counts[idx];
-    max_count = std::max(max_count, counts[idx]);
-  }
-
-  if (max_count == 0) return "";
-
-  std::string result;
-  result.reserve(static_cast<size_t>((width + 10) * (height + 3)));
-
-  if (opts.show_border) {
-    detail::drawBorder(result, width, opts.title);
-  }
-
-  for (int64_t row = 0; row < height; ++row) {
-    if (opts.show_border) result += "│";
-
-    for (int64_t col = 0; col < width; ++col) {
-      const auto idx = static_cast<size_t>(col + row * width);
-      const int64_t count = counts[idx];
-
-      if (count == 0) {
-        result += " ";
-      } else {
-        // Map count to shade level (log scale)
-        const double t = std::log1p(static_cast<double>(count)) /
-                         std::log1p(static_cast<double>(max_count));
-        const auto shade_idx = std::min(
-            static_cast<size_t>(std::lround(t * (detail::kNumShades - 1))),
-            detail::kNumShades - 1);
-        const RGB color = detail::lerpColor(opts.low_color, opts.high_color, t);
-        result += color.wrap(detail::kShadeChars[shade_idx]);
-      }
-    }
-
-    if (opts.show_border) result += "│";
-    result += "\n";
-  }
-
-  if (opts.show_border) {
-    detail::drawBottomBorder(result, width);
-  }
-
-  return result;
+  out += "┐\n";
 }
 
-// =============================================================================
-// Partial Block Characters for Smooth Shading
-// =============================================================================
-//
-// Unicode provides partial blocks for sub-cell precision:
-//
-// Horizontal (left fill): ▏▎▍▌▋▊▉█  (1/8 to 8/8)
-// Vertical (bottom fill): ▁▂▃▄▅▆▇█  (1/8 to 8/8)
-// Half blocks: ▀ (upper), ▄ (lower), ▌ (left), ▐ (right)
-//
-// Missing from Unicode: right-side eighths, upper eighths (except half)
-//
-// With fg+bg coloring, we can use these to interpolate between adjacent cells:
-// - ▀ with fg=top_color, bg=bottom_color gives 2x vertical resolution
-// - ▌ with fg=left_color, bg=right_color gives 2x horizontal resolution
-// - Eighth blocks give up to 8x resolution on one edge
+inline void frameBottom(std::string& out, int64_t width) {
+  out += "└";
+  for (int64_t i = 0; i < width; ++i) out += "―";
+  out += "┘\n";
+}
 
-namespace detail {
+// Maps data coordinates onto an integer pixel grid; row 0 is the TOP (y flips).
+struct Viewport {
+  double min_x, max_x, min_y, max_y;
+  int64_t cols, rows;
 
-// Horizontal eighth blocks: index 0-7 maps to 1/8 through 8/8 fill from left
-constexpr const char* kLeftEighths[] = {"▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"};
+  auto col(double x) const -> int64_t {
+    if (max_x <= min_x) return cols / 2;
+    return static_cast<int64_t>(std::lround((x - min_x) / (max_x - min_x) * (cols - 1)));
+  }
+  auto row(double y) const -> int64_t {
+    if (max_y <= min_y) return rows / 2;
+    return static_cast<int64_t>(std::lround((max_y - y) / (max_y - min_y) * (rows - 1)));
+  }
+};
 
-// Vertical eighth blocks: index 0-7 maps to 1/8 through 8/8 fill from bottom
-constexpr const char* kBottomEighths[] = {"▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"};
+// A 2×4 Braille dot grid: every character cell packs 8 sub-pixels, so an 80×20
+// canvas addresses 160×80 dots. Per-dot color *accumulates*, so where two
+// series cross, the cell shows their average — not whichever drew last.
+class BrailleCanvas {
+ public:
+  BrailleCanvas(int64_t char_cols, int64_t char_rows)
+      : cols_{char_cols},
+        rows_{char_rows},
+        dot_cols_{2 * char_cols},
+        dot_rows_{4 * char_rows},
+        on_(static_cast<size_t>(dot_cols_ * dot_rows_), false),
+        acc_(static_cast<size_t>(dot_cols_ * dot_rows_)) {}
 
-// Half blocks
-constexpr const char* kUpperHalf = "▀";
-constexpr const char* kLowerHalf = "▄";
-constexpr const char* kLeftHalf = "▌";
-constexpr const char* kRightHalf = "▐";
-constexpr const char* kFullBlock = "█";
+  auto dotCols() const -> int64_t { return dot_cols_; }
+  auto dotRows() const -> int64_t { return dot_rows_; }
 
-}  // namespace detail
-
-// Smooth heatmap using half blocks for 2x vertical resolution
-// Each character cell shows two density values (top and bottom halves)
-// Uses fg+bg coloring for smooth gradients
-inline auto smoothHeatmap(const std::vector<Point>& points,
-                          const DensityPlotOptions& opts = {}) -> std::string {
-  if (opts.width <= 0 || opts.height <= 0) return "";
-  if (points.empty()) return "";
-
-  const int64_t width = opts.width;
-  const int64_t height = opts.height;
-
-  // Compute data bounds
-  double data_min_x = points[0].x, data_max_x = points[0].x;
-  double data_min_y = points[0].y, data_max_y = points[0].y;
-  for (const auto& p : points) {
-    data_min_x = std::min(data_min_x, p.x);
-    data_max_x = std::max(data_max_x, p.x);
-    data_min_y = std::min(data_min_y, p.y);
-    data_max_y = std::max(data_max_y, p.y);
+  void dot(int64_t dc, int64_t dr, const RGB& color) {
+    if (dc < 0 || dc >= dot_cols_ || dr < 0 || dr >= dot_rows_) return;
+    const auto i = static_cast<size_t>(dc + dr * dot_cols_);
+    on_[i] = true;
+    acc_[i].add(color);
   }
 
-  double min_x = opts.min_x.value_or(data_min_x - (data_max_x - data_min_x) * 0.05 - 0.001);
-  double max_x = opts.max_x.value_or(data_max_x + (data_max_x - data_min_x) * 0.05 + 0.001);
-  double min_y = opts.min_y.value_or(data_min_y - (data_max_y - data_min_y) * 0.05 - 0.001);
-  double max_y = opts.max_y.value_or(data_max_y + (data_max_y - data_min_y) * 0.05 + 0.001);
-
-  double x_range = max_x - min_x;
-  double y_range = max_y - min_y;
-  if (x_range <= 0 || y_range <= 0) return "";
-
-  // Aspect ratio correction
-  const double screen_width = static_cast<double>(width) / opts.char_aspect;
-  const double screen_height = static_cast<double>(height);
-  const double x_scale = x_range / screen_width;
-  const double y_scale = y_range / screen_height;
-
-  if (x_scale > y_scale && !opts.min_y && !opts.max_y) {
-    const double extra = (x_scale * screen_height - y_range) / 2;
-    min_y -= extra;
-    max_y += extra;
-    y_range = max_y - min_y;
-  } else if (y_scale > x_scale && !opts.min_x && !opts.max_x) {
-    const double extra = (y_scale * screen_width - x_range) / 2;
-    min_x -= extra;
-    max_x += extra;
-    x_range = max_x - min_x;
+  // Bresenham segment in dot space — connects samples without the staircase a
+  // pure vertical fill leaves on shallow slopes.
+  void line(int64_t c0, int64_t r0, int64_t c1, int64_t r1, const RGB& color) {
+    const int64_t dc = std::abs(c1 - c0);
+    const int64_t dr = -std::abs(r1 - r0);
+    const int64_t sc = c0 < c1 ? 1 : -1;
+    const int64_t sr = r0 < r1 ? 1 : -1;
+    int64_t err = dc + dr;
+    while (true) {
+      dot(c0, r0, color);
+      if (c0 == c1 && r0 == r1) break;
+      const int64_t e2 = 2 * err;
+      if (e2 >= dr) { err += dr; c0 += sc; }
+      if (e2 <= dc) { err += dc; r0 += sr; }
+    }
   }
 
-  // Grid at 2x vertical resolution (2 rows per character)
-  const int64_t grid_w = width;
-  const int64_t grid_h = height * 2;
-  const auto grid_size = static_cast<size_t>(grid_w * grid_h);
-
-  // Count samples per sub-cell
-  std::vector<int64_t> counts(grid_size, 0);
-  int64_t max_count = 0;
-
-  for (const auto& p : points) {
-    auto col = static_cast<int64_t>((p.x - min_x) / x_range * static_cast<double>(grid_w));
-    auto row = static_cast<int64_t>((max_y - p.y) / y_range * static_cast<double>(grid_h));
-    col = std::clamp(col, int64_t{0}, grid_w - 1);
-    row = std::clamp(row, int64_t{0}, grid_h - 1);
-
-    const auto idx = static_cast<size_t>(col + row * grid_w);
-    ++counts[idx];
-    max_count = std::max(max_count, counts[idx]);
-  }
-
-  if (max_count == 0) return "";
-
-  const double log_max = std::log1p(static_cast<double>(max_count));
-  const RGB bg = opts.bg_color.value_or(opts.low_color);
-
-  // Helper to compute color from count
-  auto countToColor = [&](int64_t count) -> RGB {
-    if (count == 0) return bg;
-    const double t = std::sqrt(std::log1p(static_cast<double>(count)) / log_max);
-    return detail::lerpColor(opts.low_color, opts.high_color, t);
+  struct Style {
+    bool border = true;
+    std::string title;
+    std::optional<int64_t> axis_row;  // char row to underline with the x-axis
+    RGB axis_color = colors::kAxis;
+    std::string legend;  // appended verbatim after the frame
   };
 
-  std::string result;
-  result.reserve(static_cast<size_t>((width + 10) * (height + 3)));
-
-  if (opts.show_border) {
-    detail::drawBorder(result, width, opts.title);
-  }
-
-  for (int64_t row = 0; row < height; ++row) {
-    if (opts.show_border) result += "│";
-
-    for (int64_t col = 0; col < width; ++col) {
-      // Top and bottom sub-rows for this character cell
-      const auto top_idx = static_cast<size_t>(col + (row * 2) * grid_w);
-      const auto bot_idx = static_cast<size_t>(col + (row * 2 + 1) * grid_w);
-
-      const int64_t top_count = counts[top_idx];
-      const int64_t bot_count = counts[bot_idx];
-
-      const RGB top_color = countToColor(top_count);
-      const RGB bot_color = countToColor(bot_count);
-
-      if (top_count == 0 && bot_count == 0) {
-        result += " ";
-      } else if (top_color == bot_color) {
-        // Same color - use full block
-        result += top_color.wrap(detail::kFullBlock);
-      } else {
-        // Different colors - use upper half block
-        // ▀ : foreground = top, background = bottom
-        result += top_color.wrapFgBg(detail::kUpperHalf, bot_color);
-      }
-    }
-
-    if (opts.show_border) result += "│";
-    result += "\n";
-  }
-
-  if (opts.show_border) {
-    detail::drawBottomBorder(result, width);
-  }
-
-  return result;
-}
-
-// Ultra-smooth heatmap with 8x vertical resolution using eighth blocks
-// Uses bottom-fill eighth blocks (▁▂▃▄▅▆▇█) for fine vertical gradients
-// Only works well at edges (where background is empty/dark)
-inline auto smoothHeatmap8(const std::vector<Point>& points,
-                           const DensityPlotOptions& opts = {}) -> std::string {
-  if (opts.width <= 0 || opts.height <= 0) return "";
-  if (points.empty()) return "";
-
-  const int64_t width = opts.width;
-  const int64_t height = opts.height;
-
-  // Compute data bounds
-  double data_min_x = points[0].x, data_max_x = points[0].x;
-  double data_min_y = points[0].y, data_max_y = points[0].y;
-  for (const auto& p : points) {
-    data_min_x = std::min(data_min_x, p.x);
-    data_max_x = std::max(data_max_x, p.x);
-    data_min_y = std::min(data_min_y, p.y);
-    data_max_y = std::max(data_max_y, p.y);
-  }
-
-  double min_x = opts.min_x.value_or(data_min_x - (data_max_x - data_min_x) * 0.05 - 0.001);
-  double max_x = opts.max_x.value_or(data_max_x + (data_max_x - data_min_x) * 0.05 + 0.001);
-  double min_y = opts.min_y.value_or(data_min_y - (data_max_y - data_min_y) * 0.05 - 0.001);
-  double max_y = opts.max_y.value_or(data_max_y + (data_max_y - data_min_y) * 0.05 + 0.001);
-
-  double x_range = max_x - min_x;
-  double y_range = max_y - min_y;
-  if (x_range <= 0 || y_range <= 0) return "";
-
-  // Aspect ratio correction
-  const double screen_width = static_cast<double>(width) / opts.char_aspect;
-  const double screen_height = static_cast<double>(height);
-  const double x_scale = x_range / screen_width;
-  const double y_scale = y_range / screen_height;
-
-  if (x_scale > y_scale && !opts.min_y && !opts.max_y) {
-    const double extra = (x_scale * screen_height - y_range) / 2;
-    min_y -= extra;
-    max_y += extra;
-    y_range = max_y - min_y;
-  } else if (y_scale > x_scale && !opts.min_x && !opts.max_x) {
-    const double extra = (y_scale * screen_width - x_range) / 2;
-    min_x -= extra;
-    max_x += extra;
-    x_range = max_x - min_x;
-  }
-
-  // Grid at 8x vertical resolution
-  const int64_t grid_w = width;
-  const int64_t grid_h = height * 8;
-  const auto grid_size = static_cast<size_t>(grid_w * grid_h);
-
-  // Count samples per sub-cell
-  std::vector<int64_t> counts(grid_size, 0);
-  int64_t max_count = 0;
-
-  for (const auto& p : points) {
-    auto col = static_cast<int64_t>((p.x - min_x) / x_range * static_cast<double>(grid_w));
-    auto row = static_cast<int64_t>((max_y - p.y) / y_range * static_cast<double>(grid_h));
-    col = std::clamp(col, int64_t{0}, grid_w - 1);
-    row = std::clamp(row, int64_t{0}, grid_h - 1);
-
-    const auto idx = static_cast<size_t>(col + row * grid_w);
-    ++counts[idx];
-    max_count = std::max(max_count, counts[idx]);
-  }
-
-  if (max_count == 0) return "";
-
-  const double log_max = std::log1p(static_cast<double>(max_count));
-  const RGB bg = opts.bg_color.value_or(opts.low_color);
-
-  auto countToColor = [&](int64_t count) -> RGB {
-    if (count == 0) return bg;
-    const double t = std::sqrt(std::log1p(static_cast<double>(count)) / log_max);
-    return detail::lerpColor(opts.low_color, opts.high_color, t);
-  };
-
-  std::string result;
-  result.reserve(static_cast<size_t>((width + 10) * (height + 3)));
-
-  if (opts.show_border) {
-    detail::drawBorder(result, width, opts.title);
-  }
-
-  for (int64_t row = 0; row < height; ++row) {
-    if (opts.show_border) result += "│";
-
-    for (int64_t col = 0; col < width; ++col) {
-      // Find the 8 sub-rows for this character cell
-      // Count how many have samples and find dominant color
-      int64_t total_count = 0;
-      int64_t filled_eighths = 0;  // How many eighth-rows from bottom have samples
-
-      // Scan from bottom to top (row*8+7 is top, row*8 is bottom in screen coords)
-      // But in our grid, higher row index = lower on screen
-      for (int64_t dy = 7; dy >= 0; --dy) {
-        const auto idx = static_cast<size_t>(col + (row * 8 + dy) * grid_w);
-        if (counts[idx] > 0) {
-          total_count += counts[idx];
-          // Fill from bottom: if sub-row 7 has data, that's bottom of char
-          filled_eighths = std::max(filled_eighths, int64_t{8} - dy);
-        }
-      }
-
-      if (total_count == 0) {
-        result += " ";
-      } else {
-        const RGB color = countToColor(total_count);
-        if (filled_eighths >= 8) {
-          result += color.wrap(detail::kFullBlock);
+  auto render(const Style& s) const -> std::string {
+    std::string out;
+    out.reserve(static_cast<size_t>((cols_ + 4) * (rows_ + 3)) * 3);
+    if (s.border) frameTop(out, cols_, s.title);
+    for (int64_t r = 0; r < rows_; ++r) {
+      if (s.border) out += "│";
+      for (int64_t c = 0; c < cols_; ++c) {
+        const auto [octant, color] = pack(c, r);
+        if (octant != 0) {
+          out += color.wrap(kOctant[static_cast<size_t>(octant)].bytes);
+        } else if (s.axis_row && *s.axis_row == r) {
+          out += s.axis_color.wrap("―");
         } else {
-          // Use eighth block with fg=color, bg=background
-          result += color.wrapFgBg(
-              detail::kBottomEighths[static_cast<size_t>(filled_eighths - 1)],
-              bg);
+          out += " ";
         }
       }
+      if (s.border) out += "│";
+      out += "\n";
     }
-
-    if (opts.show_border) result += "│";
-    result += "\n";
+    if (s.border) frameBottom(out, cols_);
+    out += s.legend;
+    return out;
   }
 
-  if (opts.show_border) {
-    detail::drawBottomBorder(result, width);
+ private:
+  struct Accum {
+    uint32_t r = 0, g = 0, b = 0, n = 0;
+    void add(const RGB& c) { r += c.r; g += c.g; b += c.b; ++n; }
+    void merge(const Accum& o) { r += o.r; g += o.g; b += o.b; n += o.n; }
+    auto blend(const RGB& fallback) const -> RGB {
+      if (n == 0) return fallback;
+      return RGB{static_cast<uint8_t>(r / n), static_cast<uint8_t>(g / n),
+                 static_cast<uint8_t>(b / n)};
+    }
+  };
+
+  struct Cell {
+    int octant;
+    RGB color;
+  };
+
+  auto pack(int64_t c, int64_t r) const -> Cell {
+    int octant = 0;
+    Accum a;
+    const int64_t ox = c * 2;
+    const int64_t oy = r * 4;
+    for (int64_t dy = 0; dy < 4; ++dy) {
+      const auto il = static_cast<size_t>(ox + (oy + dy) * dot_cols_);
+      const auto ir = static_cast<size_t>((ox + 1) + (oy + dy) * dot_cols_);
+      if (on_[il]) { octant |= (1 << dy);       a.merge(acc_[il]); }
+      if (on_[ir]) { octant |= (1 << (dy + 4)); a.merge(acc_[ir]); }
+    }
+    return {octant, a.blend(colors::kDefault)};
   }
 
-  return result;
+  int64_t cols_, rows_, dot_cols_, dot_rows_;
+  std::vector<bool> on_;
+  std::vector<Accum> acc_;
+};
+
+inline auto seriesLegend(std::span<const Series> series) -> std::string {
+  std::string out = "\n";
+  for (const auto& s : series) {
+    out += s.color.wrap("●");
+    out += " ";
+    out += s.label.empty() ? "series" : s.label;
+    out += "  ";
+  }
+  out += "\n";
+  return out;
 }
 
-// Solid heatmap using full blocks with color intensity
-// Best for showing density gradients without pattern artifacts
-inline auto heatmap(const std::vector<Point>& points,
-                    const DensityPlotOptions& opts = {}) -> std::string {
-  if (opts.width <= 0 || opts.height <= 0) return "";
-  if (points.empty()) return "";
+// The char row to draw the x-axis on, or none if y=0 is off-screen.
+inline auto axisRow(const Viewport& vp, double min_y, double max_y, bool show_axes)
+    -> std::optional<int64_t> {
+  if (!show_axes || min_y > 0.0 || max_y < 0.0) return std::nullopt;
+  return std::clamp(vp.row(0.0), int64_t{0}, vp.rows - 1) / 4;
+}
 
-  const int64_t width = opts.width;
-  const int64_t height = opts.height;
+// High-resolution function plot. Samples one point per dot column and connects
+// consecutive samples with a Bresenham segment.
+template <RealFunction F>
+inline auto plotFn(F&& fn, double min_x, double max_x, const PlotOptions& opts)
+    -> std::string {
+  if (opts.width <= 0 || opts.height <= 0 || max_x <= min_x) return "";
 
-  // Compute data bounds
-  double data_min_x = points[0].x, data_max_x = points[0].x;
-  double data_min_y = points[0].y, data_max_y = points[0].y;
-  for (const auto& p : points) {
-    data_min_x = std::min(data_min_x, p.x);
-    data_max_x = std::max(data_max_x, p.x);
-    data_min_y = std::min(data_min_y, p.y);
-    data_max_y = std::max(data_max_y, p.y);
+  BrailleCanvas canvas{opts.width, opts.height};
+  const int64_t n = canvas.dotCols();
+
+  std::vector<double> ys(static_cast<size_t>(n));
+  double min_y = std::numeric_limits<double>::max();
+  double max_y = std::numeric_limits<double>::lowest();
+  for (int64_t i = 0; i < n; ++i) {
+    const double x = min_x + (max_x - min_x) * static_cast<double>(i) / (n - 1);
+    const double y = fn(x);
+    ys[static_cast<size_t>(i)] = y;
+    min_y = std::min(min_y, y);
+    max_y = std::max(max_y, y);
+  }
+  ensureRange(min_y, max_y);
+
+  const Viewport vp{min_x, max_x, min_y, max_y, n, canvas.dotRows()};
+  int64_t prev = std::clamp(vp.row(ys[0]), int64_t{0}, vp.rows - 1);
+  for (int64_t i = 0; i < n; ++i) {
+    const int64_t row = std::clamp(vp.row(ys[static_cast<size_t>(i)]), int64_t{0}, vp.rows - 1);
+    if (i == 0) {
+      canvas.dot(i, row, opts.color);
+    } else {
+      canvas.line(i - 1, prev, i, row, opts.color);
+    }
+    prev = row;
   }
 
-  double min_x = opts.min_x.value_or(data_min_x - (data_max_x - data_min_x) * 0.05 - 0.001);
-  double max_x = opts.max_x.value_or(data_max_x + (data_max_x - data_min_x) * 0.05 + 0.001);
-  double min_y = opts.min_y.value_or(data_min_y - (data_max_y - data_min_y) * 0.05 - 0.001);
-  double max_y = opts.max_y.value_or(data_max_y + (data_max_y - data_min_y) * 0.05 + 0.001);
+  BrailleCanvas::Style style;
+  style.border = opts.show_border;
+  style.title = opts.title;
+  style.axis_row = axisRow(vp, min_y, max_y, opts.show_axes);
+  std::string out = canvas.render(style);
 
-  double x_range = max_x - min_x;
-  double y_range = max_y - min_y;
-  if (x_range <= 0 || y_range <= 0) return "";
+  if (!opts.x_label.empty()) {
+    const auto pad = std::max(int64_t{0}, (opts.width - static_cast<int64_t>(opts.x_label.size())) / 2 + 1);
+    out += std::string(static_cast<size_t>(pad), ' ');
+    out += opts.x_label;
+    out += "\n";
+  }
+  return out;
+}
 
-  // Aspect ratio correction
-  const double screen_width = static_cast<double>(width) / opts.char_aspect;
-  const double screen_height = static_cast<double>(height);
-  const double x_scale = x_range / screen_width;
-  const double y_scale = y_range / screen_height;
+template <RealFunction F>
+inline auto plotFn(F&& fn, double min_x, double max_x, int64_t width,
+                   int64_t height, std::optional<RGB> color = std::nullopt)
+    -> std::string {
+  PlotOptions opts;
+  opts.width = width;
+  opts.height = height;
+  if (color) opts.color = *color;
+  return plotFn(std::forward<F>(fn), min_x, max_x, opts);
+}
 
-  if (x_scale > y_scale && !opts.min_y && !opts.max_y) {
-    const double extra = (x_scale * screen_height - y_range) / 2;
+// Several functions on shared axes; overlapping dots blend their colors, and a
+// legend lists each series. Series.fn is type-erased — a heterogeneous list of
+// callables is the one place type erasure earns its keep here.
+inline auto linesPlot(std::span<const Series> series, double min_x, double max_x,
+                      const PlotOptions& opts = {}) -> std::string {
+  if (opts.width <= 0 || opts.height <= 0 || max_x <= min_x || series.empty()) return "";
+
+  BrailleCanvas canvas{opts.width, opts.height};
+  const int64_t n = canvas.dotCols();
+
+  std::vector<std::vector<double>> ys(series.size());
+  double min_y = std::numeric_limits<double>::max();
+  double max_y = std::numeric_limits<double>::lowest();
+  for (size_t s = 0; s < series.size(); ++s) {
+    ys[s].resize(static_cast<size_t>(n));
+    for (int64_t i = 0; i < n; ++i) {
+      const double x = min_x + (max_x - min_x) * static_cast<double>(i) / (n - 1);
+      const double y = series[s].fn(x);
+      ys[s][static_cast<size_t>(i)] = y;
+      min_y = std::min(min_y, y);
+      max_y = std::max(max_y, y);
+    }
+  }
+  ensureRange(min_y, max_y);
+
+  const Viewport vp{min_x, max_x, min_y, max_y, n, canvas.dotRows()};
+  for (size_t s = 0; s < series.size(); ++s) {
+    int64_t prev = std::clamp(vp.row(ys[s][0]), int64_t{0}, vp.rows - 1);
+    for (int64_t i = 0; i < n; ++i) {
+      const int64_t row = std::clamp(vp.row(ys[s][static_cast<size_t>(i)]), int64_t{0}, vp.rows - 1);
+      if (i == 0) {
+        canvas.dot(i, row, series[s].color);
+      } else {
+        canvas.line(i - 1, prev, i, row, series[s].color);
+      }
+      prev = row;
+    }
+  }
+
+  BrailleCanvas::Style style;
+  style.border = opts.show_border;
+  style.title = opts.title;
+  style.axis_row = axisRow(vp, min_y, max_y, opts.show_axes);
+  style.legend = seriesLegend(series);
+  return canvas.render(style);
+}
+
+// Discrete points, auto-scaled with 5% padding on each axis.
+inline auto scatterPlot(std::span<const Point> points,
+                        const PlotOptions& opts = {}) -> std::string {
+  if (opts.width <= 0 || opts.height <= 0 || points.empty()) return "";
+
+  double min_x = points[0].x, max_x = points[0].x;
+  double min_y = points[0].y, max_y = points[0].y;
+  for (const auto& p : points) {
+    min_x = std::min(min_x, p.x);
+    max_x = std::max(max_x, p.x);
+    min_y = std::min(min_y, p.y);
+    max_y = std::max(max_y, p.y);
+  }
+  const double x_pad = (max_x > min_x) ? (max_x - min_x) * 0.05 : 0.5;
+  const double y_pad = (max_y > min_y) ? (max_y - min_y) * 0.05 : 0.5;
+  min_x -= x_pad;
+  max_x += x_pad;
+  min_y -= y_pad;
+  max_y += y_pad;
+
+  BrailleCanvas canvas{opts.width, opts.height};
+  const Viewport vp{min_x, max_x, min_y, max_y, canvas.dotCols(), canvas.dotRows()};
+  for (const auto& p : points) canvas.dot(vp.col(p.x), vp.row(p.y), opts.color);
+
+  BrailleCanvas::Style style;
+  style.border = opts.show_border;
+  style.title = opts.title;
+  style.axis_row = axisRow(vp, min_y, max_y, opts.show_axes);
+  return canvas.render(style);
+}
+
+struct DensityPlotOptions {
+  int64_t width = 60;
+  int64_t height = 20;
+  bool show_border = true;
+  std::string title;
+
+  RGB low_color{20, 20, 80};      // dark blue
+  RGB high_color{255, 255, 100};  // bright yellow
+
+  // Terminal cells are ~2× taller than wide; correcting keeps a round cloud
+  // round instead of squashed. Set to 1.0 to disable.
+  double char_aspect = 2.0;
+
+  // Fixed bounds (auto-fit when unset).
+  std::optional<double> min_x, max_x, min_y, max_y;
+};
+
+// Auto-fit point bounds with 5% padding, then expand the looser axis so equal
+// data distances map to equal screen distances (after char_aspect correction).
+// Any explicitly-set bound is honored and never expanded.
+inline auto fitBounds(std::span<const Point> pts, const DensityPlotOptions& o)
+    -> std::array<double, 4> {
+  double dminx = pts[0].x, dmaxx = pts[0].x, dminy = pts[0].y, dmaxy = pts[0].y;
+  for (const auto& p : pts) {
+    dminx = std::min(dminx, p.x);
+    dmaxx = std::max(dmaxx, p.x);
+    dminy = std::min(dminy, p.y);
+    dmaxy = std::max(dmaxy, p.y);
+  }
+  double min_x = o.min_x.value_or(dminx - (dmaxx - dminx) * 0.05 - 0.001);
+  double max_x = o.max_x.value_or(dmaxx + (dmaxx - dminx) * 0.05 + 0.001);
+  double min_y = o.min_y.value_or(dminy - (dmaxy - dminy) * 0.05 - 0.001);
+  double max_y = o.max_y.value_or(dmaxy + (dmaxy - dminy) * 0.05 + 0.001);
+
+  const double sw = static_cast<double>(o.width) / o.char_aspect;
+  const double sh = static_cast<double>(o.height);
+  const double xs = (max_x - min_x) / sw;
+  const double ys = (max_y - min_y) / sh;
+  if (xs > ys && !o.min_y && !o.max_y) {
+    const double extra = (xs * sh - (max_y - min_y)) / 2;
     min_y -= extra;
     max_y += extra;
-    y_range = max_y - min_y;
-  } else if (y_scale > x_scale && !opts.min_x && !opts.max_x) {
-    const double extra = (y_scale * screen_width - x_range) / 2;
+  } else if (ys > xs && !o.min_x && !o.max_x) {
+    const double extra = (ys * sw - (max_x - min_x)) / 2;
     min_x -= extra;
     max_x += extra;
-    x_range = max_x - min_x;
   }
+  return {min_x, max_x, min_y, max_y};
+}
 
-  // Count samples per cell
-  const auto grid_size = static_cast<size_t>(width * height);
-  std::vector<int64_t> counts(grid_size, 0);
+// Density of a point cloud as a solid color field — log-compressed counts on a
+// low→high gradient. The deliberately low-fidelity baseline; block_graphics.h's
+// LAB-space hiresHeatmap is the high-quality variant.
+inline auto heatmap(std::span<const Point> points,
+                    const DensityPlotOptions& opts = {}) -> std::string {
+  if (opts.width <= 0 || opts.height <= 0 || points.empty()) return "";
+  const auto [min_x, max_x, min_y, max_y] = fitBounds(points, opts);
+  const double xr = max_x - min_x;
+  const double yr = max_y - min_y;
+  if (xr <= 0 || yr <= 0) return "";
+
+  const int64_t w = opts.width;
+  const int64_t h = opts.height;
+  std::vector<int64_t> counts(static_cast<size_t>(w * h), 0);
   int64_t max_count = 0;
-
   for (const auto& p : points) {
-    auto col = static_cast<int64_t>((p.x - min_x) / x_range * static_cast<double>(width));
-    auto row = static_cast<int64_t>((max_y - p.y) / y_range * static_cast<double>(height));
-    col = std::clamp(col, int64_t{0}, width - 1);
-    row = std::clamp(row, int64_t{0}, height - 1);
-
-    const auto idx = static_cast<size_t>(col + row * width);
-    ++counts[idx];
-    max_count = std::max(max_count, counts[idx]);
+    auto col = static_cast<int64_t>((p.x - min_x) / xr * static_cast<double>(w));
+    auto row = static_cast<int64_t>((max_y - p.y) / yr * static_cast<double>(h));
+    col = std::clamp(col, int64_t{0}, w - 1);
+    row = std::clamp(row, int64_t{0}, h - 1);
+    max_count = std::max(max_count, ++counts[static_cast<size_t>(col + row * w)]);
   }
-
   if (max_count == 0) return "";
-
-  // Use log scale for better visual distribution
   const double log_max = std::log1p(static_cast<double>(max_count));
 
-  std::string result;
-  result.reserve(static_cast<size_t>((width + 10) * (height + 3)));
-
-  if (opts.show_border) {
-    detail::drawBorder(result, width, opts.title);
-  }
-
-  for (int64_t row = 0; row < height; ++row) {
-    if (opts.show_border) result += "│";
-
-    for (int64_t col = 0; col < width; ++col) {
-      const auto idx = static_cast<size_t>(col + row * width);
-      const int64_t count = counts[idx];
-
+  std::string out;
+  out.reserve(static_cast<size_t>((w + 4) * (h + 3)) * 3);
+  if (opts.show_border) frameTop(out, w, opts.title);
+  for (int64_t row = 0; row < h; ++row) {
+    if (opts.show_border) out += "│";
+    for (int64_t col = 0; col < w; ++col) {
+      const int64_t count = counts[static_cast<size_t>(col + row * w)];
       if (count == 0) {
-        result += " ";
+        out += " ";
       } else {
-        // Map count to color intensity (log scale with sqrt for visual spread)
         const double t = std::sqrt(std::log1p(static_cast<double>(count)) / log_max);
-        const RGB color = detail::lerpColor(opts.low_color, opts.high_color, t);
-        result += color.wrap("█");
+        out += lerpColor(opts.low_color, opts.high_color, t).wrap("█");
       }
     }
-
-    if (opts.show_border) result += "│";
-    result += "\n";
+    if (opts.show_border) out += "│";
+    out += "\n";
   }
+  if (opts.show_border) frameBottom(out, w);
+  return out;
+}
 
-  if (opts.show_border) {
-    detail::drawBottomBorder(result, width);
+// A scalar field f(x, y) over [x0,x1]×[y0,y1] as a color heatmap: each value is
+// normalized to the sampled [min,max] and mapped low→high. For loss surfaces,
+// |f|, basins of attraction, a matrix entry-magnitude map, …
+template <typename F>
+  requires std::invocable<F, double, double>
+inline auto heatmapFn(F&& f, double x0, double x1, double y0, double y1,
+                      const DensityPlotOptions& opts = {}) -> std::string {
+  if (opts.width <= 0 || opts.height <= 0 || x1 <= x0 || y1 <= y0) return "";
+  const int64_t w = opts.width;
+  const int64_t h = opts.height;
+
+  std::vector<double> vals(static_cast<size_t>(w * h));
+  double lo = std::numeric_limits<double>::max();
+  double hi = std::numeric_limits<double>::lowest();
+  for (int64_t row = 0; row < h; ++row) {
+    const double y = y1 - (y1 - y0) * (static_cast<double>(row) + 0.5) / static_cast<double>(h);
+    for (int64_t col = 0; col < w; ++col) {
+      const double x = x0 + (x1 - x0) * (static_cast<double>(col) + 0.5) / static_cast<double>(w);
+      const double v = f(x, y);
+      vals[static_cast<size_t>(col + row * w)] = v;
+      lo = std::min(lo, v);
+      hi = std::max(hi, v);
+    }
   }
+  ensureRange(lo, hi);
 
-  return result;
+  std::string out;
+  out.reserve(static_cast<size_t>((w + 4) * (h + 3)) * 3);
+  if (opts.show_border) frameTop(out, w, opts.title);
+  for (int64_t row = 0; row < h; ++row) {
+    if (opts.show_border) out += "│";
+    for (int64_t col = 0; col < w; ++col) {
+      const double t = (vals[static_cast<size_t>(col + row * w)] - lo) / (hi - lo);
+      out += lerpColor(opts.low_color, opts.high_color, t).wrap("█");
+    }
+    if (opts.show_border) out += "│";
+    out += "\n";
+  }
+  if (opts.show_border) frameBottom(out, w);
+  return out;
+}
+
+// Bottom-fill eighth blocks: index 0→7 is 1/8→8/8 of a cell filled from below.
+inline constexpr const char* kBottomEighths[] = {"▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"};
+
+// One-line trend: each value picks an eighth-block by its height in [min,max].
+// No frame — meant to sit inline in a log line or a table cell.
+inline auto sparkline(std::span<const double> values,
+                      std::optional<RGB> color = std::nullopt) -> std::string {
+  if (values.empty()) return "";
+  const double lo = std::ranges::min(values);
+  const double hi = std::ranges::max(values);
+  const double range = (hi > lo) ? hi - lo : 1.0;
+  std::string out;
+  for (const double v : values) {
+    const auto level = std::clamp(
+        static_cast<int64_t>((v - lo) / range * 7.0 + 0.5), int64_t{0}, int64_t{7});
+    out += kBottomEighths[level];
+  }
+  return color ? color->wrap(out) : out;
+}
+
+struct BarPlotOptions {
+  int64_t height = 12;
+  RGB low_color{80, 90, 220};
+  RGB high_color{255, 120, 90};
+  bool show_border = true;
+  std::string title;
+};
+
+// Vertical bars with eighth-block sub-row precision; each bar is colored by its
+// height on a low→high gradient. Values ≤ 0 render as an empty column.
+inline auto barPlot(std::span<const double> values, const BarPlotOptions& opts = {})
+    -> std::string {
+  if (values.empty() || opts.height <= 0) return "";
+  const double hi = std::max(0.0, std::ranges::max(values));
+  if (hi <= 0) return "";
+
+  const int64_t w = static_cast<int64_t>(values.size());
+  const int64_t h = opts.height;
+
+  std::string out;
+  out.reserve(static_cast<size_t>((w + 4) * (h + 3)) * 3);
+  if (opts.show_border) frameTop(out, w, opts.title);
+  for (int64_t row = 0; row < h; ++row) {
+    if (opts.show_border) out += "│";
+    for (const double v : values) {
+      const double frac = std::clamp(v, 0.0, hi) / hi;
+      const int64_t eighths = std::lround(frac * static_cast<double>(8 * h));
+      const int64_t top = 8 * (h - row);      // eighths spanned at the top of this row
+      const int64_t bot = 8 * (h - row - 1);  // …and at its bottom
+      const RGB color = lerpColor(opts.low_color, opts.high_color, frac);
+      if (eighths >= top) {
+        out += color.wrap("█");
+      } else if (eighths <= bot) {
+        out += " ";
+      } else {
+        out += color.wrap(kBottomEighths[static_cast<size_t>(eighths - bot - 1)]);
+      }
+    }
+    if (opts.show_border) out += "│";
+    out += "\n";
+  }
+  if (opts.show_border) frameBottom(out, w);
+  return out;
 }
 
 }  // namespace tempura

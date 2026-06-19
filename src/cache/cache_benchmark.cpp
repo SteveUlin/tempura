@@ -299,8 +299,11 @@ void runBenchmark(double zipf_alpha, std::size_t num_keys,
     }
 
     std::println("");
-    std::print("{}", multiPlotBraille(series, 1.0, 50.0, 70, 18, true, false,
-                                      std::format("Hit Rate % (α={:.1f})", zipf_alpha)));
+    std::print("{}", linesPlot(series, 1.0, 50.0,
+                               {.width = 70,
+                                .height = 18,
+                                .title = std::format("Hit Rate % (α={:.1f})", zipf_alpha),
+                                .show_axes = false}));
   }
 }
 
