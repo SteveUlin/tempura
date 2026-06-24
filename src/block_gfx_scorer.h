@@ -13,7 +13,7 @@
 
 #include "block_gfx_patterns.h"
 
-namespace tempura::block_gfx {
+namespace tempura {
 
 // =============================================================================
 // High-Resolution Density Grid
@@ -909,4 +909,4 @@ inline auto getAllScorers() -> std::vector<NamedScorer> {
   };
 }
 
-}  // namespace tempura::block_gfx
+}  // namespace tempura

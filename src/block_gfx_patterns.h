@@ -10,7 +10,7 @@
 #include <cmath>
 #include <cstdint>
 
-namespace tempura::block_gfx {
+namespace tempura {
 
 constexpr int kSubpixelWidth = 8;
 constexpr int kSubpixelHeight = 24;  // LCM(3,4,8) for sextants, octants, sixteenths, eighths
@@ -1101,4 +1101,4 @@ inline auto codepointToUtf8(uint32_t cp, char* buf) -> int {
   }
 }
 
-}  // namespace tempura::block_gfx
+}  // namespace tempura

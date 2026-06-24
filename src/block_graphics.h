@@ -29,23 +29,13 @@ namespace tempura {
 // correspond to equal perceived color differences. This produces much smoother
 // gradients than RGB interpolation, especially for heatmaps.
 
-namespace lab {
-
 struct Lab {
   double L;  // Lightness [0, 100]
   double a;  // Green-Red [-128, 127]
   double b;  // Blue-Yellow [-128, 127]
 };
 
-// sRGB to linear RGB (remove gamma)
-constexpr double srgbToLinear(double c) {
-  return c <= 0.04045 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4);
-}
-
-// Linear RGB to sRGB (apply gamma)
-constexpr double linearToSrgb(double c) {
-  return c <= 0.0031308 ? 12.92 * c : 1.055 * std::pow(c, 1.0 / 2.4) - 0.055;
-}
+// srgbToLinear / linearToSrgb come from plot.h (the canonical transfer functions).
 
 // XYZ to LAB helper
 constexpr double xyzToLabF(double t) {
@@ -124,7 +114,6 @@ inline auto lerpLab(const RGB& from, const RGB& to, double t) -> RGB {
   return labToRgb(result);
 }
 
-}  // namespace lab
 
 // =============================================================================
 // Block Graphics - High Resolution Terminal Heatmaps
@@ -147,7 +136,6 @@ inline auto lerpLab(const RGB& from, const RGB& to, double t) -> RGB {
 // Given a desired density pattern, we score each character and pick the best.
 // Combined with fg/bg coloring, this achieves very high visual fidelity.
 
-namespace block_gfx {
 
 // BlockChar is defined in block_gfx_patterns.h
 
@@ -434,7 +422,6 @@ inline auto findCharByDensity(double density) -> const BlockChar& {
   return *best;
 }
 
-}  // namespace block_gfx
 
 // =============================================================================
 // High-Resolution Heatmap
@@ -507,8 +494,8 @@ auto hiresHeatmap(R&& points, const HiresHeatmapOptions& opts = {})
   }
 
   // High-resolution density grid using scorer's resolution
-  int grid_w = static_cast<int>(opts.width) * block_gfx::kDensityWidth;
-  int grid_h = static_cast<int>(opts.height) * block_gfx::kDensityHeight;
+  int grid_w = static_cast<int>(opts.width) * kDensityWidth;
+  int grid_h = static_cast<int>(opts.height) * kDensityHeight;
   std::vector<int> counts(grid_w * grid_h, 0);
 
   for (const auto& p : pts) {
@@ -521,7 +508,7 @@ auto hiresHeatmap(R&& points, const HiresHeatmapOptions& opts = {})
 
   // Color interpolation in LAB space for perceptually uniform gradients
   auto lerpColor = [](const RGB& a, const RGB& b, double t) -> RGB {
-    return lab::lerpLab(a, b, t);
+    return lerpLab(a, b, t);
   };
 
   RGB bg = opts.bg_color.value_or(opts.low_color);
@@ -545,13 +532,13 @@ auto hiresHeatmap(R&& points, const HiresHeatmapOptions& opts = {})
   }
 
   // Get the character library and scorer
-  const auto& lib = block_gfx::getCharacterLibrary();
-  auto scorer = block_gfx::scorerVarianceAware(0.5);
+  const auto& lib = getCharacterLibrary();
+  auto scorer = scorerVarianceAware(0.5);
 
   // Cell result: stores chosen shape + raw fg/bg densities
   struct CellResult {
     const char* utf8;
-    const block_gfx::FillPattern* pattern;
+    const FillPattern* pattern;
     bool inverted;
     double raw_fg;  // Raw average density in foreground region
     double raw_bg;  // Raw average density in background region
@@ -570,22 +557,22 @@ auto hiresHeatmap(R&& points, const HiresHeatmapOptions& opts = {})
   for (int64_t row = 0; row < opts.height; ++row) {
     for (int64_t col = 0; col < opts.width; ++col) {
       // Build DensityGrid with Gaussian smoothing (raw values)
-      block_gfx::DensityGrid raw_grid{};
+      DensityGrid raw_grid{};
       double cell_max = 0.0;
 
-      for (int dy = 0; dy < block_gfx::kDensityHeight; ++dy) {
-        for (int dx = 0; dx < block_gfx::kDensityWidth; ++dx) {
+      for (int dy = 0; dy < kDensityHeight; ++dy) {
+        for (int dx = 0; dx < kDensityWidth; ++dx) {
           double sum = 0.0;
           for (int ky = -1; ky <= 1; ++ky) {
             for (int kx = -1; kx <= 1; ++kx) {
-              int gx = static_cast<int>(col) * block_gfx::kDensityWidth + dx + kx;
-              int gy = static_cast<int>(row) * block_gfx::kDensityHeight + dy + ky;
+              int gx = static_cast<int>(col) * kDensityWidth + dx + kx;
+              int gy = static_cast<int>(row) * kDensityHeight + dy + ky;
               if (gx >= 0 && gx < grid_w && gy >= 0 && gy < grid_h) {
                 sum += counts[gy * grid_w + gx] * kKernel[ky + 1][kx + 1];
               }
             }
           }
-          raw_grid[block_gfx::densityIndex(dx, dy)] = sum;
+          raw_grid[densityIndex(dx, dy)] = sum;
           cell_max = std::max(cell_max, sum);
         }
       }
@@ -597,7 +584,7 @@ auto hiresHeatmap(R&& points, const HiresHeatmapOptions& opts = {})
         cell = {" ", nullptr, false, 0.0, 0.0};
       } else {
         // Normalize for shape selection
-        block_gfx::DensityGrid norm_grid = raw_grid;
+        DensityGrid norm_grid = raw_grid;
         for (auto& v : norm_grid) {
           v /= cell_max;
         }
@@ -606,7 +593,7 @@ auto hiresHeatmap(R&& points, const HiresHeatmapOptions& opts = {})
         auto res = scorer(norm_grid, lib);
 
         // Find the pattern for the chosen character
-        const block_gfx::FillPattern* pattern = nullptr;
+        const FillPattern* pattern = nullptr;
         for (const auto& ch : lib) {
           if (ch.utf8 == res.utf8) {
             pattern = &ch.pattern;
@@ -620,12 +607,12 @@ auto hiresHeatmap(R&& points, const HiresHeatmapOptions& opts = {})
 
         // Compute raw average density in fg/bg using original (un-normalized) grid
         // Downsample raw_grid to pattern resolution
-        auto raw_pattern = block_gfx::downsampleToPattern(raw_grid);
+        auto raw_pattern = downsampleToPattern(raw_grid);
 
         double fg_sum = 0.0, bg_sum = 0.0;
         int fg_count = 0, bg_count = 0;
         if (pattern) {
-          for (int i = 0; i < block_gfx::kTotalSubpixels; ++i) {
+          for (int i = 0; i < kTotalSubpixels; ++i) {
             bool is_fg = res.inverted ? !(*pattern)[i] : (*pattern)[i];
             if (is_fg) {
               fg_sum += raw_pattern[i];
