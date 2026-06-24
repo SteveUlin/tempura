@@ -69,7 +69,7 @@ constexpr auto solve(const Cholesky<T, E>& ch, const B& b) {
   assert(ch.positive_definite && "solve() on a non-positive-definite Cholesky");
   const auto& L = ch.factor;
 
-  HeapResult<T, std::extents<std::size_t, E::static_extent(0)>> x(n);
+  HeapResult<T, std::extents<std::size_t, E::static_extent(0)>> x(dims(n));
   for (std::size_t i = 0; i < n; ++i) x[i] = static_cast<T>(vb[i]);
   for (std::size_t i = 0; i < n; ++i) {  // forward: L·y = b
     for (std::size_t j = 0; j < i; ++j) x[i] -= L[i, j] * x[j];
@@ -107,7 +107,7 @@ constexpr auto inverse(const Cholesky<T, E>& ch) {
   const std::size_t n = ch.rows();
   assert(ch.positive_definite && "inverse of a non-positive-definite Cholesky");
   const auto& L = ch.factor;
-  HeapResult<T, E> inv(n, n);
+  HeapResult<T, E> inv(dims(n, n));
   for (std::size_t c = 0; c < n; ++c) {  // solve A·x = eₖ into column c
     for (std::size_t i = 0; i < n; ++i) inv[i, c] = (i == c) ? T{1} : T{};
     for (std::size_t i = 0; i < n; ++i) {  // forward

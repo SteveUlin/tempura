@@ -15,8 +15,8 @@
 namespace tempura {
 
 // Rank-1 analogues of Dense/InlineDense: heap (std::vector) vs stack (std::array),
-// both rank-1 MdArray owners (see mdarray.h). No defaulted length — use `dyn` for a
-// runtime axis: `Vec<double, dyn>`.
+// both rank-1 MdArray owners (see mdarray.h). No defaulted length — use `Dyn` for a
+// runtime axis: `Vec<double, Dyn>`.
 template <typename T, std::size_t N>
 using Vec = MdArray<T, std::extents<std::size_t, N>, std::layout_right, std::vector<T>>;
 
@@ -91,7 +91,7 @@ constexpr auto multiply(const A& a, const X& x) {
   auto vx = view(x);
   using Ea = typename decltype(va)::extents_type;
   using Value = std::common_type_t<typename decltype(va)::value_type, typename decltype(vx)::value_type>;
-  HeapResult<Value, std::extents<std::size_t, Ea::static_extent(0)>> y(va.extent(0));
+  HeapResult<Value, std::extents<std::size_t, Ea::static_extent(0)>> y(dims(va.extent(0)));
   multiply(va, vx, y);
   return y;
 }

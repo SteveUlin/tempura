@@ -9,6 +9,8 @@
 #include <utility>
 #include <vector>
 
+#include "dyn.h"
+#include "matrix.h"
 #include "mdarray.h"
 #include "unit.h"
 
@@ -24,7 +26,7 @@ using namespace std::chrono_literals;
 
 namespace {
 
-using Mat = Dense<double, dyn, dyn>;
+using Mat = Dense<double, Dyn, Dyn>;
 using MS = std::mdspan<double, std::dextents<std::size_t, 2>>;
 
 // Fixed-seed random n×n, entries in [-1,1]. No diagonal bump: we WANT partial
@@ -115,8 +117,8 @@ auto main() -> int {
   "lazy foil reproduces the eager factorization"_test = [] {
     constexpr std::size_t n = 6;
     auto pristine = randomMatrix(n, 1);
-    Mat e(n, n);
-    Mat l(n, n);
+    Mat e(dims(n, n));
+    Mat l(dims(n, n));
     refill(e, pristine);
     refill(l, pristine);
     std::vector<double> se(n);
@@ -142,7 +144,7 @@ auto main() -> int {
     const auto pristine = randomMatrix(n, 0xC0FFEE);
     const double work = (2.0 / 3.0) * static_cast<double>(n) * n * n;
 
-    Mat ws(n, n);
+    Mat ws(dims(n, n));
     std::vector<double> scale(n);
     std::vector<std::size_t> perm(n);
 

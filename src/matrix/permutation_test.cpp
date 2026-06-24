@@ -2,7 +2,8 @@
 
 #include <cstddef>
 
-#include "mdarray.h"
+#include "dyn.h"
+#include "matrix.h"
 #include "unit.h"
 
 using namespace tempura;
@@ -20,7 +21,7 @@ static_assert([] {
 auto main() -> int {
   "identity leaves rows untouched"_test = [] {
     Permutation<3> id{};
-    Dense<double, dyn, dyn> m(3, 1);
+    Dense<double, Dyn, Dyn> m(dims(3, 1));
     m[0, 0] = 10; m[1, 0] = 20; m[2, 0] = 30;
     id.permuteRows(m);
     expectEq(m[0, 0], 10.0);
@@ -30,7 +31,7 @@ auto main() -> int {
 
   "permuteRows gathers whole rows: new row i <- old row order[i]"_test = [] {
     Permutation<3> p{1, 2, 0};  // row0<-1, row1<-2, row2<-0
-    Dense<double, dyn, dyn> m(3, 2);
+    Dense<double, Dyn, Dyn> m(dims(3, 2));
     for (std::size_t i = 0; i < 3; ++i) {
       m[i, 0] = static_cast<double>(i);
       m[i, 1] = static_cast<double>(10 + i);

@@ -1,3 +1,5 @@
+#include "dyn.h"
+#include "matrix.h"
 #include "mdarray.h"
 
 #include <array>
@@ -20,7 +22,7 @@ using Stat23 = std::extents<std::size_t, 2, 3>;
 // The owner is constexpr-usable end to end: build, index two ways, hand out a view,
 // write through it, read back. Exercised at compile time via static_assert.
 constexpr auto roundTrip() -> bool {
-  MdArray<double, Dext2> a(2, 3);
+  MdArray<double, Dext2> a(dims(2, 3));
   a[1, 2] = 7.0;
   a[std::array<std::size_t, 2>{0, 1}] = 4.0;
   auto s = a.toMdspan();
@@ -42,7 +44,7 @@ static_assert(inlineRoundTrip());
 
 auto main() -> int {
   "shape ctor: zeros, shape queries"_test = [] {
-    MdArray<double, Dext2> a(3, 4);
+    MdArray<double, Dext2> a(dims(3, 4));
     expectEq(a.rank(), 2u);
     expectEq(a.rankDynamic(), 2u);
     expectEq(a.extent(0), 3u);
@@ -55,7 +57,7 @@ auto main() -> int {
   };
 
   "row-major (layout_right) flat layout"_test = [] {
-    MdArray<double, Dext2> a(2, 3);
+    MdArray<double, Dext2> a(dims(2, 3));
     double v = 1.0;
     for (std::size_t i = 0; i < 2; ++i)
       for (std::size_t j = 0; j < 3; ++j) a[i, j] = v++;
@@ -76,7 +78,7 @@ auto main() -> int {
   };
 
   "rank-3 (genuinely N-dimensional)"_test = [] {
-    MdArray<double, Dext3> a(2, 2, 2);
+    MdArray<double, Dext3> a(dims(2, 2, 2));
     double v = 1.0;
     for (std::size_t i = 0; i < 2; ++i)
       for (std::size_t j = 0; j < 2; ++j)
@@ -87,7 +89,7 @@ auto main() -> int {
   };
 
   "subscript by array and by span"_test = [] {
-    MdArray<double, Dext2> a(2, 3);
+    MdArray<double, Dext2> a(dims(2, 3));
     a[1, 2] = 9.0;
     std::array<std::size_t, 2> idx{1, 2};
     expectEq(a[idx], 9.0);
@@ -97,9 +99,9 @@ auto main() -> int {
     expectEq(a[1, 2], 11.0);
   };
 
-  "mixed static and dynamic extents (supply only the dynamic dim)"_test = [] {
+  "mixed static and dynamic extents (full shape, static axis validated)"_test = [] {
     using Ext = std::extents<std::size_t, 3, std::dynamic_extent>;
-    MdArray<double, Ext> a(4);
+    MdArray<double, Ext> a(dims(3, 4));
     expectEq(a.rankDynamic(), 1u);
     expectEq(MdArray<double, Ext>::staticExtent(0), 3u);
     expectEq(a.extent(0), 3u);
@@ -132,7 +134,7 @@ auto main() -> int {
   };
 
   "toMdspan: member, const and non-const share storage"_test = [] {
-    MdArray<double, Dext2> a(2, 2);
+    MdArray<double, Dext2> a(dims(2, 2));
     a[0, 0] = 1.0;
     auto s = a.toMdspan();
     static_assert(std::same_as<decltype(s)::element_type, double>);
@@ -182,7 +184,7 @@ auto main() -> int {
   };
 
   "copy and move are value semantics (independent storage)"_test = [] {
-    MdArray<double, Dext2> a(2, 2);
+    MdArray<double, Dext2> a(dims(2, 2));
     a[0, 0] = 1.0;
     auto b = a;       // copy
     b[0, 0] = 9.0;
@@ -193,9 +195,9 @@ auto main() -> int {
   };
 
   "Dense / InlineDense are the rank-2 owners (heap and stack)"_test = [] {
-    static_assert(std::same_as<Dense<double, dyn, dyn>,
+    static_assert(std::same_as<Dense<double, Dyn, Dyn>,
                                MdArray<double, Dext2, std::layout_right, std::vector<double>>>);
-    Dense<double, dyn, dyn> m(2, 2);  // fully dynamic, heap
+    Dense<double, Dyn, Dyn> m(dims(2, 2));  // fully dynamic, heap
     m[1, 1] = 7.0;
     expectEq(m[1, 1], 7.0);
     Dense<double, 2, 3> stat;  // static shape, heap

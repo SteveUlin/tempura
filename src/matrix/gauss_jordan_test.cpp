@@ -25,13 +25,13 @@ static_assert(invertsToIdentity());
 
 auto main() -> int {
   "gaussJordan inverts: A·A⁻¹ = I, and matches LU inverse"_test = [] {
-    Dense<double, dyn, dyn> a(3, 3);
+    Dense<double, Dyn, Dyn> a(dims(3, 3));
     auto va = a.toMdspan();
     double vals[3][3] = {{2, 1, 1}, {1, 3, 2}, {1, 0, 0}};
     for (std::size_t i = 0; i < 3; ++i)
       for (std::size_t j = 0; j < 3; ++j) va[i, j] = vals[i][j];
 
-    Dense<double, dyn, dyn> inv(3, 3);
+    Dense<double, Dyn, Dyn> inv(dims(3, 3));
     auto vi = inv.toMdspan();
     for (std::size_t i = 0; i < 3; ++i)
       for (std::size_t j = 0; j < 3; ++j) vi[i, j] = vals[i][j];
@@ -51,10 +51,10 @@ auto main() -> int {
 
   "gaussJordan solves A·X = B (ride-along RHS)"_test = [] {
     // A·x = b with A = [[2,1],[1,3]], b = [3,5] → x = [0.8, 1.4]
-    Dense<double, dyn, dyn> a(2, 2);
+    Dense<double, Dyn, Dyn> a(dims(2, 2));
     auto va = a.toMdspan();
     va[0, 0] = 2; va[0, 1] = 1; va[1, 0] = 1; va[1, 1] = 3;
-    Dense<double, dyn, dyn> b(2, 1);
+    Dense<double, Dyn, Dyn> b(dims(2, 1));
     auto vb = b.toMdspan();
     vb[0, 0] = 3; vb[1, 0] = 5;
     expectTrue(gaussJordan(a, b));            // a → A⁻¹, b → A⁻¹·b = x
@@ -63,7 +63,7 @@ auto main() -> int {
   };
 
   "gaussJordan reports a singular matrix"_test = [] {
-    Dense<double, dyn, dyn> a(2, 2);
+    Dense<double, Dyn, Dyn> a(dims(2, 2));
     auto va = a.toMdspan();
     va[0, 0] = 1; va[0, 1] = 2; va[1, 0] = 2; va[1, 1] = 4;  // row 2 = 2·row 1
     expectFalse(gaussJordan(a));
@@ -71,7 +71,7 @@ auto main() -> int {
 
   "gaussJordan needs pivoting: zero leading pivot"_test = [] {
     // [[0,1],[1,0]] inverse is itself; without pivoting the 0 pivot would fail
-    Dense<double, dyn, dyn> a(2, 2);
+    Dense<double, Dyn, Dyn> a(dims(2, 2));
     auto va = a.toMdspan();
     va[0, 0] = 0; va[0, 1] = 1; va[1, 0] = 1; va[1, 1] = 0;
     expectTrue(gaussJordan(a));

@@ -37,7 +37,7 @@ auto main() -> int {
   };
 
   "a column slice is strided (stride = #cols), a row is contiguous"_test = [] {
-    Dense<int, dyn, dyn> m(2, 3);  // row-major
+    Dense<int, Dyn, Dyn> m(dims(2, 3));  // row-major
     expectEq(cols(m)[0].stride(0), std::size_t{3});  // step a column → skip a whole row
     expectEq(rows(m)[0].stride(0), std::size_t{1});  // a row walks unit stride
   };
@@ -60,7 +60,7 @@ auto main() -> int {
   "slices compose with the vector kernels (matmul by dot of row·col)"_test = [] {
     InlineDense<double, 2, 3> a{{1, 2, 3}, {4, 5, 6}};
     InlineDense<double, 3, 2> b{{7, 8}, {9, 10}, {11, 12}};
-    Dense<double, dyn, dyn> c(2, 2);
+    Dense<double, Dyn, Dyn> c(dims(2, 2));
     auto ra = rows(a);
     auto cb = cols(b);
     for (std::size_t i = 0; i < 2; ++i)

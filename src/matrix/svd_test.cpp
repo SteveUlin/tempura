@@ -32,7 +32,7 @@ static_assert(reconstructs2x2());
 
 auto main() -> int {
   "U·Σ·Vᵀ = A, UᵀU = VᵀV = I, σ descending and ≥ 0"_test = [] {
-    Dense<double, dyn, dyn> a(3, 3);
+    Dense<double, Dyn, Dyn> a(dims(3, 3));
     auto va = a.toMdspan();
     double vals[3][3] = {{1, 2, 3}, {4, 5, 6}, {7, 8, 10}};  // nonsingular general matrix
     for (std::size_t i = 0; i < 3; ++i)
@@ -58,7 +58,7 @@ auto main() -> int {
   };
 
   "known singular values: diag(3,1,2) → 3, 2, 1"_test = [] {
-    Dense<double, dyn, dyn> a(3, 3);
+    Dense<double, Dyn, Dyn> a(dims(3, 3));
     auto va = a.toMdspan();
     for (std::size_t i = 0; i < 3; ++i)
       for (std::size_t j = 0; j < 3; ++j) va[i, j] = 0.0;

@@ -16,7 +16,7 @@ namespace tempura {
 //
 // A forwarding reference so a temporary view composes (`transposed(transposed(m))`).
 // A mutable m yields a writable transpose; a const m yields mdspan<const T>. Materialize
-// into owned row-major storage with `Dense<T, dyn, dyn> r = transposed(m);`.
+// into owned row-major storage with `Dense<T, Dyn, Dyn> r = transposed(m);`.
 //
 // PRECONDITIONS: m's storage outlives the view; m's view must be STRIDED — true for
 // owners and strided/transposed views, NOT for a gather view (permutedRows), whose

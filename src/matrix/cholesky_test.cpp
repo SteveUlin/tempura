@@ -31,7 +31,7 @@ static_assert(reconstructsKnown());
 
 auto main() -> int {
   "L·Lᵀ = A; solve residual ≈ 0; log|A| and det match"_test = [] {
-    Dense<double, dyn, dyn> a(3, 3);
+    Dense<double, Dyn, Dyn> a(dims(3, 3));
     auto va = a.toMdspan();
     double vals[3][3] = {{4, 12, -16}, {12, 37, -43}, {-16, -43, 98}};
     for (std::size_t i = 0; i < 3; ++i)
@@ -49,7 +49,7 @@ auto main() -> int {
     expectClose(determinant(ch), 36.0, {.rtol = 1e-10, .atol = 1e-10});
     expectClose(logDeterminant(ch), std::log(36.0), {.rtol = 1e-10, .atol = 1e-10});
 
-    Vec<double, dyn> b(3);
+    Vec<double, Dyn> b(dims(3));
     b[0] = 1; b[1] = 2; b[2] = 3;
     auto x = solve(ch, b);
     for (std::size_t i = 0; i < 3; ++i) {  // residual A·x − b ≈ 0
@@ -60,7 +60,7 @@ auto main() -> int {
   };
 
   "inverse: A·A⁻¹ = I"_test = [] {
-    Dense<double, dyn, dyn> a(2, 2);
+    Dense<double, Dyn, Dyn> a(dims(2, 2));
     auto va = a.toMdspan();
     va[0, 0] = 2; va[0, 1] = 1; va[1, 0] = 1; va[1, 1] = 2;  // SPD
     auto ch = cholesky(a);
@@ -72,7 +72,7 @@ auto main() -> int {
   };
 
   "non-positive-definite input is flagged, not masked"_test = [] {
-    Dense<double, dyn, dyn> a(2, 2);
+    Dense<double, Dyn, Dyn> a(dims(2, 2));
     auto va = a.toMdspan();
     va[0, 0] = 1; va[0, 1] = 2; va[1, 0] = 2; va[1, 1] = 1;  // symmetric, eigenvalues 3,−1
     auto ch = cholesky(a);

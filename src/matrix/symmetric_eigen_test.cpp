@@ -31,7 +31,7 @@ static_assert(reconstructs2x2());
 auto main() -> int {
   // 1-D Laplacian: eigenvalues 2 − √2, 2, 2 + √2 (well separated, non-degenerate).
   "eigenvalues match the 1-D Laplacian spectrum; A·V = V·D; VᵀV = I"_test = [] {
-    Dense<double, dyn, dyn> a(3, 3);
+    Dense<double, Dyn, Dyn> a(dims(3, 3));
     auto va = a.toMdspan();
     double vals[3][3] = {{2, -1, 0}, {-1, 2, -1}, {0, -1, 2}};
     for (std::size_t i = 0; i < 3; ++i)
@@ -58,7 +58,7 @@ auto main() -> int {
   };
 
   "degenerate spectrum: [[4,1,1],[1,4,1],[1,1,4]] has eigenvalues 3, 3, 6"_test = [] {
-    Dense<double, dyn, dyn> a(3, 3);
+    Dense<double, Dyn, Dyn> a(dims(3, 3));
     auto va = a.toMdspan();
     double vals[3][3] = {{4, 1, 1}, {1, 4, 1}, {1, 1, 4}};
     for (std::size_t i = 0; i < 3; ++i)

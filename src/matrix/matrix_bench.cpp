@@ -22,20 +22,20 @@ using namespace std::chrono_literals;
 namespace {
 
 template <typename T>
-auto randomMat(std::size_t n, std::uint64_t seed) -> Dense<T, dyn, dyn> {
+auto randomMat(std::size_t n, std::uint64_t seed) -> Dense<T, Dyn, Dyn> {
   std::mt19937_64 gen{seed};
   std::uniform_real_distribution<double> dist{-1.0, 1.0};
-  Dense<T, dyn, dyn> m(n, n);
+  Dense<T, Dyn, Dyn> m(dims(n, n));
   T* p = m.containerData();
   for (std::size_t i = 0; i < n * n; ++i) p[i] = static_cast<T>(dist(gen));
   return m;
 }
 
 template <typename T>
-auto randomVec(std::size_t n, std::uint64_t seed) -> Vec<T, dyn> {
+auto randomVec(std::size_t n, std::uint64_t seed) -> Vec<T, Dyn> {
   std::mt19937_64 gen{seed};
   std::uniform_real_distribution<double> dist{-1.0, 1.0};
-  Vec<T, dyn> v(n);
+  Vec<T, Dyn> v(dims(n));
   T* p = v.containerData();
   for (std::size_t i = 0; i < n; ++i) p[i] = static_cast<T>(dist(gen));
   return v;
@@ -49,7 +49,7 @@ auto main() -> int {
   for (std::size_t n : {16u, 32u, 64u, 128u, 256u, 512u}) {
     auto a = randomMat<double>(n, 1);
     auto b = randomMat<double>(n, 2);
-    Dense<double, dyn, dyn> dst(n, n);
+    Dense<double, Dyn, Dyn> dst(dims(n, n));
     const double work = 2.0 * static_cast<double>(n) * n * n;
     auto r = "matmul"_bench.warmup(2).minEpoch(2ms).maxRuntime(250ms).minSamples(3)
                  .flops(work).quiet() = [&] {
@@ -69,7 +69,7 @@ auto main() -> int {
   for (std::size_t n : {16u, 32u, 64u, 128u, 256u, 512u}) {
     auto a = randomMat<double>(n, 1);
     auto b = randomMat<double>(n, 2);
-    Dense<double, dyn, dyn> dst(n, n);
+    Dense<double, Dyn, Dyn> dst(dims(n, n));
     const double work = 2.0 * static_cast<double>(n) * n * n;
     auto direct = "mm direct"_bench.warmup(2).minEpoch(2ms).maxRuntime(200ms).minSamples(3)
                       .flops(work).quiet() = [&] {

@@ -12,7 +12,7 @@ using namespace tempura;
 
 static_assert(std::same_as<decltype(InlineDense<double, 2, 3>{} * InlineVec<double, 3>{}),
                            Vec<double, 2>>);
-static_assert(std::same_as<decltype(Dense<double, dyn, dyn>{} * Vec<double, dyn>{}), Vec<double, dyn>>);
+static_assert(std::same_as<decltype(Dense<double, Dyn, Dyn>{} * Vec<double, Dyn>{}), Vec<double, Dyn>>);
 
 constexpr auto constexprVecOps() -> bool {
   InlineVec<double, 3> x;
@@ -29,7 +29,7 @@ static_assert(constexprVecOps());
 
 auto main() -> int {
   "construction and single-index subscript"_test = [] {
-    Vec<double, dyn> x(3);
+    Vec<double, Dyn> x(dims(3));
     expectEq(x.rank(), 1u);
     expectEq(x.size(), 3u);
     x[0] = 1.0; x[1] = 2.0; x[2] = 3.0;
@@ -41,9 +41,9 @@ auto main() -> int {
   };
 
   "dot product"_test = [] {
-    Vec<double, dyn> x(3);
+    Vec<double, Dyn> x(dims(3));
     x[0] = 1.0; x[1] = 2.0; x[2] = 3.0;
-    Vec<double, dyn> y(3);
+    Vec<double, Dyn> y(dims(3));
     y[0] = 4.0; y[1] = 5.0; y[2] = 6.0;
     expectEq(dot(x, y), 32.0);
     expectEq(dot(x, x), 14.0);  // ‖x‖²
@@ -51,11 +51,11 @@ auto main() -> int {
 
   "matrix-vector product, dynamic"_test = [] {
     // [1 2 3; 4 5 6] · [1; 1; 1] = [6; 15]
-    Dense<double, dyn, dyn> a(2, 3);
+    Dense<double, Dyn, Dyn> a(dims(2, 3));
     double v = 1.0;
     for (std::size_t i = 0; i < 2; ++i)
       for (std::size_t j = 0; j < 3; ++j) a[i, j] = v++;
-    Vec<double, dyn> x(3);
+    Vec<double, Dyn> x(dims(3));
     x[0] = 1.0; x[1] = 1.0; x[2] = 1.0;
     auto y = a * x;
     expectEq(y.rank(), 1u);
@@ -78,11 +78,11 @@ auto main() -> int {
   };
 
   "destination matvec writes into a caller-owned vector"_test = [] {
-    Dense<double, dyn, dyn> a(2, 2);
+    Dense<double, Dyn, Dyn> a(dims(2, 2));
     a[0, 0] = 1.0; a[0, 1] = 2.0; a[1, 0] = 3.0; a[1, 1] = 4.0;
-    Vec<double, dyn> x(2);
+    Vec<double, Dyn> x(dims(2));
     x[0] = 1.0; x[1] = 1.0;
-    Vec<double, dyn> y(2);
+    Vec<double, Dyn> y(dims(2));
     auto& r = multiply(a, x, y);
     expectTrue(&r == &y);
     expectEq(y[0], 3.0);
@@ -90,7 +90,7 @@ auto main() -> int {
   };
 
   "euclidean norm"_test = [] {
-    Vec<double, dyn> x(2);
+    Vec<double, Dyn> x(dims(2));
     x[0] = 3.0; x[1] = 4.0;
     expectEq(norm2(x), 5.0);  // √(9+16) = 5, exact in IEEE double
   };
@@ -102,10 +102,10 @@ auto main() -> int {
     MdArray w{4.0, 5.0};  // CTAD → InlineVec
     static_assert(std::same_as<decltype(w), InlineVec<double, 2>>);
     expectEq(w[1], 5.0);
-    Vec<double, dyn> d{1.0, 2.0, 3.0};  // dynamic, length inferred
+    Vec<double, Dyn> d{1.0, 2.0, 3.0};  // dynamic, length inferred
     expectEq(d.size(), 3u);
     expectEq(d[2], 3.0);
-    Vec<double, dyn> z(3);  // parens = zero vector of length 3
+    Vec<double, Dyn> z(dims(3));  // parens = zero vector of length 3
     expectEq(z.size(), 3u);
     expectEq(z[0], 0.0);
   };

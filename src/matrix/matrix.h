@@ -8,9 +8,31 @@
 #include <type_traits>
 #include <vector>
 
+#include "dyn.h"
 #include "mdarray.h"
 
 namespace tempura {
+
+// The rank-2 owners: Dense on the heap (std::vector), InlineDense on the stack
+// (std::array, fully constexpr). Extents are explicit and per-axis static-or-dynamic —
+// `Dense<double, Dyn, Dyn>` is a fully dynamic matrix, `Dense<double, 3, 4>` fixes the
+// shape on the heap, `InlineDense<double, 3, 4>` on the stack. No defaulted dims: a heap
+// matrix always states its shape (use `Dyn` for a runtime axis). ColMajor/InlineColMajor
+// mirror them in column-major (layout_left). Other ranks use Vec/InlineVec (vec.h) or
+// MdArray directly.
+template <typename T, std::size_t Rows, std::size_t Cols>
+using Dense = MdArray<T, std::extents<std::size_t, Rows, Cols>, std::layout_right, std::vector<T>>;
+
+template <typename T, std::size_t Rows, std::size_t Cols>
+using InlineDense =
+    MdArray<T, std::extents<std::size_t, Rows, Cols>, std::layout_right, std::array<T, Rows * Cols>>;
+
+template <typename T, std::size_t Rows, std::size_t Cols>
+using ColMajor = MdArray<T, std::extents<std::size_t, Rows, Cols>, std::layout_left, std::vector<T>>;
+
+template <typename T, std::size_t Rows, std::size_t Cols>
+using InlineColMajor =
+    MdArray<T, std::extents<std::size_t, Rows, Cols>, std::layout_left, std::array<T, Rows * Cols>>;
 
 // Merge two extents of one axis for a result type: a known dim wins, a dynamic dim
 // defers to the other. Conflicting *static* dims are a bug — assert it (a failed assert
@@ -250,7 +272,7 @@ constexpr auto eye() {
 }
 template <typename T>
 constexpr auto eye(std::size_t n) {
-  Dense<T, dyn, dyn> e(n, n);
+  Dense<T, Dyn, Dyn> e(dims(n, n));
   identity(e);
   return e;
 }
@@ -262,7 +284,7 @@ constexpr auto add(const A& a, const B& b) {
   using Ea = typename decltype(va)::extents_type;
   using Eb = typename decltype(vb)::extents_type;
   using Value = std::common_type_t<typename decltype(va)::value_type, typename decltype(vb)::value_type>;
-  HeapResult<Value, SumExtents<Ea, Eb>> c(va.extent(0), va.extent(1));
+  HeapResult<Value, SumExtents<Ea, Eb>> c(dims(va.extent(0), va.extent(1)));
   add(va, vb, c);
   return c;
 }
@@ -273,7 +295,7 @@ constexpr auto multiply(const A& a, const B& b) {
   using Ea = typename decltype(va)::extents_type;
   using Eb = typename decltype(vb)::extents_type;
   using Value = std::common_type_t<typename decltype(va)::value_type, typename decltype(vb)::value_type>;
-  HeapResult<Value, ProductExtents<Ea, Eb>> c(va.extent(0), vb.extent(1));
+  HeapResult<Value, ProductExtents<Ea, Eb>> c(dims(va.extent(0), vb.extent(1)));
   multiply(va, vb, c);
   return c;
 }

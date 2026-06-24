@@ -56,7 +56,7 @@ auto main() -> int {
   };
 
   "empty matrix (0 rows) renders without OOB"_test = [] {
-    Dense<int, dyn, dyn> m(0, 3);
+    Dense<int, Dyn, Dyn> m(dims(0, 3));
     expectEq(toString(m), std::string("[ ]"));
   };
 

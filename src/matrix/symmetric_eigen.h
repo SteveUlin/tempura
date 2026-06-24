@@ -93,7 +93,7 @@ constexpr auto symmetricEigen(const M& a) {
 
   // ── Phase 2: form Q from the stored reflectors (overwrites v) ──
   {
-    HeapResult<T, E> q(static_cast<std::size_t>(n), static_cast<std::size_t>(n));
+    HeapResult<T, E> q(dims(static_cast<std::size_t>(n), static_cast<std::size_t>(n)));
     identity(q);
     for (std::int64_t j = n - 3; j >= 0; --j) {
       if (tau[j] == T{}) continue;
@@ -180,7 +180,7 @@ constexpr auto symmetricEigen(const M& a) {
     }
   }
 
-  HeapResult<T, std::extents<std::size_t, E::static_extent(0)>> values(static_cast<std::size_t>(n));
+  HeapResult<T, std::extents<std::size_t, E::static_extent(0)>> values(dims(static_cast<std::size_t>(n)));
   for (std::int64_t i = 0; i < n; ++i) values[i] = d[i];
   return SymmetricEigen<T, E>{std::move(values), std::move(v)};
 }

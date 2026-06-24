@@ -47,7 +47,7 @@ constexpr auto svd(const M& a) {
   const T eps = std::numeric_limits<T>::epsilon();
 
   HeapResult<T, E> u(va);  // packed workspace → left vectors
-  HeapResult<T, E> v(static_cast<std::size_t>(n), static_cast<std::size_t>(n));
+  HeapResult<T, E> v(dims(static_cast<std::size_t>(n), static_cast<std::size_t>(n)));
   std::vector<T> diag(n);
   std::vector<T> off(n);
   std::vector<T> tau_l(n);
@@ -116,7 +116,7 @@ constexpr auto svd(const M& a) {
 
   // ── Phase 3: form U from the left reflectors (overwrites u) ──
   {
-    HeapResult<T, E> uu(static_cast<std::size_t>(n), static_cast<std::size_t>(n));
+    HeapResult<T, E> uu(dims(static_cast<std::size_t>(n), static_cast<std::size_t>(n)));
     identity(uu);
     for (std::int64_t j = n - 1; j >= 0; --j) {
       if (tau_l[j] == T{}) continue;
@@ -230,7 +230,7 @@ constexpr auto svd(const M& a) {
     }
   }
 
-  HeapResult<T, std::extents<std::size_t, E::static_extent(0)>> sv(static_cast<std::size_t>(n));
+  HeapResult<T, std::extents<std::size_t, E::static_extent(0)>> sv(dims(static_cast<std::size_t>(n)));
   for (std::int64_t i = 0; i < n; ++i) sv[i] = diag[i];
   return Svd<T, E>{std::move(u), std::move(v), std::move(sv)};
 }

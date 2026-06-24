@@ -27,7 +27,7 @@ static_assert(reconstructsA());
 auto main() -> int {
   "Q·R = A and QᵀQ = I (orthonormal), R upper-triangular"_test = [] {
     // classic Golub example; its QR is well known
-    Dense<double, dyn, dyn> a(3, 3);
+    Dense<double, Dyn, Dyn> a(dims(3, 3));
     auto va = a.toMdspan();
     double vals[3][3] = {{12, -51, 4}, {6, 167, -68}, {-4, 24, -41}};
     for (std::size_t i = 0; i < 3; ++i)
@@ -52,12 +52,12 @@ auto main() -> int {
   };
 
   "QR solves A·x = b (residual ≈ 0)"_test = [] {
-    Dense<double, dyn, dyn> a(3, 3);
+    Dense<double, Dyn, Dyn> a(dims(3, 3));
     auto va = a.toMdspan();
     double vals[3][3] = {{4, -2, 1}, {-2, 4, -2}, {1, -2, 4}};
     for (std::size_t i = 0; i < 3; ++i)
       for (std::size_t j = 0; j < 3; ++j) va[i, j] = vals[i][j];
-    Vec<double, dyn> b(3);
+    Vec<double, Dyn> b(dims(3));
     b[0] = 1; b[1] = 4; b[2] = 7;
 
     auto qr = qrDecompose(a);
@@ -73,7 +73,7 @@ auto main() -> int {
     // a naive Σxᵢ² overflows to ∞ at 1e200 and underflows to 0 at 1e-200 (dropping a
     // reflector); the scaled norm survives both and Q·R = A holds.
     for (double mag : {1e200, 1e-200}) {
-      Dense<double, dyn, dyn> a(2, 2);
+      Dense<double, Dyn, Dyn> a(dims(2, 2));
       auto va = a.toMdspan();
       va[0, 0] = 1 * mag; va[0, 1] = 2 * mag;
       va[1, 0] = 3 * mag; va[1, 1] = 4 * mag;
@@ -87,7 +87,7 @@ auto main() -> int {
   };
 
   "structurally singular matrix is flagged; factorization still reconstructs"_test = [] {
-    Dense<double, dyn, dyn> a(2, 2);
+    Dense<double, Dyn, Dyn> a(dims(2, 2));
     auto va = a.toMdspan();
     va[0, 0] = 1; va[0, 1] = 0; va[1, 0] = 0; va[1, 1] = 0;  // a zero pivot column emerges
     auto qr = qrDecompose(a);

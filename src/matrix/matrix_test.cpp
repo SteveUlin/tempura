@@ -18,12 +18,12 @@ static_assert(std::same_as<decltype(InlineDense<double, 2, 3>{} * InlineDense<do
                            Dense<double, 2, 4>>);
 static_assert(std::same_as<decltype(Dense<double, 2, 3>{} * Dense<double, 3, 4>{}),
                            Dense<double, 2, 4>>);
-static_assert(std::same_as<decltype(Dense<double, dyn, dyn>{} * Dense<double, dyn, dyn>{}), Dense<double, dyn, dyn>>);
+static_assert(std::same_as<decltype(Dense<double, Dyn, Dyn>{} * Dense<double, Dyn, Dyn>{}), Dense<double, Dyn, Dyn>>);
 static_assert(std::same_as<decltype(InlineDense<double, 2, 2>{} + InlineDense<double, 2, 2>{}),
                            Dense<double, 2, 2>>);
-static_assert(std::same_as<decltype(InlineDense<double, 2, 2>{} + Dense<double, dyn, dyn>{}),
+static_assert(std::same_as<decltype(InlineDense<double, 2, 2>{} + Dense<double, Dyn, Dyn>{}),
                            Dense<double, 2, 2>>);
-static_assert(std::same_as<decltype(Dense<double, dyn, dyn>{} + Dense<double, dyn, dyn>{}), Dense<double, dyn, dyn>>);
+static_assert(std::same_as<decltype(Dense<double, Dyn, Dyn>{} + Dense<double, Dyn, Dyn>{}), Dense<double, Dyn, Dyn>>);
 
 // Matrix multiply in a constant expression. The heap result is a transient
 // allocation, valid in constexpr since C++20 made std::vector constexpr.
@@ -52,9 +52,9 @@ static_assert(constexprDestination());
 
 auto main() -> int {
   "dynamic addition"_test = [] {
-    Dense<double, dyn, dyn> a(2, 2);
+    Dense<double, Dyn, Dyn> a(dims(2, 2));
     a[0, 0] = 1.0; a[0, 1] = 2.0; a[1, 0] = 3.0; a[1, 1] = 4.0;
-    Dense<double, dyn, dyn> b(2, 2);
+    Dense<double, Dyn, Dyn> b(dims(2, 2));
     b[0, 0] = 10.0; b[0, 1] = 20.0; b[1, 0] = 30.0; b[1, 1] = 40.0;
     auto c = a + b;
     expectEq(c.extent(0), 2u);
@@ -92,11 +92,11 @@ auto main() -> int {
 
   "dynamic product against a hand-computed result"_test = [] {
     // [1 2 3; 4 5 6] · [7 8; 9 10; 11 12] = [58 64; 139 154]
-    Dense<double, dyn, dyn> a(2, 3);
+    Dense<double, Dyn, Dyn> a(dims(2, 3));
     double v = 1.0;
     for (std::size_t i = 0; i < 2; ++i)
       for (std::size_t j = 0; j < 3; ++j) a[i, j] = v++;
-    Dense<double, dyn, dyn> b(3, 2);
+    Dense<double, Dyn, Dyn> b(dims(3, 2));
     v = 7.0;
     for (std::size_t i = 0; i < 3; ++i)
       for (std::size_t j = 0; j < 2; ++j) b[i, j] = v++;
@@ -125,20 +125,20 @@ auto main() -> int {
   };
 
   "named functions and operators agree"_test = [] {
-    Dense<double, dyn, dyn> a(2, 2);
+    Dense<double, Dyn, Dyn> a(dims(2, 2));
     a[0, 0] = 1.0; a[0, 1] = 2.0; a[1, 0] = 3.0; a[1, 1] = 4.0;
-    Dense<double, dyn, dyn> b(2, 2);
+    Dense<double, Dyn, Dyn> b(dims(2, 2));
     b[0, 0] = 5.0; b[0, 1] = 6.0; b[1, 0] = 7.0; b[1, 1] = 8.0;
     expectRangeEq((a + b).container(), add(a, b).container());
     expectRangeEq((a * b).container(), multiply(a, b).container());
   };
 
   "destination add fills a preallocated result and returns it"_test = [] {
-    Dense<double, dyn, dyn> a(2, 2);
+    Dense<double, Dyn, Dyn> a(dims(2, 2));
     a[0, 0] = 1.0; a[0, 1] = 2.0; a[1, 0] = 3.0; a[1, 1] = 4.0;
-    Dense<double, dyn, dyn> b(2, 2);
+    Dense<double, Dyn, Dyn> b(dims(2, 2));
     b[0, 0] = 10.0; b[0, 1] = 20.0; b[1, 0] = 30.0; b[1, 1] = 40.0;
-    Dense<double, dyn, dyn> dst(2, 2);
+    Dense<double, Dyn, Dyn> dst(dims(2, 2));
     auto& r = add(a, b, dst);
     expectTrue(&r == &dst);
     expectEq(dst[0, 0], 11.0);
@@ -161,11 +161,11 @@ auto main() -> int {
   };
 
   "multiplyAdd accumulates A·B into the destination"_test = [] {
-    Dense<double, dyn, dyn> a(2, 2);
+    Dense<double, Dyn, Dyn> a(dims(2, 2));
     a[0, 0] = 1.0; a[0, 1] = 2.0; a[1, 0] = 3.0; a[1, 1] = 4.0;
-    Dense<double, dyn, dyn> b(2, 2);
+    Dense<double, Dyn, Dyn> b(dims(2, 2));
     b[0, 0] = 5.0; b[0, 1] = 6.0; b[1, 0] = 7.0; b[1, 1] = 8.0;
-    Dense<double, dyn, dyn> dst(2, 2);
+    Dense<double, Dyn, Dyn> dst(dims(2, 2));
     dst[0, 0] = 1.0; dst[0, 1] = 1.0; dst[1, 0] = 1.0; dst[1, 1] = 1.0;
     multiplyAdd(a, b, dst);  // A·B = [19 22; 43 50], plus the ones already in dst
     expectEq(dst[0, 0], 20.0);
@@ -173,9 +173,9 @@ auto main() -> int {
   };
 
   "operator+= mutates the left operand in place"_test = [] {
-    Dense<double, dyn, dyn> a(2, 2);
+    Dense<double, Dyn, Dyn> a(dims(2, 2));
     a[0, 0] = 1.0; a[0, 1] = 2.0; a[1, 0] = 3.0; a[1, 1] = 4.0;
-    Dense<double, dyn, dyn> b(2, 2);
+    Dense<double, Dyn, Dyn> b(dims(2, 2));
     b[0, 0] = 10.0; b[0, 1] = 20.0; b[1, 0] = 30.0; b[1, 1] = 40.0;
     auto& r = (a += b);
     expectTrue(&r == &a);
@@ -184,9 +184,9 @@ auto main() -> int {
   };
 
   "operator*= with a square right operand"_test = [] {
-    Dense<double, dyn, dyn> a(2, 2);
+    Dense<double, Dyn, Dyn> a(dims(2, 2));
     a[0, 0] = 1.0; a[0, 1] = 2.0; a[1, 0] = 3.0; a[1, 1] = 4.0;
-    Dense<double, dyn, dyn> b(2, 2);
+    Dense<double, Dyn, Dyn> b(dims(2, 2));
     b[0, 0] = 5.0; b[0, 1] = 6.0; b[1, 0] = 7.0; b[1, 1] = 8.0;
     a *= b;  // [1 2;3 4]·[5 6;7 8] = [19 22; 43 50]
     expectEq(a[0, 0], 19.0);
@@ -223,10 +223,10 @@ auto main() -> int {
   };
 
   "destination multiply into a sub-block of a larger matrix"_test = [] {
-    Dense<double, dyn, dyn> big(3, 3);  // fill the top-left 2x2 only
-    Dense<double, dyn, dyn> a(2, 2);
+    Dense<double, Dyn, Dyn> big(dims(3, 3));  // fill the top-left 2x2 only
+    Dense<double, Dyn, Dyn> a(dims(2, 2));
     a[0, 0] = 1.0; a[0, 1] = 2.0; a[1, 0] = 3.0; a[1, 1] = 4.0;
-    Dense<double, dyn, dyn> id(2, 2);
+    Dense<double, Dyn, Dyn> id(dims(2, 2));
     id[0, 0] = 1.0; id[1, 1] = 1.0;
     auto block = std::submdspan(big.toMdspan(), std::pair{0, 2}, std::pair{0, 2});
     multiply(a, id, block);  // writes the product into big's corner, no copy
@@ -236,9 +236,9 @@ auto main() -> int {
   };
 
   "identity leaves the operand unchanged"_test = [] {
-    Dense<double, dyn, dyn> a(2, 2);
+    Dense<double, Dyn, Dyn> a(dims(2, 2));
     a[0, 0] = 3.0; a[0, 1] = 5.0; a[1, 0] = 7.0; a[1, 1] = 9.0;
-    Dense<double, dyn, dyn> id(2, 2);
+    Dense<double, Dyn, Dyn> id(dims(2, 2));
     id[0, 0] = 1.0; id[1, 1] = 1.0;
     auto c = a * id;
     expectEq(c[0, 0], 3.0);
@@ -248,7 +248,7 @@ auto main() -> int {
   };
 
   "dynamic matrix value-init infers shape from the literal"_test = [] {
-    Dense<double, dyn, dyn> m{{1.0, 2.0, 3.0}, {4.0, 5.0, 6.0}};
+    Dense<double, Dyn, Dyn> m{{1.0, 2.0, 3.0}, {4.0, 5.0, 6.0}};
     expectEq(m.extent(0), 2u);
     expectEq(m.extent(1), 3u);
     expectEq(m[0, 0], 1.0);

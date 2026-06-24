@@ -130,7 +130,7 @@ constexpr auto solve(const Lu<T, E>& lu, const B& b) {
   assert(static_cast<std::size_t>(vb.extent(0)) == n && "RHS size must match the system");
   assert(!lu.singular && "solve() on a singular factorization");
 
-  HeapResult<R, std::extents<std::size_t, E::static_extent(0)>> x(n);
+  HeapResult<R, std::extents<std::size_t, E::static_extent(0)>> x(dims(n));
   const auto ord = lu.perm.span();
   for (std::size_t i = 0; i < n; ++i) x[i] = static_cast<R>(vb[ord[i]]);  // x ← P·b (gather)
   const auto& f = lu.factors;
@@ -153,7 +153,7 @@ constexpr auto solve(const Lu<T, E>& lu, const B& b) {
   assert(static_cast<std::size_t>(vb.extent(0)) == n && "RHS rows must match the system");
   assert(!lu.singular && "solve() on a singular factorization");
 
-  HeapResult<R, std::extents<std::size_t, E::static_extent(0), std::dynamic_extent>> x(n, rhs);
+  HeapResult<R, std::extents<std::size_t, E::static_extent(0), std::dynamic_extent>> x(dims(n, rhs));
   for (std::size_t i = 0; i < n; ++i)
     for (std::size_t k = 0; k < rhs; ++k) x[i, k] = static_cast<R>(vb[i, k]);
   lu.perm.permuteRows(x);  // X ← P·B (rank-2 gather)
@@ -195,7 +195,7 @@ constexpr auto inverse(const M& a) {
   const std::size_t n = static_cast<std::size_t>(va.extent(0));
   auto lu = luDecompose(a);
   assert(!lu.singular && "inverse of a singular matrix");
-  HeapResult<T, E> id(n, n);
+  HeapResult<T, E> id(dims(n, n));
   identity(id);
   return solve(lu, id);
 }

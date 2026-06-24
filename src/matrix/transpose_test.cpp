@@ -68,7 +68,7 @@ auto main() -> int {
 
   "materialize copies into independent storage"_test = [] {
     InlineDense<int, 2, 3> m{{1, 2, 3}, {4, 5, 6}};
-    Dense<int, dyn, dyn> r = transposed(m);  // converting-from-mdspan ctor copies
+    Dense<int, Dyn, Dyn> r = transposed(m);  // converting-from-mdspan ctor copies
     r[0, 0] = 99;
     expectEq((m[0, 0]), 1);               // source untouched
     expectEq((transposed(m)[0, 0]), 1);
@@ -78,7 +78,7 @@ auto main() -> int {
   };
 
   "materialize converts element type"_test = [] {
-    Dense<double, dyn, dyn> r = transposed(InlineDense<int, 2, 2>{{1, 2}, {3, 4}});
+    Dense<double, Dyn, Dyn> r = transposed(InlineDense<int, 2, 2>{{1, 2}, {3, 4}});
     expectEq(r.extent(0), std::size_t{2});
     expectEq((r[0, 1]), 3.0);  // = src[1,0] = 3
   };

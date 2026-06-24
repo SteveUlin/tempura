@@ -91,7 +91,7 @@ constexpr auto qrDecompose(const M& a) {
 template <typename T, typename E>
 constexpr auto formQ(const Qr<T, E>& qr) {
   const std::size_t n = qr.rows();
-  HeapResult<T, E> q(n, n);
+  HeapResult<T, E> q(dims(n, n));
   identity(q);
   const auto& f = qr.factors;
   for (std::size_t jj = n; jj-- > 0;) {
@@ -110,7 +110,7 @@ constexpr auto formQ(const Qr<T, E>& qr) {
 template <typename T, typename E>
 constexpr auto formR(const Qr<T, E>& qr) {
   const std::size_t n = qr.rows();
-  HeapResult<T, E> r(n, n);
+  HeapResult<T, E> r(dims(n, n));
   const auto& f = qr.factors;
   for (std::size_t i = 0; i < n; ++i)
     for (std::size_t j = 0; j < n; ++j) r[i, j] = (j >= i) ? f[i, j] : T{};
@@ -126,7 +126,7 @@ constexpr auto solve(const Qr<T, E>& qr, const B& b) {
   assert(!qr.singular && "solve() on a singular QR factorization (zero R pivot)");
   const auto& f = qr.factors;
 
-  HeapResult<T, std::extents<std::size_t, E::static_extent(0)>> x(n);
+  HeapResult<T, std::extents<std::size_t, E::static_extent(0)>> x(dims(n));
   for (std::size_t i = 0; i < n; ++i) x[i] = static_cast<T>(vb[i]);
 
   for (std::size_t j = 0; j < n; ++j) {  // x ← Qᵀ·b, reflections in forward order
