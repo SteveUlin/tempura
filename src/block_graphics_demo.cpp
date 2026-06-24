@@ -21,26 +21,35 @@ void header(std::string_view title) {
   std::println("\n\033[1m── {} {}\033[0m", title, std::string(static_cast<size_t>(dashes), '-'));
 }
 
-// Rasterize an implicit shape over a w×h character canvas: for each cell, sample
-// the predicate at all 8×24 sub-pixels to build its coverage FillPattern, then
-// render with the best-matching mosaic glyph. inside() takes normalized [0,1]²
-// canvas coordinates.
+// Rasterize an implicit shape over a w×h character canvas with anti-aliasing.
+// Per cell: sample the predicate across the fine 32×96 density grid, let the
+// variance-aware scorer pick the glyph whose filled region best *aligns* with
+// the shape's edge (its variance penalty is the anti-jaggedness term), then
+// render fg/bg so partial-coverage cells blend shape-color into the background.
+// Binary point-sampling + the scorer's 4×4 downsample gives 17 levels of edge AA.
 template <typename Inside>
 auto drawShape(int w, int h, Inside inside, RGB color, std::string_view title) -> std::string {
+  const auto& lib = getCharacterLibrary();
+  const auto scorer = scorerVarianceAware(0.5);
+  const RGB canvas{18, 18, 26};  // dark background the edges anti-alias against
+
   std::string out;
   frameTop(out, w, title);
   for (int cy = 0; cy < h; ++cy) {
     out += "│";
     for (int cx = 0; cx < w; ++cx) {
-      FillPattern pat;
-      for (int sy = 0; sy < kSubpixelHeight; ++sy) {
-        const double ny = (cy + (sy + 0.5) / kSubpixelHeight) / h;
-        for (int sx = 0; sx < kSubpixelWidth; ++sx) {
-          const double nx = (cx + (sx + 0.5) / kSubpixelWidth) / w;
-          if (inside(nx, ny)) pat.set(static_cast<size_t>(subpixelIndex(sx, sy)));
+      DensityGrid grid{};
+      for (int dy = 0; dy < kDensityHeight; ++dy) {
+        const double ny = (cy + (dy + 0.5) / kDensityHeight) / h;
+        for (int dx = 0; dx < kDensityWidth; ++dx) {
+          const double nx = (cx + (dx + 0.5) / kDensityWidth) / w;
+          grid[static_cast<size_t>(densityIndex(dx, dy))] = inside(nx, ny) ? 1.0 : 0.0;
         }
       }
-      out += (pat.count() == 0) ? std::string{" "} : color.wrap(findBestChar(pat).utf8);
+      const auto res = scorer(grid, lib);
+      const RGB fg = lerpColor(canvas, color, std::clamp(res.fg_intensity, 0.0, 1.0));
+      const RGB bg = lerpColor(canvas, color, std::clamp(res.bg_intensity, 0.0, 1.0));
+      out += fg.wrapFgBg(res.utf8, bg);
     }
     out += "│\n";
   }
