@@ -52,5 +52,18 @@ auto main() -> int {
     expectEq(hiresHeatmap(std::vector<Point>{}), std::string{});
   };
 
+  "drawMosaic renders a coverage field"_test = [] {
+    // A constant-1 field fills every cell with the full block; constant-0 leaves
+    // none (the binary shape-match selects ' ' there, so continuity can't leak).
+    const auto full = drawMosaic([](double, double) { return 1.0; },
+                                 {.width = 8, .height = 4, .show_border = false});
+    const auto empty = drawMosaic([](double, double) { return 0.0; },
+                                  {.width = 8, .height = 4, .show_border = false});
+    expectTrue(full.find("█") != std::string::npos);
+    expectTrue(empty.find("█") == std::string::npos);
+    expectTrue(!drawMosaic([](double x, double) { return x < 0.5 ? 1.0 : 0.0; },
+                           {.width = 12, .height = 6}).empty());
+  };
+
   return TestRegistry::result();
 }

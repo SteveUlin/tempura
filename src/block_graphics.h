@@ -692,4 +692,106 @@ auto hiresHeatmap(R&& points, const HiresHeatmapOptions& opts = {})
   return result;
 }
 
+struct MosaicOptions {
+  int64_t width = 48;
+  int64_t height = 22;
+  RGB color{120, 220, 255};    // shape / foreground
+  RGB background{18, 18, 26};   // canvas the edges anti-alias against
+  double continuity = 8.0;      // weight of neighbor-edge continuity vs density fit
+  bool show_border = true;
+  std::string title;
+};
+
+// Render a coverage field cover(nx, ny) ∈ [0,1] over a character canvas (nx, ny
+// are normalized [0,1] canvas coordinates) as mosaic glyphs with anti-aliased
+// fg/bg color. Glyph selection is CONTINUITY-AWARE: cells are chosen greedily
+// left→right, top→bottom, and each prefers a glyph whose edge subpixels line up
+// with its already-chosen left/top neighbor — so a diagonal tiles into a smooth
+// line instead of the lumps a per-cell argmax leaves where it tips between wedge
+// families. `continuity` trades that smoothness against raw density fit.
+template <typename Cover>
+auto drawMosaic(Cover&& cover, const MosaicOptions& opts) -> std::string {
+  if (opts.width <= 0 || opts.height <= 0) return "";
+  const auto& lib = getCharacterLibrary();
+  const int64_t W = opts.width, H = opts.height;
+  const auto cell = [W](int64_t cx, int64_t cy) { return static_cast<size_t>(cy * W + cx); };
+
+  std::vector<const BlockChar*> chosen(static_cast<size_t>(W * H), &lib[0]);
+  std::vector<double> fg_int(static_cast<size_t>(W * H), 0.0);
+  std::vector<double> bg_int(static_cast<size_t>(W * H), 0.0);
+
+  for (int64_t cy = 0; cy < H; ++cy) {
+    for (int64_t cx = 0; cx < W; ++cx) {
+      std::array<double, kTotalSubpixels> target{};
+      for (int py = 0; py < kSubpixelHeight; ++py) {
+        const double ny = (static_cast<double>(cy) + (py + 0.5) / kSubpixelHeight) / static_cast<double>(H);
+        for (int px = 0; px < kSubpixelWidth; ++px) {
+          const double nx = (static_cast<double>(cx) + (px + 0.5) / kSubpixelWidth) / static_cast<double>(W);
+          target[static_cast<size_t>(subpixelIndex(px, py))] = std::clamp(cover(nx, ny), 0.0, 1.0);
+        }
+      }
+
+      const BlockChar* left = (cx > 0) ? chosen[cell(cx - 1, cy)] : nullptr;
+      const BlockChar* top = (cy > 0) ? chosen[cell(cx, cy - 1)] : nullptr;
+
+      const BlockChar* best = &lib[0];
+      double best_score = -1e18, best_fg = 0.0, best_bg = 0.0;
+      for (const auto& ch : lib) {
+        double fsum = 0.0, bsum = 0.0;
+        int fcount = 0, bcount = 0;
+        for (int i = 0; i < kTotalSubpixels; ++i) {
+          if (ch.pattern[static_cast<size_t>(i)]) { fsum += target[static_cast<size_t>(i)]; ++fcount; }
+          else { bsum += target[static_cast<size_t>(i)]; ++bcount; }
+        }
+        const double fg = fcount ? fsum / fcount : 0.0;  // for AA color only
+        const double bg = bcount ? bsum / bcount : 0.0;
+        // Select by binary shape match. Using the fg/bg means here instead would
+        // make every glyph tie (error 0) on a uniform cell — then continuity has
+        // nothing to push against and propagates fill into empty cells.
+        double score = 0.0;
+        for (int i = 0; i < kTotalSubpixels; ++i) {
+          const double err = target[static_cast<size_t>(i)] - (ch.pattern[static_cast<size_t>(i)] ? 1.0 : 0.0);
+          score -= err * err;
+        }
+        // Reward edge agreement with the already-placed neighbors.
+        if (left != nullptr) {
+          int match = 0;
+          for (int y = 0; y < kSubpixelHeight; ++y) {
+            match += left->pattern[static_cast<size_t>(subpixelIndex(kSubpixelWidth - 1, y))]
+                  == ch.pattern[static_cast<size_t>(subpixelIndex(0, y))];
+          }
+          score += opts.continuity * (static_cast<double>(match) / kSubpixelHeight);
+        }
+        if (top != nullptr) {
+          int match = 0;
+          for (int x = 0; x < kSubpixelWidth; ++x) {
+            match += top->pattern[static_cast<size_t>(subpixelIndex(x, kSubpixelHeight - 1))]
+                  == ch.pattern[static_cast<size_t>(subpixelIndex(x, 0))];
+          }
+          score += opts.continuity * (static_cast<double>(match) / kSubpixelWidth);
+        }
+        if (score > best_score) { best_score = score; best = &ch; best_fg = fg; best_bg = bg; }
+      }
+      chosen[cell(cx, cy)] = best;
+      fg_int[cell(cx, cy)] = best_fg;
+      bg_int[cell(cx, cy)] = best_bg;
+    }
+  }
+
+  std::string out;
+  if (opts.show_border) frameTop(out, W, opts.title);
+  for (int64_t cy = 0; cy < H; ++cy) {
+    if (opts.show_border) out += "│";
+    for (int64_t cx = 0; cx < W; ++cx) {
+      const RGB fg = lerpColor(opts.background, opts.color, std::clamp(fg_int[cell(cx, cy)], 0.0, 1.0));
+      const RGB bg = lerpColor(opts.background, opts.color, std::clamp(bg_int[cell(cx, cy)], 0.0, 1.0));
+      out += fg.wrapFgBg(chosen[cell(cx, cy)]->utf8, bg);
+    }
+    if (opts.show_border) out += "│";
+    out += "\n";
+  }
+  if (opts.show_border) frameBottom(out, W);
+  return out;
+}
+
 }  // namespace tempura
