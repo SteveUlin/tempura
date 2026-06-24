@@ -80,14 +80,30 @@ auto main() -> int {
   };
 
   "axis labels appear in the gutter and x-tick row"_test = [] {
-    // Plot over x∈[-2,2] so ticks read -2…2. Asserting on labels that contain
-    // '.' or '-' is robust: ANSI color codes are only digits and ';', so a bare
-    // "2" could be a color channel, but "-2" and "0.5" can only be a label.
+    // Plot over x∈[-2,2] so x-ticks read -2…2. Asserting on "-2" is robust: ANSI
+    // color codes are digits and ';' only, so a '-' can only come from a label.
+    // (y-tick values shift with snapZeroToAxis, so assert the glyphs, not values.)
     auto result = plotFn([](double x) { return std::sin(x); }, -2, 2, 60, 12);
-    expectTrue(result.find("0.5") != std::string::npos);  // a nice y-tick
-    expectTrue(result.find("┤") != std::string::npos);    // a y-tick mark
-    expectTrue(result.find("┼") != std::string::npos);    // the zero crossing
-    expectTrue(result.find("-2") != std::string::npos);   // an x-tick label
+    expectTrue(result.find("┤") != std::string::npos);   // a y-tick mark
+    expectTrue(result.find("┼") != std::string::npos);   // the zero crossing
+    expectTrue(result.find("-2") != std::string::npos);  // an x-tick label
+  };
+
+  "snapZeroToAxis puts y=0 exactly on a cell center (and never clips)"_test = [] {
+    auto check = [](double lo, double hi, int64_t h) {
+      double a = lo, b = hi;
+      snapZeroToAxis(a, b, h);
+      expectTrue(a <= lo + 1e-12 && b >= hi - 1e-12);  // data range only grows
+      // a cell center is dot row 4c+1.5 of the 4h-row grid; y=0 must land there
+      const double den = 4.0 * static_cast<double>(h) - 1.0;
+      const double dot_row = b / (b - a) * den;
+      const double r = std::fmod(dot_row - 1.5, 4.0);
+      expectTrue(std::abs(r) < 1e-6 || std::abs(std::abs(r) - 4.0) < 1e-6);
+    };
+    check(-0.7, 1.3, 16);
+    check(-2.0, 5.0, 12);
+    check(-1.0, 0.2, 20);
+    check(-3.0, 1.0, 8);
   };
 
   "constant function"_test = [] {

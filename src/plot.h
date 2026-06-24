@@ -223,6 +223,9 @@ constexpr auto buildBarChartText(auto&& bars) -> std::string {
     if (bar.color.has_value()) {
       result += bar.color->ansiPrefix();
     }
+    // Sextant-34 fills the cell's middle third: a thick centered bar that still
+    // aligns with the ├ connector. Box-drawing ─/━ are centered but too thin for
+    // a bar; this is the deliberate trade of broad font coverage for thickness.
     for (int64_t j = 0; j < std::max(int64_t{0}, bar.length); ++j) {
       result += "🬋";
     }
@@ -675,6 +678,33 @@ inline auto axisRow(const Viewport& vp, double min_y, double max_y, bool show_ax
   return std::clamp(vp.row(0.0), int64_t{0}, vp.rows - 1) / 4;
 }
 
+// The ─/┼ axis glyph renders at a character cell's vertical *center*, but the
+// curve is drawn at 4× that resolution (Braille dots), so y=0 lands anywhere in
+// a cell and the line floats up to half a cell off true zero. Fix it at the
+// source: expand the y-range (never clipping data) so y=0 falls exactly on a
+// cell center — dot row 4c+1.5 — where the glyph actually sits. Skip the rare
+// blow-up when zero is inside the outermost half-cell (small error, near an edge).
+inline void snapZeroToAxis(double& min_y, double& max_y, int64_t height) {
+  if (!(min_y < 0.0 && max_y > 0.0) || height < 1) return;
+  const double range = max_y - min_y;
+  const double below = -min_y;
+  const double f = max_y / range;  // zero's fraction of the way down from the top
+  const double den = std::max<double>(4 * height - 1, 1);
+  const int64_t c = std::clamp<int64_t>(std::lround((f * den - 1.5) / 4.0), 0, height - 1);
+  const double p = (4.0 * c + 1.5) / den;  // target fraction: center of cell row c
+  double lo = min_y;
+  double hi = max_y;
+  if (p >= f) {
+    hi = p * below / (1.0 - p);  // expand upward to push zero down to the center
+  } else {
+    lo = -(max_y * (1.0 - p) / p);  // expand downward
+  }
+  if (hi - lo <= range * 1.5) {  // reject pathological expansion near an edge
+    min_y = lo;
+    max_y = hi;
+  }
+}
+
 // High-resolution function plot. Samples one point per dot column and connects
 // consecutive samples with a Bresenham segment.
 template <RealFunction F>
@@ -696,6 +726,7 @@ inline auto plotFn(F&& fn, double min_x, double max_x, const PlotOptions& opts)
     max_y = std::max(max_y, y);
   }
   ensureRange(min_y, max_y);
+  if (opts.show_axes) snapZeroToAxis(min_y, max_y, opts.height);
 
   const Viewport vp{min_x, max_x, min_y, max_y, n, canvas.dotRows()};
   int64_t prev = std::clamp(vp.row(ys[0]), int64_t{0}, vp.rows - 1);
@@ -760,6 +791,7 @@ inline auto linesPlot(std::span<const Series> series, double min_x, double max_x
     }
   }
   ensureRange(min_y, max_y);
+  if (opts.show_axes) snapZeroToAxis(min_y, max_y, opts.height);
 
   const Viewport vp{min_x, max_x, min_y, max_y, n, canvas.dotRows()};
   for (size_t s = 0; s < series.size(); ++s) {
@@ -803,6 +835,7 @@ inline auto scatterPlot(std::span<const Point> points,
   max_x += x_pad;
   min_y -= y_pad;
   max_y += y_pad;
+  if (opts.show_axes) snapZeroToAxis(min_y, max_y, opts.height);
 
   BrailleCanvas canvas{opts.width, opts.height};
   const Viewport vp{min_x, max_x, min_y, max_y, canvas.dotCols(), canvas.dotRows()};
