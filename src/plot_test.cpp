@@ -239,7 +239,7 @@ auto main() -> int {
     expectEq(lerpColor(RGB{0, 0, 0}, RGB{255, 255, 255}, 1.0).r, uint8_t{255});
     for (int c = 0; c <= 255; ++c) {
       const auto byte = static_cast<uint8_t>(c);
-      expectEq(linearToSrgb(srgbToLinear(byte)), byte);
+      expectEq(linearToChannel(channelToLinear(byte)), byte);
     }
   };
 

@@ -346,27 +346,31 @@ struct Series {
   std::string label;
 };
 
-// sRGB ↔ linear light (IEC 61966-2-1). Color math — averaging, interpolation —
-// must happen in LINEAR space: sRGB is gamma-encoded (it spends more code values
-// on shadows to match human vision), so blending the encoded bytes directly is
-// ~2× too dark. Linearize → blend → re-encode.
-inline auto srgbToLinear(uint8_t c) -> double {
-  const double s = c / 255.0;
+// sRGB ↔ linear light (IEC 61966-2-1), both normalized to [0,1]. Color math —
+// averaging, interpolation, LAB conversion — must happen in LINEAR space: sRGB
+// is gamma-encoded (more code values in shadows, to match human vision), so
+// blending the encoded values directly is ~2× too dark. These are the canonical
+// transfer functions; byte-color and LAB code both build on them.
+inline auto srgbToLinear(double s) -> double {
   return s <= 0.04045 ? s / 12.92 : std::pow((s + 0.055) / 1.055, 2.4);
 }
 
-inline auto linearToSrgb(double v) -> uint8_t {
-  v = std::clamp(v, 0.0, 1.0);
-  const double s = v <= 0.0031308 ? v * 12.92 : 1.055 * std::pow(v, 1.0 / 2.4) - 0.055;
-  return static_cast<uint8_t>(s * 255.0 + 0.5);  // +0.5 rounds rather than truncates
+inline auto linearToSrgb(double v) -> double {
+  return v <= 0.0031308 ? v * 12.92 : 1.055 * std::pow(v, 1.0 / 2.4) - 0.055;
+}
+
+// 8-bit channel ↔ linear: the conveniences the byte-color blenders use.
+inline auto channelToLinear(uint8_t c) -> double { return srgbToLinear(c / 255.0); }
+inline auto linearToChannel(double v) -> uint8_t {
+  return static_cast<uint8_t>(std::clamp(linearToSrgb(v), 0.0, 1.0) * 255.0 + 0.5);
 }
 
 // Interpolate between two colors at fraction t∈[0,1], mixed in linear light.
 inline auto lerpColor(const RGB& a, const RGB& b, double t) -> RGB {
   t = std::clamp(t, 0.0, 1.0);
   const auto mix = [t](uint8_t x, uint8_t y) {
-    const double lx = srgbToLinear(x);
-    return linearToSrgb(lx + t * (srgbToLinear(y) - lx));
+    const double lx = channelToLinear(x);
+    return linearToChannel(lx + t * (channelToLinear(y) - lx));
   };
   return RGB{mix(a.r, b.r), mix(a.g, b.g), mix(a.b, b.b)};
 }
@@ -622,16 +626,16 @@ class BrailleCanvas {
     double r = 0, g = 0, b = 0;
     uint32_t n = 0;
     void add(const RGB& c) {
-      r += srgbToLinear(c.r);
-      g += srgbToLinear(c.g);
-      b += srgbToLinear(c.b);
+      r += channelToLinear(c.r);
+      g += channelToLinear(c.g);
+      b += channelToLinear(c.b);
       ++n;
     }
     void merge(const Accum& o) { r += o.r; g += o.g; b += o.b; n += o.n; }
     auto blend(const RGB& fallback) const -> RGB {
       if (n == 0) return fallback;
       const double d = n;
-      return RGB{linearToSrgb(r / d), linearToSrgb(g / d), linearToSrgb(b / d)};
+      return RGB{linearToChannel(r / d), linearToChannel(g / d), linearToChannel(b / d)};
     }
   };
 
