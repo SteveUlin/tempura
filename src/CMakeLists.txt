@@ -82,6 +82,7 @@ tempura_test(plot           LABEL plot)  # terminal plotting
 tempura_demo(plot)                       # visual spotcheck: cmake --build … --target plot_demo
 tempura_test(block_graphics LABEL plot)  # mosaic drawing: best-fit glyphs + LAB color
 tempura_demo(block_graphics)             # visual spotcheck of the mosaic renderer
+tempura_demo(glyphs)                     # glyph gallery: every mosaic char + its fill pattern
 
 # Module subdirectories — each owns its own CMakeLists with tempura_test() bricks.
 add_subdirectory(matrix)
