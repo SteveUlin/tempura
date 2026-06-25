@@ -7,54 +7,22 @@
 
 #pragma once
 
-// Core concepts and type traits
-#include "concepts.h"
-
-// Receiver implementations
-#include "receivers.h"
-
-// Fundamental sender types
-#include "just.h"
-
-// Sender adaptors
-#include "then.h"
-#include "upon_error.h"
-#include "upon_stopped.h"
-#include "let_value.h"
-#include "let_error.h"
-#include "let_stopped.h"
-#include "on.h"
-#include "repeat_effect.h"
-
-// Algorithms
-#include "algorithms.h"
-
-// Schedulers
-#include "schedulers.h"
-
-// Parallel composition
-#include "when_all.h"
-#include "when_any.h"
-
-// Multi-shot and bulk operations
-#include "split.h"
-#include "bulk.h"
-
-namespace tempura {
-
-// ============================================================================
-// Parallel Composition
-// ============================================================================
-
-// ============================================================================
-// TODO: Implement ThreadPoolScheduler
-// ============================================================================
-
-// ============================================================================
-// Stop Token and Environment Support
-// ============================================================================
-
 #include "task/stop_token.h"
 #include "task/env.h"
-
-}  // namespace tempura
+#include "task/concepts.h"
+#include "task/receivers.h"
+#include "task/just.h"
+#include "task/then.h"
+#include "task/upon_error.h"
+#include "task/upon_stopped.h"
+#include "task/let_value.h"
+#include "task/let_error.h"
+#include "task/let_stopped.h"
+#include "task/on.h"
+#include "task/repeat_effect.h"
+#include "task/algorithms.h"
+#include "task/schedulers.h"
+#include "task/when_all.h"
+#include "task/when_any.h"
+#include "task/split.h"
+#include "task/bulk.h"

@@ -22,7 +22,7 @@ class ThreadPool {
   // Add a task to the thread pool
   template <typename F, typename... Args>
   auto enqueue(F&& f, Args&&... args) {
-    using ReturnType = std::result_of_t<F(Args...)>;
+    using ReturnType = std::invoke_result_t<F, Args...>;
 
     assert(!stop_ && "Cannot enqueue tasks while the threadpool is stopped");
 

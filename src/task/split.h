@@ -189,7 +189,7 @@ class SplitSharedState {
 
  private:
   void notifyWaiters() {
-    std::vector<std::function<void()>> to_notify;
+    std::vector<std::move_only_function<void()>> to_notify;
     {
       std::lock_guard lock(mutex_);
       to_notify = std::move(waiters_);
@@ -205,7 +205,7 @@ class SplitSharedState {
   State state_;
   std::optional<ValueTuple> value_;
   std::optional<ErrorVariant> error_;
-  std::vector<std::function<void()>> waiters_;
+  std::vector<std::move_only_function<void()>> waiters_;
 
   // Inner operation state (constructed when sender is started)
   using InnerOpState =

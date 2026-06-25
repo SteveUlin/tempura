@@ -11,7 +11,7 @@
 
 add_library(tempura STATIC)
 add_library(tempura::tempura ALIAS tempura)
-target_sources(tempura PRIVATE json.cpp)
+target_sources(tempura PRIVATE json.cpp synchronization/threadpool.cpp)
 target_include_directories(tempura PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
 target_link_libraries(tempura PUBLIC tempura_flags)
 target_compile_features(tempura PUBLIC cxx_std_26)
@@ -88,3 +88,4 @@ tempura_demo(glyphs)                     # glyph gallery: every mosaic char + it
 add_subdirectory(matrix)
 add_subdirectory(autodiff)
 add_subdirectory(math)
+add_subdirectory(task)

@@ -64,13 +64,18 @@ struct UniqueTypes<T, Rest...> {
                                         std::declval<rest_unique>()));
 };
 
-// Convert tuple to variant
+// Convert tuple to variant (std::monostate fallback for empty tuple)
 template <typename Tuple>
 struct TupleToVariant;
 
-template <typename... Ts>
-struct TupleToVariant<std::tuple<Ts...>> {
-  using type = std::variant<Ts...>;
+template <>
+struct TupleToVariant<std::tuple<>> {
+  using type = std::variant<std::monostate>;
+};
+
+template <typename T, typename... Ts>
+struct TupleToVariant<std::tuple<T, Ts...>> {
+  using type = std::variant<T, Ts...>;
 };
 
 // Merge and deduplicate error types from all senders

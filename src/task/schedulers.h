@@ -14,10 +14,6 @@
 
 namespace tempura {
 
-// ============================================================================
-// InlineScheduler - executes immediately on calling thread
-// ============================================================================
-
 // Operation state for inline schedule sender
 template <typename R>
 class InlineScheduleOperationState {
@@ -62,10 +58,6 @@ class InlineScheduler {
 };
 
 static_assert(Scheduler<InlineScheduler>);
-
-// ============================================================================
-// EventLoopScheduler - executes on EventLoop's worker thread
-// ============================================================================
 
 // Operation state for event loop schedule sender
 template <typename R>
@@ -146,10 +138,6 @@ class EventLoopScheduler {
 
 static_assert(Scheduler<EventLoopScheduler>);
 
-// ============================================================================
-// ThreadPoolScheduler - executes on a thread pool's worker threads
-// ============================================================================
-
 // Operation state for thread pool schedule sender
 template <typename R>
 class ThreadPoolScheduleOperationState {
@@ -225,10 +213,6 @@ class ThreadPoolScheduler {
 };
 
 static_assert(Scheduler<ThreadPoolScheduler>);
-
-// ============================================================================
-// NewThreadContext - manages threads spawned on demand
-// ============================================================================
 
 // NewThreadContext manages a collection of threads that are created on demand
 //
@@ -350,10 +334,6 @@ class NewThreadScheduler {
 };
 
 static_assert(Scheduler<NewThreadScheduler>);
-
-// ============================================================================
-// TimerScheduler - executes on a timer queue at scheduled times
-// ============================================================================
 
 // Operation state for delay sender - computes time at start(), not creation
 template <typename R, typename Duration>

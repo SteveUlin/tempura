@@ -29,17 +29,21 @@ class ManualLifetime {
 
   // Construct T in-place from constructor arguments.
   //
-  // Example:
-  //   storage.construct(42, "hello");  // Calls T(int, const char*)
-  //
-  // PRECONDITION:
-  //   Storage is not currently constructed (your responsibility)
-  // POSTCONDITION:
-  //   Storage contains a constructed T
+  // PRECONDITION: storage is not currently constructed (your responsibility)
   template <typename... Args>
   constexpr void construct(Args&&... args) noexcept(
       std::is_nothrow_constructible_v<T, Args...>) {
     std::construct_at(&storage_.value_, std::forward<Args>(args)...);
+  }
+
+  // Construct T from the return value of a zero-argument factory callable.
+  // Placement new triggers guaranteed copy elision when factory() returns a
+  // prvalue — the only way to in-place-construct non-moveable operation states.
+  //
+  // PRECONDITION: storage is not currently constructed (your responsibility)
+  template <typename F>
+  void constructWith(F&& factory) {
+    ::new (static_cast<void*>(&storage_.value_)) T(std::forward<F>(factory)());
   }
 
   // Destroy the contained object.

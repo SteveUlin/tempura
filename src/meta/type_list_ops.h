@@ -1,6 +1,6 @@
 #pragma once
 
-#include <experimental/meta>
+#include <meta>
 #include <vector>
 
 #include "meta/tags.h"
@@ -32,27 +32,23 @@ struct Concat<TypeList<Ts...>, TypeList<Us...>, Rest...> {
 template <typename... Lists>
 using Concat_t = typename Concat<Lists...>::Type;
 
-// Filter — keep types matching predicate using template for
-template <template <typename> class Pred, typename List>
+// Filter — keep types matching predicate (recursive template, no heap in consteval)
+template <template <typename> class Pred, typename List, typename Acc = TypeList<>>
 struct Filter;
 
-template <template <typename> class Pred, typename... Ts>
-struct Filter<Pred, TypeList<Ts...>> {
- private:
-  static consteval auto compute() -> std::meta::info {
-    std::vector<std::meta::info> result;
-    template for (constexpr auto arg : std::meta::template_arguments_of(^^TypeList<Ts...>)) {
-      using Elem = [:arg:];
-      if (Pred<Elem>::value) {
-        result.push_back(arg);
-      }
-    }
-    return std::meta::substitute(^^TypeList, result);
-  }
-
- public:
-  using Type = [:compute():];
+// Base: list exhausted — return accumulator
+template <template <typename> class Pred, typename Acc>
+struct Filter<Pred, TypeList<>, Acc> {
+  using Type = Acc;
 };
+
+// Head matches predicate: append to accumulator, recurse
+template <template <typename> class Pred, typename Head, typename... Tail, typename... Acc>
+struct Filter<Pred, TypeList<Head, Tail...>, TypeList<Acc...>>
+    : std::conditional_t<
+          Pred<Head>::value,
+          Filter<Pred, TypeList<Tail...>, TypeList<Acc..., Head>>,
+          Filter<Pred, TypeList<Tail...>, TypeList<Acc...>>> {};
 
 template <template <typename> class Pred, typename List>
 using Filter_t = typename Filter<Pred, List>::Type;

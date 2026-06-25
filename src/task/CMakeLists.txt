@@ -1,0 +1,18 @@
+# task — P2300 sender/receiver substrate: schedulers, stop tokens, async composition.
+# tempura_test() is defined in the parent src/CMakeLists.txt.
+tempura_test(bulk                    LABEL task)
+tempura_test(completion_signatures   LABEL task)
+tempura_test(concepts                LABEL task)
+tempura_test(env                     LABEL task)
+tempura_test(let_value      LABEL task)
+tempura_test(on             LABEL task)
+tempura_test(repeat_effect  LABEL task)
+tempura_test(schedulers     LABEL task)
+tempura_test(sender_advanced LABEL task)
+tempura_test(sender_basics  LABEL task)
+tempura_test(split          LABEL task)
+tempura_test(stopped        LABEL task)
+tempura_test(stop_token     LABEL task)
+tempura_test(type_utils     LABEL task)
+tempura_test(when_all       LABEL task)
+tempura_test(when_any       LABEL task)

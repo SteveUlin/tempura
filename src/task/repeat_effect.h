@@ -17,13 +17,10 @@
 #include <utility>
 
 #include "concepts.h"
+#include "env.h"
 #include "meta/manual_lifetime.h"
 
 namespace tempura {
-
-// ============================================================================
-// repeatEffectUntil - repeat until predicate returns true
-// ============================================================================
 
 template <typename S, typename P, typename R>
 class RepeatEffectUntilOperationState;
@@ -87,17 +84,19 @@ class RepeatEffectUntilOperationState {
   }
 
   void onValueComplete() noexcept {
-    // Destroy previous operation
     inner_op_.destruct();
     constructed_ = false;
 
-    // Check if we should stop
+    if (get_stop_token(get_env(receiver_)).stop_requested()) {
+      std::move(receiver_).setStopped();
+      return;
+    }
+
     if (std::invoke(predicate_)) {
       std::move(receiver_).setValue();
       return;
     }
 
-    // Copy and reconstruct - repeat needs fresh sender each iteration
     inner_op_.constructWith(
         [this] { return S(source_).connect(InnerReceiver{this}); });
     constructed_ = true;
@@ -175,10 +174,6 @@ auto operator|(S&& sender, const RepeatEffectUntilAdaptor<P>& adaptor) {
   return adaptor(std::forward<S>(sender));
 }
 
-// ============================================================================
-// repeatEffect - repeat forever until error/stopped
-// ============================================================================
-
 template <typename S>
 auto repeatEffect(S&& source) {
   return repeatEffectUntil(std::forward<S>(source), [] { return false; });
@@ -197,10 +192,6 @@ template <typename S>
 auto operator|(S&& sender, RepeatEffectAdaptor) {
   return repeatEffect(std::forward<S>(sender));
 }
-
-// ============================================================================
-// repeatN - repeat exactly N times
-// ============================================================================
 
 template <typename S, typename R>
 class RepeatNOperationState;
