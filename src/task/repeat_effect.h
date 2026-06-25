@@ -263,6 +263,12 @@ class RepeatNOperationState {
     inner_op_.destruct();
     constructed_ = false;
 
+    // Honor cancellation at the iteration boundary, like repeatEffectUntil.
+    if (get_stop_token(get_env(receiver_)).stop_requested()) {
+      std::move(receiver_).setStopped();
+      return;
+    }
+
     --remaining_;
 
     // Check if we're done
