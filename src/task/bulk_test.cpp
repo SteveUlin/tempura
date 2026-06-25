@@ -14,10 +14,6 @@
 using namespace tempura;
 
 auto main() -> int {
-  // ==========================================================================
-  // Basic bulk functionality
-  // ==========================================================================
-
   "bulk - basic counter"_test = [] {
     int sum = 0;
     auto result = syncWait(
@@ -100,10 +96,6 @@ auto main() -> int {
     expectEq(calls[2].second, 22);
   };
 
-  // ==========================================================================
-  // Composition
-  // ==========================================================================
-
   "bulk - chained with then"_test = [] {
     int bulk_sum = 0;
 
@@ -140,10 +132,6 @@ auto main() -> int {
     expectEq(sum2, 6);
   };
 
-  // ==========================================================================
-  // Three-argument form
-  // ==========================================================================
-
   "bulk - three argument form"_test = [] {
     int sum = 0;
     auto result = syncWait(bulk(just(7), 4, [&sum](std::size_t i, int v) {
@@ -155,10 +143,6 @@ auto main() -> int {
     // sum = 0*7 + 1*7 + 2*7 + 3*7 = 42
     expectEq(sum, 42);
   };
-
-  // ==========================================================================
-  // Error and stopped propagation
-  // ==========================================================================
 
   "bulk - stopped propagates through"_test = [] {
     int call_count = 0;
@@ -172,9 +156,18 @@ auto main() -> int {
     expectEq(call_count, 0);  // Bulk function not called on stopped
   };
 
-  // ==========================================================================
-  // Different shape types
-  // ==========================================================================
+  "bulk - error propagates through"_test = [] {
+    int call_count = 0;
+    // CustomErrorSender1 calls setError without ever calling setValue
+    auto result = syncWait(
+        CustomErrorSender1{}
+        | bulk(5, [&call_count](std::size_t, int) {
+            ++call_count;
+          }));
+
+    expectFalse(result.has_value());
+    expectEq(call_count, 0);  // Bulk function not called on error
+  };
 
   "bulk - int shape"_test = [] {
     int count = 0;

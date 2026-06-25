@@ -17,10 +17,6 @@ struct NotASender {
 };
 
 auto main() -> int {
-  // ==========================================================================
-  // Sender Concept Validation
-  // ==========================================================================
-
   "Sender concept - JustSender"_test = [] {
     static_assert(Sender<JustSender<int>>);
     static_assert(Sender<decltype(just(42))>);
@@ -41,10 +37,6 @@ auto main() -> int {
     static_assert(!Sender<NotASender>);
   };
 
-  // ==========================================================================
-  // Variadic Error Types - P2300 Symmetry
-  // ==========================================================================
-
   "ErrorTypes - custom error senders satisfy Sender concept"_test = [] {
     static_assert(Sender<CustomErrorSender1>);
     static_assert(Sender<CustomErrorSender2>);
@@ -60,5 +52,5 @@ auto main() -> int {
     static_assert(Size_v<ErrorSigs> == 3);
   };
 
-  return 0;
+  return TestRegistry::result();
 }

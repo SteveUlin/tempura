@@ -16,73 +16,6 @@
 
 using namespace tempura;
 
-// Helper error sender for testing
-class ErrorSenderTest {
- public:
-  template <typename Env = EmptyEnv>
-  using CompletionSignatures =
-      tempura::CompletionSignatures<SetValueTag(int), SetErrorTag(std::error_code), SetStoppedTag()>;
-
-  template <typename R>
-  auto connect(R&& receiver) && {
-    class OpState {
-     public:
-      OpState(R r) : receiver_(std::move(r)) {}
-      void start() noexcept {
-        receiver_.setError(
-            std::make_error_code(std::errc::invalid_argument));
-      }
-
-     private:
-      R receiver_;
-    };
-    return OpState{std::forward<R>(receiver)};
-  }
-};
-
-// Another error sender for testing
-class ErrorSenderTest2 {
- public:
-  template <typename Env = EmptyEnv>
-  using CompletionSignatures =
-      tempura::CompletionSignatures<SetValueTag(int), SetErrorTag(std::error_code), SetStoppedTag()>;
-
-  template <typename R>
-  auto connect(R&& receiver) && {
-    class OpState {
-     public:
-      OpState(R r) : receiver_(std::move(r)) {}
-      void start() noexcept {
-        receiver_.setError(std::make_error_code(std::errc::io_error));
-      }
-
-     private:
-      R receiver_;
-    };
-    return OpState{std::forward<R>(receiver)};
-  }
-};
-
-// Stopped sender for testing
-class StoppedSenderTest {
- public:
-  template <typename Env = EmptyEnv>
-  using CompletionSignatures =
-      tempura::CompletionSignatures<SetValueTag(int), SetStoppedTag()>;
-
-  template <typename R>
-  auto connect(R&& receiver) && {
-    class OpState {
-     public:
-      OpState(R r) : receiver_(std::move(r)) {}
-      void start() noexcept { receiver_.setStopped(); }
-
-     private:
-      R receiver_;
-    };
-    return OpState{std::forward<R>(receiver)};
-  }
-};
 
 // Sender that checks if stop token is available (for cancellation testing)
 class StopTokenCheckSender {
@@ -114,10 +47,6 @@ class StopTokenCheckSender {
 };
 
 auto main() -> int {
-  // ==========================================================================
-  // Basic whenAll functionality
-  // ==========================================================================
-
   "whenAll - two senders"_test = [] {
     auto sender = whenAll(just(42), just(std::string{"hello"}));
     auto result = syncWait(std::move(sender));
@@ -175,10 +104,6 @@ auto main() -> int {
     expectEq(std::get<0>(std::move(t2)).value, 20);
   };
 
-  // ==========================================================================
-  // Composition with then
-  // ==========================================================================
-
   "whenAll - composed with then"_test = [] {
     auto sender = whenAll(just(10), just(20)) | then([](auto t1, auto t2) {
       return std::get<0>(t1) + std::get<0>(t2);
@@ -203,10 +128,6 @@ auto main() -> int {
     expectEq(std::get<0>(*result), 14);  // (5*2) + (3+1) = 10 + 4 = 14
   };
 
-  // ==========================================================================
-  // Nested whenAll
-  // ==========================================================================
-
   "whenAll - nested composition"_test = [] {
     auto inner1 = whenAll(just(1), just(2));
     auto inner2 = whenAll(just(3), just(4));
@@ -225,10 +146,6 @@ auto main() -> int {
     expectEq(std::get<0>(t3), 3);
     expectEq(std::get<0>(t4), 4);
   };
-
-  // ==========================================================================
-  // Error handling
-  // ==========================================================================
 
   "whenAll - first sender errors"_test = [] {
     auto sender = whenAll(ErrorSenderTest{}, just(42));
@@ -251,27 +168,12 @@ auto main() -> int {
     expectFalse(result.has_value());
   };
 
-  // ==========================================================================
-  // Stop handling
-  // ==========================================================================
-
   "whenAll - sender stopped"_test = [] {
-    auto sender = whenAll(StoppedSenderTest{}, just(42));
+    auto sender = whenAll(StoppedSender{}, just(42));
     auto result = syncWait(std::move(sender));
 
     expectFalse(result.has_value());
   };
-
-  // ==========================================================================
-  // Type deduction tests (compile-time)
-  // ==========================================================================
-
-  // NOTE: ValueTypes/ErrorTypes removed in favor of CompletionSignatures
-  // These tests have been removed as they test the old interface
-
-  // ==========================================================================
-  // Integration with schedulers
-  // ==========================================================================
 
   "whenAll - with InlineScheduler"_test = [] {
     InlineScheduler sched;
@@ -292,10 +194,6 @@ auto main() -> int {
   // Note: SingleThreadScheduler test would go here, but it requires
   // additional dependencies not included in this test file
 
-  // ==========================================================================
-  // Many senders
-  // ==========================================================================
-
   "whenAll - five senders"_test = [] {
     auto sender = whenAll(just(1), just(2), just(3), just(4), just(5));
     auto result = syncWait(std::move(sender));
@@ -309,10 +207,6 @@ auto main() -> int {
     expectEq(std::get<0>(t4), 4);
     expectEq(std::get<0>(t5), 5);
   };
-
-  // ==========================================================================
-  // Early stopping / cancellation tests
-  // ==========================================================================
 
   "whenAll - stop token available in child receivers"_test = [] {
     auto sender = whenAll(StopTokenCheckSender{}, just(42), just(99));
@@ -333,30 +227,14 @@ auto main() -> int {
     // This should complete with error (from ErrorSenderTest)
     auto result = syncWait(std::move(sender));
 
-    // Should NOT have a value (error occurred)
     expectFalse(result.has_value());
-
-    // The mechanism is in place - stop source requested stop
-    expectTrue(true);  // Basic sanity check
   };
 
   "whenAll - stop propagates to other senders"_test = [] {
-    // When one sender is stopped, the stop token should be signaled
-    auto sender = whenAll(just(1), StoppedSenderTest{}, StopTokenCheckSender{});
-
-    // This should complete with stop (from StoppedSenderTest)
+    auto sender = whenAll(just(1), StoppedSender{}, StopTokenCheckSender{});
     auto result = syncWait(std::move(sender));
-
-    // Should NOT have a value (stopped)
     expectFalse(result.has_value());
-
-    // The mechanism is in place
-    expectTrue(true);  // Basic sanity check
   };
-
-  // ==========================================================================
-  // Async scheduler tests (ThreadPoolScheduler)
-  // ==========================================================================
 
   "whenAll - concurrent completion on thread pool"_test = [] {
     ThreadPool pool{4};
@@ -426,12 +304,7 @@ auto main() -> int {
                           ErrorSenderTest{});
     auto result = syncWait(std::move(sender));
 
-    // Should get an error (from ErrorSenderTest)
     expectFalse(result.has_value());
-
-    // The slow task may or may not have completed depending on timing,
-    // but the error should have been propagated
-    expectTrue(true);  // Basic sanity check
   };
 
   "whenAll - stop token propagation cancels pending work"_test = [] {
@@ -472,11 +345,7 @@ auto main() -> int {
                           std::move(s_trigger), ErrorSenderTest{});
     auto result = syncWait(std::move(sender));
 
-    // Should get an error
     expectFalse(result.has_value());
-
-    // The stop mechanism is in place (error propagation works)
-    expectTrue(true);
   };
 
   "whenAll - multiple async operations complete successfully"_test = [] {
@@ -499,12 +368,12 @@ auto main() -> int {
 
     if (!expectTrue(result.has_value())) return;
 
-    // All 5 tasks should have incremented the counter
     expectEq(counter.load(), 5);
-
-    // Verify we got all results
     auto [t1, t2, t3, t4, t5] = *result;
-    expectTrue(true);  // If we got here, all completed
+    // All 5 results are in [1,5] and their sum is 15 (1+2+3+4+5)
+    int sum = std::get<0>(t1) + std::get<0>(t2) + std::get<0>(t3) +
+              std::get<0>(t4) + std::get<0>(t5);
+    expectEq(sum, 15);
   };
 
   return TestRegistry::result();

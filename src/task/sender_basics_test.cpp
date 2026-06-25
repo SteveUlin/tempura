@@ -13,10 +13,6 @@
 using namespace tempura;
 
 auto main() -> int {
-  // ==========================================================================
-  // JustSender / syncWait
-  // ==========================================================================
-
   "JustSender - single value"_test = [] {
     auto result = syncWait(JustSender{42});
     if (!expectTrue(result.has_value())) return;
@@ -50,10 +46,6 @@ auto main() -> int {
     expectEq(std::get<0>(*result).value, 99);
   };
 
-  // ==========================================================================
-  // Receivers
-  // ==========================================================================
-
   "ValueReceiver - basic usage"_test = [] {
     std::optional<std::tuple<int>> value;
     JustSender{42}.connect(ValueReceiver<int>{value}).start();
@@ -75,10 +67,6 @@ auto main() -> int {
   "PrintReceiver - compiles and runs"_test = [] {
     JustSender{99}.connect(PrintReceiver<int>{}).start();
   };
-
-  // ==========================================================================
-  // then / Pipe Operators
-  // ==========================================================================
 
   "then - basic transformation"_test = [] {
     auto sender = then(just(21), [](int x) { return x * 2; });
@@ -106,5 +94,5 @@ auto main() -> int {
     }
   };
 
-  return 0;
+  return TestRegistry::result();
 }

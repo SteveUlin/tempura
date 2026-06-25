@@ -12,10 +12,6 @@
 using namespace tempura;
 
 auto main() -> int {
-  // ==========================================================================
-  // letValue - nested async operations
-  // ==========================================================================
-
   "letValue - basic nested sender"_test = [] {
     auto sender = letValue(just(21), [](int x) { return just(x * 2); });
     auto result = syncWait(std::move(sender));
@@ -64,10 +60,6 @@ auto main() -> int {
       expectEq(product, 50);
     }
   };
-
-  // ==========================================================================
-  // letError - nested error recovery
-  // ==========================================================================
 
   "letError - error recovery with sender"_test = [] {
     // Use a sender that actually has error signatures
@@ -127,10 +119,6 @@ auto main() -> int {
     }
   };
 
-  // ==========================================================================
-  // uponError - error transformation
-  // ==========================================================================
-
   "uponError - variadic error types"_test = [] {
     // uponError should unpack error tuple and convert to value
     auto sender = CustomErrorSender2{} |
@@ -148,5 +136,5 @@ auto main() -> int {
     }
   };
 
-  return 0;
+  return TestRegistry::result();
 }

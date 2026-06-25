@@ -1,4 +1,5 @@
 #include "task/task.h"
+#include "task/test_helpers.h"
 #include "unit.h"
 
 #include <atomic>
@@ -31,42 +32,7 @@ struct SchedulerCheckSender {
   }
 };
 
-// Helper error sender for testing error propagation
-class ErrorSenderTest {
- public:
-  template <typename Env = EmptyEnv>
-  using CompletionSignatures = tempura::CompletionSignatures<
-      SetValueTag(int), SetErrorTag(std::error_code), SetStoppedTag()>;
-
-  template <typename R>
-  auto connect(R&& receiver) && {
-    class OpState {
-     public:
-      OpState(R r) : receiver_(std::move(r)) {}
-      void start() noexcept {
-        receiver_.setError(std::make_error_code(std::errc::io_error));
-      }
-
-     private:
-      R receiver_;
-    };
-    return OpState{std::forward<R>(receiver)};
-  }
-};
-
 auto main() -> int {
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Basic compilation tests for on()
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  "on() - compiles with InlineScheduler"_test = [] {
-    // Just verify it compiles for now
-    InlineScheduler sched;
-    auto sender = just(42);
-    [[maybe_unused]] auto on_sender = on(sched, std::move(sender));
-    // Full test would require proper async execution
-  };
-
   "BlockingReceiver - provides InlineScheduler environment"_test = [] {
     std::optional<std::tuple<int>> result;
     std::latch latch{1};
@@ -87,17 +53,6 @@ auto main() -> int {
       expectTrue(std::get<0>(*result));
     }
   };
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Async scheduler tests for on() with ThreadPoolScheduler
-  //
-  // NOTE: These tests currently fail to compile due to use-after-free bug in
-  // on.h (see TODO.md line 7). The schedule operation states are stored as
-  // local variables in start() and destroyed before async work completes.
-  // These tests will work once the bug is fixed.
-  // ═══════════════════════════════════════════════════════════════════════════
-
-#if 1  // Enabled - UAF bug in on.h has been fixed
 
   "on() - basic async execution with ThreadPool"_test = [] {
     ThreadPool pool{2};
@@ -261,12 +216,6 @@ auto main() -> int {
     expectTrue(thread1.load() != std::thread::id{});
     expectTrue(thread2.load() != std::thread::id{});
   };
-
-#endif  // Disabled async tests
-
-  // ==========================================================================
-  // Scheduler Equality Optimization Tests
-  // ==========================================================================
 
   "on() - same scheduler optimization (InlineScheduler)"_test = [] {
     // When target scheduler equals original scheduler, transitions are skipped

@@ -12,10 +12,6 @@
 using namespace tempura;
 
 auto main() -> int {
-  // ==========================================================================
-  // Basic split functionality
-  // ==========================================================================
-
   "split - basic single value"_test = [] {
     auto shared = split(just(42));
     auto result = syncWait(shared);
@@ -79,10 +75,6 @@ auto main() -> int {
     expectEq(std::get<0>(*result2), 20);
   };
 
-  // ==========================================================================
-  // Stopped and error handling
-  // ==========================================================================
-
   "split - forwards stopped"_test = [] {
     auto shared = split(StoppedSender{});
 
@@ -94,9 +86,26 @@ auto main() -> int {
     expectFalse(result2.has_value());
   };
 
-  // ==========================================================================
-  // Copy semantics
-  // ==========================================================================
+  "split - forwards error to single consumer"_test = [] {
+    auto shared = split(CustomErrorSender1{});
+    auto result = syncWait(shared);
+    // Error channel → optional is empty
+    expectFalse(result.has_value());
+  };
+
+  "split - cached error fans out to multiple consumers"_test = [] {
+    // split's core contract: compute once, broadcast to all waiters.
+    // An error must be cached and re-delivered to every subsequent consumer.
+    auto shared = split(CustomErrorSender1{});
+
+    auto r1 = syncWait(shared);
+    auto r2 = syncWait(shared);
+    auto r3 = syncWait(shared);
+
+    expectFalse(r1.has_value());
+    expectFalse(r2.has_value());
+    expectFalse(r3.has_value());
+  };
 
   "split - copyable sender"_test = [] {
     auto shared = split(just(999));
@@ -117,10 +126,6 @@ auto main() -> int {
     expectEq(std::get<0>(*result2), 999);
     expectEq(std::get<0>(*result3), 999);
   };
-
-  // ==========================================================================
-  // Type deduction
-  // ==========================================================================
 
   "split - deduction guide"_test = [] {
     // Test that SplitSender can be deduced

@@ -14,10 +14,6 @@
 using namespace tempura;
 
 auto main() -> int {
-  // ==========================================================================
-  // InlineScheduler Tests
-  // ==========================================================================
-
   "InlineScheduler - concept validation"_test = [] {
     static_assert(Scheduler<InlineScheduler>);
     expectTrue(true);
@@ -57,10 +53,6 @@ auto main() -> int {
     expectTrue(result.has_value());
     expectEq(std::get<0>(*result), 25);  // (10 * 2) + 5
   };
-
-  // ==========================================================================
-  // EventLoopScheduler Tests
-  // ==========================================================================
 
   "EventLoopScheduler - concept validation"_test = [] {
     static_assert(Scheduler<EventLoopScheduler>);
@@ -238,10 +230,6 @@ auto main() -> int {
     expectEq(execution_order[2], 3);
   };
 
-  // ==========================================================================
-  // ThreadPoolScheduler Tests
-  // ==========================================================================
-
   "ThreadPoolScheduler - concept validation"_test = [] {
     static_assert(Scheduler<ThreadPoolScheduler>);
     expectTrue(true);
@@ -405,10 +393,6 @@ auto main() -> int {
     expectEq(std::get<0>(*result), 22);  // (5 * 3) + (5 + 2) = 15 + 7 = 22
   };
 
-  // ==========================================================================
-  // NewThreadScheduler Tests
-  // ==========================================================================
-
   "NewThreadScheduler - concept validation"_test = [] {
     static_assert(Scheduler<NewThreadScheduler>);
     expectTrue(true);
@@ -541,10 +525,6 @@ auto main() -> int {
     // and task should have completed
     expectTrue(task_completed.load());
   };
-
-  // ==========================================================================
-  // TimerQueue Tests
-  // ==========================================================================
 
   "TimerQueue - scheduleAfter executes task"_test = [] {
     TimerQueue queue;
@@ -797,10 +777,6 @@ auto main() -> int {
     expectEq(executed_count.load(), 3);
   };
 
-  // ==========================================================================
-  // Scheduler Equality Tests
-  // ==========================================================================
-
   "InlineScheduler - equality"_test = [] {
     InlineScheduler s1;
     InlineScheduler s2;
@@ -848,5 +824,5 @@ auto main() -> int {
     expectTrue(!(s1 == s3));
   };
 
-  return 0;
+  return TestRegistry::result();
 }

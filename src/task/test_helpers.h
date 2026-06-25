@@ -3,14 +3,11 @@
 #pragma once
 
 #include <string>
+#include <system_error>
 #include <tuple>
 #include <utility>
 
 namespace tempura {
-
-// ============================================================================
-// Custom Error Sender Types (for testing variadic error types)
-// ============================================================================
 
 // Sender with custom error types (tuple of string and int)
 class CustomErrorSender1 {
@@ -85,9 +82,50 @@ struct MoveOnly {
   int value;
 };
 
-// ============================================================================
-// Stopped Sender (for testing stopped channel handling)
-// ============================================================================
+// Sender that completes with std::error_code (errc::invalid_argument)
+class ErrorSenderTest {
+ public:
+  template <typename Env = EmptyEnv>
+  using CompletionSignatures = tempura::CompletionSignatures<
+      SetValueTag(int), SetErrorTag(std::error_code), SetStoppedTag()>;
+
+  template <typename R>
+  auto connect(R&& receiver) && {
+    class OpState {
+     public:
+      OpState(R r) : receiver_(std::move(r)) {}
+      void start() noexcept {
+        receiver_.setError(
+            std::make_error_code(std::errc::invalid_argument));
+      }
+     private:
+      R receiver_;
+    };
+    return OpState{std::forward<R>(receiver)};
+  }
+};
+
+// Sender that completes with std::error_code (errc::io_error)
+class ErrorSenderTest2 {
+ public:
+  template <typename Env = EmptyEnv>
+  using CompletionSignatures = tempura::CompletionSignatures<
+      SetValueTag(int), SetErrorTag(std::error_code), SetStoppedTag()>;
+
+  template <typename R>
+  auto connect(R&& receiver) && {
+    class OpState {
+     public:
+      OpState(R r) : receiver_(std::move(r)) {}
+      void start() noexcept {
+        receiver_.setError(std::make_error_code(std::errc::io_error));
+      }
+     private:
+      R receiver_;
+    };
+    return OpState{std::forward<R>(receiver)};
+  }
+};
 
 // Sender that always completes with stopped
 class StoppedSender {

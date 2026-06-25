@@ -17,73 +17,6 @@
 
 using namespace tempura;
 
-// Helper error sender for testing
-class ErrorSenderTest {
- public:
-  template <typename Env = EmptyEnv>
-  using CompletionSignatures =
-      tempura::CompletionSignatures<SetValueTag(int), SetErrorTag(std::error_code), SetStoppedTag()>;
-
-  template <typename R>
-  auto connect(R&& receiver) && {
-    class OpState {
-     public:
-      OpState(R r) : receiver_(std::move(r)) {}
-      void start() noexcept {
-        receiver_.setError(
-            std::make_error_code(std::errc::invalid_argument));
-      }
-
-     private:
-      R receiver_;
-    };
-    return OpState{std::forward<R>(receiver)};
-  }
-};
-
-// Another error sender for testing
-class ErrorSenderTest2 {
- public:
-  template <typename Env = EmptyEnv>
-  using CompletionSignatures =
-      tempura::CompletionSignatures<SetValueTag(int), SetErrorTag(std::error_code), SetStoppedTag()>;
-
-  template <typename R>
-  auto connect(R&& receiver) && {
-    class OpState {
-     public:
-      OpState(R r) : receiver_(std::move(r)) {}
-      void start() noexcept {
-        receiver_.setError(std::make_error_code(std::errc::io_error));
-      }
-
-     private:
-      R receiver_;
-    };
-    return OpState{std::forward<R>(receiver)};
-  }
-};
-
-// Stopped sender for testing
-class StoppedSenderTest {
- public:
-  template <typename Env = EmptyEnv>
-  using CompletionSignatures =
-      tempura::CompletionSignatures<SetValueTag(int), SetStoppedTag()>;
-
-  template <typename R>
-  auto connect(R&& receiver) && {
-    class OpState {
-     public:
-      OpState(R r) : receiver_(std::move(r)) {}
-      void start() noexcept { receiver_.setStopped(); }
-
-     private:
-      R receiver_;
-    };
-    return OpState{std::forward<R>(receiver)};
-  }
-};
 
 // Sender that checks if stop was requested (for cancellation testing)
 class StoppableOperationTest {
@@ -150,10 +83,6 @@ class TokenCheckSenderTest {
 };
 
 auto main() -> int {
-  // ==========================================================================
-  // Basic whenAny functionality
-  // ==========================================================================
-
   "whenAny - two senders with int"_test = [] {
     auto sender = whenAny(just(42), just(99));
     auto result = syncWait(std::move(sender));
@@ -249,10 +178,6 @@ auto main() -> int {
     expectTrue(mo.value == 10 || mo.value == 20);
   };
 
-  // ==========================================================================
-  // Composition with then
-  // ==========================================================================
-
   "whenAny - composed with then"_test = [] {
     auto sender = whenAny(just(10), just(20)) | then([](auto var) {
       // Extract the value from the variant
@@ -287,10 +212,6 @@ auto main() -> int {
     expectTrue(value == 10 || value == 4);
   };
 
-  // ==========================================================================
-  // Nested whenAny
-  // ==========================================================================
-
   "whenAny - nested composition"_test = [] {
     auto inner1 = whenAny(just(1), just(2));
     auto inner2 = whenAny(just(3), just(4));
@@ -298,33 +219,23 @@ auto main() -> int {
     auto sender = whenAny(std::move(inner1), std::move(inner2));
     auto result = syncWait(std::move(sender));
 
-    if (!expectTrue(result.has_value())) return;
-
-    auto [outer_var] = *result;
-    // The outer variant contains variants from inner whenAny calls
-    // This gets complex quickly, but we can verify it completed
-    expectTrue(true);  // If we got here, the composition worked
+    // Liveness: composition completes without deadlock
+    expectTrue(result.has_value());
   };
 
-  // ==========================================================================
-  // Error handling
-  // ==========================================================================
-
   "whenAny - first sender errors"_test = [] {
+    // ErrorSenderTest is first and sync: error wins, value second sender is ignored.
     auto sender = whenAny(ErrorSenderTest{}, just(42));
     auto result = syncWait(std::move(sender));
-
-    // Either error or value could win depending on scheduling
-    // In inline execution, error typically wins
-    expectTrue(true);  // Test completes without crash
+    expectFalse(result.has_value());
   };
 
   "whenAny - second sender errors"_test = [] {
+    // just(100) is first and sync: value wins, second sender's error is ignored.
     auto sender = whenAny(just(100), ErrorSenderTest2{});
     auto result = syncWait(std::move(sender));
-
-    // Either error or value could win depending on scheduling
-    expectTrue(true);  // Test completes without crash
+    expectTrue(result.has_value());
+    expectEq(std::get<0>(std::get<std::tuple<int>>(std::get<0>(*result))), 100);
   };
 
   "whenAny - all senders error"_test = [] {
@@ -334,35 +245,19 @@ auto main() -> int {
     expectFalse(result.has_value());  // Should get an error
   };
 
-  // ==========================================================================
-  // Stop handling
-  // ==========================================================================
-
   "whenAny - sender stopped"_test = [] {
-    auto sender = whenAny(StoppedSenderTest{}, just(42));
+    // StoppedSender is first and sync: stopped wins, value second sender is ignored.
+    auto sender = whenAny(StoppedSender{}, just(42));
     auto result = syncWait(std::move(sender));
-
-    // Either stopped or value could win depending on scheduling
-    expectTrue(true);  // Test completes without crash
+    expectFalse(result.has_value());
   };
 
   "whenAny - all senders stopped"_test = [] {
-    auto sender = whenAny(StoppedSenderTest{}, StoppedSenderTest{});
+    auto sender = whenAny(StoppedSender{}, StoppedSender{});
     auto result = syncWait(std::move(sender));
 
     expectFalse(result.has_value());  // Should get stopped signal
   };
-
-  // ==========================================================================
-  // Type deduction tests (compile-time)
-  // ==========================================================================
-
-  // NOTE: ValueTypes/ErrorTypes removed in favor of CompletionSignatures
-  // These tests have been removed as they test the old interface
-
-  // ==========================================================================
-  // Integration with schedulers
-  // ==========================================================================
 
   "whenAny - with InlineScheduler"_test = [] {
     InlineScheduler sched;
@@ -383,10 +278,6 @@ auto main() -> int {
     expectTrue(value == 10 || value == 20);
   };
 
-  // ==========================================================================
-  // Many senders
-  // ==========================================================================
-
   "whenAny - five senders"_test = [] {
     auto sender = whenAny(just(1), just(2), just(3), just(4), just(5));
     auto result = syncWait(std::move(sender));
@@ -401,42 +292,25 @@ auto main() -> int {
     expectTrue(value >= 1 && value <= 5);
   };
 
-  // ==========================================================================
-  // Mixed whenAll and whenAny
-  // ==========================================================================
-
   "whenAny - composed with whenAll"_test = [] {
     auto all_sender = whenAll(just(1), just(2));
     auto any_sender = whenAny(std::move(all_sender), just(99));
 
     auto result = syncWait(std::move(any_sender));
-    if (!expectTrue(result.has_value())) return;
-
-    // Should complete (either the whenAll or the just(99))
-    expectTrue(true);
+    expectTrue(result.has_value());
   };
 
-  // ==========================================================================
-  // Cancellation tests
-  // ==========================================================================
-
   "whenAny - losers receive stop signal"_test = [] {
-    StoppableOperationTest slow_sender;
-    bool* stop_flag = &slow_sender.stop_observed_;
-
-    // Fast sender completes first
-    auto sender = whenAny(just(42), std::move(slow_sender));
+    // just(42) is first and wins; StoppableOperationTest starts after stop is requested.
+    auto sender = whenAny(just(42), StoppableOperationTest{});
     auto result = syncWait(std::move(sender));
 
-    // Verify the fast sender won
     if (!expectTrue(result.has_value())) return;
     auto [var] = *result;
+    // just(42) wins — value channel with 42.
     expectTrue(std::holds_alternative<std::tuple<int>>(var));
-
-    // The stop token should have been signaled for the slow sender
-    // Note: Due to race conditions, we can't guarantee stop_requested()
-    // returns true at the exact moment we check, but the mechanism is in place
-    expectTrue(true);  // Basic sanity check that test ran
+    expectEq(std::get<0>(std::get<std::tuple<int>>(var)), 42);
+    // Liveness: confirms slow sender completed and handed off to receiver.
   };
 
   "whenAny - stop token available in child receivers"_test = [] {
@@ -453,10 +327,6 @@ auto main() -> int {
       expectTrue(stop_was_possible);
     }
   };
-
-  // ==========================================================================
-  // Async scheduler tests (ThreadPoolScheduler)
-  // ==========================================================================
 
   "whenAny - concurrent completions from thread pool workers"_test = [] {
     ThreadPool pool{4};
@@ -578,11 +448,7 @@ auto main() -> int {
     // Fast task (99) should usually win
     expectTrue(winner >= 1 && winner <= 99);
 
-    // Multiple tasks should have started
     expectTrue(tasks_started.load() >= 1);
-
-    // The stop mechanism is in place to cancel losing operations
-    expectTrue(true);
   };
 
   "whenAny - concurrent error and value completions"_test = [] {
@@ -605,9 +471,8 @@ auto main() -> int {
                           ErrorSenderTest{});
     auto result = syncWait(std::move(sender));
 
-    // Either error or value could win depending on exact timing
-    // Both are valid outcomes for this race
-    expectTrue(true);  // Test completes without deadlock
+    // Winner is nondeterministic: value (42 or 99) or error are all legal.
+    // syncWait returning is the liveness assertion (no deadlock).
   };
 
   "whenAny - many concurrent operations"_test = [] {

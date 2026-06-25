@@ -58,10 +58,6 @@ struct ReceiverWithScheduler {
 };
 
 auto main() -> int {
-  // ═══════════════════════════════════════════════════════════════════════════
-  // EmptyEnv tests
-  // ═══════════════════════════════════════════════════════════════════════════
-
   "EmptyEnv - provides NeverStopToken"_test = [] {
     EmptyEnv env;
     auto token = get_stop_token(env);
@@ -83,10 +79,6 @@ auto main() -> int {
     static_assert(!token.stop_requested());
   };
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // withStopToken tests
-  // ═══════════════════════════════════════════════════════════════════════════
-
   "withStopToken - stores and returns stop token"_test = [] {
     InplaceStopSource source;
     auto token = source.get_token();
@@ -105,10 +97,6 @@ auto main() -> int {
     constexpr auto token = get_stop_token(env);
     static_assert(!token.stop_requested());
   };
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // withScheduler tests
-  // ═══════════════════════════════════════════════════════════════════════════
 
   "withScheduler - stores and returns scheduler"_test = [] {
     InlineScheduler sched;
@@ -141,10 +129,6 @@ auto main() -> int {
     constexpr auto sched = get_scheduler(env);
     (void)sched;  // Suppress unused variable warning
   };
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Composed environment tests (stop token + scheduler)
-  // ═══════════════════════════════════════════════════════════════════════════
 
   "Composed - stores both token and scheduler"_test = [] {
     InplaceStopSource source;
@@ -184,10 +168,6 @@ auto main() -> int {
     (void)sched;  // Suppress unused variable warning
   };
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // get_env CPO tests
-  // ═══════════════════════════════════════════════════════════════════════════
-
   "get_env - returns receiver's environment"_test = [] {
     InplaceStopSource source;
     ReceiverWithEnv receiver{&source};
@@ -202,10 +182,6 @@ auto main() -> int {
     auto env = get_env(receiver);
     static_assert(std::same_as<decltype(env), EmptyEnv>);
   };
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // get_stop_token CPO tests
-  // ═══════════════════════════════════════════════════════════════════════════
 
   "get_stop_token - queries environment for stop token"_test = [] {
     InplaceStopSource source;
@@ -246,10 +222,6 @@ auto main() -> int {
     expectTrue(token.stop_requested());
   };
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // get_scheduler CPO tests
-  // ═══════════════════════════════════════════════════════════════════════════
-
   "get_scheduler - queries environment for scheduler"_test = [] {
     InlineScheduler sched;
     auto env = withScheduler(sched);
@@ -278,10 +250,6 @@ auto main() -> int {
     auto retrieved = get_scheduler(env);
     static_assert(std::same_as<decltype(retrieved), EventLoopScheduler>);
   };
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Advanced composition tests
-  // ═══════════════════════════════════════════════════════════════════════════
 
   "Composition - withScheduler(withStopToken(...))"_test = [] {
     InplaceStopSource source;
@@ -373,10 +341,6 @@ auto main() -> int {
     static_assert(std::same_as<decltype(get_scheduler(env)), InlineScheduler>);
     (void)sched;  // Suppress unused warning
   };
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Integration tests - environment propagation
-  // ═══════════════════════════════════════════════════════════════════════════
 
   "Integration - receiver provides environment to sender"_test = [] {
     InplaceStopSource source;
