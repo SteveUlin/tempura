@@ -13,6 +13,7 @@
 #include "completion_signatures.h"
 #include "concepts.h"
 #include "env.h"
+#include "on.h"
 #include "stop_token.h"
 #include "type_utils.h"
 
@@ -27,10 +28,6 @@ struct ExtractValueTuple {
 template <typename S>
 using ExtractValueTupleT = typename ExtractValueTuple<S>::Type;
 
-// ============================================================================
-// WhenAll - Parallel Composition
-// ============================================================================
-//
 // whenAll waits for all input senders to complete and aggregates their results.
 //
 // Semantics:
@@ -52,70 +49,44 @@ template <typename R, typename... Senders>
 class WhenAllSharedState {
  public:
   using ValueTuple = std::tuple<ExtractValueTupleT<Senders>...>;
+  using ErrorVariant = typename MergeUniqueErrorTypes<Senders...>::type;
+
+  // Completion outcome: either all values, one error, or stopped
+  enum class Outcome : unsigned char { kNone, kValue, kError, kStopped };
 
   WhenAllSharedState(R receiver, std::size_t count)
       : receiver_(std::move(receiver)),
         remaining_count_(count),
-        completed_(false) {}
+        outcome_(Outcome::kNone) {}
 
   // Called when a child sender completes successfully
   template <std::size_t Index, typename... Args>
   void setValue(Args&&... args) noexcept {
-    // Store the value at the correct index (wrap in tuple)
     std::get<Index>(values_).emplace(std::forward<Args>(args)...);
-
-    // Decrement counter and check if we're the last to complete
-    if (remaining_count_.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-      // We're last to complete. Try to claim completion (success path).
-      // If an error/stop occurred, they already claimed it, so we do nothing.
-      bool expected = false;
-      if (completed_.compare_exchange_strong(expected, true,
-                                              std::memory_order_acq_rel)) {
-        // Success: all senders completed without error
-        // Note: all optionals in values_ are populated since we're last
-        unpackAndForward(std::index_sequence_for<Senders...>{});
-      }
-      // else: error or stop already called receiver, we're done
-    }
+    completeOne();
   }
 
   // Called when a child sender completes with error
   template <typename Error>
   void setError(Error&& error) noexcept {
-    // Try to claim completion immediately (first error wins)
-    // This happens BEFORE decrementing to prevent race with setValue
-    bool expected = false;
-    if (completed_.compare_exchange_strong(expected, true,
-                                            std::memory_order_acq_rel)) {
-      // Request stop for all other senders
+    // First error wins — store it and request stop
+    Outcome expected = Outcome::kNone;
+    if (outcome_.compare_exchange_strong(expected, Outcome::kError,
+                                         std::memory_order_acq_rel)) {
+      error_.emplace(std::forward<Error>(error));
       stop_source_.request_stop();
-
-      // Forward error as variant (P2300 approach: simple variant of unique types)
-      using ErrorVariant = typename MergeUniqueErrorTypes<Senders...>::type;
-      receiver_.setError(ErrorVariant{std::forward<Error>(error)});
     }
-    // else: another error/stop already claimed completion
-
-    // Decrement counter (remaining children will see completed_ = true)
-    remaining_count_.fetch_sub(1, std::memory_order_acq_rel);
+    completeOne();
   }
 
   // Called when a child sender is stopped
   void setStopped() noexcept {
-    // Try to claim completion immediately (first stop wins)
-    // This happens BEFORE decrementing to prevent race with setValue
-    bool expected = false;
-    if (completed_.compare_exchange_strong(expected, true,
-                                            std::memory_order_acq_rel)) {
-      // Request stop for all other senders
-      stop_source_.request_stop();
-
-      receiver_.setStopped();
-    }
-    // else: another error/stop already claimed completion
-
-    // Decrement counter (remaining children will see completed_ = true)
-    remaining_count_.fetch_sub(1, std::memory_order_acq_rel);
+    // First stop wins (error takes priority if already set)
+    Outcome expected = Outcome::kNone;
+    outcome_.compare_exchange_strong(expected, Outcome::kStopped,
+                                     std::memory_order_acq_rel);
+    stop_source_.request_stop();
+    completeOne();
   }
 
   // Get stop token for child operations
@@ -124,6 +95,27 @@ class WhenAllSharedState {
   }
 
  private:
+  // Call receiver only when all children have acknowledged completion.
+  // This ensures operation states remain valid until every child is done.
+  void completeOne() noexcept {
+    if (remaining_count_.fetch_sub(1, std::memory_order_acq_rel) != 1) {
+      return;  // Not last to complete
+    }
+    // We are last — safe to call receiver now (all op states still alive)
+    switch (outcome_.load(std::memory_order_acquire)) {
+      case Outcome::kNone:   // Fall through: all succeeded
+      case Outcome::kValue:
+        unpackAndForward(std::index_sequence_for<Senders...>{});
+        break;
+      case Outcome::kError:
+        receiver_.setError(std::move(*error_));
+        break;
+      case Outcome::kStopped:
+        receiver_.setStopped();
+        break;
+    }
+  }
+
   template <std::size_t... Is>
   void unpackAndForward(std::index_sequence<Is...>) noexcept {
     receiver_.setValue(std::move(*std::get<Is>(values_))...);
@@ -131,9 +123,10 @@ class WhenAllSharedState {
 
   R receiver_;
   std::tuple<std::optional<ExtractValueTupleT<Senders>>...> values_;
+  std::optional<ErrorVariant> error_;
   std::atomic<std::size_t> remaining_count_;
-  std::atomic<bool> completed_;      // true if receiver has been called
-  InplaceStopSource stop_source_;    // Stop source for active cancellation
+  std::atomic<Outcome> outcome_;
+  InplaceStopSource stop_source_;
 };
 
 // Receiver for each individual sender in the whenAll
@@ -163,10 +156,6 @@ class WhenAllReceiver {
   SharedState* state_;
 };
 
-// ============================================================================
-// OperationTuple - Recursive storage for non-movable operation states
-// ============================================================================
-//
 // Uses recursive template inheritance instead of std::tuple to avoid moving
 // operation states. Each level of inheritance stores one operation state,
 // constructed in-place via member initializer list.

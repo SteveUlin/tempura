@@ -4,6 +4,8 @@
 
 #include <atomic>
 #include <cstddef>
+#include <functional>
+#include <optional>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -16,10 +18,6 @@
 #include "type_utils.h"
 
 namespace tempura {
-
-// ============================================================================
-// Value Type Merging
-// ============================================================================
 
 // Merge all value types into a variant (deduplicated)
 // Each sender's value tuple is extracted from completion signatures
@@ -44,10 +42,6 @@ struct MergeValueTypes {
   >::type;
 };
 
-// ============================================================================
-// WhenAny - Race Composition
-// ============================================================================
-//
 // whenAny waits for the first input sender to complete and returns its result.
 //
 // Semantics:
@@ -71,60 +65,49 @@ struct MergeValueTypes {
 template <typename R, typename... Senders>
 class WhenAnySharedState {
  public:
-  WhenAnySharedState(R receiver)
+  using ValueVariant = typename MergeValueTypes<Senders...>::type;
+  using ErrorVariant = typename MergeUniqueErrorTypes<Senders...>::type;
+  enum class Outcome : unsigned char { kNone, kValue, kError, kStopped };
+
+  WhenAnySharedState(R receiver, std::size_t count)
       : receiver_(std::move(receiver)),
-        completed_(false) {}
+        remaining_count_(count),
+        outcome_(Outcome::kNone) {}
 
   // Called when a child sender completes successfully
   template <std::size_t Index, typename... Args>
   void setValue(Args&&... args) noexcept {
-    // Try to claim completion (first value wins)
-    bool expected = false;
-    if (completed_.compare_exchange_strong(expected, true,
-                                            std::memory_order_acq_rel)) {
-      // We're first! Request stop for all other senders
-      stop_source_.request_stop();
-
-      // Forward the value as a variant
-      using ValueVariant = typename MergeValueTypes<Senders...>::type;
+    Outcome expected = Outcome::kNone;
+    if (outcome_.compare_exchange_strong(expected, Outcome::kValue,
+                                         std::memory_order_acq_rel)) {
       using ThisSender = std::tuple_element_t<Index, std::tuple<Senders...>>;
       using ThisValueTuple = ExtractValueTupleT<ThisSender>;
-
-      receiver_.setValue(ValueVariant{std::in_place_type<ThisValueTuple>,
-                                      std::forward<Args>(args)...});
+      value_.emplace(std::in_place_type<ThisValueTuple>,
+                     std::forward<Args>(args)...);
+      stop_source_.request_stop();
     }
-    // else: another sender already completed, ignore this result
+    completeOne();
   }
 
   // Called when a child sender completes with error
   template <typename Error>
   void setError(Error&& error) noexcept {
-    // Try to claim completion (first error wins)
-    bool expected = false;
-    if (completed_.compare_exchange_strong(expected, true,
-                                            std::memory_order_acq_rel)) {
-      // Request stop for all other senders
+    Outcome expected = Outcome::kNone;
+    if (outcome_.compare_exchange_strong(expected, Outcome::kError,
+                                         std::memory_order_acq_rel)) {
+      error_.emplace(std::forward<Error>(error));
       stop_source_.request_stop();
-
-      // Forward error as variant
-      using ErrorVariant = typename MergeUniqueErrorTypes<Senders...>::type;
-      receiver_.setError(ErrorVariant{std::forward<Error>(error)});
     }
-    // else: another sender already completed, ignore this error
+    completeOne();
   }
 
   // Called when a child sender is stopped
   void setStopped() noexcept {
-    // Try to claim completion (first stop wins)
-    bool expected = false;
-    if (completed_.compare_exchange_strong(expected, true,
-                                            std::memory_order_acq_rel)) {
-      // Request stop for all other senders
-      stop_source_.request_stop();
-
-      receiver_.setStopped();
-    }
-    // else: another sender already completed, ignore this stop
+    Outcome expected = Outcome::kNone;
+    outcome_.compare_exchange_strong(expected, Outcome::kStopped,
+                                     std::memory_order_acq_rel);
+    stop_source_.request_stop();
+    completeOne();
   }
 
   // Get stop token for child operations
@@ -133,9 +116,31 @@ class WhenAnySharedState {
   }
 
  private:
+  // Call receiver only after all children acknowledge completion.
+  void completeOne() noexcept {
+    if (remaining_count_.fetch_sub(1, std::memory_order_acq_rel) != 1) {
+      return;
+    }
+    switch (outcome_.load(std::memory_order_acquire)) {
+      case Outcome::kNone:  // shouldn't happen but treat as stopped
+      case Outcome::kStopped:
+        receiver_.setStopped();
+        break;
+      case Outcome::kValue:
+        receiver_.setValue(std::move(*value_));
+        break;
+      case Outcome::kError:
+        receiver_.setError(std::move(*error_));
+        break;
+    }
+  }
+
   R receiver_;
-  std::atomic<bool> completed_;      // true if receiver has been called
-  InplaceStopSource stop_source_;    // Stop source for active cancellation
+  std::optional<ValueVariant> value_;
+  std::optional<ErrorVariant> error_;
+  std::atomic<std::size_t> remaining_count_;
+  std::atomic<Outcome> outcome_;
+  InplaceStopSource stop_source_;
 };
 
 // Receiver for each individual sender in the whenAny
@@ -164,10 +169,6 @@ class WhenAnyReceiver {
  private:
   SharedState* state_;
 };
-
-// ============================================================================
-// OperationTuple - Recursive storage for non-movable operation states
-// ============================================================================
 
 // Forward declaration
 template <std::size_t Index, typename SharedState, typename... Senders>
@@ -215,7 +216,7 @@ class WhenAnyOperationState {
 
   template <typename... Ss>
   WhenAnyOperationState(R receiver, Ss&&... senders)
-      : state_(std::move(receiver))
+      : state_(std::move(receiver), sizeof...(Senders))
       , inner_ops_(&state_, std::forward<Ss>(senders)...) {}
 
   // Operation States are not copyable nor movable

@@ -109,14 +109,16 @@ class LetValueOperationState {
 
   // Transition from outer to inner operation
   // Called by LetValueReceiver::setValue
+  //
+  // args are refs into outer op state storage — invoke func_ BEFORE destruct().
   template <typename... Args>
   void transitionToInner(Args&&... args) noexcept {
-    // Step 1: Destroy outer operation (frees union storage)
+    // Step 1: Call function while outer args are still alive
+    auto inner_sender = std::invoke(func_, std::forward<Args>(args)...);
+
+    // Step 2: Destroy outer operation (frees union storage)
     storage_.outer_.destruct();
     state_ = State::kEmpty;
-
-    // Step 2: Call function to get inner sender
-    auto inner_sender = std::invoke(func_, std::forward<Args>(args)...);
 
     // Step 3: Construct inner operation in the SAME memory (union reuse, guaranteed copy elision via lambda)
     storage_.inner_.constructWith([&] {
@@ -231,4 +233,3 @@ auto operator|(S&& sender, const LetValueAdaptor<F>& adaptor) {
 }
 
 }  // namespace tempura
-// INJECTED BY SKILL - no diff gate

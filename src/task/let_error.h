@@ -119,14 +119,16 @@ class LetErrorOperationState {
 
   // Transition from outer to inner operation
   // Called by LetErrorReceiver::setError
+  //
+  // args are refs into outer op state storage — invoke func_ BEFORE destruct().
   template <typename... ErrorArgs>
   void transitionToInner(ErrorArgs&&... args) noexcept {
-    // Step 1: Destroy outer operation (frees union storage)
+    // Step 1: Call function while outer error args are still alive
+    auto inner_sender = std::invoke(func_, std::forward<ErrorArgs>(args)...);
+
+    // Step 2: Destroy outer operation (frees union storage)
     storage_.outer_.destruct();
     state_ = State::kEmpty;
-
-    // Step 2: Call function to get inner sender
-    auto inner_sender = std::invoke(func_, std::forward<ErrorArgs>(args)...);
 
     // Step 3: Construct inner operation in the SAME memory (union reuse, guaranteed copy elision via lambda)
     storage_.inner_.constructWith([&] {
