@@ -54,7 +54,9 @@ class JustSender {
   using CompletionSignatures =
       tempura::CompletionSignatures<SetValueTag(Args...), SetStoppedTag()>;
 
-  JustSender(Args&&... args) : values_{std::forward<Args>(args)...} {}
+  // Args is the (decayed) class parameter, so `Args&&` would be a plain rvalue
+  // reference — by value instead, to decay-copy lvalues and move rvalues.
+  JustSender(Args... args) : values_{std::move(args)...} {}
 
   template <ReceiverOf<Args...> R>
   auto connect(R&& receiver) && {
