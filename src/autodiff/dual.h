@@ -151,6 +151,23 @@ constexpr auto operator/(const U& s, const Dual<T, G>& d) -> Dual<T, G> {
   return {c / d.value, -c * d.gradient / (d.value * d.value)};  // d/dx (c/x) = −c/x²
 }
 
+// ── fma: the fused primitive. Value keeps a single rounding (std::fma); the tangent follows
+// the product+sum rule via the module ops, so it stays generic in G — matching operator*. ──
+template <typename T, typename G>
+constexpr auto fma(const Dual<T, G>& a, const Dual<T, G>& b, const Dual<T, G>& c) -> Dual<T, G> {
+  using std::fma;
+  return {fma(a.value, b.value, c.value),
+          a.gradient * b.value + a.value * b.gradient + c.gradient};
+}
+// Constant (zero-tangent) addend — the coefficient in a Horner step.
+template <typename T, typename G, typename U>
+  requires(!kIsDual<U>)
+constexpr auto fma(const Dual<T, G>& a, const Dual<T, G>& b, const U& c) -> Dual<T, G> {
+  using std::fma;
+  return {fma(a.value, b.value, static_cast<T>(c)),
+          a.gradient * b.value + a.value * b.gradient};
+}
+
 // ── Elementary functions: chain rule on the value, fail loud on domain violations ──
 // constexpr throughout (C++26 P0533/P1383 make <cmath> constexpr); found by ADL so a
 // templated f(Dual) and f(double) write the same `using std::sin; sin(x)`.

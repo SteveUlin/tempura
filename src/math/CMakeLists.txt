@@ -3,6 +3,7 @@
 # (IEEE-754 bit surgery), poly.h (polynomial evaluation), ulp_sweep.h (ULP oracle).
 # tempura_test() is defined in the parent src/CMakeLists.txt.
 tempura_test(float_bits LABEL math)
+tempura_test(eft LABEL math)
 tempura_test(poly LABEL math)
 tempura_test(ulp_sweep LABEL math)
 tempura_test(exp LABEL math)

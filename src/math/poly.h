@@ -1,159 +1,97 @@
 #pragma once
 
-#include <array>
+#include <algorithm>
 #include <cmath>
 #include <concepts>
 #include <cstddef>
+#include <iterator>
+#include <ranges>
 #include <utility>
 
 namespace tempura {
 
-// Polynomial evaluation toolkit — PURE EVALUATION (no fitting, no allocation, no runtime
-// basis change). Coefficients are a std::array in LOW-TO-HIGH order: c[i] is the
-// coefficient of xⁱ, so p(x) = Σ c[i]·xⁱ. Where coefficients come from (minimax/Remez,
-// Chebyshev, Taylor) is an offline design choice; this header only evaluates them.
-//
-// Scheme guide: horner is the default (fewest ops, one rounding per step, FMA-fused).
-// hornerSecondOrder / evalEven / evalOdd handle parity and latency (poly.h, next). The
-// accuracy escape-hatch (compHorner) and the Chebyshev-basis Clenshaw form live alongside.
+// A bidirectional range of floating-point polynomial COEFFICIENTS.
+template <typename R>
+concept RealCoeffs = std::ranges::bidirectional_range<R> &&
+                     std::floating_point<std::ranges::range_value_t<R>>;
 
-// FMA-Horner: p(x) with a single rounding per step (std::fma fuses the multiply-add).
-template <std::floating_point T, std::size_t N>
-constexpr auto horner(const std::array<T, N>& c, T x) -> T {
-  if constexpr (N == 0) {
-    return T{0};
-  } else {
-    T acc = c[N - 1];
-    for (std::size_t i = N - 1; i-- > 0;) acc = std::fma(acc, x, c[i]);  // N==1 ⇒ no iterations
-    return acc;
+template <typename R>
+using CoeffT = std::ranges::range_value_t<R>;
+
+// Horner — evaluate p(x)= Σ cᵢ xⁱ as a nested product
+//     p(x) = c₀ + x·(c₁ + x·(c₂ + x·c₃))          (a right fold)
+//     acc = c₃ → c₃·x+c₂ → (c₃·x+c₂)·x+c₁ → …·x+c₀
+template <RealCoeffs R, typename X>
+constexpr auto horner(R&& c, X x) -> X {
+  return std::ranges::fold_right(c, X{}, [x](CoeffT<R> ci, X acc) {
+    using std::fma;  // std::fma for scalars; ADL finds fma(Dual,…) for a dual
+                     // argument
+    return fma(acc, x, ci);
+  });
+}
+
+// Coefficients of the N-th derivative p⁽ᴺ⁾ as a lazy view
+template <std::size_t N = 1, RealCoeffs R>
+  requires std::ranges::sized_range<R>
+constexpr auto polyDifferentiate(R&& c) {
+  using T = CoeffT<R>;
+  const std::size_t len = std::ranges::size(c);
+  const std::size_t out = len > N ? len - N : 0;
+  return std::views::zip_transform(
+      [](std::size_t k, T ck) {
+        T m{1};
+        for (std::size_t i = 1; i <= N; ++i) m *= static_cast<T>(k + i);
+        return m * ck;
+      },
+      std::views::iota(std::size_t{0}, out),
+      std::forward<R>(c) | std::views::drop(N));
+}
+
+// Evaluate an even polynomial: ax² + bx⁴ + cx⁶ + …
+template <RealCoeffs R>
+constexpr auto evalEven(R&& c, CoeffT<R> x) -> CoeffT<R> {
+  return horner(std::forward<R>(c), x * x);
+}
+// Evaluate an odd polynomial: ax + bx³ + cx\^5 + …
+template <RealCoeffs R>
+constexpr auto evalOdd(R&& c, CoeffT<R> x) -> CoeffT<R> {
+  return x * horner(std::forward<R>(c), x * x);
+}
+
+// Second-order Horner (2-way): split coefficients by index parity into two
+// independent Horner chains in x², recombine E(x²) + x·O(x²). Same op count,
+// ~half the critical path (measured ~2× by degree 128). This is the k=2 split,
+// NOT Estrin's scheme (a log-depth tree over x^(2ᵏ)). Costs accuracy near roots
+// (x² amplification) — prefer horner there.
+template <RealCoeffs R>
+constexpr auto horner2(R&& c, CoeffT<R> x) -> CoeffT<R> {
+  const CoeffT<R> x2 = x * x;
+  const CoeffT<R> even = horner(c | std::views::stride(2), x2);
+  const CoeffT<R> odd =
+      horner(c | std::views::drop(1) | std::views::stride(2), x2);
+  return std::fma(x, odd, even);
+}
+
+// Clenshaw recurrence for a CHEBYSHEV-basis series Σ c[k]·Tₖ(x) — evaluate
+// without converting to monomials, more stable when coefficients live in that
+// basis. CONVENTION: full c[0] (not the c₀/2 some references use). Footgun:
+// passing monomial coeffs here is silent garbage. Chebyshev basis, not monomial
+// — its natural home is the Chebyshev machinery, not poly.h.
+template <RealCoeffs R>
+constexpr auto clenshaw(R&& c, CoeffT<R> x) -> CoeffT<R> {
+  using T = CoeffT<R>;
+  auto rit = std::ranges::rbegin(c);
+  const auto rend = std::ranges::rend(c);
+  if (rit == rend) return T{0};
+  const T two_x = T{2} * x;
+  T b1{0};  // bₖ₊₁
+  T b2{0};  // bₖ₊₂
+  for (const auto last = std::ranges::prev(rend); rit != last; ++rit) {
+    const T bk = std::fma(two_x, b1, *rit - b2);  // bₖ = 2x·bₖ₊₁ − bₖ₊₂ + cₖ
+    b2 = b1;
+    b1 = bk;
   }
-}
-
-// Evaluate p(x) AND p'(x) in one pass (the classic Newton-polishing / error-analysis
-// primitive). dp accumulates the running value before p advances, so it ends as the
-// derivative. ~2× one Horner.
-template <std::floating_point T, std::size_t N>
-constexpr auto hornerWithDeriv(const std::array<T, N>& c, T x) -> std::pair<T, T> {
-  if constexpr (N == 0) {
-    return {T{0}, T{0}};
-  } else {
-    T p = c[N - 1];
-    T dp{0};
-    for (std::size_t i = N - 1; i-- > 0;) {
-      dp = std::fma(dp, x, p);     // derivative uses the OLD p
-      p = std::fma(p, x, c[i]);
-    }
-    return {p, dp};
-  }
-}
-
-// Coefficients of p'(x): c'[i] = (i+1)·c[i+1]. A constant (N≤1) differentiates to the empty
-// polynomial, which horner evaluates to 0.
-template <std::floating_point T, std::size_t N>
-constexpr auto derivative(const std::array<T, N>& c) -> std::array<T, (N > 0 ? N - 1 : 0)> {
-  std::array<T, (N > 0 ? N - 1 : 0)> d{};
-  for (std::size_t i = 1; i < N; ++i) d[i - 1] = static_cast<T>(i) * c[i];
-  return d;
-}
-
-// ── parity forms: sin/cos/atan/erf have only even or only odd powers, so the coefficient
-// array holds just that parity and is evaluated in x² (half the degree, half the work). ──
-
-// Σ c[k]·x^(2k) — an even function.
-template <std::floating_point T, std::size_t M>
-constexpr auto evalEven(const std::array<T, M>& c, T x) -> T {
-  return horner(c, x * x);
-}
-// x·Σ c[k]·x^(2k) — an odd function. Factoring x OUT (not folding it into the coefficients)
-// makes evalOdd(c, −x) == −evalOdd(c, x) hold bit-exactly: horner sees x² either way, and
-// the single outer multiply by x carries the sign. That exact antisymmetry is the point.
-template <std::floating_point T, std::size_t M>
-constexpr auto evalOdd(const std::array<T, M>& c, T x) -> T {
-  return x * horner(c, x * x);
-}
-
-// Second-order (Dorn) Horner: split the full coefficient array by index parity into two
-// independent Horner chains in x², recombine E(x²) + x·O(x²). Same op count as horner but
-// ~half the critical-path length — pick it when a longer polynomial is latency-bound.
-template <std::floating_point T, std::size_t N>
-constexpr auto hornerSecondOrder(const std::array<T, N>& c, T x) -> T {
-  if constexpr (N == 0) {
-    return T{0};
-  } else {
-    const T x2 = x * x;
-    std::array<T, (N + 1) / 2> even{};
-    std::array<T, N / 2> odd{};
-    for (std::size_t k = 0; k < even.size(); ++k) even[k] = c[2 * k];
-    for (std::size_t k = 0; k < odd.size(); ++k) odd[k] = c[2 * k + 1];
-    return std::fma(x, horner(odd, x2), horner(even, x2));
-  }
-}
-
-// Clenshaw recurrence for a CHEBYSHEV-basis polynomial: evaluates Σ c[k]·Tₖ(x) (Tₖ the
-// Chebyshev polynomials of the first kind) without converting to monomial form. More stable
-// than monomial Horner when coefficients stay in Chebyshev form.
-// CONVENTION: full c[0] (NOT the c₀/2 convention some references use) — a caller holding
-// half-c₀ coefficients must double c[0] first. And note the basis footgun: these coeffs are
-// CHEBYSHEV coefficients; passing monomial coeffs here (or Chebyshev coeffs to horner) is
-// silent garbage.
-template <std::floating_point T, std::size_t N>
-constexpr auto clenshaw(const std::array<T, N>& c, T x) -> T {
-  if constexpr (N == 0) {
-    return T{0};
-  } else if constexpr (N == 1) {
-    return c[0];
-  } else {
-    T b1{0};  // bₖ₊₁
-    T b2{0};  // bₖ₊₂
-    const T two_x = T{2} * x;
-    for (std::size_t k = N - 1; k >= 1; --k) {
-      const T bk = std::fma(two_x, b1, c[k] - b2);  // bₖ = 2x·bₖ₊₁ − bₖ₊₂ + cₖ
-      b2 = b1;
-      b1 = bk;
-    }
-    return std::fma(x, b1, c[0] - b2);  // c₀ + x·b₁ − b₂
-  }
-}
-
-// ── Error-free transforms (EFTs): exact residuals for the compensated escape-hatch. ──
-// They feed compHorner; carrying a two-word value further would need a DoubleWord type
-// (deferred until a kernel — e.g. exp's extended-precision fold — needs it).
-
-// a + b = sum + err, EXACTLY (Knuth, branch-free). err is the part lost to rounding.
-template <std::floating_point T>
-constexpr auto twoSum(T a, T b) -> std::pair<T, T> {
-  const T s = a + b;
-  const T bv = s - a;
-  const T err = (a - (s - bv)) + (b - bv);
-  return {s, err};
-}
-// a · b = prod + err, EXACTLY (one FMA — the reason compensation is cheap).
-template <std::floating_point T>
-constexpr auto twoProductFMA(T a, T b) -> std::pair<T, T> {
-  const T p = a * b;
-  return {p, std::fma(a, b, -p)};
-}
-
-// Compensated Horner (Graillat–Langlois–Louvet): run Horner while accumulating each step's
-// rounding residual into an error polynomial, then add the correction — giving ~twice the
-// working precision. Accurate until the condition number approaches 1/u². ~3× the flops of
-// horner; reach for it only where the ULP oracle shows plain Horner losing digits (heavy
-// cancellation, e.g. evaluating near a polynomial's root).
-template <std::floating_point T, std::size_t N>
-constexpr auto compHorner(const std::array<T, N>& c, T x) -> T {
-  if constexpr (N == 0) {
-    return T{0};
-  } else {
-    T s = c[N - 1];
-    T r{0};  // the running error polynomial
-    for (std::size_t i = N - 1; i-- > 0;) {
-      const auto [p, pe] = twoProductFMA(s, x);    // s·x = p + pe
-      const auto [snew, se] = twoSum(p, c[i]);     // p + c[i] = snew + se
-      s = snew;
-      r = std::fma(r, x, pe + se);                 // accumulate both residuals
-    }
-    return s + r;
-  }
+  return std::fma(x, b1, *rit - b2);  // c₀ + x·b₁ − b₂
 }
 
 }  // namespace tempura

@@ -96,8 +96,9 @@ add_library(tempura_release_flags INTERFACE)
 target_compile_options(tempura_release_flags INTERFACE
   $<$<CONFIG:Release>:-ftree-vectorize>
   $<$<CONFIG:Release>:-march=native>
-  $<$<CONFIG:Release>:-ffast-math>
-  $<$<CONFIG:Release>:-funsafe-math-optimizations>
+  # No -ffast-math / -funsafe-math-optimizations: they enable -fassociative-math,
+  # which reassociates the error-free transforms in eft.h (twoSum's e = b-(s-a)
+  # folds to 0) and silently collapses DoubleWord back to plain double.
   $<$<CONFIG:Release>:-fno-math-errno>
   $<$<CONFIG:Release>:-O3>
   $<$<CONFIG:Release>:-funroll-loops>
