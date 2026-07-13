@@ -1,37 +1,213 @@
 #pragma once
 
-#include <cassert>
 #include <cmath>
 #include <compare>
 #include <concepts>
 #include <numbers>
 #include <type_traits>
+#include <utility>
 
 namespace tempura::autodiff {
 
-// Forward-mode AD core (the JVP primitive). A dual number a + bε with ε² = 0: Taylor-
-// expanding any f gives f(a + bε) = f(a) + f'(a)·b·ε, so ONE evaluation yields both the
-// value and the directional derivative along the seed b.
+// Forward-mode AD core.
 //
-// T is the value scalar; G is the TANGENT carry — and G need NOT equal T. G = T seeds one
-// direction; G = a vector seeds K directions at once (the basis of jacfwd); G = Dual gives
-// second order (forward-over-forward). The arithmetic only asks that G be a module over T
-// (addable to itself, scalable by T), so it stays generic without a concept for now.
+// A dual number a + bε with ε² = 0: Taylor-expanding any f gives
+// f(a + bε) = f(a) + f'(a)·b·ε, so one evaluation yields both the value and the
+// directional derivative along the seed b.
+
 template <typename T, typename G = T>
 struct Dual {
   T value{};
   G gradient{};
 
-  constexpr Dual() = default;
-  constexpr Dual(const T& value) : value{value}, gradient{} {}
-  constexpr Dual(const T& value, const G& gradient) : value{value}, gradient{gradient} {}
+  // Value-only: the gradient never steers control flow, so a differentiated
+  // branch matches the primal's.
+  friend constexpr auto operator<=>(const Dual& a, const Dual& b)
+    requires std::three_way_comparable<T>
+  {
+    return a.value <=> b.value;
+  }
+  friend constexpr auto operator==(const Dual& a, const Dual& b) -> bool
+    requires std::equality_comparable<T>
+  {
+    return a.value == b.value;
+  }
 
-  // Order by VALUE ONLY. A defaulted spaceship would fold the tangent into the order, so
-  // two duals with equal value but different derivative would compare unequal — and a
-  // branch like `if (x < y)` inside a differentiated function could then depend on a
-  // derivative. A dual must compare like its real part.
-  constexpr auto operator<=>(const Dual& o) const { return value <=> o.value; }
-  constexpr auto operator==(const Dual& o) const -> bool { return value == o.value; }
+  // The constructible_from gate keeps a lossy cross-type mix (Dual<float> vs
+  // Dual<double>) from compiling.
+  template <typename U>
+    requires(std::constructible_from<T, const U&> &&
+             requires(const T& t, const U& u) { t <=> u; })
+  friend constexpr auto operator<=>(const Dual& a, const U& s) {
+    return a.value <=> s;
+  }
+  template <typename U>
+    requires(std::constructible_from<T, const U&> &&
+             requires(const T& t, const U& u) {
+               { t == u } -> std::convertible_to<bool>;
+             })
+  friend constexpr auto operator==(const Dual& a, const U& s) -> bool {
+    return a.value == s;
+  }
+
+  // Compound assignment holds the primary arithmetic; the binary operators derive.
+
+  constexpr auto operator+=(const Dual& rhs) -> Dual& {
+    value += rhs.value;
+    gradient += rhs.gradient;
+    return *this;
+  }
+  constexpr auto operator-=(const Dual& rhs) -> Dual& {
+    value -= rhs.value;
+    gradient -= rhs.gradient;
+    return *this;
+  }
+  constexpr auto operator*=(const Dual& rhs) -> Dual& {
+    G cross = value * rhs.gradient;  // read all old state before any write (x *= x safe)
+    gradient *= rhs.value;
+    gradient += cross;  // product rule: g·w + v·g′
+    value *= rhs.value;
+    return *this;
+  }
+  constexpr auto operator/=(const Dual& rhs) -> Dual& {
+    // Quotient rule u′/w − (u/w²)·w′, folded /w/w so w² never forms (overflows near 1.3e154).
+    G cross = (value / rhs.value / rhs.value) * rhs.gradient;
+    gradient /= rhs.value;
+    gradient -= cross;
+    value /= rhs.value;
+    return *this;
+  }
+
+  // Scalar-mixed forms. The scalars of Dual<T,G> are exactly what constructs into
+  // T: an inner Dual lifts losslessly, a mismatched Dual (float vs double) fails loud.
+  template <typename U>
+    requires(std::constructible_from<T, const U&>)
+  constexpr auto operator+=(const U& s) -> Dual& {
+    value += static_cast<T>(s);
+    return *this;
+  }
+  template <typename U>
+    requires(std::constructible_from<T, const U&>)
+  constexpr auto operator-=(const U& s) -> Dual& {
+    value -= static_cast<T>(s);
+    return *this;
+  }
+  template <typename U>
+    requires(std::constructible_from<T, const U&>)
+  constexpr auto operator*=(const U& s) -> Dual& {
+    const T c = static_cast<T>(s);
+    value *= c;
+    gradient *= c;
+    return *this;
+  }
+  template <typename U>
+    requires(std::constructible_from<T, const U&>)
+  constexpr auto operator/=(const U& s) -> Dual& {
+    const T c = static_cast<T>(s);
+    value /= c;
+    gradient /= c;
+    return *this;
+  }
+
+  // An rvalue dual operand donates its buffer. Two statements, never
+  // `return a += b`: that returns an lvalue and copies; a bare `return a;` moves.
+
+  friend constexpr auto operator+(Dual a, const Dual& b) -> Dual {
+    a += b;
+    return a;
+  }
+  friend constexpr auto operator+(const Dual& a, Dual&& b) -> Dual {
+    b += a;
+    return std::move(b);
+  }
+  friend constexpr auto operator-(Dual a, const Dual& b) -> Dual {
+    a -= b;
+    return a;
+  }
+  friend constexpr auto operator-(const Dual& a, Dual&& b) -> Dual {
+    // −(b−a), not (−b)+a: the latter doubles the tangent for x − move(x); alias-safe.
+    b.value = a.value - b.value;
+    b.gradient -= a.gradient;
+    b.gradient *= T{-1};
+    return std::move(b);
+  }
+  friend constexpr auto operator*(Dual a, const Dual& b) -> Dual {
+    a *= b;
+    return a;
+  }
+  friend constexpr auto operator*(const Dual& a, Dual&& b) -> Dual {
+    b *= a;
+    return std::move(b);
+  }
+  friend constexpr auto operator/(Dual a, const Dual& b) -> Dual {
+    a /= b;
+    return a;
+  }
+  friend constexpr auto operator/(const Dual& a, Dual&& b) -> Dual {
+    // Hoist a′/w before mutating (x / move(x) safe); fold /w/w so w² never forms.
+    G t = a.gradient / b.value;
+    b.gradient *= -(a.value / b.value / b.value);
+    b.gradient += t;
+    b.value = a.value / b.value;
+    return std::move(b);
+  }
+
+  template <typename U>
+    requires(std::constructible_from<T, const U&>)
+  friend constexpr auto operator+(Dual a, const U& s) -> Dual {
+    a += s;
+    return a;
+  }
+  template <typename U>
+    requires(std::constructible_from<T, const U&>)
+  friend constexpr auto operator+(const U& s, Dual a) -> Dual {
+    a += s;
+    return a;
+  }
+  template <typename U>
+    requires(std::constructible_from<T, const U&>)
+  friend constexpr auto operator-(Dual a, const U& s) -> Dual {
+    a -= s;
+    return a;
+  }
+  template <typename U>
+    requires(std::constructible_from<T, const U&>)
+  friend constexpr auto operator-(const U& s, Dual a) -> Dual {
+    a.value = static_cast<T>(s) - a.value;
+    a.gradient *= T{-1};
+    return a;
+  }
+  template <typename U>
+    requires(std::constructible_from<T, const U&>)
+  friend constexpr auto operator*(Dual a, const U& s) -> Dual {
+    a *= s;
+    return a;
+  }
+  template <typename U>
+    requires(std::constructible_from<T, const U&>)
+  friend constexpr auto operator*(const U& s, Dual a) -> Dual {
+    a *= s;
+    return a;
+  }
+  template <typename U>
+    requires(std::constructible_from<T, const U&>)
+  friend constexpr auto operator/(Dual a, const U& s) -> Dual {
+    a /= s;
+    return a;
+  }
+  template <typename U>
+    requires(std::constructible_from<T, const U&>)
+  friend constexpr auto operator/(const U& s, Dual a) -> Dual {
+    const T q = static_cast<T>(s) / a.value;
+    a.gradient *= -q / a.value;  // d/dx (c/x) = −c/x² = −(c/x)/x, no w² overflow
+    a.value = q;
+    return a;
+  }
+
+  friend constexpr auto operator+(const Dual& d) -> Dual { return d; }
+  friend constexpr auto operator-(const Dual& d) -> Dual {
+    return {.value = -d.value, .gradient = -d.gradient};
+  }
 };
 
 template <typename T>
@@ -39,241 +215,118 @@ Dual(T) -> Dual<T>;
 template <typename T, typename G>
 Dual(T, G) -> Dual<T, G>;
 
-template <typename T>
-struct IsDual : std::false_type {};
+// fma: the value keeps std::fma's single rounding.
 template <typename T, typename G>
-struct IsDual<Dual<T, G>> : std::true_type {};
-template <typename T>
-inline constexpr bool kIsDual = IsDual<std::remove_cvref_t<T>>::value;
-
-// ── Arithmetic: dual ⊕ dual (same type) ──
-
-template <typename T, typename G>
-constexpr auto operator+=(Dual<T, G>& lhs, const Dual<T, G>& rhs) -> Dual<T, G>& {
-  lhs.value += rhs.value;
-  lhs.gradient += rhs.gradient;
-  return lhs;
-}
-template <typename T, typename G>
-constexpr auto operator+(Dual<T, G> lhs, const Dual<T, G>& rhs) -> Dual<T, G> {
-  return lhs += rhs;
-}
-template <typename T, typename G>
-constexpr auto operator+(const Dual<T, G>& d) -> Dual<T, G> {
-  return d;
-}
-
-template <typename T, typename G>
-constexpr auto operator-=(Dual<T, G>& lhs, const Dual<T, G>& rhs) -> Dual<T, G>& {
-  lhs.value -= rhs.value;
-  lhs.gradient -= rhs.gradient;
-  return lhs;
-}
-template <typename T, typename G>
-constexpr auto operator-(Dual<T, G> lhs, const Dual<T, G>& rhs) -> Dual<T, G> {
-  return lhs -= rhs;
-}
-template <typename T, typename G>
-constexpr auto operator-(Dual<T, G> d) -> Dual<T, G> {
-  d.value = -d.value;
-  d.gradient = -d.gradient;
-  return d;
-}
-
-template <typename T, typename G>
-constexpr auto operator*=(Dual<T, G>& lhs, const Dual<T, G>& rhs) -> Dual<T, G>& {
-  lhs.gradient = lhs.gradient * rhs.value + lhs.value * rhs.gradient;  // product rule
-  lhs.value *= rhs.value;
-  return lhs;
-}
-template <typename T, typename G>
-constexpr auto operator*(Dual<T, G> lhs, const Dual<T, G>& rhs) -> Dual<T, G> {
-  return lhs *= rhs;
-}
-
-template <typename T, typename G>
-constexpr auto operator/=(Dual<T, G>& lhs, const Dual<T, G>& rhs) -> Dual<T, G>& {
-  lhs.gradient = (lhs.gradient * rhs.value - lhs.value * rhs.gradient) /  // quotient rule
-                 (rhs.value * rhs.value);
-  lhs.value /= rhs.value;
-  return lhs;
-}
-template <typename T, typename G>
-constexpr auto operator/(Dual<T, G> lhs, const Dual<T, G>& rhs) -> Dual<T, G> {
-  return lhs /= rhs;
-}
-
-// ── Arithmetic: dual ⊕ scalar (the scalar is a constant — zero tangent) ──
-// The result keeps the DUAL's value type T; the scalar is cast into it. The previous
-// `operator*(T, Dual<U,G>) -> Dual<T,G>` deduced the result's T from the SCALAR, so
-// `2 * Dual<double>` became Dual<int> and silently truncated the value. Hence U is a
-// separate, non-dual parameter and the dual's T always wins.
-
-template <typename T, typename G, typename U>
-  requires(!kIsDual<U>)
-constexpr auto operator+(const Dual<T, G>& d, const U& s) -> Dual<T, G> {
-  return {d.value + static_cast<T>(s), d.gradient};
-}
-template <typename T, typename G, typename U>
-  requires(!kIsDual<U>)
-constexpr auto operator+(const U& s, const Dual<T, G>& d) -> Dual<T, G> {
-  return {static_cast<T>(s) + d.value, d.gradient};
-}
-template <typename T, typename G, typename U>
-  requires(!kIsDual<U>)
-constexpr auto operator-(const Dual<T, G>& d, const U& s) -> Dual<T, G> {
-  return {d.value - static_cast<T>(s), d.gradient};
-}
-template <typename T, typename G, typename U>
-  requires(!kIsDual<U>)
-constexpr auto operator-(const U& s, const Dual<T, G>& d) -> Dual<T, G> {
-  return {static_cast<T>(s) - d.value, -d.gradient};
-}
-template <typename T, typename G, typename U>
-  requires(!kIsDual<U>)
-constexpr auto operator*(const Dual<T, G>& d, const U& s) -> Dual<T, G> {
-  return {d.value * static_cast<T>(s), d.gradient * static_cast<T>(s)};
-}
-template <typename T, typename G, typename U>
-  requires(!kIsDual<U>)
-constexpr auto operator*(const U& s, const Dual<T, G>& d) -> Dual<T, G> {
-  return {static_cast<T>(s) * d.value, static_cast<T>(s) * d.gradient};
-}
-template <typename T, typename G, typename U>
-  requires(!kIsDual<U>)
-constexpr auto operator/(const Dual<T, G>& d, const U& s) -> Dual<T, G> {
-  return {d.value / static_cast<T>(s), d.gradient / static_cast<T>(s)};
-}
-template <typename T, typename G, typename U>
-  requires(!kIsDual<U>)
-constexpr auto operator/(const U& s, const Dual<T, G>& d) -> Dual<T, G> {
-  const T c = static_cast<T>(s);
-  return {c / d.value, -c * d.gradient / (d.value * d.value)};  // d/dx (c/x) = −c/x²
-}
-
-// ── fma: the fused primitive. Value keeps a single rounding (std::fma); the tangent follows
-// the product+sum rule via the module ops, so it stays generic in G — matching operator*. ──
-template <typename T, typename G>
-constexpr auto fma(const Dual<T, G>& a, const Dual<T, G>& b, const Dual<T, G>& c) -> Dual<T, G> {
+constexpr auto fma(const Dual<T, G>& a, const Dual<T, G>& b, Dual<T, G> c)
+    -> Dual<T, G> {
   using std::fma;
-  return {fma(a.value, b.value, c.value),
-          a.gradient * b.value + a.value * b.gradient + c.gradient};
+  // Sink the addend by value: its tangent is the accumulator.
+  c.gradient += a.gradient * b.value;
+  c.gradient += a.value * b.gradient;
+  c.value = fma(a.value, b.value, c.value);
+  return c;
 }
-// Constant (zero-tangent) addend — the coefficient in a Horner step.
+// Constant (zero-tangent) addend.
 template <typename T, typename G, typename U>
-  requires(!kIsDual<U>)
-constexpr auto fma(const Dual<T, G>& a, const Dual<T, G>& b, const U& c) -> Dual<T, G> {
+  requires(std::constructible_from<T, const U&>)
+constexpr auto fma(const Dual<T, G>& a, const Dual<T, G>& b, const U& c)
+    -> Dual<T, G> {
   using std::fma;
-  return {fma(a.value, b.value, static_cast<T>(c)),
-          a.gradient * b.value + a.value * b.gradient};
+  G g = a.gradient * b.value;
+  g += a.value * b.gradient;
+  return {.value = fma(a.value, b.value, static_cast<T>(c)),
+          .gradient = std::move(g)};
 }
 
-// ── Elementary functions: chain rule on the value, fail loud on domain violations ──
-// constexpr throughout (C++26 P0533/P1383 make <cmath> constexpr); found by ADL so a
-// templated f(Dual) and f(double) write the same `using std::sin; sin(x)`.
+// Elementary functions: chain rule on the value; a domain violation propagates
+// as NaN through value and gradient.
 
 template <typename T, typename G>
-constexpr auto sqrt(Dual<T, G> d) -> Dual<T, G> {
+constexpr auto sqrt(const Dual<T, G>& d) -> Dual<T, G> {
   using std::sqrt;
-  assert(d.value >= T{} && "sqrt domain: value must be ≥ 0");
   const T s = sqrt(d.value);
-  d.gradient = d.gradient / (T{2} * s);
-  d.value = s;
-  return d;
+  return {.value = s, .gradient = d.gradient / (T{2} * s)};
 }
 template <typename T, typename G>
-constexpr auto exp(Dual<T, G> d) -> Dual<T, G> {
+constexpr auto exp(const Dual<T, G>& d) -> Dual<T, G> {
   using std::exp;
   const T e = exp(d.value);
-  d.gradient = d.gradient * e;
-  d.value = e;
-  return d;
+  return {.value = e, .gradient = d.gradient * e};
 }
 template <typename T, typename G>
-constexpr auto log(Dual<T, G> d) -> Dual<T, G> {
+constexpr auto log(const Dual<T, G>& d) -> Dual<T, G> {
   using std::log;
-  assert(d.value > T{} && "log domain: value must be > 0");
-  d.gradient = d.gradient / d.value;
-  d.value = log(d.value);
-  return d;
+  return {.value = log(d.value), .gradient = d.gradient / d.value};
 }
-// pow with a constant exponent: d/dx xⁿ = n·xⁿ⁻¹.
+// pow, constant exponent: d/dx xⁿ = n·xⁿ⁻¹. Non-deduced n so pow(x, 2) binds to
+// T instead of deducing int and clashing with T=double.
 template <typename T, typename G>
-constexpr auto pow(Dual<T, G> d, const T& n) -> Dual<T, G> {
+constexpr auto pow(const Dual<T, G>& d, const std::type_identity_t<T>& n)
+    -> Dual<T, G> {
   using std::pow;
-  d.gradient = d.gradient * (n * pow(d.value, n - T{1}));
-  d.value = pow(d.value, n);
-  return d;
+  return {.value = pow(d.value, n),
+          .gradient = d.gradient * (n * pow(d.value, n - T{1}))};
 }
-// pow with a dual exponent: d(uᵛ) = uᵛ·(v'·ln u + v·u'/u).
+// pow, dual exponent: d(uᵛ) = uᵛ·(v′·ln u + v·u′/u).
 template <typename T, typename G>
-constexpr auto pow(const Dual<T, G>& base, const Dual<T, G>& expo) -> Dual<T, G> {
+constexpr auto pow(const Dual<T, G>& base, const Dual<T, G>& expo)
+    -> Dual<T, G> {
   using std::log;
   using std::pow;
-  assert(base.value > T{} && "pow domain: base must be > 0 for a dual exponent");
   const T uv = pow(base.value, expo.value);
-  return {uv, uv * (expo.gradient * log(base.value) +
-                    expo.value * base.gradient / base.value)};
+  const T c1 = uv * log(base.value);
+  const T c2 = uv * expo.value / base.value;
+  return {.value = uv, .gradient = c1 * expo.gradient + c2 * base.gradient};
 }
 
 template <typename T, typename G>
-constexpr auto sin(Dual<T, G> d) -> Dual<T, G> {
+constexpr auto sin(const Dual<T, G>& d) -> Dual<T, G> {
   using std::cos;
   using std::sin;
-  d.gradient = d.gradient * cos(d.value);
-  d.value = sin(d.value);
-  return d;
+  return {.value = sin(d.value), .gradient = d.gradient * cos(d.value)};
 }
 template <typename T, typename G>
-constexpr auto cos(Dual<T, G> d) -> Dual<T, G> {
+constexpr auto cos(const Dual<T, G>& d) -> Dual<T, G> {
   using std::cos;
   using std::sin;
-  d.gradient = d.gradient * (-sin(d.value));
-  d.value = cos(d.value);
-  return d;
+  return {.value = cos(d.value), .gradient = d.gradient * (-sin(d.value))};
 }
 template <typename T, typename G>
-constexpr auto tan(Dual<T, G> d) -> Dual<T, G> {
+constexpr auto tan(const Dual<T, G>& d) -> Dual<T, G> {
   using std::cos;
   using std::tan;
   const T c = cos(d.value);
-  d.gradient = d.gradient / (c * c);  // sec²
-  d.value = tan(d.value);
-  return d;
+  return {.value = tan(d.value), .gradient = d.gradient / (c * c)};  // sec²
 }
 template <typename T, typename G>
-constexpr auto asin(Dual<T, G> d) -> Dual<T, G> {
+constexpr auto asin(const Dual<T, G>& d) -> Dual<T, G> {
   using std::asin;
   using std::sqrt;
-  assert(d.value * d.value <= T{1} && "asin domain: |value| must be ≤ 1");
-  d.gradient = d.gradient / sqrt(T{1} - d.value * d.value);
-  d.value = asin(d.value);
-  return d;
+  return {.value = asin(d.value),
+          .gradient = d.gradient / sqrt(T{1} - d.value * d.value)};
 }
 template <typename T, typename G>
-constexpr auto acos(Dual<T, G> d) -> Dual<T, G> {
+constexpr auto acos(const Dual<T, G>& d) -> Dual<T, G> {
   using std::acos;
   using std::sqrt;
-  assert(d.value * d.value <= T{1} && "acos domain: |value| must be ≤ 1");
-  d.gradient = d.gradient * (-T{1} / sqrt(T{1} - d.value * d.value));
-  d.value = acos(d.value);
-  return d;
+  return {.value = acos(d.value),
+          .gradient = d.gradient * (-T{1} / sqrt(T{1} - d.value * d.value))};
 }
 template <typename T, typename G>
-constexpr auto atan(Dual<T, G> d) -> Dual<T, G> {
+constexpr auto atan(const Dual<T, G>& d) -> Dual<T, G> {
   using std::atan;
-  d.gradient = d.gradient / (T{1} + d.value * d.value);
-  d.value = atan(d.value);
-  return d;
+  return {.value = atan(d.value),
+          .gradient = d.gradient / (T{1} + d.value * d.value)};
 }
 
-// Digamma ψ(x) = d/dx ln Γ(x): recurrence-shift to large x, then the Bernoulli asymptotic
-// series. The derivative rule for lgamma below.
+// Digamma ψ(x) = d/dx ln Γ(x): recurrence-shift to large x, then the Bernoulli
+// asymptotic series.
 template <std::floating_point T>
 constexpr auto digamma(T x) -> T {
   if (x < T{0.5}) {  // reflection ψ(1−x) − ψ(x) = π·cot(πx)
     using std::tan;
-    return digamma(T{1} - x) - std::numbers::pi_v<T> / tan(std::numbers::pi_v<T> * x);
+    return digamma(T{1} - x) -
+           std::numbers::pi_v<T> / tan(std::numbers::pi_v<T> * x);
   }
   T result{};
   while (x < T{7}) {  // ψ(x+1) = ψ(x) + 1/x
@@ -292,11 +345,10 @@ constexpr auto digamma(T x) -> T {
   return result;
 }
 template <typename T, typename G>
-auto lgamma(Dual<T, G> d) -> Dual<T, G> {  // not constexpr: std::lgamma isn't
+auto lgamma(const Dual<T, G>& d)
+    -> Dual<T, G> {  // not constexpr: std::lgamma isn't
   using std::lgamma;
-  d.gradient = d.gradient * digamma(d.value);
-  d.value = lgamma(d.value);
-  return d;
+  return {.value = lgamma(d.value), .gradient = d.gradient * digamma(d.value)};
 }
 
 }  // namespace tempura::autodiff
