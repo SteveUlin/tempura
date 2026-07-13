@@ -1,74 +1,82 @@
 #pragma once
 
-#include <array>
 #include <cassert>
 #include <cstddef>
-#include <cstdint>
+#include <initializer_list>
+#include <utility>
 #include <vector>
+
+#include "weighted_dag.h"
 
 namespace tempura::autodiff {
 
-// Reverse-mode AD core (the VJP primitive): a flat Wengert tape. Each elementary op pushes
-// ONE Entry recording its local partials and its parents' indices. Because operations are
-// recorded in evaluation order, that order is ALREADY a topological sort — so the reverse
-// sweep is just a backward scan accumulating adjoints: linear in the number of ops,
-// cache-friendly, and correct on shared subexpressions (where a virtual + shared_ptr DAG
-// re-walks shared nodes and goes exponential). Parents are INTEGER INDICES so they survive
-// the vector's reallocation (raw pointers would dangle). Runtime/allocating by nature —
-// reverse mode is not a constexpr path (forward dual/jet is).
-//
-// Generic over T is the keystone: Tape<Dual<U>> records a forward-dual computation and
-// sweeps it backward → forward-over-reverse HVP/Hessian with no second AD system.
+// v ← (I−L)⁻¹·v: forward substitution in node order; each node gathers its
+// parents through its weights, on top of its seed.
 template <typename T>
-class Tape {
- public:
-  struct Entry {
-    std::array<T, 2> partials{};          // ∂(this op)/∂(parent k)
-    std::array<std::uint32_t, 2> deps{};  // parent indices; a leaf/unary's spare slot self-refs
-  };
-
-  // An independent variable / constant: no parents, nothing to propagate through.
-  auto leaf() -> std::uint32_t {
-    const auto idx = static_cast<std::uint32_t>(entries_.size());
-    entries_.push_back(Entry{{T{}, T{}}, {idx, idx}});
-    return idx;
-  }
-  // A unary op with local partial p w.r.t. parent a (spare slot self-references → ignored).
-  auto unary(std::uint32_t a, const T& p) -> std::uint32_t {
-    const auto idx = static_cast<std::uint32_t>(entries_.size());
-    entries_.push_back(Entry{{p, T{}}, {a, idx}});
-    return idx;
-  }
-  // A binary op with local partials pa, pb w.r.t. parents a, b.
-  auto binary(std::uint32_t a, std::uint32_t b, const T& pa, const T& pb) -> std::uint32_t {
-    const auto idx = static_cast<std::uint32_t>(entries_.size());
-    entries_.push_back(Entry{{pa, pb}, {a, b}});
-    return idx;
-  }
-
-  auto size() const -> std::size_t { return entries_.size(); }
-
-  // Reverse sweep from `output` with cotangent `seed`. Returns the full adjoint vector,
-  // where adj[i] = ∂(seed·output)/∂(node i); read adj[leaf.idx] for an input's gradient.
-  // Adjoints live in a SEPARATE buffer and the tape is const, so sweeps with different
-  // seeds (multi-output VJP, or multi-column reverse Jacobians) are independent.
-  auto backward(std::uint32_t output, const T& seed = T{1}) const -> std::vector<T> {
-    assert(output < entries_.size() && "output index out of range");
-    std::vector<T> adj(entries_.size(), T{});
-    adj[output] = seed;
-    for (std::size_t i = entries_.size(); i-- > 0;) {
-      const Entry& e = entries_[i];
-      const T a = adj[i];
-      adj[e.deps[0]] += a * e.partials[0];
-      // Skip the self-referencing spare slot of a leaf/unary; a real second parent (incl.
-      // a repeated parent like x*x) has index < i, so its contribution accumulates.
-      if (e.deps[1] != static_cast<std::uint32_t>(i)) adj[e.deps[1]] += a * e.partials[1];
+auto forwardSubstitute(const WeightedDag<T>& dag, std::vector<T> v)
+    -> std::vector<T> {
+  assert(v.size() == dag.nodeCount() && "vector must cover every node");
+  for (std::size_t i = 0; i < dag.nodeCount(); ++i) {
+    for (const auto& [dep, weight] : dag.edges(i)) {
+      assert(dep < i && "edge must point to an earlier node");
+      v[i] += weight * v[dep];
     }
-    return adj;
+  }
+  return v;
+}
+
+// v ← (I−L)⁻ᵀ·v: back-substitution in reverse node order; each node scatters
+// its value to its parents through its weights.
+template <typename T>
+auto backwardSubstitute(const WeightedDag<T>& dag, std::vector<T> v)
+    -> std::vector<T> {
+  assert(v.size() == dag.nodeCount() && "vector must cover every node");
+  for (std::size_t i = dag.nodeCount(); i-- > 0;) {
+    for (const auto& [dep, weight] : dag.edges(i)) {
+      assert(dep < i && "edge must point to an earlier node");
+      v[dep] += v[i] * weight;
+    }
+  }
+  return v;
+}
+
+// Reverse-mode core (the VJP primitive): AD vocabulary over a public WeightedDag.
+// Recording evaluates f once and stores its linearization — edge weight =
+// ∂(node)/∂(parent) at the recorded point.
+//
+// T is generic: Tape<Dual<U>> records dual partials and sweeps them backward —
+// forward-over-reverse second order with no second AD system.
+template <typename T>
+struct Tape {
+  WeightedDag<T> dag;
+
+  auto leaf() -> std::size_t { return dag.addNode({}); }
+
+  auto unary(std::size_t a, const T& p) -> std::size_t { return dag.addNode({{a, p}}); }
+
+  auto binary(std::size_t a, std::size_t b, const T& pa, const T& pb) -> std::size_t {
+    return dag.addNode({{a, pa}, {b, pb}});
   }
 
- private:
-  std::vector<Entry> entries_;
+  auto ternary(std::size_t a, std::size_t b, std::size_t c, const T& pa, const T& pb,
+               const T& pc) -> std::size_t {
+    return dag.addNode({{a, pa}, {b, pb}, {c, pc}});
+  }
+
+  // result[n] = ∂(seed·output)/∂n.
+  auto backward(std::size_t output, const T& seed = T{1}) const -> std::vector<T> {
+    auto adj = std::vector<T>(dag.nodeCount(), T{});
+    adj[output] = seed;
+    return backwardSubstitute(dag, std::move(adj));
+  }
+
+  // result[n] = n's tangent under the seeded leaf tangents: a JVP over the recording.
+  auto forward(std::initializer_list<std::pair<std::size_t, T>> seeds) const
+      -> std::vector<T> {
+    auto tangents = std::vector<T>(dag.nodeCount(), T{});
+    for (const auto& [node, tangent] : seeds) tangents[node] = tangent;
+    return forwardSubstitute(dag, std::move(tangents));
+  }
 };
 
 }  // namespace tempura::autodiff
