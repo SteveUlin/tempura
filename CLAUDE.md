@@ -28,26 +28,12 @@
 - Concepts: in-place syntax for simple per-parameter bounds (`template <std::floating_point T>`); reserve `requires`-clauses for constraints relating types or a derived type (e.g. a range's `value_type`)
 - Classes: `public` before `private`
 - Prefer `{}` over `()` for initialization (including ctor init lists)
+- Generic literal init spells `T a = {3}` — types add no converting constructors to make `T a = 3` work (aggregates stay aggregates)
 - `static_assert` tests belong in test files, not headers
 - Unicode/emojis encouraged (α, β, ∂, ∑, ✓, ✗, ⚠️)
-- Document preconditions/postconditions/dangers in comments where non-obvious
 - No copyright statements
 - `[[nodiscard]]` on types only, never on functions - too noisy
 - `noexcept` only when needed for performance (move constructors, swap) - codebase is exception-free by design, don't sprinkle it everywhere
-
-**Comments:**
-
-- The bar to add a comment at all is HIGH. Write one only if it clears at least one of: (1) a *why* — non-obvious code whose rationale isn't visible from the code; (2) a pre/postcondition worth stating (e.g. "dst must not alias inputs"); (3) the code's function is non-obvious from its name. If none apply, write nothing.
-- Assume the reader is a competent C++ developer - be instructive, not condescending
-- Explain *why this specific approach* - what constraint or insight drove the decision
-- Keep comments concise - one line when possible
-- A comment must stand on its own - never reference a doc or another file from it (no paths/links); they rot and couple. The full design rationale lives in commits/docs, discovered there, not linked from source
-- Good: `// API requires positive input, so take abs() and negate output if needed`
-- Good: `// Robin Hood reduces probe length variance at cost of more swaps`
-- Good: `// Variance = p(1-p), maximized at p=0.5`
-- Bad: `// Now print the output` (obvious from code)
-- Bad: `// This function returns the probability` (obvious from signature)
-- No multi-line comment blocks or section banners — they read as noise and get skipped; one terse line, with design rationale in commits/docs, not source
 
 ## Testing
 
