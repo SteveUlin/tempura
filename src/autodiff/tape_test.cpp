@@ -2,11 +2,11 @@
 
 #include <cmath>
 #include <numbers>
+#include <utility>
 #include <vector>
 
 #include "dual.h"
 #include "unit.h"
-#include "var.h"
 #include "weighted_dag.h"
 
 using namespace tempura;
@@ -15,9 +15,9 @@ using namespace tempura::autodiff;
 auto main() -> int {
   "single variable: d(x²)/dx = 2x"_test = [] {
     Tape<double> tape;
-    auto x = variable(tape, 3.0);
+    auto x = tape.variable(3.0);
     auto y = x * x;
-    auto adj = tape.backward(y.id);
+    auto adj = tape.backward(y);
     expectClose((y.value), 9.0, {.rtol = 1e-12, .atol = 1e-12});
     expectClose((adj[x.id]), 6.0, {.rtol = 1e-12, .atol = 1e-12});
   };
@@ -25,10 +25,10 @@ auto main() -> int {
   "multiple inputs: one sweep yields the whole gradient"_test = [] {
     // f(x,z) = x·z + sin(x); ∂f/∂x = z + cos(x), ∂f/∂z = x
     Tape<double> tape;
-    auto x = variable(tape, 1.3);
-    auto z = variable(tape, 2.1);
+    auto x = tape.variable(1.3);
+    auto z = tape.variable(2.1);
     auto f = x * z + sin(x);
-    auto adj = tape.backward(f.id);
+    auto adj = tape.backward(f);
     expectClose((f.value), 1.3 * 2.1 + std::sin(1.3), {.rtol = 1e-12, .atol = 1e-12});
     expectClose((adj[x.id]), 2.1 + std::cos(1.3), {.rtol = 1e-12, .atol = 1e-12});
     expectClose((adj[z.id]), 1.3, {.rtol = 1e-12, .atol = 1e-12});
@@ -36,12 +36,12 @@ auto main() -> int {
 
   "shared subexpression stays linear: d(x⁴)/dx = 4x³"_test = [] {
     // node.h's recursive sweep was EXPONENTIAL here (re-walks the shared w each path);
-    // the flat tape accumulates both contributions in one linear pass.
+    // the flat recording accumulates both contributions in one linear pass.
     Tape<double> tape;
-    auto x = variable(tape, 2.0);
+    auto x = tape.variable(2.0);
     auto w = x * x;  // x², used twice
     auto q = w * w;  // (x²)² = x⁴
-    auto adj = tape.backward(q.id);
+    auto adj = tape.backward(q);
     expectClose((q.value), 16.0, {.rtol = 1e-12, .atol = 1e-12});
     expectClose((adj[x.id]), 4 * 8.0, {.rtol = 1e-12, .atol = 1e-12});  // 4x³ = 32
   };
@@ -49,12 +49,12 @@ auto main() -> int {
   "diamond DAG gradient"_test = [] {
     // a = x·z, b = x+z, c = a·b; ∂c/∂x = z·b + a, ∂c/∂z = x·b + a
     Tape<double> tape;
-    auto x = variable(tape, 2.0);
-    auto z = variable(tape, 3.0);
+    auto x = tape.variable(2.0);
+    auto z = tape.variable(3.0);
     auto a = x * z;        // 6
     auto b = x + z;        // 5
     auto c = a * b;        // 30
-    auto adj = tape.backward(c.id);
+    auto adj = tape.backward(c);
     expectClose((c.value), 30.0, {.rtol = 1e-12, .atol = 1e-12});
     expectClose((adj[x.id]), 3.0 * 5.0 + 6.0, {.rtol = 1e-12, .atol = 1e-12});  // 21
     expectClose((adj[z.id]), 2.0 * 5.0 + 6.0, {.rtol = 1e-12, .atol = 1e-12});  // 16
@@ -77,10 +77,13 @@ auto main() -> int {
   "forward substitution over the recording matches dual jvp"_test = [] {
     // One recording of f(x,z) = x·z + sin(x); tangent seeds (1, 0.5) at the leaves
     Tape<double> tape;
-    auto x = variable(tape, 1.3);
-    auto z = variable(tape, 2.1);
+    auto x = tape.variable(1.3);
+    auto z = tape.variable(2.1);
     auto y = x * z + sin(x);
-    auto tangents = tape.forward({{x.id, 1.0}, {z.id, 0.5}});
+    std::vector<double> seeds(tape.dag().nodeCount(), 0.0);
+    seeds[x.id] = 1.0;
+    seeds[z.id] = 0.5;
+    auto tangents = forwardSubstitute(tape.dag(), std::move(seeds));
 
     auto fwd = Dual<double>{1.3, 1.0} * Dual<double>{2.1, 0.5} + sin(Dual<double>{1.3, 1.0});
     expectClose((tangents[y.id]), (fwd.gradient), {.rtol = 1e-12, .atol = 1e-12});
@@ -89,10 +92,10 @@ auto main() -> int {
   "reverse matches forward (dual) on the same function"_test = [] {
     // ∂/∂x of f(x,z)=x·z+sin(x) at (1.3, 2.1): reverse adj[x] vs forward dual seed on x
     Tape<double> tape;
-    auto x = variable(tape, 1.3);
-    auto z = variable(tape, 2.1);
+    auto x = tape.variable(1.3);
+    auto z = tape.variable(2.1);
     auto fx = (x * z + sin(x));
-    double reverse_dx = tape.backward(fx.id)[x.id];
+    double reverse_dx = tape.backward(fx)[x.id];
 
     Dual<double> dx{1.3, 1.0};
     Dual<double> dz{2.1, 0.0};
@@ -100,11 +103,11 @@ auto main() -> int {
     expectClose(reverse_dx, (forward.gradient), {.rtol = 1e-12, .atol = 1e-12});
   };
 
-  "the tape is reusable: repeated sweeps are identical (graph untouched)"_test = [] {
+  "the recording is reusable: Var and id sweeps are identical (graph untouched)"_test = [] {
     Tape<double> tape;
-    auto x = variable(tape, 1.5);
+    auto x = tape.variable(1.5);
     auto y = exp(x) * x;  // dy/dx = eˣ(x+1)
-    auto a1 = tape.backward(y.id);
+    auto a1 = tape.backward(y);
     auto a2 = tape.backward(y.id);
     expectClose((a1[x.id]), std::exp(1.5) * 2.5, {.rtol = 1e-12, .atol = 1e-12});
     expectEq((a1[x.id]), (a2[x.id]));
@@ -112,18 +115,18 @@ auto main() -> int {
 
   "scalar mixed ops record the right partial"_test = [] {
     Tape<double> tape;
-    auto x = variable(tape, 4.0);
+    auto x = tape.variable(4.0);
     auto y = 2.0 * x + 3.0;  // dy/dx = 2
-    auto adj = tape.backward(y.id);
+    auto adj = tape.backward(y);
     expectClose((y.value), 11.0, {.rtol = 1e-12, .atol = 1e-12});
     expectClose((adj[x.id]), 2.0, {.rtol = 1e-12, .atol = 1e-12});
   };
 
   "scalars need only construct into T: int literals, c/x"_test = [] {
     Tape<double> tape;
-    auto x = variable(tape, 2.0);
+    auto x = tape.variable(2.0);
     auto y = 2 * x + 1 - 1.0 / x;  // dy/dx = 2 + 1/x²
-    auto adj = tape.backward(y.id);
+    auto adj = tape.backward(y);
     expectClose((y.value), 4.5, {.rtol = 1e-12, .atol = 1e-12});
     expectClose((adj[x.id]), 2.25, {.rtol = 1e-12, .atol = 1e-12});
   };
@@ -131,20 +134,20 @@ auto main() -> int {
   "inverse trig partials"_test = [] {
     // d asin = 1/√(1−x²), d acos = −1/√(1−x²), d atan = 1/(1+x²), at x = 0.3
     Tape<double> tape;
-    auto x = variable(tape, 0.3);
+    auto x = tape.variable(0.3);
     const double r = 1.0 / std::sqrt(1.0 - 0.09);
-    expectClose((tape.backward(asin(x).id)[x.id]), r, {.rtol = 1e-12, .atol = 1e-12});
-    expectClose((tape.backward(acos(x).id)[x.id]), -r, {.rtol = 1e-12, .atol = 1e-12});
-    expectClose((tape.backward(atan(x).id)[x.id]), 1.0 / 1.09, {.rtol = 1e-12, .atol = 1e-12});
+    expectClose((tape.backward(asin(x))[x.id]), r, {.rtol = 1e-12, .atol = 1e-12});
+    expectClose((tape.backward(acos(x))[x.id]), -r, {.rtol = 1e-12, .atol = 1e-12});
+    expectClose((tape.backward(atan(x))[x.id]), 1.0 / 1.09, {.rtol = 1e-12, .atol = 1e-12});
   };
 
   "pow with variable exponent"_test = [] {
     // z = xᵉ: ∂z/∂x = e·xᵉ⁻¹, ∂z/∂e = xᵉ·ln x, at (2, 3)
     Tape<double> tape;
-    auto x = variable(tape, 2.0);
-    auto e = variable(tape, 3.0);
+    auto x = tape.variable(2.0);
+    auto e = tape.variable(3.0);
     auto z = pow(x, e);
-    auto adj = tape.backward(z.id);
+    auto adj = tape.backward(z);
     expectClose((z.value), 8.0, {.rtol = 1e-12, .atol = 1e-12});
     expectClose((adj[x.id]), 12.0, {.rtol = 1e-12, .atol = 1e-12});
     expectClose((adj[e.id]), 8.0 * std::numbers::ln2, {.rtol = 1e-12, .atol = 1e-12});
@@ -153,18 +156,18 @@ auto main() -> int {
   "an infinite adjoint reaches its leaf intact"_test = [] {
     // d(1/x)/dx = −1/x² → −∞ at x = 0; a zero-multiplied spare slot would NaN it
     Tape<double> tape;
-    auto x = variable(tape, 0.0);
+    auto x = tape.variable(0.0);
     auto y = 1.0 / x;
-    auto adj = tape.backward(y.id);
+    auto adj = tape.backward(y);
     expectInf((adj[x.id]));
   };
 
   "fma records a·b + c with a fused value"_test = [] {
     Tape<double> tape;
-    auto x = variable(tape, 2.0);
-    auto z = variable(tape, 3.0);
+    auto x = tape.variable(2.0);
+    auto z = tape.variable(3.0);
     auto y = fma(x, z, x);  // xz + x: ∂/∂x = z + 1, ∂/∂z = x
-    auto adj = tape.backward(y.id);
+    auto adj = tape.backward(y);
     expectClose((y.value), 8.0, {.rtol = 1e-12, .atol = 1e-12});
     expectClose((adj[x.id]), 4.0, {.rtol = 1e-12, .atol = 1e-12});
     expectClose((adj[z.id]), 2.0, {.rtol = 1e-12, .atol = 1e-12});
@@ -173,24 +176,24 @@ auto main() -> int {
   "mutable weights re-linearize one recording at a new point"_test = [] {
     // x·x records partials (3, 3); overwritten to (5, 5) — the linearization at x = 5
     Tape<double> tape;
-    auto x = variable(tape, 3.0);
+    auto x = tape.variable(3.0);
     auto y = x * x;
-    expectClose((tape.backward(y.id)[x.id]), 6.0, {.rtol = 1e-12, .atol = 1e-12});
-    for (auto& e : tape.dag.edges(y.id)) e.weight = 5.0;
-    expectClose((tape.backward(y.id)[x.id]), 10.0, {.rtol = 1e-12, .atol = 1e-12});
+    expectClose((tape.backward(y)[x.id]), 6.0, {.rtol = 1e-12, .atol = 1e-12});
+    for (auto& e : tape.dag().edges(y.id)) e.weight = 5.0;
+    expectClose((tape.backward(y)[x.id]), 10.0, {.rtol = 1e-12, .atol = 1e-12});
   };
 
   "clear reuses one tape across recordings"_test = [] {
     Tape<double> tape;
     {
-      auto x = variable(tape, 2.0);
+      auto x = tape.variable(2.0);
       auto y = x * x;
-      expectClose((tape.backward(y.id)[x.id]), 4.0, {.rtol = 1e-12, .atol = 1e-12});
+      expectClose((tape.backward(y)[x.id]), 4.0, {.rtol = 1e-12, .atol = 1e-12});
     }
-    tape.dag.clear();
-    auto x = variable(tape, 1.5);
+    tape.clear();
+    auto x = tape.variable(1.5);
     auto y = exp(x);
-    expectClose((tape.backward(y.id)[x.id]), std::exp(1.5), {.rtol = 1e-12, .atol = 1e-12});
+    expectClose((tape.backward(y)[x.id]), std::exp(1.5), {.rtol = 1e-12, .atol = 1e-12});
   };
 
   return TestRegistry::result();

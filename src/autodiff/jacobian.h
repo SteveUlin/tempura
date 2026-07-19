@@ -2,14 +2,13 @@
 
 #include <array>
 #include <cstddef>
-#include <cstdint>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 
 #include "dual.h"
-#include "matrix/mdarray.h"
+#include "matrix/matrix.h"
 #include "tape.h"
-#include "var.h"
 
 namespace tempura::autodiff {
 
@@ -25,13 +24,15 @@ namespace tempura::autodiff {
 // NOTE: each pass here is independent, so the seed loop is the natural place for a future
 // task/-bulk parallel backend (see the autodiff plan) — kept serial until measured.
 
+template <typename X, std::size_t>
+using Repeat = X;
+
 template <typename F, typename T, std::size_t N>
-auto jacfwd(F&& f, const std::array<T, N>& x) {
-  // Probe M with a zero seed (the value-only pass).
-  auto probe = [&]<std::size_t... I>(std::index_sequence<I...>) {
-    return f(Dual<T>{x[I], T{}}...);
+constexpr auto jacfwd(F&& f, const std::array<T, N>& x) {
+  // M from f's return TYPE alone — shape discovery never calls f.
+  constexpr std::size_t M = []<std::size_t... I>(std::index_sequence<I...>) {
+    return std::tuple_size_v<std::invoke_result_t<F&, Repeat<Dual<T>, I>...>>;
   }(std::make_index_sequence<N>{});
-  constexpr std::size_t M = std::tuple_size_v<decltype(probe)>;
 
   InlineDense<T, M, N> jac{};
   for (std::size_t j = 0; j < N; ++j) {
@@ -46,12 +47,9 @@ auto jacfwd(F&& f, const std::array<T, N>& x) {
 template <typename F, typename T, std::size_t N>
 auto jacrev(F&& f, const std::array<T, N>& x) {
   Tape<T> tape;
-  std::array<Var<T>, N> vars{};
-  std::array<std::uint32_t, N> in{};
-  for (std::size_t i = 0; i < N; ++i) {
-    vars[i] = variable(tape, x[i]);
-    in[i] = vars[i].idx;
-  }
+  auto vars = [&]<std::size_t... I>(std::index_sequence<I...>) {
+    return std::array{tape.variable(x[I])...};
+  }(std::make_index_sequence<N>{});
   auto out = [&]<std::size_t... I>(std::index_sequence<I...>) {
     return f(vars[I]...);
   }(std::make_index_sequence<N>{});
@@ -59,8 +57,8 @@ auto jacrev(F&& f, const std::array<T, N>& x) {
 
   InlineDense<T, M, N> jac{};
   for (std::size_t m = 0; m < M; ++m) {  // cotangent = eₘ → row m = eₘᵀ·J
-    const auto adj = tape.backward(out[m].idx);
-    for (std::size_t n = 0; n < N; ++n) jac[m, n] = adj[in[n]];
+    const auto adj = tape.backward(out[m]);
+    for (std::size_t n = 0; n < N; ++n) jac[m, n] = adj[vars[n].id];
   }
   return jac;
 }

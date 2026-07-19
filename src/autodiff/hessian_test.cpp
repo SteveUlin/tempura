@@ -35,6 +35,16 @@ auto main() -> int {
     expectClose((h[0, 1]), (h[1, 0]), {.rtol = 1e-12, .atol = 1e-12});  // symmetry
   };
 
+  "scalar literals lift through Var<Dual>: f = 2x²y + 1/x"_test = [] {
+    // H = [[4y + 2/x³, 4x], [4x, 0]], at (1, 2)
+    auto g = [](auto x, auto y) { return 2.0 * x * x * y + 1.0 / x; };
+    auto h = hessian(g, std::array{1.0, 2.0});
+    const double expected[2][2] = {{10.0, 4.0}, {4.0, 0.0}};
+    for (std::size_t i = 0; i < 2; ++i)
+      for (std::size_t j = 0; j < 2; ++j)
+        expectClose((h[i, j]), expected[i][j], {.rtol = 1e-11, .atol = 1e-11});
+  };
+
   "HVP matches H·v without materializing H"_test = [&] {
     const std::array x{1.0, 2.0};
     const std::array v{0.3, 0.7};

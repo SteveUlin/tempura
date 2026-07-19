@@ -10,6 +10,14 @@
 using namespace tempura;
 using namespace tempura::autodiff;
 
+// constexpr: exact small-int polynomial, so == is safe.
+constexpr auto jacfwdConstexpr() -> bool {
+  auto f = [](auto x, auto y) { return std::array{x * x + y, x * y}; };
+  auto j = jacfwd(f, std::array{3.0, 4.0});  // J = [[2x, 1], [y, x]]
+  return j[0, 0] == 6.0 && j[0, 1] == 1.0 && j[1, 0] == 4.0 && j[1, 1] == 3.0;
+}
+static_assert(jacfwdConstexpr());
+
 auto main() -> int {
   "square map: jacfwd and jacrev agree with the known Jacobian"_test = [] {
     // f(x,y) = [x²+y, x·y]; J = [[2x, 1], [y, x]]; at (3,4): [[6,1],[4,3]]
@@ -38,6 +46,16 @@ auto main() -> int {
         expectClose((jf[i, j]), expected[i][j], {.rtol = 1e-12, .atol = 1e-12});
         expectClose((jr[i, j]), expected[i][j], {.rtol = 1e-12, .atol = 1e-12});
       }
+  };
+
+  "jacfwd calls f exactly N times: shape comes from the type"_test = [] {
+    int calls = 0;
+    auto f = [&](auto x, auto y) {
+      ++calls;
+      return std::array{x + y, x * y};
+    };
+    jacfwd(f, std::array{1.0, 2.0});
+    expectEq(calls, 2);
   };
 
   "result is a real tempura matrix"_test = [] {

@@ -2,12 +2,10 @@
 
 #include <array>
 #include <cstddef>
-#include <cstdint>
 #include <utility>
 
 #include "dual.h"
 #include "tape.h"
-#include "var.h"
 
 namespace tempura::autodiff {
 
@@ -20,32 +18,33 @@ namespace tempura::autodiff {
 
 // Forward JVP, scalar f: T → T. Returns (f(x), f'(x)·v).
 template <typename F, typename T>
-auto jvp(F&& f, const T& x, const T& v) -> std::pair<T, T> {
+constexpr auto jvp(F&& f, const T& x, const T& v) -> std::pair<T, T> {
   auto r = f(Dual<T>{x, v});
   return {r.value, r.gradient};
 }
 
 // Forward JVP, f: Tⁿ → T. One pass gives (f(x), J·v) — the directional derivative along v.
 template <typename F, typename T, std::size_t N>
-auto jvp(F&& f, const std::array<T, N>& x, const std::array<T, N>& v) -> std::pair<T, T> {
+constexpr auto jvp(F&& f, const std::array<T, N>& x, const std::array<T, N>& v) -> std::pair<T, T> {
   auto r = [&]<std::size_t... I>(std::index_sequence<I...>) {
     return f(Dual<T>{x[I], v[I]}...);
   }(std::make_index_sequence<N>{});
   return {r.value, r.gradient};
 }
 
-// Reverse value-and-gradient, f: Tⁿ → T. One tape, one backward sweep → ∇f.
+// Reverse value-and-gradient, f: Tⁿ → T. One recording, one backward sweep → ∇f.
 template <typename F, typename T, std::size_t N>
 auto valueAndGrad(F&& f, const std::array<T, N>& x) -> std::pair<T, std::array<T, N>> {
   Tape<T> tape;
-  std::array<Var<T>, N> vars{};
-  for (std::size_t i = 0; i < N; ++i) vars[i] = variable(tape, x[i]);
+  auto vars = [&]<std::size_t... I>(std::index_sequence<I...>) {
+    return std::array{tape.variable(x[I])...};
+  }(std::make_index_sequence<N>{});
   Var<T> y = [&]<std::size_t... I>(std::index_sequence<I...>) {
     return f(vars[I]...);
   }(std::make_index_sequence<N>{});
-  const auto adj = tape.backward(y.idx);
+  const auto adj = tape.backward(y);
   std::array<T, N> g{};
-  for (std::size_t i = 0; i < N; ++i) g[i] = adj[vars[i].idx];
+  for (std::size_t i = 0; i < N; ++i) g[i] = adj[vars[i].id];
   return {y.value, g};
 }
 
@@ -56,27 +55,28 @@ auto grad(F&& f, const std::array<T, N>& x) -> std::array<T, N> {
 }
 
 // Reverse VJP, f: Tⁿ → T. Returns (f(x), pullback) where pullback(cotangent) = cotangent·J
-// (the input adjoints). The pullback OWNS the tape, so it outlives this call and can be
-// re-invoked with any cotangent — the forward pass is recorded once, reused per cotangent.
+// (the input adjoints). The pullback OWNS the recording, so it outlives this call and can
+// be re-invoked with any cotangent — the forward pass is recorded once, reused per
+// cotangent.
 template <typename F, typename T, std::size_t N>
 auto vjp(F&& f, const std::array<T, N>& x) {
   Tape<T> tape;
-  std::array<std::uint32_t, N> in{};
-  std::array<Var<T>, N> vars{};
-  for (std::size_t i = 0; i < N; ++i) {
-    vars[i] = variable(tape, x[i]);
-    in[i] = vars[i].idx;
-  }
+  auto vars = [&]<std::size_t... I>(std::index_sequence<I...>) {
+    return std::array{tape.variable(x[I])...};
+  }(std::make_index_sequence<N>{});
   Var<T> y = [&]<std::size_t... I>(std::index_sequence<I...>) {
     return f(vars[I]...);
   }(std::make_index_sequence<N>{});
-  const std::uint32_t output = y.idx;
-  // Move the tape into the closure; only integer indices of `vars` are needed afterward,
-  // so the now-dangling Var pointers are never touched again.
-  auto pullback = [tape = std::move(tape), output, in](const T& cotangent) -> std::array<T, N> {
+  auto ids = [&]<std::size_t... I>(std::index_sequence<I...>) {
+    return std::array{vars[I].id...};
+  }(std::make_index_sequence<N>{});
+  // The tape moves into the closure; the Vars' dag pointers dangle after, so
+  // only ids cross.
+  auto pullback = [tape = std::move(tape), output = y.id,
+                   ids](const T& cotangent) -> std::array<T, N> {
     const auto adj = tape.backward(output, cotangent);
     std::array<T, N> g{};
-    for (std::size_t i = 0; i < N; ++i) g[i] = adj[in[i]];
+    for (std::size_t i = 0; i < N; ++i) g[i] = adj[ids[i]];
     return g;
   };
   return std::pair{y.value, std::move(pullback)};

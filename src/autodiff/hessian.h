@@ -2,20 +2,18 @@
 
 #include <array>
 #include <cstddef>
-#include <cstdint>
 #include <utility>
 
 #include "dual.h"
-#include "matrix/mdarray.h"
+#include "matrix/matrix.h"
 #include "tape.h"
-#include "var.h"
 
 namespace tempura::autodiff {
 
 // Second order by COMPOSING forward and reverse — the payoff of making every core generic
-// over its scalar. Run the reverse tape on Dual<T> elements, seeding the forward (dual)
-// tangent with v: each input's adjoint returns as a Dual whose .value is ∂f/∂xᵢ and whose
-// .gradient is (H·v)ᵢ. No bespoke second-order machinery — Tape<Dual<T>> just works.
+// over its scalar. Record on Dual<T> elements, seeding the forward (dual) tangent with v:
+// each input's adjoint returns as a Dual whose .value is ∂f/∂xᵢ and whose .gradient is
+// (H·v)ᵢ. No bespoke second-order machinery — Tape<Dual<T>> just works.
 //
 // hvp gives a Hessian-vector product in ONE forward-over-reverse pass (H never
 // materialized — the matrix-free primitive Newton/CG methods want). hessian assembles the
@@ -28,21 +26,18 @@ auto gradAndHvp(F&& f, const std::array<T, N>& x, const std::array<T, N>& v)
     -> std::pair<std::array<T, N>, std::array<T, N>> {
   using D = Dual<T>;
   Tape<D> tape;
-  std::array<Var<D>, N> vars{};
-  std::array<std::uint32_t, N> in{};
-  for (std::size_t i = 0; i < N; ++i) {
-    vars[i] = variable(tape, D{x[i], v[i]});  // value x, forward tangent v
-    in[i] = vars[i].idx;
-  }
+  auto vars = [&]<std::size_t... I>(std::index_sequence<I...>) {
+    return std::array{tape.variable(D{x[I], v[I]})...};  // value x, forward tangent v
+  }(std::make_index_sequence<N>{});
   Var<D> y = [&]<std::size_t... I>(std::index_sequence<I...>) {
     return f(vars[I]...);
   }(std::make_index_sequence<N>{});
-  const auto adj = tape.backward(y.idx, D{T{1}, T{}});  // reverse cotangent 1, no forward part
+  const auto adj = tape.backward(y, D{T{1}, T{}});  // reverse cotangent 1, no forward part
   std::array<T, N> g{};
   std::array<T, N> hv{};
   for (std::size_t i = 0; i < N; ++i) {
-    g[i] = adj[in[i]].value;      // ∂f/∂xᵢ
-    hv[i] = adj[in[i]].gradient;  // (H·v)ᵢ
+    g[i] = adj[vars[i].id].value;      // ∂f/∂xᵢ
+    hv[i] = adj[vars[i].id].gradient;  // (H·v)ᵢ
   }
   return {g, hv};
 }

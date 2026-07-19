@@ -15,7 +15,7 @@ including the parts that mix forward and reverse — with no special-case machin
 | Mode | Type | What it is |
 |------|------|------------|
 | **forward / JVP** | `Dual<T, G>` (`dual.h`) | a + bε, ε²=0. One pass gives value + directional derivative. The carry `G` decouples from `T`: `G=T` is one direction, a vector is K directions (jacfwd), `Dual` is second order. |
-| **reverse / VJP** | `Var<T>` → `Tape<T>` → `WeightedDag<T>` (`var.h`, `tape.h`, `weighted_dag.h`) | a flat Wengert tape: each op records its local partials + parent indices; recording order *is* topological order, so the backward sweep is a linear array scan. |
+| **reverse / VJP** | `Tape<T>` owns a `WeightedDag<T>` and hands out `Var<T>` leaves; ops record, `tape.backward` seeds + sweeps (`tape.h`, `weighted_dag.h`) | a flat Wengert tape: each op records its local partials + parent indices; recording order *is* topological order, so the backward sweep is a linear array scan. |
 
 The two design choices that make the whole thing work:
 
@@ -24,13 +24,13 @@ The two design choices that make the whole thing work:
   iterating them backward — O(#ops), cache-friendly, and correct on shared subexpressions
   (where a pointer-graph DAG re-walks shared nodes and goes exponential). Nodes are plain
   `size_t` indices: they survive reallocation, and per-node data (adjoints, tangents) is
-  any external `std::vector` aligned by index. Weights are mutable (`weights(n)`) and the
+  any external `std::vector` aligned by index. Weights are mutable (`edges(n)`) and the
   dag `clear()`s keeping capacity, so one tape re-records or re-linearizes with no
   steady-state allocation. This is why the old `node.h` (virtual + `shared_ptr`-per-node +
   recursive sweep) was deleted.
-- **Every core is generic over its scalar `T`.** A `Var<Dual<U>>` on a `Tape<Dual<U>>`
-  records a forward-dual computation and sweeps it backward — i.e. forward-over-reverse —
-  with no second AD system. That single fact gives Hessians and HVPs for free.
+- **Every core is generic over its scalar `T`.** A `Tape<Dual<U>>` records a forward-dual
+  computation and sweeps it backward — i.e. forward-over-reverse — with no second AD
+  system. That single fact gives Hessians and HVPs for free.
 
 ## The transform layer
 
