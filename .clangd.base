@@ -40,6 +40,12 @@ Index:
   Background: Build
 
 Diagnostics:
+  # clang reports __GNUC__=4.2.1, so libstdc++'s constexpr <cmath> compiles out and std::fma
+  # binds to the non-constexpr C decl → a false "not a constant expression" on any constexpr
+  # math. gcc (the real build) is authoritative for static_assert, so silence clangd's false
+  # positive here — it otherwise misleads AI assistants (and humans) into "fixing" non-bugs.
+  Suppress:
+    - static_assert_expression_is_not_constant
   ClangTidy:
     Add:
       - performance-*

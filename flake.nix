@@ -107,6 +107,22 @@
               CMAKE_CUDA_COMPILER = "${pkgs.cudaPackages_12_6.cudatoolkit}/bin/nvcc";
               NIX_ENFORCE_NO_NATIVE = "";
             };
+
+            # clangd can't see a nix-wrapped compiler's implicit -isystem set, so it reads the
+            # wrong libstdc++ and false-flags C++26. Regenerate .clangd = tracked .clangd.base +
+            # gcc-trunk's own include search list, scraped as data — no query-driver, no editor
+            # config. Refreshes on every devShell eval, so toolchain store-hash bumps self-heal.
+            shellHook = ''
+              {
+                cat .clangd.base
+                echo '---'
+                echo 'CompileFlags:'
+                echo '  Add:'
+                g++ -E -x c++ -v /dev/null 2>&1 \
+                  | sed -n '/<...> search starts here:/,/End of search list/p' \
+                  | grep '^ ' | sed 's|^ *|    - -isystem|'
+              } > .clangd
+            '';
           };
 
         # GCC trunk shell (C++26 with P2996 reflection)
