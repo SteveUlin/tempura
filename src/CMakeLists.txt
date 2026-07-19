@@ -88,5 +88,6 @@ tempura_demo(glyphs)                     # glyph gallery: every mosaic char + it
 add_subdirectory(matrix)
 add_subdirectory(autodiff)
 add_subdirectory(math)
+add_subdirectory(optim)
 add_subdirectory(task)
 add_subdirectory(comm)
