@@ -12,8 +12,7 @@
 
 namespace tempura::autodiff {
 
-// v ← (I−L)⁻¹·v: forward substitution in node order; each node gathers its
-// parents through its weights, on top of its seed.
+// v ← (I−L)⁻¹·v: forward substitution in node order; nodes gather from parents.
 template <typename T>
 auto forwardSubstitute(const WeightedDag<T>& dag, std::vector<T> v)
     -> std::vector<T> {
@@ -27,8 +26,7 @@ auto forwardSubstitute(const WeightedDag<T>& dag, std::vector<T> v)
   return v;
 }
 
-// v ← (I−L)⁻ᵀ·v: back-substitution in reverse node order; each node scatters
-// its value to its parents through its weights.
+// v ← (I−L)⁻ᵀ·v: back-substitution in reverse order; nodes scatter to parents.
 template <typename T>
 auto backwardSubstitute(const WeightedDag<T>& dag, std::vector<T> v)
     -> std::vector<T> {
@@ -42,10 +40,10 @@ auto backwardSubstitute(const WeightedDag<T>& dag, std::vector<T> v)
   return v;
 }
 
-// A Var is a value handle into a recording: each operation computes its value
-// and appends one node whose edge weights are the local partials ∂op/∂input at
-// the current values, so the recording is f's linearization. Thin and freely
-// copyable; BORROWS the dag, which must outlive every Var.
+// A value handle into a recording: each operation appends one node whose edge
+// weights are the local partials ∂op/∂input at the current values, so the
+// recording is f's linearization. Borrows the dag, which must outlive every
+// Var.
 template <typename T>
 struct Var {
   WeightedDag<T>* dag;
@@ -54,7 +52,7 @@ struct Var {
 };
 
 // A recording session: owns the dag and hands out the leaves; operators derive
-// every other node through the Var's dag pointer.
+// the rest.
 template <typename T>
 class Tape {
  public:
@@ -77,6 +75,7 @@ class Tape {
     return backwardSubstitute(dag_, std::move(adj));
   }
 
+  // Invalidates outstanding Vars: their ids alias the next recording.
   auto clear() -> void { dag_.clear(); }
 
   auto dag() -> WeightedDag<T>& { return dag_; }
@@ -89,21 +88,21 @@ class Tape {
 
 template <typename T>
 auto operator+(const Var<T>& a, const Var<T>& b) -> Var<T> {
-  assert(a.dag && a.dag == b.dag && "Vars must share one dag");
+  assert(a.dag == b.dag && "Vars must share one dag");
   return {a.dag, a.dag->addNode({{a.id, T{1}}, {b.id, T{1}}}),
           a.value + b.value};
 }
 
 template <typename T>
 auto operator-(const Var<T>& a, const Var<T>& b) -> Var<T> {
-  assert(a.dag && a.dag == b.dag && "Vars must share one dag");
+  assert(a.dag == b.dag && "Vars must share one dag");
   return {a.dag, a.dag->addNode({{a.id, T{1}}, {b.id, T{-1}}}),
           a.value - b.value};
 }
 
 template <typename T>
 auto operator*(const Var<T>& a, const Var<T>& b) -> Var<T> {
-  assert(a.dag && a.dag == b.dag && "Vars must share one dag");
+  assert(a.dag == b.dag && "Vars must share one dag");
   // ∂(ab)/∂a = b, ∂(ab)/∂b = a
   return {a.dag, a.dag->addNode({{a.id, b.value}, {b.id, a.value}}),
           a.value * b.value};
@@ -111,7 +110,7 @@ auto operator*(const Var<T>& a, const Var<T>& b) -> Var<T> {
 
 template <typename T>
 auto operator/(const Var<T>& a, const Var<T>& b) -> Var<T> {
-  assert(a.dag && a.dag == b.dag && "Vars must share one dag");
+  assert(a.dag == b.dag && "Vars must share one dag");
   const T inv = T{1} / b.value;  // ∂(a/b)/∂a = 1/b, ∂/∂b = −a/b²
   return {a.dag, a.dag->addNode({{a.id, inv}, {b.id, -a.value * inv * inv}}),
           a.value * inv};
@@ -252,8 +251,8 @@ auto atan(const Var<T>& x) -> Var<T> {
           atan(x.value)};
 }
 
-// pow, constant exponent: d/dx xⁿ = n·xⁿ⁻¹. Non-deduced n so pow(x, 2) binds
-// to T instead of deducing int and clashing with T=double.
+// Non-deduced n so pow(x, 2) binds to T instead of deducing int and clashing
+// with T=double.
 template <typename T>
 auto pow(const Var<T>& x, const std::type_identity_t<T>& n) -> Var<T> {
   using std::pow;
@@ -261,10 +260,10 @@ auto pow(const Var<T>& x, const std::type_identity_t<T>& n) -> Var<T> {
           pow(x.value, n)};
 }
 
-// pow, variable exponent: d(uᵛ) = uᵛ·(v·u′/u + ln u·v′).
+// d(uᵛ) = uᵛ·(v·u′/u + ln u·v′).
 template <typename T>
 auto pow(const Var<T>& x, const Var<T>& e) -> Var<T> {
-  assert(x.dag && x.dag == e.dag && "Vars must share one dag");
+  assert(x.dag == e.dag && "Vars must share one dag");
   using std::log;
   using std::pow;
   const T uv = pow(x.value, e.value);
@@ -274,12 +273,11 @@ auto pow(const Var<T>& x, const Var<T>& e) -> Var<T> {
           uv};
 }
 
-// fma: the value keeps std::fma's single rounding; the partials b, a, 1 are
-// exact regardless.
+// The value keeps std::fma's single rounding; the partials b, a, 1 are exact
+// regardless.
 template <typename T>
 auto fma(const Var<T>& a, const Var<T>& b, const Var<T>& c) -> Var<T> {
-  assert(a.dag && a.dag == b.dag && a.dag == c.dag &&
-         "Vars must share one dag");
+  assert(a.dag == b.dag && a.dag == c.dag && "Vars must share one dag");
   using std::fma;
   return {a.dag,
           a.dag->addNode({{a.id, b.value}, {b.id, a.value}, {c.id, T{1}}}),
