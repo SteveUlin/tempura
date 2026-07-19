@@ -57,7 +57,7 @@ template <typename T>
 class Tape {
  public:
   auto variable(const T& value) -> Var<T> {
-    return {&dag_, dag_.addNode({}), value};
+    return {.dag = &dag_, .id = dag_.addNode({}), .value = value};
   }
 
   // Reverse sweep (the VJP primitive): result[n] = ∂(seed·output)/∂n.
@@ -89,36 +89,42 @@ class Tape {
 template <typename T>
 auto operator+(const Var<T>& a, const Var<T>& b) -> Var<T> {
   assert(a.dag == b.dag && "Vars must share one dag");
-  return {a.dag, a.dag->addNode({{a.id, T{1}}, {b.id, T{1}}}),
-          a.value + b.value};
+  return {.dag = a.dag,
+          .id = a.dag->addNode({{a.id, T{1}}, {b.id, T{1}}}),
+          .value = a.value + b.value};
 }
 
 template <typename T>
 auto operator-(const Var<T>& a, const Var<T>& b) -> Var<T> {
   assert(a.dag == b.dag && "Vars must share one dag");
-  return {a.dag, a.dag->addNode({{a.id, T{1}}, {b.id, T{-1}}}),
-          a.value - b.value};
+  return {.dag = a.dag,
+          .id = a.dag->addNode({{a.id, T{1}}, {b.id, T{-1}}}),
+          .value = a.value - b.value};
 }
 
 template <typename T>
 auto operator*(const Var<T>& a, const Var<T>& b) -> Var<T> {
   assert(a.dag == b.dag && "Vars must share one dag");
   // ∂(ab)/∂a = b, ∂(ab)/∂b = a
-  return {a.dag, a.dag->addNode({{a.id, b.value}, {b.id, a.value}}),
-          a.value * b.value};
+  return {.dag = a.dag,
+          .id = a.dag->addNode({{a.id, b.value}, {b.id, a.value}}),
+          .value = a.value * b.value};
 }
 
 template <typename T>
 auto operator/(const Var<T>& a, const Var<T>& b) -> Var<T> {
   assert(a.dag == b.dag && "Vars must share one dag");
   const T inv = T{1} / b.value;  // ∂(a/b)/∂a = 1/b, ∂/∂b = −a/b²
-  return {a.dag, a.dag->addNode({{a.id, inv}, {b.id, -a.value * inv * inv}}),
-          a.value * inv};
+  return {.dag = a.dag,
+          .id = a.dag->addNode({{a.id, inv}, {b.id, -a.value * inv * inv}}),
+          .value = a.value * inv};
 }
 
 template <typename T>
 auto operator-(const Var<T>& a) -> Var<T> {
-  return {a.dag, a.dag->addNode({{a.id, T{-1}}}), -a.value};
+  return {.dag = a.dag,
+          .id = a.dag->addNode({{a.id, T{-1}}}),
+          .value = -a.value};
 }
 
 // A scalar operand is a constant: it adds no node — it folds into the value or
@@ -129,8 +135,9 @@ auto operator-(const Var<T>& a) -> Var<T> {
 template <typename T, typename U>
   requires(std::constructible_from<T, const U&>)
 auto operator+(const Var<T>& a, const U& s) -> Var<T> {
-  return {a.dag, a.dag->addNode({{a.id, T{1}}}),
-          a.value + static_cast<T>(s)};
+  return {.dag = a.dag,
+          .id = a.dag->addNode({{a.id, T{1}}}),
+          .value = a.value + static_cast<T>(s)};
 }
 
 template <typename T, typename U>
@@ -142,22 +149,26 @@ auto operator+(const U& s, const Var<T>& a) -> Var<T> {
 template <typename T, typename U>
   requires(std::constructible_from<T, const U&>)
 auto operator-(const Var<T>& a, const U& s) -> Var<T> {
-  return {a.dag, a.dag->addNode({{a.id, T{1}}}),
-          a.value - static_cast<T>(s)};
+  return {.dag = a.dag,
+          .id = a.dag->addNode({{a.id, T{1}}}),
+          .value = a.value - static_cast<T>(s)};
 }
 
 template <typename T, typename U>
   requires(std::constructible_from<T, const U&>)
 auto operator-(const U& s, const Var<T>& a) -> Var<T> {
-  return {a.dag, a.dag->addNode({{a.id, T{-1}}}),
-          static_cast<T>(s) - a.value};
+  return {.dag = a.dag,
+          .id = a.dag->addNode({{a.id, T{-1}}}),
+          .value = static_cast<T>(s) - a.value};
 }
 
 template <typename T, typename U>
   requires(std::constructible_from<T, const U&>)
 auto operator*(const Var<T>& a, const U& s) -> Var<T> {
   const T c = static_cast<T>(s);
-  return {a.dag, a.dag->addNode({{a.id, c}}), a.value * c};
+  return {.dag = a.dag,
+          .id = a.dag->addNode({{a.id, c}}),
+          .value = a.value * c};
 }
 
 template <typename T, typename U>
@@ -170,7 +181,9 @@ template <typename T, typename U>
   requires(std::constructible_from<T, const U&>)
 auto operator/(const Var<T>& a, const U& s) -> Var<T> {
   const T inv = T{1} / static_cast<T>(s);
-  return {a.dag, a.dag->addNode({{a.id, inv}}), a.value * inv};
+  return {.dag = a.dag,
+          .id = a.dag->addNode({{a.id, inv}}),
+          .value = a.value * inv};
 }
 
 template <typename T, typename U>
@@ -178,7 +191,9 @@ template <typename T, typename U>
 auto operator/(const U& s, const Var<T>& a) -> Var<T> {
   // d(c/x) = −(c/x)/x: x² never forms.
   const T q = static_cast<T>(s) / a.value;
-  return {a.dag, a.dag->addNode({{a.id, -q / a.value}}), q};
+  return {.dag = a.dag,
+          .id = a.dag->addNode({{a.id, -q / a.value}}),
+          .value = q};
 }
 
 // Elementary functions: unqualified calls, so on Var<Dual> the partials
@@ -187,28 +202,34 @@ template <typename T>
 auto sin(const Var<T>& x) -> Var<T> {
   using std::cos;
   using std::sin;
-  return {x.dag, x.dag->addNode({{x.id, cos(x.value)}}), sin(x.value)};
+  return {.dag = x.dag,
+          .id = x.dag->addNode({{x.id, cos(x.value)}}),
+          .value = sin(x.value)};
 }
 
 template <typename T>
 auto cos(const Var<T>& x) -> Var<T> {
   using std::cos;
   using std::sin;
-  return {x.dag, x.dag->addNode({{x.id, -sin(x.value)}}), cos(x.value)};
+  return {.dag = x.dag,
+          .id = x.dag->addNode({{x.id, -sin(x.value)}}),
+          .value = cos(x.value)};
 }
 
 template <typename T>
 auto exp(const Var<T>& x) -> Var<T> {
   using std::exp;
   const T e = exp(x.value);
-  return {x.dag, x.dag->addNode({{x.id, e}}), e};
+  return {.dag = x.dag, .id = x.dag->addNode({{x.id, e}}), .value = e};
 }
 
 template <typename T>
 auto log(const Var<T>& x) -> Var<T> {
   using std::log;
   assert(x.value > T{} && "log domain: value must be > 0");
-  return {x.dag, x.dag->addNode({{x.id, T{1} / x.value}}), log(x.value)};
+  return {.dag = x.dag,
+          .id = x.dag->addNode({{x.id, T{1} / x.value}}),
+          .value = log(x.value)};
 }
 
 template <typename T>
@@ -216,7 +237,9 @@ auto sqrt(const Var<T>& x) -> Var<T> {
   using std::sqrt;
   assert(x.value >= T{} && "sqrt domain: value must be ≥ 0");
   const T s = sqrt(x.value);
-  return {x.dag, x.dag->addNode({{x.id, T{1} / (T{2} * s)}}), s};
+  return {.dag = x.dag,
+          .id = x.dag->addNode({{x.id, T{1} / (T{2} * s)}}),
+          .value = s};
 }
 
 template <typename T>
@@ -224,31 +247,36 @@ auto tan(const Var<T>& x) -> Var<T> {
   using std::cos;
   using std::tan;
   const T c = cos(x.value);
-  return {x.dag, x.dag->addNode({{x.id, T{1} / (c * c)}}), tan(x.value)};
+  return {.dag = x.dag,
+          .id = x.dag->addNode({{x.id, T{1} / (c * c)}}),
+          .value = tan(x.value)};
 }
 
 template <typename T>
 auto asin(const Var<T>& x) -> Var<T> {
   using std::asin;
   using std::sqrt;
-  return {x.dag, x.dag->addNode({{x.id, T{1} / sqrt(T{1} - x.value * x.value)}}),
-          asin(x.value)};
+  return {.dag = x.dag,
+          .id = x.dag->addNode({{x.id, T{1} / sqrt(T{1} - x.value * x.value)}}),
+          .value = asin(x.value)};
 }
 
 template <typename T>
 auto acos(const Var<T>& x) -> Var<T> {
   using std::acos;
   using std::sqrt;
-  return {x.dag,
-          x.dag->addNode({{x.id, T{-1} / sqrt(T{1} - x.value * x.value)}}),
-          acos(x.value)};
+  return {.dag = x.dag,
+          .id = x.dag->addNode(
+              {{x.id, T{-1} / sqrt(T{1} - x.value * x.value)}}),
+          .value = acos(x.value)};
 }
 
 template <typename T>
 auto atan(const Var<T>& x) -> Var<T> {
   using std::atan;
-  return {x.dag, x.dag->addNode({{x.id, T{1} / (T{1} + x.value * x.value)}}),
-          atan(x.value)};
+  return {.dag = x.dag,
+          .id = x.dag->addNode({{x.id, T{1} / (T{1} + x.value * x.value)}}),
+          .value = atan(x.value)};
 }
 
 // Non-deduced n so pow(x, 2) binds to T instead of deducing int and clashing
@@ -256,8 +284,9 @@ auto atan(const Var<T>& x) -> Var<T> {
 template <typename T>
 auto pow(const Var<T>& x, const std::type_identity_t<T>& n) -> Var<T> {
   using std::pow;
-  return {x.dag, x.dag->addNode({{x.id, n * pow(x.value, n - T{1})}}),
-          pow(x.value, n)};
+  return {.dag = x.dag,
+          .id = x.dag->addNode({{x.id, n * pow(x.value, n - T{1})}}),
+          .value = pow(x.value, n)};
 }
 
 // d(uᵛ) = uᵛ·(v·u′/u + ln u·v′).
@@ -267,10 +296,10 @@ auto pow(const Var<T>& x, const Var<T>& e) -> Var<T> {
   using std::log;
   using std::pow;
   const T uv = pow(x.value, e.value);
-  return {x.dag,
-          x.dag->addNode(
+  return {.dag = x.dag,
+          .id = x.dag->addNode(
               {{x.id, uv * e.value / x.value}, {e.id, uv * log(x.value)}}),
-          uv};
+          .value = uv};
 }
 
 // The value keeps std::fma's single rounding; the partials b, a, 1 are exact
@@ -279,9 +308,10 @@ template <typename T>
 auto fma(const Var<T>& a, const Var<T>& b, const Var<T>& c) -> Var<T> {
   assert(a.dag == b.dag && a.dag == c.dag && "Vars must share one dag");
   using std::fma;
-  return {a.dag,
-          a.dag->addNode({{a.id, b.value}, {b.id, a.value}, {c.id, T{1}}}),
-          fma(a.value, b.value, c.value)};
+  return {.dag = a.dag,
+          .id = a.dag->addNode(
+              {{a.id, b.value}, {b.id, a.value}, {c.id, T{1}}}),
+          .value = fma(a.value, b.value, c.value)};
 }
 
 }  // namespace tempura::autodiff
