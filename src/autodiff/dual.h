@@ -6,7 +6,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace tempura::autodiff {
+namespace tempura {
 
 // Forward-mode AD core.
 //
@@ -342,4 +342,4 @@ constexpr auto atan(const Dual<T, G>& d) -> Dual<T, G> {
           .gradient = d.gradient / (T{1} + d.value * d.value)};
 }
 
-}  // namespace tempura::autodiff
+}  // namespace tempura

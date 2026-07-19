@@ -10,7 +10,6 @@
 #include "weighted_dag.h"
 
 using namespace tempura;
-using namespace tempura::autodiff;
 
 auto main() -> int {
   "single variable: d(x²)/dx = 2x"_test = [] {

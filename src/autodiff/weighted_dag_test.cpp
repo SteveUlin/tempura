@@ -9,7 +9,6 @@
 #include "unit.h"
 
 using namespace tempura;
-using namespace tempura::autodiff;
 
 auto main() -> int {
   "insertion returns dense indices in topological order"_test = [] {

@@ -10,7 +10,7 @@
 
 #include "weighted_dag.h"
 
-namespace tempura::autodiff {
+namespace tempura {
 
 // v ← (I−L)⁻¹·v: forward substitution in node order; nodes gather from parents.
 template <typename T>
@@ -314,4 +314,4 @@ auto fma(const Var<T>& a, const Var<T>& b, const Var<T>& c) -> Var<T> {
           .value = fma(a.value, b.value, c.value)};
 }
 
-}  // namespace tempura::autodiff
+}  // namespace tempura

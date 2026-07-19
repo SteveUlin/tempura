@@ -5,7 +5,7 @@
 #include <span>
 #include <vector>
 
-namespace tempura::autodiff {
+namespace tempura {
 
 // Append-only weighted DAG in CSR form. Every edge points to an earlier node:
 // insertion order is a topological order and the weights form a strictly
@@ -56,4 +56,4 @@ class WeightedDag {
   std::vector<std::size_t> offsets_{0};
 };
 
-}  // namespace tempura::autodiff
+}  // namespace tempura

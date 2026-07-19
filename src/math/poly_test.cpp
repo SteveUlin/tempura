@@ -9,7 +9,7 @@
 #include "unit.h"
 
 using namespace tempura;
-using tempura::autodiff::Dual;
+using tempura::Dual;
 
 // constexpr: p(x) = 1 + 2x + 3x² at x=2 → 17; p'(x) = 2 + 6x → 14.
 static_assert(horner(std::array{1.0, 2.0, 3.0}, 2.0) == 17.0);

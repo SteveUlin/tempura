@@ -9,7 +9,6 @@
 #include "unit.h"
 
 using namespace tempura;
-using namespace tempura::autodiff;
 
 // constexpr: derivative of x² at x=3 is 2x=6 (exact polynomial — proves the constexpr path).
 constexpr auto derivXSquared() -> double {
